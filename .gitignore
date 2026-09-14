@@ -41,6 +41,10 @@ frontend/python_scripts/l2cs_validation/
 # Claude Code
 .claude/
 
+# Saídas geradas pelo Claude (rascunhos de configuração, roteiros, YAMLs de
+# apoio). Não é código do produto — fica fora do repositório.
+Claude outputs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -92,6 +96,17 @@ voice-engine/.pytest_cache/
 *.csv
 *.tsv
 *.xlsx
+
+# Documentos de escritório: plano de negócios, apresentações, contratos e PDFs
+# em geral. Mesma decisão do "*.md"/"*.txt": documentação de projeto fica
+# fora do repositório de código.
+*.doc
+*.docx
+*.pdf
+*.ppt
+*.pptx
+*.odt
+*.rtf
 
 # Arquivos que o próprio aplicativo gera na máquina de quem usa. Nenhum deles
 # é código, e todos podem conter dado de sessão real.
