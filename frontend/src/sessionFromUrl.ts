@@ -96,6 +96,25 @@ export function aplicarSessaoDaUrl(
     }
   }
 
+  // Flags do V2 que o plano de medição varia (docs/MEDICOES.md §4.6).
+  // Booleanos aceitam 1/0; o ramo ocular aceita o nome do provedor.
+  const booleanas: Array<[string, 'normalizarRollNoCrop' | 'estabilizarFixacao' | 'correcaoPorDwell']> = [
+    ['rollCrop', 'normalizarRollNoCrop'],
+    ['estabilizar', 'estabilizarFixacao'],
+    ['dwellCorrige', 'correcaoPorDwell'],
+  ];
+  for (const [param, chave] of booleanas) {
+    const v = p.get(param);
+    if (v === null) continue;
+    if (v === '1' || v === '0') exp[chave] = v === '1';
+    else console.warn(`[sessão] ?${param}=${v} inválido — aceitos: 1, 0.`);
+  }
+  const olho = p.get('olho');
+  if (olho !== null) {
+    if (olho === 'off' || olho === 'onnx') exp.eyeNet = olho;
+    else console.warn(`[sessão] ?olho=${olho} inválido — aceitos: off, onnx.`);
+  }
+
   if (JSON.stringify(exp) !== expAntes) {
     localStorage.setItem(CHAVE_EXP, JSON.stringify(exp));
     mudou = true;

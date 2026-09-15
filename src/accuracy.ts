@@ -6,6 +6,7 @@
 // durante a fixação) e as condições medidas da sessão. No fim exibe um overlay
 // com o par alvo→predição de cada ponto.
 
+import type { FichaDoModelo } from './l2cs/proveniencia';
 import {
   mapGaze, getCalibrationTargets,
   getCalibrationFitDiagnostics, getDistanceRange, getCalibrationDistancesCm,
@@ -161,6 +162,10 @@ export interface RunMeta {
  *  L2CS rodou nem qual filtro estava governando. */
 export interface RuntimeInfo {
   l2csExecutionProvider?: string | null;
+  /** Ficha de proveniência dos pesos que produziram este relatório. É o que
+   *  distingue uma rodada com o checkpoint Gaze360 de uma com o modelo
+   *  retreinado — e o que uma auditoria lê primeiro. */
+  modelo?: FichaDoModelo | null;
   l2csFallback?: boolean;
   l2csLatencyMs?: number;
   l2csStalePct?: number;

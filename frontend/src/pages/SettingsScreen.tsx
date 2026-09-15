@@ -26,6 +26,8 @@ import {
 import { env } from '../config/env';
 import { useSettings } from '../context/SettingsContext';
 import { deriveHorizontalFovDeg } from '@tracker/cameraTuner';
+import { registrarFov } from '@tracker/camera/fovPorCamera';
+import { resumoDaFicha } from '@tracker/l2cs/proveniencia';
 import { resolveCalibrationDistances } from '@tracker/calibrationDistances';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -253,7 +255,7 @@ export const SettingsScreen: React.FC = () => {
     }
   })();
 
-  const { calibration, recording, setFilterPreset, getSessionUptimeMs, getDiagnostics } = useGaze();
+  const { calibration, recording, setFilterPreset, getSessionUptimeMs, getDiagnostics, getCameraAtual } = useGaze();
   const [filterPreset, setFilterPresetState] = useState<FilterPresetV2>('balanceado-v2');
 
   // Estado local do gravador de sessão. `active` é derivado do singleton do
@@ -1508,6 +1510,16 @@ export const SettingsScreen: React.FC = () => {
               {versaoDoApp ? `Versão instalada: ${versaoDoApp}. ` : ''}
               {descricaoDaAtualizacao}
             </span>
+            {/* Ficha de proveniência dos pesos do modelo de olhar: com que
+                dado foram treinados, sob que licença, e se o arquivo é o que
+                a ficha descreve. É o que uma auditoria pergunta primeiro, e é
+                aqui — não escondido num JSON — que a resposta mora. */}
+            <span data-testid="ficha-do-modelo" style={{ flexBasis: '100%' }}>
+              {(() => {
+                const f = getDiagnostics()?.l2cs?.modelo ?? null;
+                return f ? `Modelo de olhar: ${resumoDaFicha(f)}.` : 'Modelo de olhar: ficha de proveniência indisponível.';
+              })()}
+            </span>
             {atualizacao.fase === 'pronta' ? (
               <button
                 type="button"
@@ -1888,8 +1900,16 @@ export const SettingsScreen: React.FC = () => {
                   );
                   return;
                 }
-                updateSettings({ cameraHorizontalFovDeg: fov });
-                toast.success(`Campo de visão calibrado: ${fov.toFixed(1)}°`);
+                // Guarda pela identidade da câmera: trocar de webcam restaura
+                // o valor dela, ou avisa que precisa medir de novo.
+                const cam = getCameraAtual();
+                const fovPorCamera = cam.chave
+                  ? registrarFov(settings.fovPorCamera, cam.chave, fov, cam.rotulo)
+                  : settings.fovPorCamera;
+                updateSettings({ cameraHorizontalFovDeg: fov, fovPorCamera, ultimaCameraChave: cam.chave ?? settings.ultimaCameraChave });
+                toast.success(
+                  `Campo de visão calibrado: ${fov.toFixed(1)}°` + (cam.rotulo ? ` (${cam.rotulo})` : ''),
+                );
               }}
               style={{
                 alignSelf: 'flex-start',

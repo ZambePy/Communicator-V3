@@ -52,6 +52,7 @@ import { getSaturacaoDoOlhar } from '@tracker/calibration';
 import { detectFlicker, inferPowerLineHz } from '@tracker/flickerDetector';
 import { AvisoDeDistancia } from '@tracker/distanceAdvisory';
 import { useSettings } from './SettingsContext';
+import { chaveDaCamera, resolverFovParaCamera } from '@tracker/camera/fovPorCamera';
 import { isDevMode, onDevModeChange } from '../devMode';
 import { limitarDwellMs } from '../dwellMs';
 
@@ -99,6 +100,11 @@ interface GazeContextValue {
   recording: RecordingApi;
   setFilterPreset: (preset: FilterPreset | FilterPresetV2) => void;
   getDiagnostics: () => EngineDiagnostics | null;
+  /** Identidade da câmera aberta (chave + rótulo), para o FOV por câmera. */
+  getCameraAtual: () => { chave: string | null; rotulo: string };
+  /** Aviso sobre a câmera (FOV restaurado / voltou ao padrão); a UI mostra e limpa. */
+  avisoDeCamera: string | null;
+  limparAvisoDeCamera: () => void;
   /** Stream da webcam para telas que precisam mostrar o usuário a si mesmo.
    *  O `<video>` do engine fica com 2px e opacidade 0.01 (não pode ser
    *  display:none, senão o browser suspende o decoding), então a UI que quiser
@@ -259,17 +265,31 @@ async function openCameraWithFallback(): Promise<MediaStream> {
 let provedorAtivo = 0;
 
 export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   // Os hooks de console e o boot leem as configurações fora do ciclo de render;
   // o ref garante que vejam o valor atual, não o do primeiro render.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  // Mesma razão do `settingsRef`: o boot roda fora do ciclo de render e não
+  // pode entrar na lista de dependências por causa de uma função de contexto.
+  const updateSettingsRef = useRef(updateSettings);
+  updateSettingsRef.current = updateSettings;
   const engineRef = useRef<GazeEngine | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Stream da câmera, guardada assim que `getUserMedia` resolve. Se o cleanup
   // rodar durante o await, `video.srcObject` ainda é null — este ref é o que
   // garante que as tracks sejam paradas mesmo assim.
   const streamRef = useRef<MediaStream | null>(null);
+  /** Identidade da câmera aberta nesta sessão (para o FOV por câmera). */
+  const cameraAtualRef = useRef<{ chave: string | null; rotulo: string }>({ chave: null, rotulo: '' });
+  const [avisoDeCamera, setAvisoDeCamera] = useState<string | null>(null);
+  // O aviso é de configuração, não de operação: some sozinho depois de um
+  // tempo de leitura, para não competir com os avisos que pedem ação agora.
+  useEffect(() => {
+    if (!avisoDeCamera) return;
+    const id = setTimeout(() => setAvisoDeCamera(null), 20_000);
+    return () => clearTimeout(id);
+  }, [avisoDeCamera]);
   const cursorRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<EngineState>('idle');
   const [l2csStatus, setL2csStatus] = useState<L2CSStatus>('loading');
@@ -1174,6 +1194,26 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         video.srcObject = stream;
         console.log('[IrisFlow] stream obtido, aguardando loadeddata...');
+
+        // Identidade da câmera → FOV certo para ELA. Trocar de webcam com o
+        // FOV da anterior deixava toda distância errada sem sintoma.
+        try {
+          const track = stream.getVideoTracks()[0];
+          const chave = chaveDaCamera({ deviceId: track?.getSettings().deviceId, label: track?.label });
+          cameraAtualRef.current = { chave, rotulo: track?.label ?? '' };
+          const s0 = settingsRef.current;
+          const r = resolverFovParaCamera(s0.fovPorCamera, chave, s0.ultimaCameraChave, s0.cameraHorizontalFovDeg);
+          const mudouFov = s0.cameraHorizontalFovDeg === null || Math.abs(s0.cameraHorizontalFovDeg - r.fovDeg) > 1e-6;
+          if (mudouFov || (chave !== null && chave !== s0.ultimaCameraChave)) {
+            updateSettingsRef.current({ cameraHorizontalFovDeg: r.fovDeg, ultimaCameraChave: chave ?? s0.ultimaCameraChave });
+          }
+          if (r.aviso) {
+            console.warn('[camera]', r.aviso);
+            setAvisoDeCamera(r.aviso);
+          }
+        } catch (e) {
+          console.warn('[camera] não foi possível identificar a câmera para o FOV:', e);
+        }
         // Espera LIMITADA. Sem o teto, uma câmera que abre mas nunca entrega
         // quadro (driver Windows travado, dispositivo tomado por outro app
         // depois do getUserMedia) deixava este await pendente para sempre:
@@ -1569,6 +1609,9 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         engineRef.current?.setFilterPreset(preset),
       getDiagnostics: () => engineRef.current?.getDiagnostics() ?? null,
       getCameraStream: () => (videoRef.current?.srcObject as MediaStream | null) ?? null,
+      getCameraAtual: () => cameraAtualRef.current,
+      avisoDeCamera,
+      limparAvisoDeCamera: () => setAvisoDeCamera(null),
       getCameraTuning: () => cameraTuningRef.current,
       getSessionUptimeMs: () => engineRef.current?.getSessionUptimeMs() ?? 0,
       // `isDwelling` continua exposto por compatibilidade, mas NÃO entra nas
@@ -1597,6 +1640,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       cameraError,
       calibrationInvalidated,
       gazeLostMessage,
+      avisoDeCamera,
     ]
   );
 
@@ -1614,6 +1658,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         gazeLostMessage={gazeLostMessage}
         avisoDeBorda={avisoDeBorda}
         avisoDeOlhosFechados={avisoDeOlhosFechados}
+        avisoDeCamera={avisoDeCamera}
       />
       {/* A varredura fica DENTRO do provider e FORA do `DwellContext`: ela não
           depende de dwell e não deve re-renderizar a cada alternância dele. */}

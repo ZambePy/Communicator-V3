@@ -15,6 +15,10 @@ import { extractFeatures } from '../featurePipeline';
 import { feedAccuracyRaw, feedAccuracyFiltered, getCurrentTargetPx as getAccuracyTargetPx } from '../accuracy';
 import { EyeQualityAnalyzer } from '../qualityAnalyzer';
 import { createL2CSClient, type L2CSClient } from '../l2cs/client';
+import type { FichaDoModelo } from '../l2cs/proveniencia';
+import { desfazerRollNoOlhar } from '../l2cs/roll';
+import { criarContextoDoOlho, recortarOlhoParaTensor } from '../olho/recorte';
+import { criarRamoOcularOnnx, ramoOcularNulo, type RamoOcular, type SaidasDoRamoOcular } from '../olho/ramoOcular';
 import { createCropContext, cropFaceToTensor, type CropContext } from '../l2cs/crop';
 import { L2CSHealthMonitor } from '../l2cs/block';
 import { NARIZ_PONTA, OLHO_ESQUERDO, OLHO_DIREITO } from '../faceLandmarks';
@@ -247,6 +251,14 @@ export interface EngineDiagnostics {
     fallback: boolean;
     /** Idade máxima aceita para um resultado, em ms (cresce com a latência). */
     staleMs: number;
+    /** Ficha de proveniência dos pesos carregados; `null` antes do `ready`. */
+    modelo: FichaDoModelo | null;
+  };
+  /** Ramo ocular (V2). `ativo` segue a flag `eyeNet`. */
+  olho: {
+    ativo: boolean;
+    latencyMs: number;
+    modelo: FichaDoModelo | null;
   };
   gaze: {
     yaw: number;
@@ -481,6 +493,8 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   let estabilizadorOneEuro: EstabilizadorDeFixacao | null = null;
   /** Roll do último quadro com rosto, para o crop do próximo (sprint S6). */
   let ultimoRollRad: number | null = null;
+  /** Roll passado ao recorte da última submissão ao L2CS; `null` sem normalização. */
+  let rollDaSubmissao: number | null = null;
   // Projeta a posição pelo Kalman durante a piscada, em vez de congelar. Só
   // tem efeito quando há Kalman — nunca no modo `'oneEuro'`.
   const blinkHold = new BlinkHold();
@@ -552,6 +566,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   // para o cursor não travar completamente.
   let l2csClient: L2CSClient | null = null;
   let cropCtx: CropContext | null = null;
+  // Ramo ocular (V2). Nulo por padrão: nenhum custo, vetor idêntico ao de antes.
+  let ramoOcular: RamoOcular = ramoOcularNulo;
+  let ramoOcularAtivo = false;
+  let contextoOlhoEsq: CropContext | null = null;
+  let contextoOlhoDir: CropContext | null = null;
   let l2csStatus: L2CSStatus = 'loading';
   const l2csStatusSubscribers = new Set<(s: L2CSStatus) => void>();
   let l2csFramesSubmitted = 0;
@@ -642,6 +661,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     ultimoFiltroSec = null;
     // Roll de um rosto que já não está lá não descreve o rosto que voltar.
     ultimoRollRad = null;
+    rollDaSubmissao = null;
     estabilizadorOneEuro?.reset();
     // Encerra qualquer episódio de hold em curso. O `predict` nunca é chamado
     // no ramo `piscando: false`, então o stub abaixo só existe para satisfazer
@@ -762,7 +782,27 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   // porque o loop rAF precisa começar já para o cursor não ficar parado.
   // Se init falhar, marca status='error' — a UI deve consultar via
   // getL2CSStatus() e mostrar erro/impedir calibração.
+  function initRamoOcularAsync(): void {
+    if (ramoOcularAtivo || EXPERIMENT.eyeNet === 'off') return;
+    contextoOlhoEsq = criarContextoDoOlho();
+    contextoOlhoDir = criarContextoDoOlho();
+    ramoOcular = criarRamoOcularOnnx();
+    ramoOcularAtivo = true;
+    ramoOcular.start().then(
+      () => console.log('[olho] ramo ocular pronto (dois workers).'),
+      (err) => {
+        // Falhou: volta ao nulo. O vetor do conjunto ativo continua exigindo o
+        // bloco ocular, que sai zerado com motivo 'stale' — visível no
+        // diagnóstico, e a S1 tira o peso dessas amostras.
+        console.error('[olho] ramo ocular não iniciou — bloco ocular fica zerado. Motivo:', err);
+        ramoOcular.stop();
+        ramoOcular = ramoOcularNulo;
+      },
+    );
+  }
+
   function initL2CSAsync(): void {
+    initRamoOcularAsync();
     if (l2csClient) return;
     if (EXPERIMENT.l2cs === 'off') {
       // Sem o bloco angular, o modelo usa só as 4 features de íris.
@@ -999,7 +1039,14 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
                 rollRad: EXPERIMENT.normalizarRollNoCrop ? ultimoRollRad : null,
               });
               stageTimer.end(STAGE.l2csCrop);
-              if (l2csClient.submitTensor(tensor)) l2csFramesSubmitted++;
+              if (l2csClient.submitTensor(tensor)) {
+                l2csFramesSubmitted++;
+                // Roll que ESTA inferência vai carregar. Com uma inferência em
+                // voo por vez, é o roll do próximo resultado; entre a submissão
+                // e a chegada a cabeça gira frações de grau, e usar o roll do
+                // quadro corrente seria a mesma aproximação com um atraso a mais.
+                rollDaSubmissao = EXPERIMENT.normalizarRollNoCrop ? ultimoRollRad : null;
+              }
             } catch (e) {
               // Ex.: getImageData tainted, vídeo ainda sem quadro. O extractor
               // recebe o gaze inválido e o bloco angular fica zerado neste quadro.
@@ -1010,7 +1057,14 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           stageTimer.begin(STAGE.l2csRead);
           const g = l2csClient.getLatestGaze(startTimeMs);
           stageTimer.end(STAGE.l2csRead);
-          l2csGaze = { yaw: g.yaw, pitch: g.pitch, valid: g.valid, confidence: g.confidence };
+          // A rede respondeu no referencial do recorte nivelado (S6). O vetor
+          // de features e o Ridge vivem no referencial do vídeo: sem desfazer
+          // a rotação, inclinar a cabeça mudaria o olhar lido para um ponto
+          // fixo — o erro que a normalização existe para tirar, de volta.
+          const gVideo = g.valid
+            ? desfazerRollNoOlhar({ yaw: g.yaw, pitch: g.pitch }, rollDaSubmissao, IS_VIDEO_MIRRORED)
+            : g;
+          l2csGaze = { yaw: gVideo.yaw, pitch: gVideo.pitch, valid: g.valid, confidence: g.confidence };
 
           if (g.valid) l2csFramesValid++; else l2csFramesStale++;
           // Conta inferências, não leituras: o timestamp é a hora da captura e
@@ -1032,8 +1086,35 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             setL2CSStatus('ready');
             console.log('[L2CS] saída voltou a variar — status restaurado para ready.');
           }
-          diagL2csYaw = g.yaw;
-          diagL2csPitch = g.pitch;
+          diagL2csYaw = gVideo.yaw;
+          diagL2csPitch = gVideo.pitch;
+        }
+
+        // Ramo ocular: recorta os dois olhos e lê a última saída válida. Com
+        // `l2cs=off` o bloco facial precisa existir (zerado) para os índices
+        // do bloco ocular não andarem — ver `extractCompactFeatures`.
+        let saidasDoOlho: SaidasDoRamoOcular | null = null;
+        if (ramoOcularAtivo && videoEl) {
+          const vw = videoEl.videoWidth;
+          const vh = videoEl.videoHeight;
+          if (vw > 0 && vh > 0 && contextoOlhoEsq && contextoOlhoDir && ramoOcular.podeSubmeter(startTimeMs)) {
+            try {
+              const px = (i: number) => ({ x: landmarks[i].x * vw, y: landmarks[i].y * vh });
+              const esq = recortarOlhoParaTensor(videoEl, vw, vh, {
+                cantoInterno: px(OLHO_ESQUERDO.interno), cantoExterno: px(OLHO_ESQUERDO.externo),
+                olho: 'esquerdo', isMirrored: IS_VIDEO_MIRRORED,
+              }, contextoOlhoEsq);
+              const dir = recortarOlhoParaTensor(videoEl, vw, vh, {
+                cantoInterno: px(OLHO_DIREITO.interno), cantoExterno: px(OLHO_DIREITO.externo),
+                olho: 'direito', isMirrored: IS_VIDEO_MIRRORED,
+              }, contextoOlhoDir);
+              ramoOcular.submeter(esq, dir);
+            } catch (e) {
+              console.warn('[olho] recorte falhou:', e);
+            }
+          }
+          saidasDoOlho = ramoOcular.ultimas(startTimeMs);
+          if (l2csGaze == null) l2csGaze = { yaw: 0, pitch: 0, valid: false };
         }
 
         stageTimer.begin(STAGE.features);
@@ -1042,7 +1123,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           faceMatrix,
           l2csGaze,
           videoEl?.videoWidth,
-          videoEl?.videoHeight
+          videoEl?.videoHeight,
+          undefined,
+          undefined,
+          saidasDoOlho,
         );
         stageTimer.end(STAGE.features);
         diagBlink = extractorResult.blinkDetected;
@@ -1500,6 +1584,13 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         l2csClient = null;
       }
       cropCtx = null;
+      if (ramoOcularAtivo) {
+        try { ramoOcular.stop(); } catch (e) { console.warn('[IrisFlow] ramoOcular.stop() falhou:', e); }
+        ramoOcular = ramoOcularNulo;
+        ramoOcularAtivo = false;
+        contextoOlhoEsq = null;
+        contextoOlhoDir = null;
+      }
       qualityAnalyzer.dispose?.();
       medidorDeContraluz.dispose();
       calibration.dispose();
@@ -1583,6 +1674,12 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           executionProvider: l2csClient?.getExecutionProvider() ?? null,
           fallback: l2csClient?.houveFallback() ?? false,
           staleMs: l2csClient?.getStaleMs() ?? 0,
+          modelo: l2csClient?.getFicha() ?? null,
+        },
+        olho: {
+          ativo: ramoOcularAtivo,
+          latencyMs: ramoOcular.latenciaMediaMs(),
+          modelo: ramoOcular.ficha(),
         },
         gaze: {
           yaw: diagL2csYaw,

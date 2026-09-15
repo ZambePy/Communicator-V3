@@ -164,7 +164,17 @@ export const Overlay: React.FC = () => {
 
   useEffect(() => {
     const aplicar = (c: ConfiguracaoDoModo) => {
-      if (configRef.current) return; // a primeira que chegar vale
+      if (configRef.current) {
+        // Reajuste de escala do monitor (DPI): o main reenvia a configuração
+        // com o novo tamanho em DIP. Só a geometria muda; o estado da máquina
+        // (dwell em curso, lupa aberta) continua — nada foi invalidado.
+        const antes = configRef.current;
+        if (antes.monitor.width !== c.monitor.width || antes.monitor.height !== c.monitor.height) {
+          configRef.current = { ...antes, monitor: c.monitor };
+          setConfig(configRef.current);
+        }
+        return;
+      }
       configRef.current = c;
       setConfig(c);
       estadoRef.current = { ...ESTADO_INICIAL, lupa: c.lupa };

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { FichaDoModelo } from '../l2cs/proveniencia';
 import { preflight, podeComecar, type EntradaPreflight } from './preflight';
 
 // -----------------------------------------------------------------------------
@@ -9,6 +10,19 @@ import { preflight, podeComecar, type EntradaPreflight } from './preflight';
 // deveria haver `bloqueio` custa a sessão inteira; o contrário treina o
 // operador a ignorar a lista.
 // -----------------------------------------------------------------------------
+
+/** Pesos com procedência limpa: base licenciada, hash conferido. */
+const FICHA_LIMPA: FichaDoModelo = {
+  arquivo: 'l2cs_v2.onnx',
+  dataset: 'gazegene',
+  bins: { n: 30, larguraGraus: 3, offsetGraus: -45, decodificacao: 'linear' },
+  sha256Declarado: 'a'.repeat(64),
+  sha256Calculado: 'a'.repeat(64),
+  integridade: 'confere',
+  usoComercial: 'permitido',
+  bases: ['GazeGene (CC BY-NC-SA 4.0 + contrato comercial)'],
+  contrato: 'Beihang University, 2026-11-01',
+};
 
 const BOM: EntradaPreflight = {
   estadoEngine: 'tracking',
@@ -21,7 +35,10 @@ const BOM: EntradaPreflight = {
   taxaAtualizacaoHz: 60,
   fpsRender: 29,
   videoPx: { w: 1920, h: 1080 },
-  l2cs: { status: 'ready', executionProvider: 'webgpu', stalePct: 0, pendingCount: 0, hz: 7 },
+  l2cs: {
+    status: 'ready', executionProvider: 'webgpu', stalePct: 0, pendingCount: 0, hz: 7,
+    modelo: FICHA_LIMPA,
+  },
   filtro: { pedido: 'oneEuro', efetivo: 'oneEuro', degradado: false },
   flags: { filterMode: 'oneEuro', l2csInputSize: 448 },
 };
@@ -292,5 +309,32 @@ describe('podeComecar', () => {
   it('atenção não impede; bloqueio impede', () => {
     expect(podeComecar(preflight(com({ origemGeometria: 'default' })))).toBe(true);
     expect(podeComecar(preflight(com({ calibrado: false })))).toBe(false);
+  });
+});
+
+describe('proveniência dos pesos', () => {
+  it('sem ficha é atenção, não bloqueio — a bancada precisa rodar o checkpoint antigo', () => {
+    const itens = preflight(com({ l2cs: { ...BOM.l2cs, modelo: null } }));
+    expect(nivelDe(com({ l2cs: { ...BOM.l2cs, modelo: null } }), 'L2CS · pesos')).toBe('atencao');
+    expect(podeComecar(itens)).toBe(true);
+  });
+
+  it('uso comercial proibido é atenção com a ação dizendo que não distribui', () => {
+    const e = com({ l2cs: { ...BOM.l2cs, modelo: { ...FICHA_LIMPA, usoComercial: 'proibido', contrato: null } } });
+    const item = preflight(e).find((i) => i.item === 'L2CS · pesos')!;
+    expect(item.nivel).toBe('atencao');
+    expect(item.detalhe).toContain('USO COMERCIAL PROIBIDO');
+    expect(item.acao).toMatch(/não para distribuir/);
+  });
+
+  it('hash que não confere bloqueia: a sessão não teria proveniência conhecida', () => {
+    const e = com({ l2cs: { ...BOM.l2cs, modelo: { ...FICHA_LIMPA, integridade: 'nao-confere' } } });
+    expect(nivelDe(e, 'L2CS · pesos')).toBe('bloqueio');
+    expect(podeComecar(preflight(e))).toBe(false);
+  });
+
+  it('com o worker fora do ar não há o que dizer sobre os pesos', () => {
+    const e = com({ l2cs: { ...BOM.l2cs, status: 'loading', modelo: null } });
+    expect(preflight(e).find((i) => i.item === 'L2CS · pesos')).toBeUndefined();
   });
 });

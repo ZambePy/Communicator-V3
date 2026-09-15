@@ -28,6 +28,7 @@ import {
   regiaoDaLupa,
   type Ponto,
   type QuadroDeTela,
+  reacaoAMudancaDeTela,
 } from '../../src/computador/geometria';
 import { ehTeclaNomeada } from '../../src/computador/entradaWindows';
 import {
@@ -248,12 +249,55 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
     console.log(`[computador] modo encerrado (${motivo})`);
   }
 
-  // Só o que invalida a calibração: geometria ou escala do monitor. A barra de
-  // tarefas mudando de tamanho (`workArea`) não é motivo para sair.
-  const aoMudarTela = (_e: unknown, _display?: Display, mudou?: string[]) => {
-    if (Array.isArray(mudou) && !mudou.some((m) => m === 'bounds' || m === 'scaleFactor' || m === 'rotation')) return;
-    parar('tela_mudou');
+  // Geometria FÍSICA mudou (outro monitor, rotação, resolução) → sai: a
+  // calibração não vale. Só a escala (DPI) mudou → os mesmos pixels físicos
+  // com outra contagem em DIP: recalcula o quadro, redimensiona a
+  // sobreposição e segue. A barra de tarefas (`workArea`) não é motivo para nada.
+  const aoMudarTela = (_e: unknown, display?: Display, mudou?: string[]) => {
+    const s = sessao;
+    if (!s) return;
+    // Outro monitor mudando não afeta o nosso.
+    if (display && display.id !== s.idDoMonitor) return;
+    const atual = display ?? screen.getAllDisplays().find((d) => d.id === s.idDoMonitor);
+    if (!atual) { parar('tela_mudou'); return; }
+
+    const reacao = reacaoAMudancaDeTela(
+      { monitor: s.quadro.monitor, escala: s.quadro.escala },
+      { monitor: atual.bounds, escala: atual.scaleFactor },
+      mudou,
+    );
+    if (reacao === 'ignorar') return;
+    if (reacao === 'encerrar') { parar('tela_mudou'); return; }
+    reajustarAoMonitor(s, atual);
   };
+
+  /** Mesmos pixels físicos, nova escala: refaz o quadro sem derrubar a sessão. */
+  function reajustarAoMonitor(s: Sessao, display: Display): void {
+    const principal = opcoes.janelaPrincipal();
+    if (!principal || principal.isDestroyed() || s.sobreposicao.isDestroyed()) { parar('tela_mudou'); return; }
+    const janela = principal.getContentBounds();
+    s.quadro = { janela, monitor: display.bounds, escala: display.scaleFactor };
+    s.config = { ...s.config, monitor: { width: display.bounds.width, height: display.bounds.height } };
+    try {
+      s.sobreposicao.setBounds({
+        x: display.bounds.x,
+        y: display.bounds.y,
+        width: display.bounds.width,
+        // +1 pela mesma razão do início: janela transparente do tamanho exato
+        // do monitor vira tela cheia e perde a transparência.
+        height: display.bounds.height + 1,
+      });
+      s.sobreposicao.webContents.send(CANAIS.sobreposicaoConfig, s.config);
+    } catch (e) {
+      console.warn('[computador] não foi possível reajustar a sobreposição; encerrando', e);
+      parar('tela_mudou');
+      return;
+    }
+    // O ponto pressionado pertencia ao quadro antigo; um arrasto atravessando
+    // a troca de escala não tem como ser interpolado com segurança.
+    s.pressionadoEm = null;
+    console.log(`[computador] escala do monitor mudou para ${display.scaleFactor}× — quadro reajustado, modo segue.`);
+  }
 
   async function iniciar(evento: IpcMainInvokeEvent, pedido: unknown): Promise<{ ok: true } | { ok: false; motivo: string }> {
     const principal = opcoes.janelaPrincipal();

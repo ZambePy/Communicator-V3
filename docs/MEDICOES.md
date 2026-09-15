@@ -474,6 +474,91 @@ trata correções afins como válidas por cerca de 10 min; Feit et al. relatam d
 3 a 10 recalibrações por dia com 6 usuários com ELA.
 
 
+### 4.6 Protocolos do V2 *(a medir)*
+
+Cinco sessões novas, todas na mesma bancada da M1 e julgadas pela mesma régua
+de reprodutibilidade (~0,1°). Nenhuma foi feita. Cada uma existe para
+responder a UMA pergunta do relatório *Rota para o V2*, e a ordem é a ordem em
+que as respostas são necessárias: a primeira dimensiona o investimento em
+modelo; as quatro seguintes dizem se o produto serve a quem está acamado.
+
+Regras comuns: N ≥ 3 por condição (três calibrações independentes, não três
+testes sobre a mesma calibração); `pipeline.runtime.modelo` conferido em todos
+os relatórios — **a ficha de proveniência diz com que pesos a rodada foi
+feita**, e uma rodada com `usoComercial: 'proibido'` pode ser medida e
+comparada, mas nunca sair num release; `l2csValidFraction` ≥ 0,98, senão a
+sessão é de iluminação, não da condição.
+
+#### M-ablação — quanto vale o bloco L2CS
+
+A pergunta que dimensiona todo o resto: se o bloco angular vale 0,3°, o
+retreino é urgente; se vale 0,05°, o V2 pode sair sem L2CS enquanto a licença
+não vem.
+
+| | condição A | condição B |
+|---|---|---|
+| URL | `?ep=auto&l2cs=448&filtro=oneEuro&diagonal=…` | `?ep=off&filtro=oneEuro&diagonal=…` |
+| conjunto de features | `irisCore+l2cs:6` | `irisCore:4` |
+| pessoa, distância, hora | iguais | iguais |
+
+Registrar `meanErrorDeg`, `looErrorPx`, centro/periferia, e o `featureSet` do
+relatório (a prova de que a condição B rodou sem o bloco). **Decisão:**
+diferença de A para B acima de 0,1° é o valor do bloco; abaixo, o bloco não
+está pagando o custo e a prioridade do retreino cai.
+
+#### M-deslocamento — calibrar sentado, medir reclinado
+
+A medição que ainda não existe e que define se o produto serve a quem está
+acamado. Calibrar na postura de referência (M1); sem recalibrar, medir em três
+posturas: a mesma, reclinado ~15° (encosto da cadeira um dente atrás) e
+reclinado ~30°. Duas condições por postura: compensação de pose ligada e
+desligada (`geometricPoseCompensation`, via `__irisflowExp.set`), e a normalização
+de roll do recorte (`?rollCrop=1` · `?rollCrop=0`) — o efeito de S6 só existe
+aqui.
+
+Registrar `poseDeltaCalibToTestDeg` (a prova de quanto a pessoa se moveu),
+`meanErrorDeg` e `biasY`. **Meta do V2:** a 15° o erro fica ≤ 1,5× o da
+postura de referência. **Decisão:** a compensação que não reduzir o erro sob
+deslocamento sai; a que reduzir fica ligada; e o que sobrar acima de 1,5×
+vira aviso na interface ("recalibre — você mudou de posição"), não silêncio.
+
+#### M-luz — sala clara contra só a tela
+
+Mesma pessoa, mesma calibração: uma rodada com a luz da sala acesa, outra só
+com a tela como fonte de luz (é o quarto à noite). Registrar `iluminacao` do
+preflight, `l2csValidFraction` e `meanErrorDeg`. **Decisão:** se a rodada só
+com tela perder mais de 0,3° ou a fração válida cair abaixo de 0,9, o corpus
+de treino do V2 precisa da luz de tela na randomização (já prevista no
+Communicator V2) — e o número aqui é o que prova que ela funcionou depois.
+
+#### M-óculos — com e sem
+
+Uma pessoa que usa óculos: calibrar e medir com eles, tirar, calibrar e medir
+sem. Registrar o item `óculos` do preflight (reflexo especular), `jitterRMS` e
+`meanErrorDeg`. **Decisão:** a diferença é o custo dos óculos hoje; é contra
+ela que o ramo ocular (`?olho=onnx`, quando o modelo existir) será julgado — a
+Fase 1 do roadmap só fecha se o caso com óculos não piorar em relação aos
+escalares de íris.
+
+#### M-distância — 45, 60, 75 cm
+
+Calibrar a 60 cm; sem recalibrar, medir a 45, 60 e 75 (fita métrica, e
+`distanciaMedidaCm` no relatório como testemunha). Compensação de distância
+ligada e desligada. Registrar `meanErrorDeg` e `affine.gainX/gainY` — o ganho
+é o que a distância muda primeiro. **Decisão:** a compensação fica se reduzir
+o erro nas duas distâncias fora da calibração; o FOV por câmera
+(Configurações → "Calibrar campo de visão") tem de estar medido, não no
+padrão, senão a sessão mede o erro do default de 69,7°, não o da compensação.
+
+#### Parâmetros de URL novos
+
+| parâmetro | valores | flag |
+|---|---|---|
+| `rollCrop=` | `1` · `0` | `normalizarRollNoCrop` (S6) |
+| `estabilizar=` | `1` · `0` | `estabilizarFixacao` (S5) |
+| `dwellCorrige=` | `1` · `0` | `correcaoPorDwell` (S3) |
+| `olho=` | `off` · `onnx` | `eyeNet` — ramo ocular (exige `models/eyenet/eyenet.onnx`) |
+
 ## 5. Como rodar uma sessão
 
 ### 5.1 Build
@@ -644,7 +729,7 @@ Esquema `irisflow.accuracy-report/2`:
 | `abortado` | `null` no caminho normal; o motivo quando o vigia interrompeu. Preenchido = parcial |
 | `protocolo` | `pontos`, `coletaMs`, `acomodacaoMs`, `janelaUtilMs`, `fracaoMinimaDeAmostras`, `ordem`, `sementeDaOrdem`, `minutosDesdeCalibracao` |
 | `meta` | data, `blocoDeMedicao` (derivado), iluminação e movimento de cabeça (**medidos** da prontidão), óculos (do reflexo especular medido), minutos de sessão, distância, diagonal e procedência, escala do SO, `observacoes` |
-| `pipeline` | `variant`, features, dimensões do L2CS, regressor, **snapshot completo das flags** (`experiment`) e `runtime` (provider efetivo, fallback, latência e staleness do L2CS, recorte, filtro, fps, resolução do vídeo) |
+| `pipeline` | `variant`, features, dimensões do L2CS, regressor, **snapshot completo das flags** (`experiment`) e `runtime` (provider efetivo, fallback, latência e staleness do L2CS, recorte, filtro, fps, resolução do vídeo, e **`modelo`: a ficha de proveniência dos pesos** — bases de treino, licença, `usoComercial`, integridade do hash) |
 | `result` | as métricas da seção 8 |
 | `diagnostics` | um objeto por ponto: posição real, predição média, erro por eixo, viés, graus, tremor, `bceaPx2`, `nSamples`, `nEsperado`, `fracaoValida`, pose média |
 | `distanceRange` | distância de calibração e de teste, e se a compensação estava na faixa |

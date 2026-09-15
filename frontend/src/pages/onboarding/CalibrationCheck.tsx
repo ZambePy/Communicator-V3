@@ -1,11 +1,12 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
+import { buildRuntimeInfo } from '../../utils/runtimeInfo';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { useGaze } from '../../context/GazeContext';
 import { useSettings } from '../../context/SettingsContext';
 import { BackButton } from '../../components/ui/BackButton';
 import { hoverAndFocus, hoverAndFocusBackground } from '../../components/ui/hoverFocus';
-import { startAccuracyTest, type RuntimeInfo } from '@tracker/accuracy';
+import { startAccuracyTest } from '@tracker/accuracy';
 import { montarMetaDeMedicao } from '../../utils/autoTestMeta';
 import { emitirResultadoDeCalibracao } from '../../cloud/eventos';
 import { getCalibrationTimestampMs } from '@tracker/calibration';
@@ -369,20 +370,10 @@ export const CalibrationCheck: React.FC = () => {
     meta.screenScaleFactor = settings.screenScaleFactor;
 
     // Sem isto o relatório não sabe em que provider o L2CS rodou nem qual
-    // filtro governava — e duas condições viram um número só.
-    const d = getDiagnostics();
-    const runtime: RuntimeInfo | undefined = d
-      ? {
-          l2csExecutionProvider: d.l2cs?.executionProvider ?? null,
-          l2csFallback: d.l2cs?.fallback,
-          l2csLatencyMs: d.l2cs?.latencyMs,
-          l2csStalePct: d.l2cs?.stalePct,
-          filterEffective: d.filtro?.efetivo,
-          filterPreset: d.filtro?.preset ?? null,
-          fpsRender: d.fpsRender,
-          video: d.video ? { width: d.video.width, height: d.video.height } : undefined,
-        }
-      : undefined;
+    // filtro governava — e duas condições viram um número só. A mesma função
+    // que Configurações usa: este era o segundo caminho que `runtimeInfo.ts`
+    // existe para unificar, e ainda montava o objeto à mão (sem `modelo`).
+    const runtime = buildRuntimeInfo(getDiagnostics());
 
     const inicioDaCalibracaoMs = calibracaoIniciadaEmRef.current;
     startAccuracyTest(

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  reacaoAMudancaDeTela,
   janelaParaTela,
   janelaParaSobreposicao,
   sobreposicaoParaTela,
@@ -92,5 +93,45 @@ describe('lupa', () => {
     expect(lupaParaTela({ x: 300, y: 300 }, { width: 600, height: 600 }, regiao)).toEqual({ x: 960, y: 540 });
     // Fora do painel é preso à região, nunca além dela.
     expect(lupaParaTela({ x: 900, y: 900 }, { width: 600, height: 600 }, regiao)).toEqual({ x: 1109, y: 689 });
+  });
+});
+
+describe('reacaoAMudancaDeTela', () => {
+  const full = { monitor: { x: 0, y: 0, width: 1920, height: 1080 }, escala: 1 };
+
+  it('só a barra de tarefas mudou: ignora', () => {
+    expect(reacaoAMudancaDeTela(full, full, ['workArea'])).toBe('ignorar');
+  });
+
+  it('100 % → 125 %: mesmos pixels físicos, reajusta em vez de encerrar', () => {
+    const dpi125 = { monitor: { x: 0, y: 0, width: 1536, height: 864 }, escala: 1.25 };
+    expect(reacaoAMudancaDeTela(full, dpi125, ['bounds', 'scaleFactor'])).toBe('reajustar');
+    // E o caminho de volta.
+    expect(reacaoAMudancaDeTela(dpi125, full, ['bounds', 'scaleFactor'])).toBe('reajustar');
+  });
+
+  it('150 % com arredondamento de DIP que não fecha exato ainda é reajuste', () => {
+    // 1920/1.5 = 1280, 1080/1.5 = 720 — exato. 2560×1440 @1.5 = 1706.67 → 1707.
+    const qhd = { monitor: { x: 0, y: 0, width: 2560, height: 1440 }, escala: 1 };
+    const qhd150 = { monitor: { x: 0, y: 0, width: 1707, height: 960 }, escala: 1.5 };
+    expect(reacaoAMudancaDeTela(qhd, qhd150, ['bounds', 'scaleFactor'])).toBe('reajustar');
+  });
+
+  it('resolução física diferente: encerra', () => {
+    const hd = { monitor: { x: 0, y: 0, width: 1280, height: 720 }, escala: 1 };
+    expect(reacaoAMudancaDeTela(full, hd, ['bounds'])).toBe('encerrar');
+  });
+
+  it('rotação: encerra mesmo com a mesma contagem de pixels', () => {
+    const girado = { monitor: { x: 0, y: 0, width: 1080, height: 1920 }, escala: 1 };
+    expect(reacaoAMudancaDeTela(full, girado, ['bounds', 'rotation'])).toBe('encerrar');
+  });
+
+  it('sem a lista do Electron, decide pela comparação física', () => {
+    const dpi125 = { monitor: { x: 0, y: 0, width: 1536, height: 864 }, escala: 1.25 };
+    expect(reacaoAMudancaDeTela(full, dpi125, null)).toBe('reajustar');
+    expect(reacaoAMudancaDeTela(full, full, undefined)).toBe('ignorar');
+    const hd = { monitor: { x: 0, y: 0, width: 1280, height: 720 }, escala: 1 };
+    expect(reacaoAMudancaDeTela(full, hd, undefined)).toBe('encerrar');
   });
 });

@@ -14,6 +14,8 @@
 // Puro: não lê relógio, não toca no DOM, não chama o engine. Tudo entra por
 // parâmetro, então dá para testar cada veredito sem navegador.
 
+import type { FichaDoModelo } from '../l2cs/proveniencia';
+
 export type NivelPreflight =
   /** Pronto. */
   | 'ok'
@@ -71,6 +73,8 @@ export interface EntradaPreflight {
     pendingCount: number;
     /** Taxa de inferências entregues, em Hz. `0` com fila presa = deadlock. */
     hz: number;
+    /** Ficha de proveniência dos pesos carregados; `null` antes do `ready`. */
+    modelo?: FichaDoModelo | null;
   };
 
   /** Modo de filtragem pedido e o que de fato está governando. */
@@ -306,6 +310,36 @@ export function preflight(e: EntradaPreflight): ItemPreflight[] {
       'A fila travou: o worker recebeu e não respondeu, e nenhuma inferência '
       + 'nova acontece pelo resto da sessão — com o status ainda dizendo '
       + '`ready`. Recarregue a página antes de medir.');
+  }
+
+  // ── Proveniência dos pesos ─────────────────────────────────────────────
+  // Não bloqueia a medição: a bancada pode e deve rodar o checkpoint Gaze360
+  // para comparar. Bloqueia a LEITURA — quem vê "USO COMERCIAL PROIBIDO" numa
+  // rodada de release sabe que aquele número não pode sair de casa.
+  if (e.l2cs.status === 'ready') {
+    const f = e.l2cs.modelo ?? null;
+    if (!f) {
+      add('L2CS · pesos', 'atencao', 'ficha de proveniência ausente',
+        'A meta do modelo não traz `proveniencia`. O relatório não sabe dizer '
+        + 'com que dado os pesos foram treinados nem sob que licença.');
+    } else if (f.integridade === 'nao-confere') {
+      add('L2CS · pesos', 'bloqueio', `SHA-256 não confere (${f.arquivo ?? 'onnx'})`,
+        'O arquivo carregado não é o que a ficha descreve. Ou a meta é de '
+        + 'outro modelo, ou o ONNX foi trocado sem atualizar a meta. Nenhum '
+        + 'relatório desta sessão tem proveniência conhecida.');
+    } else {
+      const uso = f.usoComercial === 'permitido'
+        ? 'uso comercial autorizado'
+        : f.usoComercial === 'proibido' ? 'USO COMERCIAL PROIBIDO' : 'uso comercial não declarado';
+      const integridade = f.integridade === 'confere' ? 'hash confere'
+        : f.integridade === 'nao-declarado' ? 'hash não declarado na meta' : 'hash não calculado';
+      add('L2CS · pesos', f.usoComercial === 'permitido' ? 'ok' : 'atencao',
+        `${f.bases.join(', ') || f.dataset} · ${uso} · ${integridade}`,
+        f.usoComercial === 'permitido'
+          ? null
+          : 'Vale para medir e comparar, não para distribuir. O V2 troca estes '
+            + 'pesos por um modelo treinado em base licenciada.');
+    }
   }
 
   // ── Cadeia de filtragem ────────────────────────────────────────────────

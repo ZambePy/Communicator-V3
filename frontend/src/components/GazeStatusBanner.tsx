@@ -41,6 +41,12 @@ interface Props {
    */
   gazeLostMessage?: string | null;
   /**
+   * A câmera aberta não é a da última sessão e o campo de visão mudou por
+   * causa disso (restaurado de uma medição anterior, ou de volta ao padrão).
+   * Última prioridade: é informação de configuração, não de operação.
+   */
+  avisoDeCamera?: string | null;
+  /**
    * Cursor parado na borda porque o olhar saiu da área da tela.
    *
    * Vem pronto do `DetectorDeOlharForaDaTela`, com histerese. É o sintoma que
@@ -100,6 +106,7 @@ export const GazeStatusBanner: React.FC<Props> = ({
   gazeLostMessage = null,
   avisoDeBorda = null,
   avisoDeOlhosFechados = null,
+  avisoDeCamera = null,
 }) => {
   // `state` continua no contrato e e IGNORADO: era a entrada do unico aviso que
   // saiu ("Ainda nao ha calibracao"). Fica no tipo porque o `GazeProvider`
@@ -151,6 +158,12 @@ export const GazeStatusBanner: React.FC<Props> = ({
     tom = 'aviso';
     titulo = 'Distância diferente da calibração';
     detalhe = distanceAdvice;
+  } else if (avisoDeCamera) {
+    // Por último: é a situação mais benigna e a única que se resolve em
+    // Configurações, não na cadeira. Só aparece quando a câmera mudou.
+    tom = 'aviso';
+    titulo = 'Câmera diferente da última sessão';
+    detalhe = avisoDeCamera;
   }
 
   if (!tom) return null;
