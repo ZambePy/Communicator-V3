@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { FOV_PADRAO_DEG, sanitizarMapaDeFov, type MapaDeFov } from '@tracker/camera/fovPorCamera';
 import { computeDisplayGeometry, pickPanelForDisplay } from '@tracker/displayGeometry';
 import { aplicarGeometriaDoUsuario } from '../design/gazeMetrics';
 import { setSessionGeometry } from '@tracker/calibration';
@@ -60,6 +61,13 @@ interface Settings {
   // estima a distância sozinho em toda sessão, que é o que faz o medidor de
   // distância da pré-calibração funcionar de verdade.
   cameraHorizontalFovDeg: number | null;
+  // FOV medido POR CÂMERA (chave = identidade do dispositivo). O campo acima
+  // é o valor ATIVO; este mapa é a memória: trocar de webcam restaura o FOV
+  // dela, ou volta ao padrão avisando quando é uma câmera nunca medida.
+  fovPorCamera: MapaDeFov;
+  // Identidade da última câmera aberta — é o que permite dizer "a câmera
+  // mudou" no boot seguinte.
+  ultimaCameraChave: string | null;
   // Fator de escala do Windows relatado pelo SO. NÃO entra na conversão
   // px→cm (a escala se cancela, porque o erro é medido em px CSS e a tela
   // cobre um número fixo de px CSS). Guardado para (a) desambiguar monitores
@@ -98,7 +106,9 @@ const defaultSettings: Settings = {
   // não entrada do erro angular. O botão continua na tela para quem quiser
   // derivar o valor da própria câmera; o default apenas deixa de ser `null`,
   // que era o que fazia toda sessão sair sem a testemunha.
-  cameraHorizontalFovDeg: 69.7,
+  cameraHorizontalFovDeg: FOV_PADRAO_DEG,
+  fovPorCamera: {},
+  ultimaCameraChave: null,
   screenScaleFactor: null,
 };
 
@@ -174,6 +184,10 @@ function lerSettingsDoDisco(): Partial<Settings> | null {
       // Storage editado à mão, ou vindo de uma versão com outra faixa.
       obj.dwellMs = limitarDwellMs(obj.dwellMs);
     }
+    // Campos novos do V2: ausentes em disco antigo, e o mapa nunca pode vir
+    // com entradas quebradas (um FOV NaN restaurado quebraria toda distância).
+    obj.fovPorCamera = sanitizarMapaDeFov((obj as { fovPorCamera?: unknown }).fovPorCamera);
+    if (typeof obj.ultimaCameraChave !== 'string') obj.ultimaCameraChave = null;
 
     return obj;
   } catch (e) {

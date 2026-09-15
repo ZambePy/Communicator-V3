@@ -5,7 +5,8 @@
 // último resultado envelheceu demais, `valid` cai para false e o extractor
 // recebe o bloco angular zerado. O loop rAF nunca espera pelo worker.
 
-import type { L2CSGaze, L2CSModelMeta, L2CSWorkerRequest, L2CSWorkerResponse } from './types';
+import type { L2CSGaze, L2CSModelMeta, L2CSWorkerRequest, L2CSWorkerResponse, VerificacaoDoModelo } from './types';
+import { fichaDoModelo, type FichaDoModelo } from './proveniencia';
 import { EXPERIMENT } from '../config/experiment';
 
 export type L2CSProviderRequest = 'auto' | 'webgpu' | 'wasm';
@@ -22,12 +23,17 @@ export interface L2CSClientOptions {
 export interface L2CSClient {
   start(): Promise<void>;
   stop(): void;
-  submitTensor(tensor: Float32Array): boolean;
+  /** `dims = [altura, largura]` só para tensor não quadrado (ramo ocular). */
+  submitTensor(tensor: Float32Array, dims?: [number, number]): boolean;
   /** true se um `submitTensor` agora seria aceito (worker pronto, slot livre e
    *  cadência satisfeita). Permite ao engine pular o crop quando não vai adiantar. */
   canSubmit(nowMs?: number): boolean;
   getLatestGaze(nowMs?: number): L2CSGaze;
   getMeta(): L2CSModelMeta | null;
+  /** O que o worker apurou sobre o arquivo (hash); `null` antes do `ready`. */
+  getVerificacao(): VerificacaoDoModelo | null;
+  /** Ficha achatada para relatório e tela; `null` antes do `ready`. */
+  getFicha(): FichaDoModelo | null;
   getAverageLatencyMs(): number;
   /** Provider efetivamente ativo no worker; `null` antes do `ready`. */
   getExecutionProvider(): string | null;
@@ -42,7 +48,7 @@ export interface L2CSClient {
 
 // Resolvidos contra a página, não contra a origem: sob `file://` no Electron
 // empacotado, `/models/...` apontaria para a raiz do disco.
-function urlRelativa(caminho: string): string {
+export function urlRelativa(caminho: string): string {
   if (typeof location === 'undefined') return caminho;
   return new URL(caminho, location.href).href;
 }
@@ -84,6 +90,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
   let worker: Worker | null = null;
   let ready = false;
   let meta: L2CSModelMeta | null = null;
+  let verificacao: VerificacaoDoModelo | null = null;
   let executionProviderAtivo: string | null = null;
   let fallback = false;
   let readyResolve: (() => void) | null = null;
@@ -133,6 +140,8 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
     if (msg.type === 'ready') {
       ready = true;
       meta = msg.meta;
+      // Worker antigo (sem o campo) → `null`, que a ficha lê como "não calculado".
+      verificacao = msg.verificacao ?? null;
       executionProviderAtivo = msg.executionProvider;
       fallback = msg.fallback;
       if (fallback) {
@@ -201,6 +210,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       }
       ready = false;
       meta = null;
+      verificacao = null;
       executionProviderAtivo = null;
       fallback = false;
       readyPromise = null;
@@ -221,7 +231,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       return now - lastSubmitMs >= cadenceMs;
     },
 
-    submitTensor(tensor: Float32Array): boolean {
+    submitTensor(tensor: Float32Array, dims?: [number, number]): boolean {
       if (!ready || !worker) return false;
       const now = performance.now();
       liberarSlotsPresos(now);
@@ -231,7 +241,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       try {
         // O buffer é transferido, não copiado: o caller aloca um tensor novo
         // por submissão.
-        post({ type: 'infer', id, tensor }, [tensor.buffer]);
+        post(dims ? { type: 'infer', id, tensor, dims } : { type: 'infer', id, tensor }, [tensor.buffer]);
       } catch (e) {
         // Buffer já destacado ou worker indisponível: nada foi enviado, então o
         // slot não pode ficar ocupado.
@@ -254,6 +264,14 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
 
     getMeta(): L2CSModelMeta | null {
       return meta;
+    },
+
+    getVerificacao(): VerificacaoDoModelo | null {
+      return verificacao;
+    },
+
+    getFicha(): FichaDoModelo | null {
+      return meta ? fichaDoModelo(meta, verificacao) : null;
     },
 
     getExecutionProvider(): string | null {

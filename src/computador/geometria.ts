@@ -144,3 +144,51 @@ export function lupaParaTela(
     regiao,
   );
 }
+
+/** O que fazer quando o sistema avisa que as métricas do monitor mudaram. */
+export type ReacaoAMudancaDeTela =
+  /** Nada relevante para o modo mudou (ex.: barra de tarefas). */
+  | 'ignorar'
+  /** Só a escala (DPI) mudou: os mesmos pixels físicos, outra contagem em
+   *  DIP. O quadro é recalculado e o modo continua. */
+  | 'reajustar'
+  /** A geometria física mudou (outro monitor, rotação, resolução): a
+   *  calibração do olhar não vale mais. Encerrar. */
+  | 'encerrar';
+
+/**
+ * Mudança de DPI não é mudança de tela.
+ *
+ * O Windows, ao trocar a escala de 100 % para 125 %, reporta `bounds` E
+ * `scaleFactor` alterados — mas o monitor é o mesmo e o olhar do paciente
+ * cai nos mesmos pixels FÍSICOS. Encerrar o modo aqui (o comportamento
+ * antigo) derrubava a sessão por um evento que não muda nada do que a
+ * calibração assume. Só a geometria física — resolução, rotação, monitor
+ * removido — invalida o mapa olhar→tela.
+ *
+ * `mudou` é a lista de métricas que o Electron diz terem mudado; ausente,
+ * assume-se o pior e a decisão vem da comparação física.
+ */
+export function reacaoAMudancaDeTela(
+  antes: { monitor: Retangulo; escala: number },
+  depois: { monitor: Retangulo; escala: number },
+  mudou?: readonly string[] | null,
+): ReacaoAMudancaDeTela {
+  if (Array.isArray(mudou) && !mudou.some((m) => m === 'bounds' || m === 'scaleFactor' || m === 'rotation')) {
+    return 'ignorar';
+  }
+  if (Array.isArray(mudou) && mudou.includes('rotation')) return 'encerrar';
+
+  const fisico = (r: Retangulo, k: number) => ({ w: Math.round(r.width * k), h: Math.round(r.height * k) });
+  const a = fisico(antes.monitor, antes.escala);
+  const d = fisico(depois.monitor, depois.escala);
+  // Um pixel de folga: o arredondamento em DIP pode não fechar exato.
+  const mesmoFisico = Math.abs(a.w - d.w) <= 1 && Math.abs(a.h - d.h) <= 1;
+  if (!mesmoFisico) return 'encerrar';
+  if (Math.abs(antes.escala - depois.escala) < 1e-9 &&
+      antes.monitor.x === depois.monitor.x && antes.monitor.y === depois.monitor.y &&
+      antes.monitor.width === depois.monitor.width && antes.monitor.height === depois.monitor.height) {
+    return 'ignorar';
+  }
+  return 'reajustar';
+}

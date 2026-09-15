@@ -9,6 +9,7 @@
 //
 // Uma função só, usada pelos dois caminhos, para não voltar a divergir.
 import type { RuntimeInfo } from '@tracker/accuracy';
+import type { FichaDoModelo } from '@tracker/l2cs/proveniencia';
 import { EXPERIMENT } from '@tracker/config/experiment';
 
 /** O que `getDiagnostics()` do GazeContext devolve, na parte que interessa. */
@@ -18,6 +19,7 @@ export interface DiagnosticosDeRuntime {
     fallback?: boolean;
     latencyMs?: number;
     stalePct?: number;
+    modelo?: FichaDoModelo | null;
   } | null;
   filtro?: { efetivo?: string; preset?: string | null } | null;
   fpsRender?: number;
@@ -31,6 +33,7 @@ export function buildRuntimeInfo(
   return {
     l2csExecutionProvider: d.l2cs?.executionProvider ?? null,
     l2csFallback: d.l2cs?.fallback,
+    modelo: d.l2cs?.modelo ?? null,
     l2csLatencyMs: d.l2cs?.latencyMs,
     l2csStalePct: d.l2cs?.stalePct,
     // O campo existia no tipo e nunca era preenchido, enquanto a §5 do

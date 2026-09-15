@@ -8,6 +8,8 @@
 // offline podem projetar outros conjuntos sobre a mesma gravação.
 
 import { buildL2CSBlock } from './l2cs/block';
+import { buildBlocoOcular } from './olho/bloco';
+import type { SaidasDoRamoOcular } from './olho/ramoOcular';
 import { EXPERIMENT } from './config/experiment';
 import {
   OLHO_ESQUERDO, OLHO_DIREITO, IRIS_ESQUERDA, IRIS_DIREITA,
@@ -274,7 +276,13 @@ export function getRecentBlinkRatePerMinute(windowMs: number = 60000): number {
  *  qualquer dimensão mudar — é o que invalida perfis salvos. */
 export const FEATURE_FORMAT_VERSION = 2;
 
-export type FeatureSet = 'irisCore' | 'irisCore+l2cs' | 'irisCore+l2csFull' | 'compact';
+export type FeatureSet =
+  | 'irisCore'
+  | 'irisCore+l2cs'
+  | 'irisCore+l2csFull'
+  | 'irisCore+l2cs+olho'
+  | 'irisCore+olho'
+  | 'compact';
 
 const FEATURE_SET_INDICES: Record<Exclude<FeatureSet, 'compact'>, readonly number[]> = {
   'irisCore': [0, 1, 2, 3],
@@ -298,13 +306,27 @@ const FEATURE_SET_INDICES: Record<Exclude<FeatureSet, 'compact'>, readonly numbe
    * `FEATURE_VECTOR_ID` e invalida os perfis salvos, por construção.
    */
   'irisCore+l2csFull': [0, 1, 2, 3, 37, 38, 39, 40, 41, 42, 43],
+  /**
+   * Ramo ocular (V2): íris + bloco facial + `tan(yaw)`/`tan(pitch)` do olho
+   * lidos pela EyeNet no recorte 96×64. Oito dimensões — o teto que o
+   * relatório do V2 se deu para não voltar a decorar. `irisCore+olho` é o
+   * mesmo sem o bloco facial, para rodar com `l2cs=off` enquanto a licença do
+   * ramo facial não vem.
+   */
+  'irisCore+l2cs+olho': [0, 1, 2, 3, 37, 38, 44, 45],
+  'irisCore+olho': [0, 1, 2, 3, 44, 45],
 };
 
 const FEATURE_SET_MIN_LENGTH: Record<Exclude<FeatureSet, 'compact'>, number> = {
   'irisCore': 4,
   'irisCore+l2cs': 39,
   'irisCore+l2csFull': 44,
+  'irisCore+l2cs+olho': 46,
+  'irisCore+olho': 46,
 };
+
+/** Índices do bloco ocular no vetor completo. */
+const OLHO_FULL_INDICES: readonly number[] = [44, 45];
 
 /** Índices do bloco L2CS no vetor completo. */
 const L2CS_FULL_INDICES: readonly number[] = [37, 38, 39, 40, 41, 42, 43];
@@ -312,11 +334,25 @@ const L2CS_FULL_INDICES: readonly number[] = [37, 38, 39, 40, 41, 42, 43];
 /** Conjunto ativo. Resolvido uma vez no boot: sem L2CS, o modelo vê só as
  *  quatro dimensões de íris. */
 export const ACTIVE_FEATURE_SET: FeatureSet =
-  EXPERIMENT.l2cs === 'off'
-    ? 'irisCore'
-    : EXPERIMENT.blocoL2csCompleto
-      ? 'irisCore+l2csFull'
-      : 'irisCore+l2cs';
+  EXPERIMENT.eyeNet !== 'off'
+    // Ramo ocular ligado: o bloco completo do L2CS (S7) não combina — seriam
+    // 13 dims, e a S7 é ablação. O ramo ocular vence e avisa.
+    ? (EXPERIMENT.l2cs === 'off' ? 'irisCore+olho' : 'irisCore+l2cs+olho')
+    : EXPERIMENT.l2cs === 'off'
+      ? 'irisCore'
+      : EXPERIMENT.blocoL2csCompleto
+        ? 'irisCore+l2csFull'
+        : 'irisCore+l2cs';
+
+if (EXPERIMENT.eyeNet !== 'off' && EXPERIMENT.blocoL2csCompleto) {
+  console.warn('[extractor] eyeNet ligado: `blocoL2csCompleto` é ignorado (o conjunto ativo é o do ramo ocular).');
+}
+
+/** O conjunto ativo carrega o bloco ocular? */
+export function setUsaRamoOcular(set: FeatureSet = ACTIVE_FEATURE_SET): boolean {
+  if (set === 'compact') return true;
+  return FEATURE_SET_INDICES[set].some((i) => OLHO_FULL_INDICES.includes(i));
+}
 
 /** Posições do bloco L2CS dentro do vetor já projetado (vazio quando o
  *  conjunto não carrega bloco angular). */
@@ -520,7 +556,8 @@ export interface L2CSGazeInput {
   confidence?: number;
 }
 
-/** Vetor completo por olho (37 dims + bloco L2CS quando `l2csGaze` é passado). */
+/** Vetor completo por olho (37 dims + bloco L2CS quando `l2csGaze` é passado
+ *  + bloco ocular quando `ramoOcular` é passado). */
 export function extractCompactFeatures(
   landmarks: Point3D[],
   faceMatrix?: Float32Array,
@@ -528,6 +565,7 @@ export function extractCompactFeatures(
   blinkDetector?: BlinkDetector,
   videoWidth?: number,
   videoHeight?: number,
+  ramoOcular?: SaidasDoRamoOcular | null,
 ): ExtractorResult {
   const analysis = analyzeFace(landmarks, faceMatrix, videoWidth, videoHeight, blinkDetector);
   if (!analysis.present) return { featuresLeft: [], featuresRight: [], blinkDetected: false };
@@ -628,6 +666,22 @@ export function extractCompactFeatures(
       compLeft.push(block[i]);
       compRight.push(block[i]);
     }
+  }
+
+  // O bloco ocular é POR OLHO — é a diferença dele para o facial. Só existe
+  // depois do bloco L2CS (índices 44–45): quem liga o ramo ocular com o L2CS
+  // desligado passa um gaze inválido para o bloco facial ocupar o lugar dele
+  // com zeros, e os índices não andam.
+  if (ramoOcular != null) {
+    if (l2csGaze == null) {
+      throw new RangeError(
+        '[extractor] bloco ocular exige o bloco L2CS antes dele (passe l2csGaze inválido com l2cs=off).',
+      );
+    }
+    const be = buildBlocoOcular(ramoOcular.esquerdo);
+    const bd = buildBlocoOcular(ramoOcular.direito);
+    compLeft.push(...be.valores);
+    compRight.push(...bd.valores);
   }
 
   return {

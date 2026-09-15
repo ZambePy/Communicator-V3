@@ -1,6 +1,7 @@
 // Fronteira entre o extractor e o resto do pipeline: extrai o vetor completo e
 // projeta no conjunto ativo. É aqui que se decide o que o modelo vê.
 
+import type { SaidasDoRamoOcular } from './olho/ramoOcular';
 import {
   extractCompactFeatures,
   projectFeatureSet,
@@ -29,8 +30,10 @@ export function extractFeatures(
   featureSet?: FeatureSet,
   /** Detector de piscada. Sem ele vale o singleton do módulo. */
   blinkDetector?: BlinkDetector,
+  /** Saídas do ramo ocular (V2); ausente, o bloco não é anexado. */
+  ramoOcular?: SaidasDoRamoOcular | null,
 ): FeaturePipelineResult {
-  const geo = extractCompactFeatures(landmarks, faceMatrix, l2csGaze, blinkDetector, videoWidth, videoHeight);
+  const geo = extractCompactFeatures(landmarks, faceMatrix, l2csGaze, blinkDetector, videoWidth, videoHeight, ramoOcular);
 
   const featuresLeft = projectFeatureSet(geo.featuresLeft, featureSet);
   const featuresRight = projectFeatureSet(geo.featuresRight, featureSet);

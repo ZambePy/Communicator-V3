@@ -1,0 +1,124 @@
+name: Release
+
+# Gera o instalador COMPLETO — com o motor de voz em Python empacotado — sem
+# nenhum passo manual. Antes, `voice-engine/build-voice-engine.ps1` tinha de
+# ser rodado à mão num PowerShell antes do `electron:build`; esquecer o passo
+# produzia um instalador sem voz que só se descobria na casa do paciente.
+#
+# Dispara por tag `v*` (release de verdade) ou à mão (`workflow_dispatch`)
+# para gerar um instalador de teste a partir de qualquer branch.
+#
+# O que este workflow NÃO faz: assinar o executável. Sem certificado de
+# assinatura de código (EV ou OV) o SmartScreen mostra a tela azul — ver
+# docs/GATE-V2.md, item "Certificado". Quando o certificado existir, os
+# segredos `CSC_LINK` / `CSC_KEY_PASSWORD` abaixo passam a ser lidos pelo
+# electron-builder automaticamente; até lá ficam vazios e o build segue.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  installer:
+    name: Instalador Windows com motor de voz
+    runs-on: windows-latest
+    # PyInstaller sobre torch + chatterbox leva um bom tempo; o teto folgado
+    # existe para o job não morrer no meio de um download lento do PyPI.
+    timeout-minutes: 90
+
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 0
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      # Sem certificado, o electron-builder tentaria assinar com nada e
+      # falharia; com o segredo vazio ele pula a assinatura.
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      # A mesma versão que o script manual exige: o motor foi validado em 3.11
+      # e o PyInstaller precisa da mesma que gerou as dependências nativas.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: voice-engine/requirements.txt
+
+      - name: Instalar dependências (raiz)
+        run: npm ci
+
+      - name: Instalar dependências (frontend)
+        working-directory: frontend
+        run: npm ci
+
+      # Os mesmos portões do CI: um instalador nunca sai de um commit que não
+      # passa neles.
+      - name: Tipos e testes
+        run: |
+          npx tsc --noEmit -p tsconfig.json
+          npx tsc --noEmit -p electron/tsconfig.json
+          npm test
+      - name: Testes da interface
+        working-directory: frontend
+        run: npm test
+
+      # O script é o MESMO que o desenvolvedor roda à mão. Não há uma segunda
+      # versão "do CI" para divergir dela.
+      - name: Empacotar o motor de voz (PyInstaller)
+        working-directory: voice-engine
+        shell: pwsh
+        run: .\build-voice-engine.ps1
+
+      - name: Conferir o motor empacotado
+        working-directory: voice-engine
+        shell: pwsh
+        run: |
+          if (-not (Test-Path .\dist\irisflow-voz\irisflow-voz.exe)) { throw 'motor de voz não foi gerado' }
+          $r = '{"id":1,"cmd":"status"}' | .\dist\irisflow-voz\irisflow-voz.exe
+          Write-Host $r
+          if (-not $r) { throw 'o motor não respondeu ao status' }
+
+      # `electron:build` = build do frontend + compile do Electron + package.
+      # `package-app.mjs` encontra `voice-engine/dist/irisflow-voz` e o copia
+      # para `resources/voice-engine` sozinho — é o passo que antes dependia de
+      # alguém lembrar de rodar o .ps1.
+      - name: Build do app e instalador
+        run: npm run electron:build
+
+      - name: Publicar instalador como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: irisflow-installer-${{ github.ref_name }}
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 30
+
+      # Numa tag, o instalador vira release do GitHub — é daqui que o
+      # electron-updater pode ler `latest.yml` quando o endereço de
+      # atualização apontar para cá.
+      - name: Release do GitHub
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+          generate_release_notes: true

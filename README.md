@@ -153,7 +153,9 @@ src/                        núcleo do pipeline (TypeScript puro, testado com Vi
   featurePipeline.ts        fronteira consumida pelo engine
   ridge.ts, scaler.ts       Ridge anisotrópico com CV de λ; padronização
   calibration/polynomial.ts expansão polinomial
-  l2cs/                     worker ONNX, recorte, decodificação, staleness e saúde
+  l2cs/                     worker ONNX, recorte, decodificação, proveniência, roll
+  olho/                     ramo ocular (V2): recorte 96×64, bloco de features, provedor
+  camera/                   campo de visão por câmera
   filters/                  One Euro, Kalman 2D, EMA adaptativa, hold na piscada
   interaction/              dwell, cursor, varredura, clique por piscada, fallback
   poseCompensation.ts       compensação geométrica de pose
@@ -211,6 +213,8 @@ build/                      ícone do aplicativo (icon.ico, icon.png), gerado do
                             símbolo oficial e consumido pelo electron-builder
 docs/MEDICOES.md            protocolo e métricas de medição (laboratório)
 docs/PROTOCOLO-SEMANAL.md   acompanhamento semanal das casas da beta (campo)
+docs/GATE-V2.md             portão de validação do V2: feito, pendente, critérios
+fixtures/                   contrato de recorte TS ↔ Python (gerado, não editar à mão)
 docs/ROTEIRO-DE-TESTE.md    roteiro de teste manual, em blocos
 docs/medicoes/historico/    relatórios reais guardados
 docs/medicoes/beta-semanal-modelo.csv   planilha modelo do protocolo semanal
@@ -287,17 +291,33 @@ projetos, e um `torchvision` de outra versão faz o modelo falhar ao carregar
 
 | modelo | arquivo | origem |
 |---|---|---|
-| L2CS-Net | `frontend/public/models/l2cs/l2cs_gaze360.onnx` (92 MB, não versionado) | treinado em Gaze360; 90 bins por eixo; entrada 224² ou 448² (padrão 448²) |
+| L2CS-Net | `frontend/public/models/l2cs/l2cs_gaze360.onnx` (92 MB, não versionado) | treinado em Gaze360; 90 bins por eixo; entrada 224² ou 448² (padrão 448²). **Licença research-only: uso comercial proibido, inclusive de modelos treinados — não sai em release** (ver `docs/GATE-V2.md`) |
+| EyeNet (V2, ramo ocular) | `frontend/public/models/eyenet/eyenet.onnx` (ainda não existe; só a meta de exemplo) | treinada no UnityEyes 2 (MIT) pelo projeto *Communicator V2*; entrada 3×64×96; liga com `?olho=onnx` |
 | Face Landmarker | `frontend/public/mediapipe/models/face_landmarker.task` | MediaPipe Tasks Vision, 478 landmarks com íris |
 | ONNX Runtime Web | `frontend/public/ort/` | binários WASM/WebGPU carregados pelo worker |
 
 Sem o arquivo `.onnx` o app roda com as 4 features de íris (`?ep=off`).
 
+Cada modelo tem uma **ficha de proveniência** no seu `*.meta.json` (bloco
+`proveniencia`: bases de treino, licença, `usoComercial`, contrato) e um
+`sha256` que o worker confere ao carregar. A ficha aparece em Configurações
+("Modelo de olhar: …"), no item "L2CS · pesos" do preflight e em
+`pipeline.runtime.modelo` de todo relatório de precisão. A meta também
+declara a grade de bins (`outputBins`, `binWidth`, `binOffset`, `decoding`):
+um modelo retreinado em ±45° usa decodificação `linear`, e o worker recusa uma
+meta cuja grade não bate com o tensor que o modelo devolve.
+
+O recorte facial e o recorte do olho são um **contrato com o treino**:
+`fixtures/recorte-l2cs.json` e `fixtures/recorte-olho.json` são gerados pelo
+TypeScript e lidos pelos testes do *Communicator V2* em Python — treinar com um
+recorte e inferir com outro é o modo de falha silencioso de um retreino.
+
 ### Flags de experimento
 
 Definidas em `src/config/experiment.ts` e lidas uma vez no boot, de três
 fontes: `localStorage` (`irisflow.experiment`), parâmetros de URL
-(`?ep=`, `?l2cs=`, `?filtro=`, `?diagonal=`) e variáveis de ambiente
+(`?ep=`, `?l2cs=`, `?filtro=`, `?diagonal=`, `?rollCrop=`, `?estabilizar=`,
+`?dwellCorrige=`, `?olho=`) e variáveis de ambiente
 `IRISFLOW_EXP_<chave>` no Electron. Pelo console: `__irisflowExp.set({...})`
 seguido de reload. A tela de Configurações do cuidador expõe as mesmas
 opções e avisa quando falta recarregar.
@@ -703,7 +723,12 @@ npm run electron:compile
 cd voice-engine && python -m pytest -q tests   # motor de voz (dublê do modelo)
 ```
 
-Tudo isso roda no CI (`.github/workflows/ci.yml`, Windows) a cada push.
+Tudo isso roda no CI (`.github/workflows/ci.yml`, Windows) a cada push. O
+instalador completo — com o motor de voz empacotado pelo PyInstaller, sem
+passo manual — sai de `.github/workflows/release.yml` a cada tag `v*` (ou à
+mão, em *Actions → Release → Run workflow*), como artefato e como release do
+GitHub. O workflow já lê `CSC_LINK`/`CSC_KEY_PASSWORD` dos segredos do
+repositório: quando o certificado de assinatura existir, basta cadastrá-los.
 
 **Estado medido nesta versão:** o núcleo passa em **1402 testes (mais 1 pulado)
 distribuídos em 132 arquivos**, e a interface em **799 testes em 97 arquivos** —

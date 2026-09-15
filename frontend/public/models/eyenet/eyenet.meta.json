@@ -1,0 +1,31 @@
+{
+  "model": "EyeNet (Communicator V2)",
+  "dataset": "unityeyes2",
+  "file": "eyenet.onnx",
+  "inputSize": 96,
+  "inputShape": [1, 3, 64, 96],
+  "inputLayout": "NCHW",
+  "inputColorOrder": "RGB",
+  "normalization": { "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225] },
+  "outputBins": 40,
+  "binWidth": 1.5,
+  "binOffset": -30,
+  "decoding": "linear",
+  "angleUnit": "degrees",
+  "inputTensorName": "input",
+  "outputTensorNames": { "yaw": "yaw", "pitch": "pitch" },
+  "sha256": null,
+  "proveniencia": {
+    "treino": {
+      "bases": [
+        { "nome": "UnityEyes 2 (renders próprios)", "licenca": "MIT", "url": "https://github.com/alexanderdsmith/UnityEyes2/blob/main/LICENSE" }
+      ],
+      "config": "configs/eyenet_unityeyes2.yaml (Communicator V2)",
+      "data": null,
+      "commit": null
+    },
+    "usoComercial": "permitido",
+    "contrato": null,
+    "notas": "Arquivo de META de exemplo: o ONNX ainda não existe. `exportar_onnx.py --modelo eyenet` do Communicator V2 sobrescreve este arquivo com sha256, data e commit reais. Recorte do olho: fixtures/recorte-olho.json (96×64, canônico como olho direito). Saída extra 'pupil' do modelo é ignorada pelo worker."
+  }
+}

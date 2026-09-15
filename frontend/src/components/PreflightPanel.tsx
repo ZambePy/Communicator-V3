@@ -96,6 +96,7 @@ export const PreflightPanel: React.FC = () => {
           stalePct: d.l2cs.stalePct,
           pendingCount: d.l2cs.pendingCount,
           hz: d.l2cs.hz,
+          modelo: d.l2cs.modelo ?? null,
         },
         filtro: d.filtro,
         flags: EXPERIMENT as unknown as Record<string, unknown>,

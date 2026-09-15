@@ -42,6 +42,15 @@ export interface ExperimentConfig {
    * calibra e mede em seguida, não a exercita.
    */
   correcaoPorDwell: boolean;
+  /**
+   * Ramo ocular (V2): uma rede pequena lê cada olho num recorte 96×64 e
+   * acrescenta `tan(yaw)`/`tan(pitch)` do olho ao vetor de features.
+   *  - `off`   não roda nada; vetor idêntico ao de antes.
+   *  - `onnx`  carrega `models/eyenet/eyenet.onnx` (+ meta) em dois workers.
+   * Desligado por padrão: o modelo é treinado no Communicator V2 e só entra
+   * depois do A/B no conjunto interno. Ligar muda o `FEATURE_VECTOR_ID`.
+   */
+  eyeNet: 'off' | 'onnx';
   /** Filtro temporal. `oneEuro` é o de produção; os outros existem para o benchmark. */
   filterMode: 'oneEuro' | 'kalman' | 'kalmanEma';
   /**
@@ -109,6 +118,7 @@ export const DEFAULTS: ExperimentConfig = {
   geometricPoseCompensation: true,
   lateralTranslationCompensation: false,
   correcaoPorDwell: true,
+  eyeNet: 'off',
   filterMode: 'oneEuro',
   estabilizarFixacao: true,
   normalizarRollNoCrop: false,
@@ -123,6 +133,7 @@ export const DEFAULTS: ExperimentConfig = {
 
 export const VALORES_ACEITOS = {
   l2cs: ['auto', 'webgpu', 'wasm', 'off'],
+  eyeNet: ['off', 'onnx'],
   filterMode: ['oneEuro', 'kalman', 'kalmanEma'],
 } as const;
 
