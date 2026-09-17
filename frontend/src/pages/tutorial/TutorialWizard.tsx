@@ -6,7 +6,7 @@ import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { limitarDwellMs } from '../../dwellMs';
-import { gravarTutorial } from '../../services/local/tutorialProfile';
+import { gravarTutorial, tutorialConcluido } from '../../services/local/tutorialProfile';
 import {
   PASSOS_DO_TUTORIAL,
   indiceDoPassoDoTutorial,
@@ -54,13 +54,18 @@ export const TutorialWizard: React.FC = () => {
   }, []);
 
   const sair = (concluiu: boolean) => {
+    // Na PRIMEIRA conclusão o destino é o "primeiro sucesso" (/welcome): a
+    // pessoa acabou de aprender o dwell e vai usá-lo de verdade, uma vez, num
+    // único cartão em destaque. Quem refaz o tutorial pelas configurações já
+    // passou por isso e volta ao menu.
+    const primeiraVez = currentProfile !== null && !tutorialConcluido(currentProfile.id);
     if (concluiu && currentProfile) {
       gravarTutorial(currentProfile.id, {
         dwellMsEscolhido: dwellMs,
         ensaiouEmergencia: ensaiou,
       });
     }
-    navigate('/menu', { replace: true });
+    navigate(concluiu && primeiraVez ? '/welcome' : '/menu', { replace: true });
   };
 
   const avancar = () => {

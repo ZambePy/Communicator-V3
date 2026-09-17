@@ -7,8 +7,8 @@ import { IntroScreen } from './IntroScreen';
 import { INTRO_SEEN_KEY } from './bootDestination';
 
 // -----------------------------------------------------------------------------
-// Uma tela só, e ela precisa responder três coisas antes do cuidador decidir
-// se vale a pena continuar: o que o produto faz, quem usa, e em que idioma.
+// Boas-vindas: símbolo, nome, UMA frase e UM botão. Zero parágrafos — a
+// explicação que convence é a experiência dos próximos três minutos.
 // -----------------------------------------------------------------------------
 
 beforeEach(async () => {
@@ -26,15 +26,26 @@ const montar = () =>
   );
 
 describe('o que a tela conta', () => {
-  it('explica o produto em uma frase', () => {
+  it('o nome do produto e a frase — e só', () => {
     montar();
-    expect(screen.getByText(/transforma o movimento dos olhos/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'IrisFlow Communicator' })).toBeInTheDocument();
+    expect(screen.getByText('Sua voz começa pelo seu olhar.')).toBeInTheDocument();
+    // Nenhum parágrafo de explicação: não há texto corrido além da frase.
+    expect(document.querySelectorAll('main p')).toHaveLength(1);
   });
 
-  it('nomeia os dois papéis: quem usa e quem acompanha', () => {
+  it('o símbolo animado está na tela, fora da árvore acessível', () => {
     montar();
-    expect(screen.getByText(/para quem usa/i)).toBeInTheDocument();
-    expect(screen.getByText(/para quem acompanha/i)).toBeInTheDocument();
+    expect(document.querySelector('.iris-simbolo')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('há um único botão de ação além do idioma', () => {
+    montar();
+    const botoes = screen
+      .getAllByRole('button')
+      .filter((b) => !b.closest('[role="group"]'));
+    expect(botoes).toHaveLength(1);
+    expect(botoes[0]).toHaveTextContent(/começar/i);
   });
 });
 
@@ -50,7 +61,7 @@ describe('escolha de idioma', () => {
     // escolheria "English" e continuaria lendo português.
     montar();
     fireEvent.click(screen.getByRole('button', { name: /english|inglês/i }));
-    expect(screen.getByText(/turns eye movement/i)).toBeInTheDocument();
+    expect(screen.getByText('Your voice begins with your gaze.')).toBeInTheDocument();
   });
 });
 

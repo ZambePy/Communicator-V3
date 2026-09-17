@@ -1,0 +1,76 @@
+.headline {
+  display: block;
+}
+
+/* Cada palavra ganha sua própria janela para o efeito de subida.
+   O espaço entre palavras vem da margem, e não de um no de texto:
+   dentro de um inline-block com overflow hidden ele seria colapsado. */
+.headline__mask {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  margin-right: 0.26em;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.04em;
+}
+
+.headline__word {
+  display: inline-block;
+  will-change: transform, opacity;
+}
+
+/* Dentro de um título, a palavra destacada usa gradiente fixo: o
+   shimmer varreria cada palavra em fase diferente e o título ficaria
+   com metades claras e escuras. Ele fica reservado para uma linha
+   inteira e contínua, como a do hero. */
+.headline__word.gradient-text {
+  /* background-image, e não o atalho background: o atalho reiniciaria
+     background-clip e o texto viraria um retângulo sólido. */
+  background-image: linear-gradient(96deg, var(--accent), var(--ok));
+  background-size: 100% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: none;
+}
+
+/* --- maquina de escrever com cursor piscante --- */
+.typewriter {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+
+.typewriter__caret {
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  margin-left: 4px;
+  vertical-align: -0.12em;
+  background: var(--ok);
+  animation: caret-blink 1s steps(1) infinite;
+}
+
+/* --- glitch discreto para rótulos tecnicos --- */
+.glitch {
+  position: relative;
+  display: inline-block;
+}
+
+.glitch::before,
+.glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.glitch::before {
+  color: var(--ok);
+  animation: glitch-shift 6s steps(1) infinite;
+  mix-blend-mode: screen;
+}
+
+.glitch::after {
+  color: var(--accent);
+  animation: glitch-shift 6s steps(1) 120ms infinite reverse;
+  mix-blend-mode: screen;
+}

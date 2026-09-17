@@ -4,6 +4,7 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { useGaze } from '../context/GazeContext';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
 import { useModoComputador } from '../computador/useModoComputador';
+import { DicaContextual } from '../components/ui/DicaContextual';
 
 /**
  * Tela "Computador": liga o Modo Computador — o cursor do IrisFlow sai do
@@ -53,8 +54,12 @@ export const VirtualMouseScreen: React.FC = () => {
         <PageHeader
           title="Computador: controle do Windows pelo olhar"
           subtitle="O cursor do IrisFlow sai do aplicativo e passa a percorrer a área de trabalho, com as mesmas ações por olhar."
-          icon={<MousePointer2 color="#1B54A8" size={28} aria-hidden="true" />}
+          icon={<MousePointer2 color="var(--color-primary)" size={28} aria-hidden="true" />}
         />
+
+        <div style={{ maxWidth: 760, margin: '0 auto' }}>
+          <DicaContextual id="computador" />
+        </div>
 
         <div
           style={{
@@ -98,8 +103,9 @@ export const VirtualMouseScreen: React.FC = () => {
                 style={{
                   padding: '0.4rem 0.9rem',
                   borderRadius: '1rem',
-                  background: motorPronto ? 'rgba(22, 163, 74, 0.1)' : 'rgba(220, 38, 38, 0.1)',
-                  color: motorPronto ? '#15803d' : '#991b1b',
+                  background: motorPronto ? 'var(--tint-ok-bg)' : 'var(--tint-danger-bg)',
+                  border: `1px solid ${motorPronto ? 'var(--tint-ok-border)' : 'var(--tint-danger-border)'}`,
+                  color: motorPronto ? 'var(--tint-ok-text)' : 'var(--tint-danger-text)',
                   fontSize: '0.85rem',
                   fontWeight: 700,
                   display: 'flex',
@@ -108,7 +114,11 @@ export const VirtualMouseScreen: React.FC = () => {
                   flexShrink: 0,
                 }}
               >
-                {motorPronto ? <CheckCircle2 size={16} color="#16a34a" /> : <ShieldAlert size={16} color="#dc2626" />}
+                {motorPronto ? (
+                  <CheckCircle2 size={16} color="var(--color-ok)" aria-hidden="true" />
+                ) : (
+                  <ShieldAlert size={16} color="var(--color-danger)" aria-hidden="true" />
+                )}
                 {motorPronto ? 'Motor conectado' : 'Aguardando motor'}
               </div>
             </div>

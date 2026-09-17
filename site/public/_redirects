@@ -1,0 +1,4 @@
+# SPA com BrowserRouter: qualquer rota profunda (/planos, /contato, /conta…)
+# precisa devolver o index.html com status 200, senão o host responde 404
+# antes do JavaScript entrar. Arquivos existentes em dist/ têm precedência.
+/*  /index.html  200

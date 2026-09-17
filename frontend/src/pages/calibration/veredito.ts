@@ -98,3 +98,26 @@ export function lerCalibracao(
 
   return { veredicto, motivo, looErrorPx, derivaGraus };
 }
+
+/**
+ * Qualidade em cinco degraus, para o PACIENTE.
+ *
+ * "87 px de erro LOO" não diz nada a quem está do outro lado da câmera — e o
+ * número muda de significado com a tela e a distância. Cinco níveis, sem
+ * unidade, comunicam o que importa: dá para usar, ou vale refazer. Os limiares
+ * seguem `LOO_BOM_PX` para o nível 3 ser exatamente a fronteira do "bom".
+ */
+export type NivelDeQualidade = 1 | 2 | 3 | 4 | 5;
+
+export const NIVEIS_DE_QUALIDADE = 5;
+
+export function nivelDeQualidade(leitura: LeituraDaCalibracao): NivelDeQualidade {
+  if (leitura.veredicto === 'refazer') return 1;
+  const px = leitura.looErrorPx;
+  if (px === null) return leitura.veredicto === 'bom' ? 4 : 3;
+  if (px <= LOO_BOM_PX * 0.4) return 5;
+  if (px <= LOO_BOM_PX * 0.7) return 4;
+  if (px <= LOO_BOM_PX) return 3;
+  if (px <= LOO_BOM_PX * 1.6) return 2;
+  return 1;
+}

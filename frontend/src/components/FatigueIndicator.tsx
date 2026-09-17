@@ -103,9 +103,11 @@ export const FatigueIndicator: React.FC = () => {
       data-testid="fatigue-indicator"
       style={{
         position: 'fixed',
-        // O DriftIndicator vive em top: 5.5rem. Se ambos aparecerem (raro —
-        // fadiga e drift são causas independentes), este fica logo abaixo.
-        top: '9rem',
+        // Embaixo, e não no topo: a 9rem do topo a pílula caía exatamente
+        // sobre o título do primeiro cartão de qualquer tela com cabeçalho
+        // (PageHeader ocupa até ~10rem). O rodapé é a única faixa que nenhum
+        // layout de paciente usa para conteúdo.
+        bottom: '2rem',
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 99960,
@@ -117,23 +119,26 @@ export const FatigueIndicator: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           gap: '0.75rem',
-          // Verde suave — sugestão de pausa, não alerta. Diferencia do azul
-          // do DriftIndicator (recalibração) e do âmbar do degraded (falha
-          // de rastreamento). Regra 4: aparência de urgência exige número
-          // que justifique — fadiga é conforto, não crise.
-          background: '#d1fae5',
-          border: '2px solid #34d399',
+          // Tinta "ok" do tema — sugestão de pausa, não alerta. Diferencia do
+          // azul do DriftIndicator (recalibração) e do âmbar do degraded
+          // (falha de rastreamento). Regra 4: aparência de urgência exige
+          // número que justifique — fadiga é conforto, não crise.
+          background: 'var(--tint-ok-bg)',
+          border: '2px solid var(--tint-ok-border)',
           borderRadius: '2rem',
-          color: '#065f46',
-          padding: '0.5rem 1.25rem',
-          boxShadow: '0 8px 15px -3px rgba(52, 211, 153, 0.20)',
+          color: 'var(--tint-ok-text)',
+          padding: '0.75rem 1.5rem',
+          boxShadow: '0 8px 24px var(--color-card-shadow)',
+          backdropFilter: 'blur(12px)',
           cursor: 'pointer',
+          // Alvo de olhar: nunca abaixo de 64 px de altura.
+          minHeight: 64,
           height: 'auto',
           width: 'auto',
         }}
         noWarn
       >
-        <Coffee size={18} color="#059669" />
+        <Coffee size={20} color="var(--color-ok)" aria-hidden="true" />
         <span style={{ fontSize: '1rem', fontWeight: 700 }}>
           Uma pausa? Modo Descanso disponível
         </span>

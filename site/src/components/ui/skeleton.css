@@ -1,0 +1,27 @@
+.skeleton {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    var(--surface-3) 45%,
+    var(--surface-2) 90%
+  );
+  background-size: 220% 100%;
+  animation: skeleton-sweep 1.5s var(--ease-in-out) infinite;
+}
+
+.skeleton-card {
+  display: grid;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.spinner {
+  display: inline-block;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: currentColor;
+  border-radius: 50%;
+}

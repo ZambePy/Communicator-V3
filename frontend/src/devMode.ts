@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 // Modo desenvolvedor: esconde o cursor de gaze e desliga o dwell para quem está
 // operando com mouse. Fica em sessionStorage para sobreviver a um F5 e morrer
 // com a aba; a mudança é avisada por evento para o provider reagir na hora.
@@ -25,4 +27,11 @@ export function onDevModeChange(cb: (on: boolean) => void): () => void {
   const handler = (e: Event) => cb(Boolean((e as CustomEvent).detail));
   window.addEventListener(EVENT, handler);
   return () => window.removeEventListener(EVENT, handler);
+}
+
+/** Versão reativa de `isDevMode`, para componentes que mostram ou escondem algo. */
+export function useDevMode(): boolean {
+  const [on, setOn] = useState(isDevMode);
+  useEffect(() => onDevModeChange(setOn), []);
+  return on;
 }

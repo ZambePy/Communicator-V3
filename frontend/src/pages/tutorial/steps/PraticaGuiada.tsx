@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Target, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { PrimaryButton } from '../../../components/ui/PrimaryButton';
+import { GazeButton } from '../../../components/ui/GazeButton';
 
 /**
  * Prática guiada.
@@ -17,7 +18,18 @@ import { PrimaryButton } from '../../../components/ui/PrimaryButton';
  * não é o do app.
  */
 
-export const ALVOS_DA_PRATICA = 4;
+export const ALVOS_DA_PRATICA = 3;
+
+/**
+ * Posição de cada alvo dentro da arena, em fração da largura. Muda a cada
+ * acerto: praticar três vezes no mesmo lugar ensina a fixar UM ponto; mudar
+ * de lugar ensina a levar o olhar até o que se quer — que é o uso real.
+ */
+export const POSICOES_DA_PRATICA: readonly { x: number; y: number }[] = [
+  { x: 0.5, y: 0.5 },
+  { x: 0.2, y: 0.4 },
+  { x: 0.8, y: 0.6 },
+];
 
 export type VereditoDoTempo = 'rapido' | 'bom' | 'lento' | 'indeterminado';
 
@@ -69,12 +81,12 @@ export const PraticaGuiada: React.FC<{
             color: 'var(--color-text-base)',
           }}
         >
-          {t('tutorial.pratica.title')}
+          {feitos === 0 ? t('tutorial.pratica.title') : t('tutorial.pratica.deNovo')}
         </h2>
         <p
           style={{
             margin: 0,
-            fontSize: '1rem',
+            fontSize: '1.05rem',
             lineHeight: 1.5,
             opacity: 0.8,
             color: 'var(--color-text-base)',
@@ -86,45 +98,56 @@ export const PraticaGuiada: React.FC<{
 
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: 260,
+          position: 'relative',
+          minHeight: 320,
           borderRadius: '1.25rem',
           border: '1px solid var(--color-card-border)',
+          overflow: 'hidden',
         }}
       >
         {terminou ? (
-          <strong style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--tint-ok-text)' }}>
+          <strong
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.2rem',
+              fontWeight: 800,
+              color: 'var(--tint-ok-text)',
+            }}
+          >
             {t('tutorial.pratica.fim')}
           </strong>
         ) : (
-          <button
-            type="button"
+          <GazeButton
+            key={feitos}
             onClick={acertou}
             aria-label={t('tutorial.pratica.alvo', { n: feitos + 1 })}
+            width={200}
+            height={200}
+            isolado
+            className="animate-scale-in"
             style={{
               // Grande de propósito: a prática é sobre o TEMPO, não sobre a
               // pontaria. Um alvo pequeno mediria a calibração de novo.
-              width: 180,
-              height: 180,
+              // GazeButton, e não <button>: é o anel de progresso dele que
+              // mostra o dwell enchendo — a coisa que a prática ensina.
+              position: 'absolute',
+              left: `${POSICOES_DA_PRATICA[feitos % POSICOES_DA_PRATICA.length].x * 100}%`,
+              top: `${POSICOES_DA_PRATICA[feitos % POSICOES_DA_PRATICA.length].y * 100}%`,
+              transform: 'translate(-50%, -50%)',
               borderRadius: '50%',
               border: '4px solid var(--color-primary)',
-              background: 'var(--tint-info-bg)',
-              color: 'var(--color-text-base)',
+              background: 'var(--color-primary)',
+              color: 'white',
               fontSize: '1.05rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.5rem',
+              boxShadow: '0 0 0 10px rgba(27, 84, 168, 0.18), 0 0 40px rgba(27, 84, 168, 0.45)',
             }}
           >
-            <Target size={40} color="var(--color-primary)" aria-hidden="true" />
             {t('tutorial.pratica.alvo', { n: feitos + 1 })}
-          </button>
+          </GazeButton>
         )}
       </div>
 

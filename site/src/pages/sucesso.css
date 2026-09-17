@@ -1,0 +1,185 @@
+.success {
+  text-align: center;
+  margin-bottom: var(--sp-6);
+}
+
+.success__badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  margin: 0 auto var(--sp-5);
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--ok), var(--teal));
+  color: #fff;
+  box-shadow: var(--glow);
+  animation: pop-check 620ms var(--ease-spring) both;
+}
+
+.success__badge svg {
+  width: 42px;
+  height: 42px;
+  position: relative;
+  z-index: 2;
+}
+
+.success__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 166, 147, 0.55);
+  animation: ring-expand 3s var(--ease-out) infinite;
+}
+
+.success__ring--2 {
+  animation-delay: 1.5s;
+}
+
+.success__title {
+  font-size: clamp(2rem, 4.4vw, 3rem);
+  margin-bottom: var(--sp-4);
+}
+
+.success__lead {
+  max-width: 56ch;
+  margin-inline: auto;
+}
+
+/* --- bloco de download --- */
+.download {
+  padding: var(--sp-6);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--ok-line);
+  background: linear-gradient(150deg, var(--ok-soft), transparent);
+  text-align: center;
+}
+
+.download__title {
+  font-size: 1.5rem;
+  margin-bottom: var(--sp-3);
+}
+
+.download__note {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  max-width: 56ch;
+  margin-inline: auto;
+  margin-bottom: var(--sp-5);
+}
+
+.download__note code {
+  font-size: 0.85em;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--surface-2);
+}
+
+.download__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  justify-content: center;
+}
+
+/* --- verificação de compatibilidade ---
+   Três níveis, com a cor vindo de um token trocado pelo modificador: o
+   bloco não sabe qual é o veredito, só lê --compat. */
+.compat {
+  --compat: var(--accent);
+  --compat-soft: var(--accent-soft);
+  --compat-line: var(--accent-line);
+  margin-top: var(--sp-6);
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--compat-line);
+  background: var(--compat-soft);
+}
+
+.compat--recomendado {
+  --compat: var(--ok);
+  --compat-soft: var(--ok-soft);
+  --compat-line: var(--ok-line);
+}
+
+.compat--minimo {
+  --compat: var(--warn);
+  --compat-soft: var(--warn-soft);
+  --compat-line: var(--warn-line);
+}
+
+.compat--abaixo {
+  --compat: var(--danger);
+  --compat-soft: var(--danger-soft);
+  --compat-line: var(--danger-line);
+}
+
+.compat__title {
+  font-size: 1.3rem;
+  margin-bottom: var(--sp-3);
+}
+
+.compat__intro {
+  font-size: 0.94rem;
+  color: var(--text-soft);
+  margin-bottom: var(--sp-4);
+}
+
+.compat__verdict {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.12rem;
+  color: var(--compat);
+  margin-bottom: var(--sp-2);
+}
+
+.compat__dot {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--compat);
+  box-shadow: 0 0 0 4px var(--compat-soft);
+}
+
+.compat__text {
+  margin-bottom: var(--sp-4);
+}
+
+.compat__list {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.compat__list > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: 0.94rem;
+}
+
+.compat__list dt {
+  color: var(--text-soft);
+}
+
+.compat__list dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+  text-align: right;
+}
+
+.compat__fine {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text-dim);
+}

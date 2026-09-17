@@ -20,12 +20,12 @@ export const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ compact }) =
         alignItems: 'center',
         gap: '0.5rem',
         padding: compact ? '0.35rem 0.5rem' : '0.5rem 0.75rem',
-        background: 'rgba(255,255,255,0.85)',
+        background: 'var(--color-card-bg)',
         borderRadius: '999px',
-        border: '1px solid #e2e8f0',
+        border: '1px solid var(--color-card-border)',
       }}
     >
-      <Globe size={compact ? 16 : 18} color="#334155" aria-hidden="true" />
+      <Globe size={compact ? 16 : 18} color="var(--color-text-muted)" aria-hidden="true" />
       {supportedLngs.map((lng) => {
         const active = current === lng;
         return (
@@ -40,8 +40,8 @@ export const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ compact }) =
               border: 'none',
               borderRadius: '999px',
               cursor: 'pointer',
-              background: active ? '#1B54A8' : 'transparent',
-              color: active ? 'white' : '#475569',
+              background: active ? 'var(--color-primary)' : 'transparent',
+              color: active ? 'white' : 'var(--color-text-base)',
               fontWeight: 700,
               fontSize: compact ? '0.75rem' : '0.85rem',
               fontFamily: 'system-ui, sans-serif',

@@ -3,7 +3,14 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, AlertTriangle, RefreshCw, ArrowRight } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
-import { lerCalibracao, type LeituraDaCalibracao } from './veredito';
+import {
+  lerCalibracao,
+  nivelDeQualidade,
+  NIVEIS_DE_QUALIDADE,
+  type LeituraDaCalibracao,
+} from './veredito';
+import { useAuth } from '../../context/AuthContext';
+import { isDevMode } from '../../devMode';
 import { getCalibrationFitDiagnostics, type CalibrationFitDiagnostics } from '@tracker/calibration';
 
 /**
@@ -41,10 +48,19 @@ export const ResultadoDaCalibracao: React.FC<{
    */
   diagnostico?: CalibrationFitDiagnostics | null;
   aoSeguir?: () => void;
-}> = ({ diagnostico, aoSeguir }) => {
+  /**
+   * Números técnicos (erro em px, deriva em graus) são do cuidador e do modo
+   * desenvolvedor. O paciente vê uma barra de cinco níveis: "87 px" não muda
+   * nenhuma decisão dele, e muda de significado com a tela e a distância.
+   * Injetável para teste; sem ele, lê do perfil.
+   */
+  mostrarNumeros?: boolean;
+}> = ({ diagnostico, aoSeguir, mostrarNumeros }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isCaregiver } = useAuth();
+  const tecnico = mostrarNumeros ?? (isCaregiver === true || isDevMode());
   const diag = diagnostico !== undefined ? diagnostico : getCalibrationFitDiagnostics();
   const leitura = lerCalibracao(diag);
   // O destino vem de quem chamou: a regra de "tutorial na primeira vez" mora
@@ -52,6 +68,7 @@ export const ResultadoDaCalibracao: React.FC<{
   const destino = (location.state as { destino?: string } | null)?.destino ?? '/menu';
   const tom = TOM[leitura.veredicto];
   const Icone = leitura.veredicto === 'bom' ? CheckCircle2 : AlertTriangle;
+  const nivel = nivelDeQualidade(leitura);
 
   return (
     <main
@@ -90,8 +107,37 @@ export const ResultadoDaCalibracao: React.FC<{
             color: 'var(--color-text-base)',
           }}
         >
-          {t('calib.resultado.title')}
+          {tecnico ? t('calib.resultado.title') : t('calib.resultado.tituloPaciente')}
         </h1>
+
+        {/* Barra de qualidade: cinco degraus, sem unidade. */}
+        <div
+          role="img"
+          aria-label={t('calib.resultado.qualidadeAria', { n: nivel, total: NIVEIS_DE_QUALIDADE })}
+          data-testid="barra-de-qualidade"
+          data-nivel={nivel}
+          style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
+        >
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            {Array.from({ length: NIVEIS_DE_QUALIDADE }, (_, i) => (
+              <span
+                key={i}
+                data-aceso={i < nivel ? 'true' : undefined}
+                style={{
+                  flex: 1,
+                  height: 14,
+                  borderRadius: 7,
+                  background: i < nivel ? tom.cor : 'var(--color-card-border)',
+                  transition: 'background 0.4s ease',
+                  transitionDelay: `${i * 90}ms`,
+                }}
+              />
+            ))}
+          </div>
+          <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+            {t('calib.resultado.qualidade', { n: nivel, total: NIVEIS_DE_QUALIDADE })}
+          </span>
+        </div>
 
         <div
           style={{
@@ -145,18 +191,22 @@ export const ResultadoDaCalibracao: React.FC<{
         </div>
 
         {/* Os números, para quem está medindo. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-          {leitura.looErrorPx !== null && (
-            <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--color-text-base)' }}>
-              {t('calib.resultado.erro', { px: Math.round(leitura.looErrorPx) })}
-            </span>
-          )}
-          {leitura.derivaGraus !== null && (
-            <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--color-text-base)' }}>
-              {t('calib.resultado.deriva', { g: leitura.derivaGraus.toFixed(1).replace('.', ',') })}
-            </span>
-          )}
-        </div>
+        {tecnico && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            {leitura.looErrorPx !== null && (
+              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--color-text-base)' }}>
+                {t('calib.resultado.erro', { px: Math.round(leitura.looErrorPx) })}
+              </span>
+            )}
+            {leitura.derivaGraus !== null && (
+              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--color-text-base)' }}>
+                {t('calib.resultado.deriva', {
+                  g: leitura.derivaGraus.toFixed(1).replace('.', ','),
+                })}
+              </span>
+            )}
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
           {/* Sempre habilitado, em TODOS os vereditos. */}

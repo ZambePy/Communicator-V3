@@ -5,6 +5,7 @@ import { Utensils, Droplets, Smile, Frown, Home, Phone, AlertCircle, Heart, Chev
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeGrid } from '../../components/ui/GazeGrid';
 import { GazeButton } from '../../components/ui/GazeButton';
+import { DicaContextual } from '../../components/ui/DicaContextual';
 
 const PICTOGRAMS = [
   { id: 1, label: 'Eu Quero Comer', Icon: Utensils, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
@@ -47,6 +48,7 @@ export const PictogramScreen: React.FC = () => {
           gap: '1.5rem',
         }}
       >
+        <DicaContextual id="pictogramas" />
         <div style={{ textAlign: 'center' }}>
           <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--color-text-base)', margin: '0 0 0.5rem 0' }}>
             Pictogramas (CAA)

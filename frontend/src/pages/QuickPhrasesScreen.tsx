@@ -6,6 +6,8 @@ import { GazePageLayout } from '../components/ui/GazePageLayout';
 import { GazeGrid } from '../components/ui/GazeGrid';
 import { GazeButton } from '../components/ui/GazeButton';
 import { logSentence } from '../utils/clinicalLogger';
+import { DicaContextual } from '../components/ui/DicaContextual';
+import { useAvisoDePrimeiroSucesso } from './useAvisoDePrimeiroSucesso';
 
 const PHRASES = [
   {
@@ -71,6 +73,7 @@ export const TEXTOS_DAS_FRASES_RAPIDAS = PHRASES.map((p) => p.text);
 
 export const QuickPhrasesScreen: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(0);
+  useAvisoDePrimeiroSucesso();
 
   const handleSpeak = (text: string) => {
     void falar(text, { rate: 0.9 }).catch((e) => console.warn('[voz] falha ao falar:', e));
@@ -94,6 +97,7 @@ export const QuickPhrasesScreen: React.FC = () => {
           boxSizing: 'border-box',
         }}
       >
+        <DicaContextual id="comunicacao" />
         <div style={{ marginBottom: '2.5rem', textAlign: 'center' }}>
           <h1 style={{ fontSize: '2.75rem', fontWeight: 800, color: 'var(--color-text-base)', margin: '0 0 0.5rem 0' }}>
             Frases Rápidas

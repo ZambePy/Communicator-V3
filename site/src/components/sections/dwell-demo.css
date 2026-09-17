@@ -1,0 +1,309 @@
+.demo__title {
+  max-width: 16ch;
+  margin-bottom: var(--sp-4);
+}
+
+.demo__lead {
+  max-width: 72ch;
+  margin-bottom: var(--sp-7);
+}
+
+.demo__frame {
+  padding: var(--sp-5);
+  background: var(--bg-soft);
+  display: grid;
+  gap: var(--sp-4);
+}
+
+/* --- barra de estado --- */
+.demo__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.demo__spacer {
+  flex: 1;
+}
+
+.demo__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.demo__chip--ok {
+  color: var(--ok);
+  border-color: var(--ok-line);
+  background: var(--ok-soft);
+}
+
+.demo__chip--ok::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  animation: pulse-dot 2.4s var(--ease-out) infinite;
+}
+
+.demo__chip--sos {
+  color: var(--danger);
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+}
+
+/* --- campo de texto --- */
+.demo__screen {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  min-height: 92px;
+}
+
+.demo__output {
+  flex: 1;
+  margin: 0;
+  font-size: clamp(1.2rem, 2.4vw, 1.7rem);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+  word-break: break-word;
+}
+
+.demo__placeholder {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.demo__speak {
+  flex: none;
+  padding: 0.7rem 1.4rem;
+  border-radius: var(--r-pill);
+  border: 1px solid rgba(0, 166, 147, 0.4);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-family: inherit;
+  font-size: 0.94rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring);
+}
+
+.demo__speak:hover:not(:disabled) {
+  background: var(--ok-soft);
+  transform: translateY(-2px);
+}
+
+.demo__speak:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.demo__speak.is-speaking {
+  animation: pulse-dot 1.4s var(--ease-out) infinite;
+}
+
+/* --- prancha de pictogramas ---
+   Poucos alvos, grandes e bem espaçados: é o terceiro princípio de
+   acessibilidade do produto. Em 24 px o desenho some, por isso o glifo
+   é generoso. Cinco colunas por duas linhas: mais que isso e o alvo
+   fica estreito, menos e ele vira uma faixa larga com um desenho
+   perdido no meio. */
+.demo__board {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--sp-3);
+}
+
+.demo__key {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  min-height: 126px;
+  padding: var(--sp-4) var(--sp-2);
+  border-radius: var(--r-md);
+  border: 2px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-spring),
+    color var(--dur) var(--ease-out);
+}
+
+/* estágio 1 — contorno de destaque */
+.demo__key:hover,
+.demo__key:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+/* estágio 2 e 3 — cor e preenchimento de progresso */
+.demo__key.is-active {
+  border-color: var(--teal);
+  color: #fff;
+}
+
+.demo__key-label {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
+}
+
+.demo__glyph {
+  display: block;
+  color: var(--accent);
+  transition: color var(--dur) var(--ease-out);
+}
+
+/* Durante a seleção o preenchimento entra por baixo: desenho e palavra
+   passam a branco juntos, senão o glifo some no gradiente. */
+.demo__key.is-active .demo__glyph {
+  color: #fff;
+}
+
+.demo__word {
+  font-size: 1.02rem;
+  letter-spacing: 0.01em;
+}
+
+.demo__word--quick {
+  font-size: 0.98rem;
+}
+
+.demo__key-fill {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  transform: scaleX(0);
+  transform-origin: left;
+  background: linear-gradient(90deg, rgba(27, 84, 168, 0.75), rgba(0, 166, 147, 0.75));
+  transition-property: transform;
+  transition-timing-function: linear;
+}
+
+.demo__key.is-active .demo__key-fill {
+  transform: scaleX(1);
+}
+
+.demo__key--quick {
+  min-height: 58px;
+  padding: var(--sp-2);
+}
+
+.demo__quick {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--sp-2);
+}
+
+/* --- ajustes --- */
+.demo__settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+}
+
+.demo__settings-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-right: var(--sp-2);
+}
+
+.demo__opt {
+  padding: 7px 15px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
+}
+
+.demo__opt:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.demo__opt.is-on {
+  background: var(--ok-soft);
+  border-color: var(--teal);
+  color: var(--ok);
+}
+
+.demo__opt--clear {
+  margin-left: auto;
+  color: var(--text-dim);
+}
+
+.demo__note {
+  max-width: 80ch;
+  margin: var(--sp-5) 0 0;
+  font-size: 0.94rem;
+  color: var(--text-dim);
+  padding-left: var(--sp-5);
+  border-left: 2px solid var(--line);
+}
+
+@media (max-width: 1000px) {
+  .demo__board {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .demo__screen {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .demo__board {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .demo__key {
+    min-height: 106px;
+  }
+  .demo__key--quick {
+    min-height: 54px;
+  }
+}

@@ -177,7 +177,7 @@ export const PhotoCaptureScreen: React.FC = () => {
         const grad = ctx.createLinearGradient(0, 0, 1280, 720);
         grad.addColorStop(0, '#1b54a8');
         grad.addColorStop(0.5, '#3b82f6');
-        grad.addColorStop(1, '#9333ea');
+        grad.addColorStop(1, '#143e80');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, 1280, 720);
         ctx.fillStyle = '#ffffff';
@@ -407,7 +407,7 @@ export const PhotoCaptureScreen: React.FC = () => {
           aria-label={`Ver Galeria de Fotos (${photoCount} fotos salvas)`}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text-base)' }}>
-            <ImageIcon size={26} color="#9333ea" />
+            <ImageIcon size={26} color="var(--color-primary)" />
             <span>Galeria ({photoCount})</span>
           </div>
         </GazeButton>
@@ -504,7 +504,7 @@ export const PhotoCaptureScreen: React.FC = () => {
                 border: '1px solid rgba(255, 255, 255, 0.2)',
               }}
             >
-              <Sparkles size={20} color="#38bdf8" />
+              <Sparkles size={20} color="var(--color-primary)" />
               Filtro: {currentFilter.name}
             </div>
 
@@ -556,7 +556,7 @@ export const PhotoCaptureScreen: React.FC = () => {
               >
                 {countdown}
               </span>
-              <span style={{ fontSize: '2rem', fontWeight: 700, color: '#38bdf8', marginTop: '1rem' }}>
+              <span style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--color-primary)', marginTop: '1rem' }}>
                 Sorria para a câmera! 😊
               </span>
             </div>
@@ -581,7 +581,7 @@ export const PhotoCaptureScreen: React.FC = () => {
               flex: 2,
               minHeight: '160px',
               borderRadius: '2.5rem',
-              background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #4338ca 100%)',
+              background: 'var(--color-primary)',
               color: '#ffffff',
               boxShadow: '0 16px 36px -6px rgba(37, 99, 235, 0.45)',
               border: '3px solid rgba(255, 255, 255, 0.4)',
@@ -654,7 +654,7 @@ export const PhotoCaptureScreen: React.FC = () => {
                   padding: '0.75rem',
                 }}
               >
-                <Sparkles size={36} color="#8b5cf6" />
+                <Sparkles size={36} color="var(--color-primary)" />
                 <span style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--color-text-base)' }}>
                   Filtro
                 </span>

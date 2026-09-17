@@ -47,7 +47,7 @@ export const SystemStatusHeader: React.FC<SystemStatusHeaderProps> = ({
             width: 8,
             height: 8,
             borderRadius: '50%',
-            background: engineOnline ? '#10b981' : '#ef4444',
+            background: engineOnline ? 'var(--color-ok)' : 'var(--color-danger)',
             boxShadow: engineOnline ? '0 0 8px rgba(16, 185, 129, 0.6)' : 'none',
           }}
         />
@@ -75,7 +75,7 @@ export const SystemStatusHeader: React.FC<SystemStatusHeaderProps> = ({
 
         {/* Tracking */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-          <Eye size={15} color={trackingOn ? '#8b5cf6' : '#94a3b8'} />
+          <Eye size={15} color={trackingOn ? 'var(--color-primary)' : 'var(--color-text-muted)'} />
           <span style={{ color: trackingOn ? '#6d28d9' : '#64748b' }}>
             {trackingOn ? 'Tracking Ativo' : 'Tracking Standby'}
           </span>

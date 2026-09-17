@@ -1,0 +1,103 @@
+.comparison__title {
+  max-width: 22ch;
+  margin-bottom: var(--sp-6);
+}
+
+.cmp__wrap {
+  overflow-x: auto;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  -webkit-overflow-scrolling: touch;
+}
+
+.cmp {
+  width: 100%;
+  min-width: 660px;
+  border-collapse: collapse;
+  font-size: 0.98rem;
+}
+
+.cmp th,
+.cmp td {
+  padding: var(--sp-4) var(--sp-4);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.cmp thead th {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: var(--bg-soft);
+  position: sticky;
+  top: 0;
+}
+
+.cmp thead th.is-ours {
+  color: var(--ok);
+}
+
+.cmp tbody th {
+  font-weight: 600;
+  color: var(--text);
+  width: 34%;
+}
+
+.cmp tbody tr {
+  transition: background var(--dur) var(--ease-out);
+}
+
+.cmp tbody tr:hover {
+  background: var(--surface-2);
+}
+
+.cmp td.is-ours {
+  background: var(--ok-soft);
+  border-left: 1px solid var(--ok-soft);
+  border-right: 1px solid var(--ok-soft);
+}
+
+.cmp__mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+.cmp__mark svg {
+  width: 15px;
+  height: 15px;
+}
+
+.cmp__mark--yes {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.cmp__mark--no {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.cmp__text {
+  color: var(--text-soft);
+}
+
+.cmp__text.is-partial {
+  color: var(--warn);
+}
+
+.comparison__honesty {
+  max-width: 88ch;
+  margin: var(--sp-5) 0 0;
+  font-size: 0.96rem;
+  color: var(--text-dim);
+  padding-left: var(--sp-5);
+  border-left: 2px solid var(--warn-line);
+}

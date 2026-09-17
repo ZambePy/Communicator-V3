@@ -75,6 +75,11 @@ interface Settings {
   // de 23,6\"" é a assinatura de escala em 150% e confunde quem lê o
   // histórico depois.
   screenScaleFactor: number | null;
+  // Dicas contextuais já dispensadas com "Entendi" (uma linha na primeira
+  // entrada em cada módulo). Ids de `DicaContextual`. Persistem para a dica
+  // não voltar a cada abertura — repetir orientação a quem já entendeu é
+  // ruído exatamente para quem tem menos energia para ignorá-lo.
+  dicasVistas: string[];
 }
 
 const defaultSettings: Settings = {
@@ -110,6 +115,7 @@ const defaultSettings: Settings = {
   fovPorCamera: {},
   ultimaCameraChave: null,
   screenScaleFactor: null,
+  dicasVistas: [],
 };
 
 const SettingsContext = createContext<{
@@ -179,6 +185,10 @@ function lerSettingsDoDisco(): Partial<Settings> | null {
     const legado = (obj as { dwellSpeed?: DwellSpeed }).dwellSpeed;
     if (typeof obj.dwellMs !== 'number' && typeof legado === 'string') {
       obj.dwellMs = dwellMsDoLegado(legado);
+    }
+    if (!Array.isArray(obj.dicasVistas)) {
+      // Campo novo, ou storage editado à mão: sem lista, nenhuma dica foi vista.
+      obj.dicasVistas = [];
     }
     if (typeof obj.dwellMs === 'number') {
       // Storage editado à mão, ou vindo de uma versão com outra faixa.

@@ -3,14 +3,16 @@ import { useGaze } from '../context/GazeContext';
 import type { EngineDiagnostics } from '../context/GazeContext';
 import { lerParametroDeUrl } from '../urlParams';
 import { medicaoEmAndamento } from '../medicaoEmAndamento';
+import { useDevMode } from '../devMode';
 
 const rad2deg = (r: number) => ((r * 180) / Math.PI).toFixed(1);
 
-/** HUD de diagnóstico do operador (`?debug=1`). Nunca aparece para o paciente. */
+/** HUD de diagnóstico do operador (`?debug=1` ou modo desenvolvedor). Nunca aparece para o paciente. */
 export const DebugHUD: React.FC = () => {
   // `lerParametroDeUrl` e não `useSearchParams`: com `HashRouter` o react-router
   // só enxerga a query DEPOIS do `#`, e a documentação instrui `?debug=1` antes.
-  const isDebug = lerParametroDeUrl('debug') === '1';
+  const devMode = useDevMode();
+  const isDebug = lerParametroDeUrl('debug') === '1' || devMode;
   const { getDiagnostics, state } = useGaze();
   const [diag, setDiag] = useState<EngineDiagnostics | null>(null);
 

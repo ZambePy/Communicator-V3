@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/brand/irisflow-symbol.png" />
+    <meta name="theme-color" content="#1b54a8" />
+    <!-- Tema aplicado antes da pintura, para evitar o lampejo de tema claro
+         quando o usuário já escolheu (ou o sistema pede) o modo escuro.
+         A escolha manual em localStorage manda; senão, segue o sistema. -->
+    <script>
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('irisflow:theme')
+          var dark = saved
+            ? saved === 'dark'
+            : matchMedia('(prefers-color-scheme: dark)').matches
+          var theme = dark ? 'dark' : 'light'
+          document.documentElement.dataset.theme = theme
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', dark ? '#061223' : '#1b54a8')
+        } catch (e) {
+          document.documentElement.dataset.theme = 'light'
+        }
+      })()
+    </script>
+    <title>IrisFlow Communicator — seu olhar tem voz</title>
+    <meta
+      name="description"
+      content="O IrisFlow Communicator transforma o movimento dos olhos em comunicação e em controle do computador usando apenas a webcam que você já tem. Tecnologia assistiva por rastreamento ocular, sem hardware proprietário."
+    />
+    <meta property="og:title" content="IrisFlow Communicator — seu olhar tem voz" />
+    <meta
+      property="og:description"
+      content="Comunicação e controle do computador pelo olhar, com a webcam que você já tem. Período de avaliação gratuito, sem fidelidade."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:image" content="/brand/og-image.png" />
+    <meta property="og:image:alt" content="IrisFlow Communicator — seu olhar tem voz" />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

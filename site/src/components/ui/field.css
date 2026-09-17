@@ -1,0 +1,159 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--sp-4);
+}
+
+.field__label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.field__control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.field__icon {
+  position: absolute;
+  left: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--text-dim);
+  pointer-events: none;
+  font-size: 1.05rem;
+}
+
+.field__input {
+  width: 100%;
+  padding: 0.92rem 1rem;
+  font-family: inherit;
+  font-size: 1.02rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  transition:
+    border-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
+}
+
+.field__icon ~ .field__input {
+  padding-left: 44px;
+}
+
+.field__input::placeholder {
+  color: var(--text-dim);
+  opacity: 0.75;
+}
+
+.field__input:hover {
+  border-color: var(--line-strong);
+}
+
+.field__input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  background: var(--surface);
+}
+
+.field__select {
+  appearance: none;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) calc(1.28em),
+    calc(100% - 14px) calc(1.28em);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 42px;
+}
+
+.field--error .field__input {
+  border-color: var(--danger);
+}
+
+.field--error .field__input:focus {
+  box-shadow: 0 0 0 4px rgba(229, 72, 77, 0.2);
+}
+
+.field__hint {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+
+.field__error {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--danger);
+  animation: fade-up 260ms var(--ease-out) both;
+}
+
+/* --- checkbox --- */
+.check {
+  margin-bottom: var(--sp-4);
+}
+
+.check__input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.check__label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  cursor: pointer;
+  font-size: 0.96rem;
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.check__box {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 2px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface-2);
+  display: grid;
+  place-items: center;
+  color: transparent;
+  transition:
+    background var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out);
+}
+
+.check__box svg {
+  width: 15px;
+  height: 15px;
+}
+
+.check__input:checked + .check__label .check__box {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+  animation: pop-check 300ms var(--ease-spring);
+}
+
+.check__input:focus-visible + .check__label .check__box {
+  outline: 3px solid var(--ok);
+  outline-offset: 3px;
+}
+
+.check--error .check__box {
+  border-color: var(--danger);
+}

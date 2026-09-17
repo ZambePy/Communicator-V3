@@ -1,0 +1,48 @@
+node_modules
+dist
+dist-ssr
+.vite
+*.local
+.DS_Store
+.env
+.env.*
+!.env.example
+npm-debug.log*
+yarn-error.log*
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Documentação, anotações e arquivos de dados fora do código
+#
+# Decisão de 10/09/2026: o repositório guarda CÓDIGO. Texto solto (.txt) e
+# documentação (.md) ficam de fora — inclusive o INTEGRACAO.md, que descreve
+# o esquema do banco e as chaves usadas por cada projeto.
+# ─────────────────────────────────────────────────────────────────────────────
+*.txt
+*.md
+
+*.csv
+*.tsv
+*.xlsx
+
+# Credenciais e certificados.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Mídia pesada e pacotes.
+*.mp4
+*.mov
+*.webm
+*.zip
+*.7z
+
+coverage/
+.vercel/
+*.tsbuildinfo

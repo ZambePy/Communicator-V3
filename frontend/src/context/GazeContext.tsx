@@ -54,6 +54,11 @@ import { AvisoDeDistancia } from '@tracker/distanceAdvisory';
 import { useSettings } from './SettingsContext';
 import { chaveDaCamera, resolverFovParaCamera } from '@tracker/camera/fovPorCamera';
 import { isDevMode, onDevModeChange } from '../devMode';
+import {
+  sinalizarEstadoDoOlhar,
+  limparEstadoDoOlhar,
+  confirmarSelecao,
+} from '../utils/feedbackVisual';
 import { limitarDwellMs } from '../dwellMs';
 
 export type {
@@ -764,6 +769,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isDegradedRef.current = isDegraded;
         setIsDegraded(isDegraded);
       }
+      // Estado visual global (esmaecer sem rosto, dessaturar degradado).
+      sinalizarEstadoDoOlhar(!sample.hasFace ? 'perdido' : isDegraded ? 'degradado' : 'ok');
 
       // Durante a calibração, só a EMERGÊNCIA continua acionável. Um dwell
       // acidental nos botões da própria tela corromperia a coleta, mas o botão
@@ -870,7 +877,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             // duas.
             clearDwellVisuals();
             dwellStateRef.current = createDwellState();
-            if (alvoDaPiscada?.isConnected) alvoDaPiscada.click();
+            if (alvoDaPiscada?.isConnected) {
+              confirmarSelecao(alvoDaPiscada);
+              alvoDaPiscada.click();
+            }
           }
         }
 
@@ -932,7 +942,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // commitado ACIMA. Se o handler React lançar, o dwell não redispara
           // sob o mesmo olhar e o loop segue vivo.
           try {
-            if (alvo.isConnected) alvo.click();
+            if (alvo.isConnected) {
+              confirmarSelecao(alvo);
+              alvo.click();
+            }
           } catch (err) {
             console.error('[IrisFlow] handler de clique por dwell lançou:', err);
           }
@@ -1489,6 +1502,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       cursorRef.current?.remove();
       cursorRef.current = null;
+      limparEstadoDoOlhar();
       anelRef.current?.ownerSVGElement?.remove();
       anelRef.current = null;
     };

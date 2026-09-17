@@ -1,0 +1,55 @@
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.env
+*.log
+.DS_Store
+ios/
+android/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Documentação, anotações e arquivos de dados fora do código
+#
+# Decisão de 10/09/2026: o repositório guarda CÓDIGO. Texto solto (.txt) e
+# documentação (.md) ficam de fora.
+# ─────────────────────────────────────────────────────────────────────────────
+*.txt
+*.md
+
+*.csv
+*.tsv
+*.xlsx
+
+# Credenciais do Expo/EAS e assinatura de build. Um keystore ou um
+# google-services.json versionado permite que outra pessoa publique um app
+# assinado como se fosse este — é o vazamento mais caro de reverter.
+.env
+.env.*
+!.env.example
+credentials.json
+google-services.json
+GoogleService-Info.plist
+*.keystore
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+*.pem
+*.key
+
+# Supabase CLI (estado local, nunca é código).
+supabase/.temp/
+supabase/.branches/
+
+# Mídia pesada e pacotes.
+*.mp4
+*.mov
+*.webm
+*.zip
+*.apk
+*.aab
+*.ipa
+
+coverage/

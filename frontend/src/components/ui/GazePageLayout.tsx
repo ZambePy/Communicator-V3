@@ -1,6 +1,6 @@
 import React from 'react';
 import { Bell } from 'lucide-react';
-import { BackButton } from './BackButton';
+import { BackButton, BACK_BUTTON_SIZE_PX } from './BackButton';
 import { GazeButton } from './GazeButton';
 import { useReminders } from '../../context/ReminderContext';
 
@@ -47,7 +47,7 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
         color: 'var(--color-text-base)',
         overflow: 'hidden',
         boxSizing: 'border-box',
-        padding: bare ? 0 : '8.5rem 3rem 3rem 3rem', // Espaço para a barra superior
+        padding: bare ? 0 : '9.5rem 3rem 3rem 3rem', // Espaço para a barra superior (2rem + 6rem do cabeçalho)
         fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       }}
     >
@@ -59,7 +59,7 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
             top: '2rem',
             left: '3rem',
             right: '3rem',
-            height: '4.5rem',
+            height: BACK_BUTTON_SIZE_PX,
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -70,7 +70,7 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
           {showBack ? (
             <BackButton to={backRoute} />
           ) : (
-            <div style={{ width: 180 }} />
+            <div style={{ width: BACK_BUTTON_SIZE_PX }} />
           )}
 
           {/* Zona de Descanso Neutra */}
@@ -79,14 +79,14 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
             className="gaze-rest-zone"
             style={{
               width: '320px', // Equivalente a 8.0° (GAZE_TOKENS.restZoneMinDeg)
-              height: '100%',
-              background: 'rgba(15, 23, 42, 0.03)',
-              border: '2px dashed rgba(15, 23, 42, 0.15)',
+              height: '4.5rem',
+              background: 'transparent',
+              border: '2px dashed var(--color-card-border)',
               borderRadius: '1.5rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'rgba(15, 23, 42, 0.6)',
+              color: 'var(--color-text-muted)',
               fontSize: '1rem',
               fontWeight: 700,
               cursor: 'default',
