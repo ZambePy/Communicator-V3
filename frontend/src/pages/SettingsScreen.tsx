@@ -22,6 +22,7 @@ import {
   Droplet,
   Monitor,
   Sparkles,
+  RotateCcw,
 } from 'lucide-react';
 import { env } from '../config/env';
 import { useSettings } from '../context/SettingsContext';
@@ -54,6 +55,8 @@ import { useCloud } from '../cloud/CloudContext';
 import { infoDoApp } from '../cloud/armazenamento';
 import { LanguageSwitcher } from '../components/ui/LanguageSwitcher';
 import { PortaoDoPin } from '../components/ui/PortaoDoPin';
+import { INTRO_SEEN_KEY } from './onboarding/bootDestination';
+import { limparTutorial } from '../services/local/tutorialProfile';
 import { useDevMode } from '../devMode';
 import { useGaze } from '../context/GazeContext';
 import { useReminders } from '../context/ReminderContext';
@@ -200,7 +203,7 @@ export const SettingsScreen: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
-  const { isCaregiver, loginCaregiver } = useAuth();
+  const { isCaregiver, loginCaregiver, currentProfile } = useAuth();
   const devMode = useDevMode();
   const toast = useToast();
 
@@ -484,6 +487,27 @@ export const SettingsScreen: React.FC = () => {
       metaWithUptime,
       buildRuntimeInfo(getDiagnostics())
     );
+  };
+
+  /**
+   * Refaz a apresentação inicial: boas-vindas, conferência da câmera, prática
+   * guiada e calibração, na ordem da primeira abertura.
+   *
+   * Existe porque esse fluxo só roda uma vez por instalação, e há dois casos
+   * reais em que ele precisa rodar de novo: outro paciente passa a usar o
+   * mesmo computador, e o cuidador quer rever o tutorial com quem já usa. Não
+   * apaga perfil, calibração salva nem configurações — só as marcas de "já
+   * viu".
+   */
+  const refazerApresentacao = () => {
+    try {
+      localStorage.removeItem(INTRO_SEEN_KEY);
+    } catch {
+      /* storage bloqueado: o botão vira só a navegação abaixo */
+    }
+    if (currentProfile) limparTutorial(currentProfile.id);
+    updateSettings({ dicasVistas: [] });
+    navigate('/intro');
   };
 
   const handleBackup = () => {
@@ -1188,7 +1212,39 @@ export const SettingsScreen: React.FC = () => {
             >
               <Download size={20} aria-hidden="true" /> Salvar relatório de suporte
             </button>
+            <button
+              type="button"
+              onClick={refazerApresentacao}
+              aria-label="Refazer a apresentação inicial"
+              style={{
+                padding: '1rem 1.5rem',
+                borderRadius: '1rem',
+                border: '2px solid var(--color-card-border)',
+                background: 'var(--color-card-bg)',
+                color: 'var(--color-text-base)',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <RotateCcw size={20} aria-hidden="true" /> Refazer a apresentação
+            </button>
           </div>
+          <p
+            style={{
+              color: 'var(--color-text-base)',
+              opacity: 0.75,
+              fontSize: '0.95rem',
+              marginTop: '0.75rem',
+            }}
+          >
+            A apresentação (boas-vindas, conferência da câmera, prática guiada e
+            calibração) roda na primeira abertura. Refaça quando outra pessoa passar a
+            usar este computador ou para rever o tutorial. Perfil, calibração salva e
+            configurações continuam como estão.
+          </p>
 
           {/* Relatos automáticos: desligado por padrão, decisão do cuidador.
               Mesmo conteúdo do botão acima — só muda quem aperta o botão

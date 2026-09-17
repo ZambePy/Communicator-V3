@@ -76,13 +76,44 @@ export const L2CS_CONFIDENCE_MIN = 0.15;
  * modelo manda a pessoa se mexer, o que só piora.
  */
 export interface DiagnosticoBloco {
-  motivo: 'stale' | 'implausivel' | 'confianca' | null;
+  /** `stale-reuso`: a leitura corrente não valia (obsoleta ou de confiança
+   *  baixa) e o bloco REUTILIZOU o último ângulo válido, ainda dentro de
+   *  `REUSO_MAX_MS`. Não é zero: o Ridge não vê degrau. */
+  motivo: 'stale' | 'implausivel' | 'confianca' | 'stale-reuso' | null;
   yawDeg: number;
   pitchDeg: number;
   confidence: number | null;
+  /** Idade do ângulo reutilizado, em ms; `null` fora do reuso. */
+  reusoDeMs: number | null;
 }
 
-let ultimoDiag: DiagnosticoBloco = { motivo: null, yawDeg: 0, pitchDeg: 0, confidence: null };
+let ultimoDiag: DiagnosticoBloco = { motivo: null, yawDeg: 0, pitchDeg: 0, confidence: null, reusoDeMs: null };
+
+/**
+ * Por quanto tempo o último ângulo válido é reutilizado quando a leitura
+ * corrente não vale.
+ *
+ * Antes, `stale` virava sete zeros no meio do vetor. Zero não é "sem
+ * informação" depois do StandardScaler — é um degrau: o Ridge saltava, o
+ * cursor pulava e o One Euro "travava" tentando seguir. Reutilizar o ângulo
+ * de até 600 ms atrás custa um atraso que o olho não nota; um zero custa um
+ * salto que ele nota. Vale também para confiança baixa isolada (1–2
+ * inferências a 100–160 ms de cadência cabem na janela).
+ */
+export const REUSO_MAX_MS = 600;
+let reusoMaxMs = REUSO_MAX_MS;
+
+export function setReusoMaxMs(ms: number): void {
+  reusoMaxMs = Number.isFinite(ms) && ms >= 0 ? ms : REUSO_MAX_MS;
+}
+
+/** Último ângulo válido e o instante em que foi visto. */
+let ultimoValido: { yaw: number; pitch: number; emMs: number } | null = null;
+
+export function reiniciarReusoDoBloco(): void {
+  ultimoValido = null;
+  ultimoDiag = { motivo: null, yawDeg: 0, pitchDeg: 0, confidence: null, reusoDeMs: null };
+}
 
 /** Diagnóstico do último `buildL2CSBlock`. Válido para o quadro corrente. */
 export function ultimoDiagnosticoDoBloco(): DiagnosticoBloco {
@@ -100,10 +131,35 @@ export function buildL2CSBlock(
    *  anterior — gravações e chamadores antigos não a fornecem, e rejeitar por
    *  ausência transformaria todo dado histórico em lixo. */
   confidence?: number,
+  /** Instante do quadro, em ms. Sem ele não há reuso (gravações e chamadores
+   *  antigos mantêm o comportamento determinístico de zerar). */
+  nowMs?: number,
 ): number[] {
   const conf = typeof confidence === 'number' ? confidence : null;
-  const anotar = (motivo: DiagnosticoBloco['motivo']) => {
-    ultimoDiag = { motivo, yawDeg: yaw * GRAUS, pitchDeg: pitch * GRAUS, confidence: conf };
+  const anotar = (motivo: DiagnosticoBloco['motivo'], reusoDeMs: number | null = null) => {
+    ultimoDiag = { motivo, yawDeg: yaw * GRAUS, pitchDeg: pitch * GRAUS, confidence: conf, reusoDeMs };
+  };
+
+  // Reuso do último ângulo válido, quando a leitura corrente não vale por
+  // idade ou por confiança. Ângulo IMPLAUSÍVEL não entra aqui: ele diz que a
+  // rede recebeu lixo, e lixo não é "atraso".
+  const reutilizar = (motivoSeExpirado: 'stale' | 'confianca'): number[] => {
+    if (nowMs !== undefined && ultimoValido !== null) {
+      const idade = nowMs - ultimoValido.emMs;
+      if (idade >= 0 && idade <= reusoMaxMs) {
+        // O diagnóstico descreve o ângulo que ENTROU no vetor — o reutilizado.
+        ultimoDiag = {
+          motivo: 'stale-reuso',
+          yawDeg: ultimoValido.yaw * GRAUS,
+          pitchDeg: ultimoValido.pitch * GRAUS,
+          confidence: conf,
+          reusoDeMs: idade,
+        };
+        return termos(ultimoValido.yaw, ultimoValido.pitch, dProxy);
+      }
+    }
+    anotar(motivoSeExpirado);
+    return [0, 0, 0, 0, 0, 0, 0];
   };
 
   // Ângulo implausível é tratado como inválido, não como extremo.
@@ -115,18 +171,22 @@ export function buildL2CSBlock(
   // ângulo impossível, esta pega a distribuição sem informação que produziu
   // um ângulo possível.
   if (valid && conf !== null && conf < L2CS_CONFIDENCE_MIN) {
-    anotar('confianca');
-    return [0, 0, 0, 0, 0, 0, 0];
+    return reutilizar('confianca');
   }
   // Degradação graciosa — quando o L2CS ainda não emitiu resultado, ou o cache
   // está stale, o Ridge continua operando com o comportamento pré-L2CS (as
   // dimensões novas ficam constantes em zero, não contribuem para a predição).
   if (!valid) {
-    anotar('stale');
-    return [0, 0, 0, 0, 0, 0, 0];
+    return reutilizar('stale');
   }
   anotar(null);
+  if (nowMs !== undefined) ultimoValido = { yaw, pitch, emMs: nowMs };
 
+  return termos(yaw, pitch, dProxy);
+}
+
+/** Os sete termos, no layout fixo acima. */
+function termos(yaw: number, pitch: number, dProxy: number): number[] {
   const y = clamp(yaw, -CLAMP_RAD, CLAMP_RAD);
   const p = clamp(pitch, -CLAMP_RAD, CLAMP_RAD);
   const ty = Math.tan(y);

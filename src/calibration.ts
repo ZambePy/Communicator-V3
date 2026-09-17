@@ -20,6 +20,9 @@ import { EXPERIMENT } from './config/experiment';
 import { compensarPredicao, deslocamentoPorPose, poseDeReferencia } from './poseCompensation';
 import type { Pose } from './poseCompensation';
 import { compensarTranslacao, centroDeReferencia } from './translationCompensation';
+import { ReferenciaLenta, type AmostraGeometrica, type MotivoDeCongelamento } from './referenciaLenta';
+import { clampNaBorda, type ModoDeClamp } from './computador/geometria';
+import type { NivelDeContraluz } from './contraluz';
 import { diagnosticarGrade } from './calibrationGridDiagnosis';
 import type { DiagnosticoGrade } from './calibrationGridDiagnosis';
 import type { CentroFacial, EscalaFacial } from './translationCompensation';
@@ -170,10 +173,52 @@ export function medianaDeDistancias(valores: readonly number[]): number | null {
   return v.length % 2 ? v[meio] : (v[meio - 1] + v[meio]) / 2;
 }
 
-export function getCollectionMsForPoint(x: number, y: number): number {
+/**
+ * Joelho empírico da hipometria periférica, em graus de excentricidade.
+ *
+ * Medido na sessão de referência (ver o bloco sobre o orçamento angular dos
+ * alvos): até ~12,4° o olho entrega o que se pede; além disso entrega cada vez
+ * menos. O perfil `computador` põe alvos nos cantos do monitor, bem além do
+ * joelho, e é ali que a amostragem precisa ser mais longa — mais amostras onde
+ * a fixação é pior, não mais grau no polinômio.
+ */
+export const JOELHO_HIPOMETRIA_DEG = 12.4;
+
+/** Acima desta distância normalizada do centro (0 = centro, 1 = canto exato)
+ *  um alvo é um dos QUATRO CANTOS — com inset de 2 % fica em 0,96; os alvos de
+ *  meio de borda ficam em ~0,68 e os intermediários das diagonais em 0,48. */
+const D_NORMALIZADA_DE_CANTO = 0.9;
+
+/** Excentricidade angular de um alvo (fração de tela) na geometria dada. */
+export function excentricidadeDoAlvoDeg(
+  x: number,
+  y: number,
+  geometry: Pick<CalibrationGeometry, 'screenWidthPx' | 'screenHeightPx' | 'screenDiagonalIn' | 'viewingDistanceCm'>,
+): number {
+  const diagPx = Math.hypot(geometry.screenWidthPx, geometry.screenHeightPx);
+  const pxPerCm = geometry.screenDiagonalIn > 0 ? diagPx / (geometry.screenDiagonalIn * 2.54) : 0;
+  if (!(pxPerCm > 0) || !(geometry.viewingDistanceCm > 0)) return 0;
+  const dxCm = ((x - 0.5) * geometry.screenWidthPx) / pxPerCm;
+  const dyCm = ((y - 0.5) * geometry.screenHeightPx) / pxPerCm;
+  return (Math.atan2(Math.hypot(dxCm, dyCm), geometry.viewingDistanceCm) * 180) / Math.PI;
+}
+
+export function getCollectionMsForPoint(
+  x: number,
+  y: number,
+  perfil: PerfilDeCalibracao = perfilAtivo,
+  geometry: CalibrationGeometry = currentCalibrationGeometry(),
+): number {
   // Distância euclidiana normalizada do centro (0..1). Centro = 0, cantos = 1.
   const d = Math.hypot(x - 0.5, y - 0.5) / Math.hypot(0.5, 0.5);
-  return Math.round(COLLECTION_MS_BASE + d * COLLECTION_MS_RANGE);
+  const base = COLLECTION_MS_BASE + d * COLLECTION_MS_RANGE;
+  if (perfil !== 'computador' || d < D_NORMALIZADA_DE_CANTO) return Math.round(base);
+  // Canto do monitor: quanto mais além do joelho, mais tempo — até dobrar a
+  // parcela periférica. Um canto a 26° numa 23,6" a 60 cm ganha os 1120 ms
+  // inteiros; num notebook de 13" a 50 cm (~17°) ganha ~40 % deles.
+  const ecc = excentricidadeDoAlvoDeg(x, y, geometry);
+  const alem = Math.min(1, Math.max(0, (ecc - JOELHO_HIPOMETRIA_DEG) / JOELHO_HIPOMETRIA_DEG));
+  return Math.round(base + alem * COLLECTION_MS_RANGE);
 }
 
 // Piso e teto de variância intra-ponto. Piso uma ordem de grandeza abaixo do
@@ -615,11 +660,14 @@ export function setCurrentFrameGeometry(
   // precisa delas.
   videoHeight?: number,
   centro?: CentroFacial | null,
+  // Distância cantal medida com a íris como régua (`escalaMetrica.ts`).
+  // Ausente, a compensação lateral cai na constante genérica.
+  cantalCm?: number,
 ): void {
   currentIodPx = iodPx;
   currentVideoWidth = videoWidth;
   latestFaceScale = iodPx > 0 && videoWidth > 0 && (videoHeight ?? 0) > 0
-    ? { iodPx, videoWidth, videoHeight: videoHeight as number }
+    ? { iodPx, videoWidth, videoHeight: videoHeight as number, cantalCm }
     : null;
   latestFaceCenter = centro ?? null;
 }
@@ -649,6 +697,140 @@ let calibrationReferencePose: Pose | null = null;
 
 export function setCurrentFramePose(pose: Pose | null): void {
   latestPose = pose;
+}
+
+// ── referência lenta (dois relógios) ─────────────────────────────────────
+
+/**
+ * Referência LENTA de pose e centro facial. Nasce na referência da calibração
+ * e absorve a deriva postural com constante de tempo de ~30 s; ver
+ * `referenciaLenta.ts`. Com `EXPERIMENT.referenciaLenta` desligada continua
+ * sendo alimentada (para diagnóstico) mas `mapGaze` usa a referência congelada.
+ */
+const referenciaLenta = new ReferenciaLenta();
+
+/**
+ * Um quadro para a referência lenta. `valido` é o veredito do engine: rosto
+ * presente, sem piscada, L2CS plausível, sem contraluz forte. Chamado a cada
+ * quadro, DEPOIS de `setCurrentFramePose`/`setCurrentFrameGeometry`.
+ */
+export function alimentarReferenciaLenta(tMs: number, valido: boolean): void {
+  referenciaLenta.atualizar(
+    { pose: latestPose, centro: latestFaceCenter, escala: latestFaceScale },
+    tMs,
+    valido,
+  );
+}
+
+/** Estado da referência lenta, para diagnóstico e teste. */
+export function getReferenciaLenta(): AmostraGeometrica & {
+  iniciada: boolean;
+  congelada: MotivoDeCongelamento;
+  ativa: boolean;
+  /** |pose atual − referência| em graus: o Δ que a compensação aplica agora. */
+  residuoPoseDeg: number;
+  /** Deslocamento do rosto em relação à referência, em cm. */
+  residuoCentroCm: number;
+  /** Qual eixo está parado por resíduo grande. */
+  congeladoPorResiduo: { pose: boolean; centro: boolean };
+  /** Há quanto tempo a EMA está parada por resíduo grande (ms). Minutos aqui
+   *  significam postura nova, e a saída é a reancoragem — não a EMA. */
+  msCongeladoPorResiduo: number;
+} {
+  return {
+    pose: referenciaLenta.pose,
+    centro: referenciaLenta.centro,
+    iniciada: referenciaLenta.iniciada,
+    congelada: referenciaLenta.motivoDoCongelamento,
+    ativa: EXPERIMENT.referenciaLenta && referenciaLenta.iniciada,
+    residuoPoseDeg: referenciaLenta.residuoPoseDeg,
+    residuoCentroCm: referenciaLenta.residuoCentroCm,
+    congeladoPorResiduo: referenciaLenta.congeladoPorResiduo,
+    msCongeladoPorResiduo: referenciaLenta.msCongeladoPorResiduo,
+  };
+}
+
+/** Referências que `mapGaze` usa neste quadro: lenta quando ligada e iniciada,
+ *  senão a congelada da calibração. */
+function referenciasEmUso(): { pose: Pose | null; centro: CentroFacial | null } {
+  if (EXPERIMENT.referenciaLenta && referenciaLenta.iniciada) {
+    return { pose: referenciaLenta.pose, centro: referenciaLenta.centro };
+  }
+  return { pose: calibrationReferencePose, centro: calibrationReferenceCenter };
+}
+
+// ── reancoragem SEM retreinar ─────────────────────────────────────────────
+
+/**
+ * Reancora as referências geométricas num instante em que a pessoa está
+ * olhando o centro da tela: a distância câmera→rosto vira a nova base da
+ * correção aditiva de distância, e pose/centro recomeçam os dois relógios.
+ *
+ * NÃO retreina o Ridge: o mapeamento íris→tela continua o mesmo; só muda o
+ * "zero" contra o qual as compensações medem. É o que resolve "sentei
+ * diferente hoje" sem os nove pontos.
+ */
+export function reancorarReferencias(medida: {
+  distanciaCm: number | null;
+  pose: Pose | null;
+  centro: CentroFacial | null;
+}): void {
+  if (medida.distanciaCm !== null && Number.isFinite(medida.distanciaCm) && medida.distanciaCm > 0) {
+    calibrationCameraDistanceCm = medida.distanciaCm;
+  }
+  if (medida.pose) calibrationReferencePose = { ...medida.pose };
+  if (medida.centro) calibrationReferenceCenter = { ...medida.centro };
+  referenciaLenta.iniciar({ pose: calibrationReferencePose, centro: calibrationReferenceCenter });
+}
+
+// ── contraluz: o quadro não vale, a calibração não começa ────────────────
+
+let contraluzAtual: NivelDeContraluz | null = null;
+
+/** Nível de contraluz do quadro corrente, informado pelo engine. */
+export function setContraluzAtual(nivel: NivelDeContraluz | null): void {
+  contraluzAtual = nivel;
+}
+
+export function contraluzForte(): boolean {
+  return contraluzAtual === 'forte';
+}
+
+export interface RecusaDeCalibracao {
+  motivo: 'contraluz_forte';
+  mensagem: string;
+  em: number;
+}
+
+let ultimaRecusa: RecusaDeCalibracao | null = null;
+
+/** Última recusa de `startCalibrationMode`/`completeCalibration` por condição
+ *  do posto de uso (mensagem via estado, não `throw`). `null` = nenhuma. */
+export function getRecusaDeCalibracao(): RecusaDeCalibracao | null {
+  return ultimaRecusa;
+}
+
+const MENSAGEM_CONTRALUZ_FORTE =
+  'Há luz forte atrás de você — a câmera está expondo para o fundo e apagando os olhos. ' +
+  'Feche a cortina ou vire a cadeira antes de calibrar.';
+
+// ── modo de clamp na borda ───────────────────────────────────────────────
+
+/**
+ * `suave` (app): Hermite de 2 % nas bordas, como sempre foi. `duro` (Modo
+ * Computador): clamp em [0,1] com margem em px — o cursor precisa chegar na
+ * barra de tarefas e no X da janela, e os 38 px do clamp suave não deixavam.
+ */
+let modoDeClamp: ModoDeClamp = 'suave';
+let margemDoClampPx = 0;
+
+export function setModoDeClamp(modo: ModoDeClamp, margemPx = 0): void {
+  modoDeClamp = modo;
+  margemDoClampPx = Number.isFinite(margemPx) ? Math.min(4, Math.max(0, margemPx)) : 0;
+}
+
+export function getModoDeClamp(): { modo: ModoDeClamp; margemPx: number } {
+  return { modo: modoDeClamp, margemPx: margemDoClampPx };
 }
 
 /**
@@ -854,6 +1036,9 @@ export function restoreReferenceStateFromProfile(
   // A confiabilidade por olho é substituída, nunca herdada: média simples é
   // neutra, peso herdado é errado E invisível.
   eyeReliability               = ref?.eyeReliability ?? null;
+  // A referência lenta nasce na referência do perfil (ou some com ele).
+  if (ref) referenciaLenta.iniciar({ pose: calibrationReferencePose, centro: calibrationReferenceCenter });
+  else referenciaLenta.limpar();
 }
 
 /**
@@ -1076,6 +1261,9 @@ export interface CalibrationContext {
    *  mesmo rosto, sem mudar a dimensão do vetor — um perfil treinado em 448
    *  carregaria numa sessão em 224 sem erro nenhum e prediria deslocado. */
   l2csInputSize: number;
+  /** Perfil da grade (`padrao` | `computador`). Ausente = `padrao`, e o
+   *  `padrao` NÃO entra na chave, para os perfis já salvos continuarem válidos. */
+  perfil?: PerfilDeCalibracao;
 }
 
 export function buildContextKeyFrom(ctx: CalibrationContext): string {
@@ -1085,7 +1273,8 @@ export function buildContextKeyFrom(ctx: CalibrationContext): string {
     `xf${ctx.expandFactor}`,
     `l2cs${ctx.l2csInputSize}`,
   ].filter(Boolean).join(',');
-  return `${ctx.viewportW}x${ctx.viewportH}_${ctx.featureVectorId}_v${ctx.formatVersion}_${expKey}`;
+  const perfil = ctx.perfil && ctx.perfil !== 'padrao' ? `_${ctx.perfil}` : '';
+  return `${ctx.viewportW}x${ctx.viewportH}_${ctx.featureVectorId}_v${ctx.formatVersion}_${expKey}${perfil}`;
 }
 
 function buildContextKey(): string {
@@ -1098,8 +1287,50 @@ function buildContextKey(): string {
     polynomialFeatures: EXPERIMENT.polynomialFeatures,
     geometricPoseCompensation: EXPERIMENT.geometricPoseCompensation,
     expandFactor: EXPERIMENT.expandFactor,
-    l2csInputSize: EXPERIMENT.l2csInputSize,
+    l2csInputSize: l2csInputSizeEfetivo,
+    perfil: perfilAtivo,
   });
+}
+
+/**
+ * Lado do recorte do L2CS EM VIGOR. Nasce em `EXPERIMENT.l2csInputSize` e o
+ * engine o atualiza quando a política por provider escolhe outro (WASM →
+ * 224²). Entra na chave do perfil: 224 e 448 produzem tan(yaw)/tan(pitch)
+ * diferentes para o mesmo rosto, e um perfil treinado num não serve no outro.
+ */
+let l2csInputSizeEfetivo: number = EXPERIMENT.l2csInputSize;
+
+export function getL2csInputSizeEfetivo(): number {
+  return l2csInputSizeEfetivo;
+}
+
+/**
+ * Informa o lado efetivo. Se ele mudou e há modelo carregado de um perfil
+ * com a chave antiga, o modelo é descartado com invalidação explícita e o
+ * disco é consultado por um perfil compatível — silêncio aqui seria um
+ * modelo prevendo deslocado sem erro nenhum.
+ */
+export function setL2csInputSizeEfetivo(size: number): void {
+  if (size === l2csInputSizeEfetivo) return;
+  const chaveAntiga = buildContextKey();
+  l2csInputSizeEfetivo = size;
+  const ativo = profileRegistry.getActive();
+  if (isCalibrated() && ativo && ativo.contextKey === chaveAntiga) {
+    clearCalibration();
+    emitirInvalidacao({
+      reason: 'feature_dim_mismatch',
+      detail: `lado do recorte L2CS mudou para ${size}² (perfil treinado em outro lado)`,
+      at: Date.now(),
+    });
+  }
+  // Reconsulta o disco SEMPRE, e não só quando havia modelo carregado.
+  //
+  // O lado efetivo só é conhecido quando o worker do L2CS sobe, centenas de
+  // milissegundos depois de `init()` — e o `loadProfile()` do init já rodou,
+  // com a chave do lado NOMINAL (448). Numa máquina sem WebGPU o perfil foi
+  // gravado sob `…_l2cs224`: a chave não bate, o perfil é ignorado, e sem esta
+  // releitura o paciente recalibraria os nove pontos a cada abertura do app.
+  loadProfile();
 }
 
 function tryParseStoredProfiles(): StoredCalibrationProfile[] {
@@ -1355,8 +1586,64 @@ export function eccentricityExtentFraction(
 }
 
 /**
+ * Perfil da grade de calibração.
+ *
+ *  - `padrao`      o app: grade dentro do orçamento de excentricidade, porque
+ *                  os botões do IrisFlow nunca encostam na borda.
+ *  - `computador`  o Modo Computador: os botões do Windows FICAM na borda (X
+ *                  da janela, barra de tarefas), e o Ridge extrapola mal ali.
+ *                  13 alvos: 3×3 com inset de 2 % nos cantos e bordas + 4
+ *                  intermediários nas diagonais, e amostragem mais longa nos
+ *                  quatro cantos (`getCollectionMsForPoint`).
+ *
+ * O perfil entra na chave do perfil salvo: o modelo do Computador não
+ * sobrescreve o do app, e vice-versa.
+ */
+export type PerfilDeCalibracao = 'padrao' | 'computador';
+
+/** Inset dos alvos de borda no perfil `computador`, em fração da tela. */
+export const INSET_COMPUTADOR = 0.02;
+
+export interface OpcoesDeAlvos {
+  quick?: boolean;
+  perfil?: PerfilDeCalibracao;
+}
+
+/**
+ * Alvos de calibração para uma geometria e um perfil. Pura e determinística.
+ *
+ * No perfil `computador` o modo `quick` devolve os 4 cantos com o inset de
+ * 2 % — o mesmo que a recalibração rápida do cuidador faria sobre o monitor.
+ */
+export function alvosDeCalibracao(
+  geometry: CalibrationGeometry,
+  opcoes: OpcoesDeAlvos = {},
+): { x: number; y: number }[] {
+  if ((opcoes.perfil ?? 'padrao') === 'computador') {
+    const lo = INSET_COMPUTADOR;
+    const hi = 1 - INSET_COMPUTADOR;
+    const cantos = [
+      { x: lo, y: lo }, { x: hi, y: lo },
+      { x: lo, y: hi }, { x: hi, y: hi },
+    ];
+    if (opcoes.quick) return cantos;
+    const xs = [lo, 0.5, hi];
+    const ys = [lo, 0.5, hi];
+    const out: { x: number; y: number }[] = [];
+    for (const y of ys) for (const x of xs) out.push({ x, y });
+    // Intermediários nas diagonais, a meio caminho entre o centro e cada
+    // canto: densidade onde o polinômio de grau 2 precisa ser segurado para
+    // não dobrar entre o centro e o canto.
+    for (const c of cantos) out.push({ x: (0.5 + c.x) / 2, y: (0.5 + c.y) / 2 });
+    return out;
+  }
+  return computeCalibrationTargets(geometry, opcoes.quick ?? false);
+}
+
+/**
  * Grade 3×3 (full) ou 4 cantos (quick) posicionada dentro do orçamento de
  * excentricidade. Pura e determinística — é o que o teste de regiões usa.
+ * É o perfil `padrao` de `alvosDeCalibracao`.
  */
 export function computeCalibrationTargets(
   geometry: CalibrationGeometry,
@@ -1522,6 +1809,31 @@ export const CALIBRATION_TARGETS_QUICK: readonly { x: number; y: number }[] =
 
 // Modo em execução. `null` quando não está calibrando.
 let currentCalibrationMode: 'full' | 'quick' | null = null;
+
+/**
+ * Perfil de calibração ATIVO — o da sessão em curso e o que a chave do perfil
+ * salvo usa (`buildContextKey`). Trocar de perfil recarrega o modelo que casa
+ * com a nova chave (`setPerfilDeCalibracao`).
+ */
+let perfilAtivo: PerfilDeCalibracao = 'padrao';
+
+export function getPerfilDeCalibracao(): PerfilDeCalibracao {
+  return perfilAtivo;
+}
+
+/**
+ * Troca o perfil ativo e recarrega do disco o modelo daquele perfil.
+ *
+ * Devolve se há modelo carregado para o perfil novo. Não descarta o perfil
+ * salvo do outro modo — os dois convivem no registry sob chaves diferentes.
+ * Sem mudança de perfil, não toca em nada.
+ */
+export function setPerfilDeCalibracao(perfil: PerfilDeCalibracao): boolean {
+  if (perfil === perfilAtivo) return isCalibrated();
+  perfilAtivo = perfil;
+  reiniciarCorrecao();
+  return loadProfile();
+}
 // Grade calculada para a tela/geometria da sessão em curso. `null` fora
 // de uma calibração; nesse caso `getCalibrationTargets` devolve a lista
 // nominal, que é o que a UI precisa para desenhar o tutorial.
@@ -1550,10 +1862,24 @@ export function startCalibrationMode(
      *  configurado diagonal e distância reais, a UI passa aqui e a grade se
      *  ajusta; sem isso, valem os defaults. */
     geometry?: Partial<CalibrationGeometry>;
+    /** `computador` para o Modo Computador (13 alvos até a borda). Ausente,
+     *  mantém o perfil ativo. */
+    perfil?: PerfilDeCalibracao;
   },
-) {
+): boolean {
+  // Contraluz forte: o quadro não vale e o modelo treinado sob ele não
+  // valeria depois. Recusa por estado, não por exceção — a tela lê
+  // `getRecusaDeCalibracao()` e mostra a mensagem.
+  if (contraluzForte()) {
+    ultimaRecusa = { motivo: 'contraluz_forte', mensagem: MENSAGEM_CONTRALUZ_FORTE, em: Date.now() };
+    return false;
+  }
+  ultimaRecusa = null;
+
   // O limiar adaptativo de piscada não pode vir enviesado de sessões anteriores.
   resetEarHistory();
+
+  if (opts?.perfil) perfilAtivo = opts.perfil;
 
   isCalibrating = true;
 
@@ -1572,6 +1898,7 @@ export function startCalibrationMode(
   sessionPoseByTarget = [];
   calibrationReferencePose = null;
   calibrationReferenceCenter = null;
+  referenciaLenta.limpar();
   acceptedDistancesCm = [];
   eyeReliability = null;
   qualityGapWarned = false;
@@ -1610,10 +1937,10 @@ export function startCalibrationMode(
   // registrada na sessão para a compensação de pose usar a mesma geometria.
   if (opts?.geometry) setSessionGeometry(opts.geometry);
   const geometry = currentCalibrationGeometry(opts?.geometry);
-  currentCalibrationTargets = computeCalibrationTargets(
-    geometry,
-    currentCalibrationMode === 'quick',
-  );
+  currentCalibrationTargets = alvosDeCalibracao(geometry, {
+    quick: currentCalibrationMode === 'quick',
+    perfil: perfilAtivo,
+  });
   const exPct = ((0.5 - currentCalibrationTargets[0].x) * 100).toFixed(1);
   const eyPct = ((0.5 - currentCalibrationTargets[0].y) * 100).toFixed(1);
   console.log(
@@ -1635,6 +1962,7 @@ export function startCalibrationMode(
       `global compensa. Não prometer a mesma precisão de outras condições.`,
     );
   }
+  return true;
 }
 
 export function startCollectingPoint(x: number, y: number, onDone: (success: boolean) => void) {
@@ -2646,6 +2974,8 @@ function trainScalersAndRegressors(trainingProfile: CalibrationPoint[]): Trainin
         : null;
     }),
   );
+  // O modelo novo recomeça os dois relógios na referência em que foi treinado.
+  referenciaLenta.iniciar({ pose: calibrationReferencePose, centro: calibrationReferenceCenter });
 
   lastFitDiagnostics = computeFitDiagnostics(
     trainFeaturesLeft, trainFeaturesRight, trainTargets, trainingProfile,
@@ -3092,6 +3422,7 @@ export type CalibrationOutcome =
         | 'insufficient_samples'     // profile vazio ou < 3 alvos únicos
         | 'degenerate_features'      // preflight (>30% features mortas)
         | 'engine_indisponivel'      // a tela pediu treino sem engine ativo
+        | 'contraluz_forte'          // luz forte atrás da pessoa no fim da coleta: não grava perfil
         | 'unknown';
       detail: string;
     };
@@ -3129,6 +3460,23 @@ export function completeCalibration(
   }
   isCollecting = false;
   pointCompleteCallback = null;
+
+  // Contraluz forte no momento de gravar: o perfil não é salvo. As amostras
+  // ficam — a pessoa pode fechar a cortina e pedir o treino de novo.
+  //
+  // A limpeza é a MESMA do `finally` abaixo, repetida à mão porque este
+  // caminho sai antes do `try`. Sem ela `isCalibrating` ficaria `true` para
+  // sempre (o motor trava no estado `calibrating` e nunca mais avisa
+  // rastreamento degradado) e `modeloAntesDoReforco` sobreviveria, pronto para
+  // ressuscitar numa falha de outra sessão.
+  if (contraluzForte()) {
+    isCalibrating = false;
+    modeloAntesDoReforco = null;
+    currentCalibrationMode = null;
+    ultimaRecusa = { motivo: 'contraluz_forte', mensagem: MENSAGEM_CONTRALUZ_FORTE, em: Date.now() };
+    onComplete?.({ ok: false, reason: 'contraluz_forte', detail: MENSAGEM_CONTRALUZ_FORTE });
+    return;
+  }
 
   let outcome: CalibrationOutcome;
   try {
@@ -3534,28 +3882,15 @@ export function mapGaze(
   let baseX = (predLeft.x * wL + predRight.x * wR) / wSum;
   let baseY = (predLeft.y * wL + predRight.y * wR) / wSum;
 
-  // softClamp: Hermite cúbico com derivada contínua nas duas junções (C¹) —
-  // f(0)=0, f(m)=m, f'(m)=1 e o espelho no outro lado. Dentro de [m, 1-m] é
-  // identidade; nas bordas o slope vai de 0 a 1 sem salto de velocidade. Uma
-  // margem de 2% afeta só ~38 px de cada lado em 1920 px.
-  const SOFT_MARGIN = 0.02;
-  function softClamp(v: number): number {
-    if (v <= 0) return 0;
-    if (v >= 1) return 1;
-    if (v < SOFT_MARGIN) {
-      // Hermite cúbico: t = v/m ∈ [0,1], f(v) = m · t²(2-t).
-      // Verificação: f(0)=0 ✓, f(m)=m·1·1=m ✓, f'(0)=0 ✓,
-      // f'(v) = (1/m)·m·(4t-3t²) = t(4-3t), f'(m) = 1·(4-3)=1 ✓
-      const t = v / SOFT_MARGIN;
-      return SOFT_MARGIN * t * t * (2 - t);
-    }
-    if (v > 1 - SOFT_MARGIN) {
-      // Espelha: t = (1-v)/m ∈ [0,1], f = 1 - m · t²(2-t)
-      const t = (1 - v) / SOFT_MARGIN;
-      return 1 - SOFT_MARGIN * t * t * (2 - t);
-    }
-    return v;
-  }
+  // Clamp de borda: `suave` (Hermite de 2 %, o softClamp de sempre) no app,
+  // `duro` no Modo Computador — ver `computador/geometria.ts` e
+  // `setModoDeClamp`. O que segue chama de "softClamp" o clamp em vigor.
+  const vwClamp = document.documentElement.clientWidth;
+  const vhClamp = document.documentElement.clientHeight;
+  const softClampX = (v: number) =>
+    clampNaBorda(v, modoDeClamp, { margemPx: margemDoClampPx, tamanhoPx: vwClamp });
+  const softClampY = (v: number) =>
+    clampNaBorda(v, modoDeClamp, { margemPx: margemDoClampPx, tamanhoPx: vhClamp });
   // Compensação de distância, aplicada em espaço NORMALIZADO e ANTES do
   // softClamp.
   //
@@ -3575,20 +3910,27 @@ export function mapGaze(
   // Compensação geométrica de pose, também antes do softClamp e pelo mesmo
   // motivo. A translação lateral vem depois da rotação: são efeitos
   // independentes que se somam no mesmo ponto predito.
+  //
+  // A referência é a LENTA quando `EXPERIMENT.referenciaLenta` está ligada:
+  // Δ = pose/centro atuais − referência lenta (dois relógios, ver
+  // `referenciaLenta.ts`); desligada, é a média congelada da calibração.
+  const referencia = referenciasEmUso();
   const comPose0 = EXPERIMENT.geometricPoseCompensation
     ? compensarPredicao(
         compensado.x, compensado.y,
-        latestPose, calibrationReferencePose,
+        latestPose, referencia.pose,
         screenDistancePx(),
         document.documentElement.clientWidth,
         document.documentElement.clientHeight,
       )
     : compensado;
 
+  // Só age com os marcos 33/263 válidos: `latestFaceScale` é `null` quando o
+  // engine mediu `iodPx = 0`, e `compensarTranslacao` devolve a entrada intacta.
   const comPose = EXPERIMENT.lateralTranslationCompensation
     ? compensarTranslacao(
         comPose0.x, comPose0.y,
-        latestFaceCenter, calibrationReferenceCenter, latestFaceScale,
+        latestFaceCenter, referencia.centro, latestFaceScale,
         screenPxPerCm(),
         document.documentElement.clientWidth,
         document.documentElement.clientHeight,
@@ -3609,8 +3951,8 @@ export function mapGaze(
   // essa informação que explica o cursor parado na borda.
   ultimaSaturacao = avaliarSaturacao(comDwell.x, comDwell.y);
 
-  const avgNormX = softClamp(comDwell.x);
-  const avgNormY = softClamp(comDwell.y);
+  const avgNormX = softClampX(comDwell.x);
+  const avgNormY = softClampY(comDwell.y);
 
   const vw = document.documentElement.clientWidth;
   const vh = document.documentElement.clientHeight;

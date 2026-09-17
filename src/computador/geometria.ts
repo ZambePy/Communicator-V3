@@ -90,6 +90,61 @@ export function telaParaFisicoAproximado(p: Ponto, quadro: QuadroDeTela): Ponto 
   };
 }
 
+// ── clamp da predição na borda ───────────────────────────────────────────────
+//
+// A predição do Ridge sai em fração de tela e pode passar de [0,1]. Dentro do
+// app o clamp é SUAVE: um Hermite cúbico de 2 % (38 px em 1920) que freia o
+// cursor antes da borda, porque ali os alvos são grandes e uma parede dura
+// faz o cursor "grudar". Sobre o Windows a conta muda: o X da janela, a barra
+// de tarefas e a barra do IrisFlow ficam NA borda, e 38 px de freio é o
+// cursor "não chegar". O Modo Computador usa o clamp DURO: [0,1] com uma
+// margem em pixels configurável (0–4 px), que é o que basta para o cursor
+// não cair no monitor vizinho.
+
+export type ModoDeClamp = 'suave' | 'duro';
+
+/** Margem do clamp suave, em fração da tela. */
+export const MARGEM_SUAVE = 0.02;
+/** Maior margem aceita pelo clamp duro, em px. */
+export const MARGEM_DURA_MAX_PX = 4;
+
+/**
+ * Hermite cúbico com derivada contínua nas duas junções (C¹): f(0)=0,
+ * f(m)=m, f'(m)=1 e o espelho do outro lado. Dentro de [m, 1−m] é identidade.
+ */
+export function clampSuave(v: number, margem = MARGEM_SUAVE): number {
+  if (!Number.isFinite(v)) return 0.5;
+  if (v <= 0) return 0;
+  if (v >= 1) return 1;
+  if (v < margem) {
+    // t = v/m ∈ [0,1], f(v) = m · t²(2−t): f(0)=0, f(m)=m, f'(0)=0, f'(m)=1.
+    const t = v / margem;
+    return margem * t * t * (2 - t);
+  }
+  if (v > 1 - margem) {
+    const t = (1 - v) / margem;
+    return 1 - margem * t * t * (2 - t);
+  }
+  return v;
+}
+
+/** Clamp em [margem, 1 − margem], com a margem dada em px do eixo. */
+export function clampDuro(v: number, margemPx: number, tamanhoPx: number): number {
+  if (!Number.isFinite(v)) return 0.5;
+  const m = tamanhoPx > 0 && Number.isFinite(margemPx)
+    ? Math.min(MARGEM_DURA_MAX_PX, Math.max(0, margemPx)) / tamanhoPx
+    : 0;
+  return Math.min(1 - m, Math.max(m, v));
+}
+
+export function clampNaBorda(
+  v: number,
+  modo: ModoDeClamp,
+  opts: { margemPx?: number; tamanhoPx: number },
+): number {
+  return modo === 'duro' ? clampDuro(v, opts.margemPx ?? 0, opts.tamanhoPx) : clampSuave(v);
+}
+
 /**
  * Diâmetro do cursor do IrisFlow quando ele sai do app e passa a andar sobre
  * o Windows.

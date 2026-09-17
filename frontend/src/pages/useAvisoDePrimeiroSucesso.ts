@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../context/ToastContext';
@@ -19,8 +19,14 @@ export function useAvisoDePrimeiroSucesso(): void {
   const veioDoPrimeiroSucesso =
     (location.state as { primeiroSucesso?: boolean } | null)?.primeiroSucesso === true;
 
+  // Guarda por montagem: o aviso sai uma vez, independentemente de quantas
+  // vezes o efeito rodar (o toast re-renderiza a árvore e a limpeza do
+  // `state` chega um ciclo depois — sem a guarda, cada ciclo emitia outro).
+  const jaAvisou = useRef(false);
+
   useEffect(() => {
-    if (!veioDoPrimeiroSucesso) return;
+    if (!veioDoPrimeiroSucesso || jaAvisou.current) return;
+    jaAvisou.current = true;
     toast.success(t('primeiroSucesso.aviso'), 7000);
     navigate(location.pathname, { replace: true, state: null });
   }, [veioDoPrimeiroSucesso, toast, t, navigate, location.pathname]);

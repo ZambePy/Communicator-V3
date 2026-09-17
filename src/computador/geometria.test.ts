@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  clampSuave, clampDuro, clampNaBorda, MARGEM_DURA_MAX_PX,
   reacaoAMudancaDeTela,
   janelaParaTela,
   janelaParaSobreposicao,
@@ -133,5 +134,38 @@ describe('reacaoAMudancaDeTela', () => {
     expect(reacaoAMudancaDeTela(full, full, undefined)).toBe('ignorar');
     const hd = { monitor: { x: 0, y: 0, width: 1280, height: 720 }, escala: 1 };
     expect(reacaoAMudancaDeTela(full, hd, undefined)).toBe('encerrar');
+  });
+});
+
+describe('clamp na borda — suave (app) × duro (Modo Computador)', () => {
+  const W = 1920;
+
+  it('suave: Hermite de 2 % com derivada zero na borda — o cursor não CHEGA', () => {
+    // t = (1 − v)/m; f = 1 − m·t²(2 − t). Em 0,995 (t = 0,25) sai 0,99813:
+    // 3,6 px aquém da borda em 1920, e só encosta com a predição crua em 1.
+    expect(clampSuave(0.995)).toBeCloseTo(1 - 0.02 * 0.0625 * 1.75, 12);
+    expect(1 - clampSuave(0.995)).toBeGreaterThan(1 / W);
+    expect(clampSuave(0.5)).toBe(0.5);
+    expect(clampSuave(1.04)).toBe(1);
+    expect(clampSuave(-0.3)).toBe(0);
+    expect(clampSuave(NaN)).toBe(0.5);
+  });
+
+  it('duro: predição crua 1,04 → 1,00; 0,995 fica 0,995 (o cursor CHEGA na borda)', () => {
+    expect(clampNaBorda(1.04, 'duro', { margemPx: 0, tamanhoPx: W })).toBe(1);
+    expect(clampNaBorda(0.995, 'duro', { margemPx: 0, tamanhoPx: W })).toBe(0.995);
+    expect(clampNaBorda(-0.02, 'duro', { margemPx: 0, tamanhoPx: W })).toBe(0);
+    // O suave, no mesmo ponto, fica aquém: é o X da janela que "não chega".
+    expect(clampNaBorda(0.995, 'suave', { tamanhoPx: W })).toBeGreaterThan(0.995);
+    expect(clampNaBorda(0.995, 'suave', { tamanhoPx: W })).toBeLessThan(1 - 1 / W);
+  });
+
+  it('duro: a margem é em px, limitada a 0–4', () => {
+    expect(clampNaBorda(1.04, 'duro', { margemPx: 2, tamanhoPx: W })).toBeCloseTo(1 - 2 / W, 12);
+    expect(clampNaBorda(-1, 'duro', { margemPx: 4, tamanhoPx: W })).toBeCloseTo(4 / W, 12);
+    // 40 px pedidos viram 4: mais que isso é o clamp suave de volta.
+    expect(clampNaBorda(1, 'duro', { margemPx: 40, tamanhoPx: W })).toBeCloseTo(1 - MARGEM_DURA_MAX_PX / W, 12);
+    expect(clampDuro(1, -5, W)).toBe(1);
+    expect(clampDuro(0.7, 2, 0)).toBe(0.7);
   });
 });

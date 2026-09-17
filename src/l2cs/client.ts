@@ -7,9 +7,40 @@
 
 import type { L2CSGaze, L2CSModelMeta, L2CSWorkerRequest, L2CSWorkerResponse, VerificacaoDoModelo } from './types';
 import { fichaDoModelo, type FichaDoModelo } from './proveniencia';
-import { EXPERIMENT } from '../config/experiment';
+import { EXPERIMENT, type ExperimentConfig } from '../config/experiment';
 
 export type L2CSProviderRequest = 'auto' | 'webgpu' | 'wasm';
+
+/** Tamanho do recorte e cadência EM VIGOR — decididos pelo provider efetivo. */
+export interface PoliticaL2cs {
+  inputSize: 224 | 448;
+  cadenceMs: number;
+}
+
+/**
+ * Política por provider.
+ *
+ * A ResNet-50 em 448² custa ~4× o de 224². Com WebGPU (~50 ms por inferência)
+ * o custo cabe a 10 Hz e o recorte maior dá mais pixels por olho; em WASM
+ * single-thread a mesma rede leva centenas de ms, o resultado chega velho e o
+ * bloco angular passa a vida em `stale`. Em WASM, 224² a 160 ms entrega ângulo
+ * FRESCO — e um ângulo fresco de 224² vale mais que um ângulo de 448² de meio
+ * segundo atrás. Nunca se zera o bloco por causa disto: ele só muda de tamanho.
+ *
+ * Com o provider FORÇADO (`l2cs = 'webgpu' | 'wasm'`, condição de medição) a
+ * política não se aplica: o operador escolheu tamanho e cadência de propósito,
+ * e o relatório precisa refletir o que ele pediu.
+ */
+export function politicaPorProvider(
+  provider: 'webgpu' | 'wasm' | null,
+  config: Pick<ExperimentConfig, 'l2cs' | 'l2csInputSize' | 'l2csCadenceMs'> = EXPERIMENT,
+): PoliticaL2cs {
+  const pedida: PoliticaL2cs = { inputSize: config.l2csInputSize, cadenceMs: config.l2csCadenceMs };
+  if (config.l2cs !== 'auto' || provider === null) return pedida;
+  return provider === 'webgpu'
+    ? { inputSize: 448, cadenceMs: 100 }
+    : { inputSize: 224, cadenceMs: 160 };
+}
 
 export interface L2CSClientOptions {
   modelUrl?: string;
@@ -39,6 +70,9 @@ export interface L2CSClient {
   getExecutionProvider(): string | null;
   /** true quando o provider ativo não é o que foi pedido (fallback do modo `auto`). */
   houveFallback(): boolean;
+  /** Tamanho do recorte e cadência em vigor. Antes do `ready` é o pedido em
+   *  `EXPERIMENT`; no `ready`, o que a política por provider decidiu. */
+  getPolitica(): PoliticaL2cs;
   /** Tolerância de idade em vigor, em ms. */
   getStaleMs(): number;
   getAverageConfidence(): number;
@@ -82,7 +116,11 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
   const modelUrl = opts.modelUrl ?? urlRelativa(DEFAULT_MODEL_PATH);
   const metaUrl = opts.metaUrl ?? urlRelativa(DEFAULT_META_PATH);
   const ortBaseUrl = urlRelativa(DEFAULT_ORT_PATH);
-  const cadenceMs = opts.cadenceMs ?? EXPERIMENT.l2csCadenceMs;
+  // Cadência explícita (testes, harness) vence a política; sem ela, a
+  // cadência nasce em `EXPERIMENT` e é trocada no `ready` pelo provider.
+  const cadenciaFixa = opts.cadenceMs;
+  let politica: PoliticaL2cs = politicaPorProvider(null);
+  let cadenceMs = cadenciaFixa ?? politica.cadenceMs;
   const staleFixo = opts.staleMs;
   const provider: L2CSProviderRequest =
     opts.provider ?? (EXPERIMENT.l2cs === 'off' ? 'auto' : EXPERIMENT.l2cs);
@@ -144,6 +182,10 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       verificacao = msg.verificacao ?? null;
       executionProviderAtivo = msg.executionProvider;
       fallback = msg.fallback;
+      // Primeiro status com provider: a política entra AQUI, antes de
+      // `readyResolve`, para quem ouve o `ready` já ler o valor em vigor.
+      politica = politicaPorProvider(msg.executionProvider);
+      if (cadenciaFixa === undefined) cadenceMs = politica.cadenceMs;
       if (fallback) {
         console.warn(`[L2CS] WebGPU indisponível — rodando em '${msg.executionProvider}'. Latência e staleness maiores; o relatório registra o provider.`);
       }
@@ -216,6 +258,8 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       readyPromise = null;
       readyResolve = null;
       readyReject = null;
+      politica = politicaPorProvider(null);
+      cadenceMs = cadenciaFixa ?? politica.cadenceMs;
       lastSubmitMs = 0;
       latest = { yaw: 0, pitch: 0, timestamp: 0, valid: false };
       recentLatencies = [];
@@ -280,6 +324,10 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
 
     houveFallback(): boolean {
       return fallback;
+    },
+
+    getPolitica(): PoliticaL2cs {
+      return { ...politica, cadenceMs };
     },
 
     getStaleMs(): number {

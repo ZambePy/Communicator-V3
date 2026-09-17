@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 
 export type ToastKind = 'success' | 'error' | 'info';
@@ -67,8 +67,17 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const error = useCallback((m: string, d?: number) => toast('error', m, d), [toast]);
   const info = useCallback((m: string, d?: number) => toast('info', m, d), [toast]);
 
+  // Identidade estável: sem o useMemo, cada toast recriava o objeto do contexto,
+  // e todo efeito que dependia de `toast` rodava de novo — um efeito que
+  // dispara um toast virava um laço infinito (o aviso do primeiro sucesso
+  // empilhou dezenas de cartões até travar a tela de Frases Rápidas).
+  const valor = useMemo(
+    () => ({ toast, success, error, info, dismiss }),
+    [toast, success, error, info, dismiss]
+  );
+
   return (
-    <ToastContext.Provider value={{ toast, success, error, info, dismiss }}>
+    <ToastContext.Provider value={valor}>
       {children}
       <div
         role="region"

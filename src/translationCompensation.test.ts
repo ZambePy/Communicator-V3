@@ -3,6 +3,8 @@ import {
   deslocamentoCm, compensarTranslacao, centroDeReferencia,
   CANTHAL_DISTANCE_CM, SINAL_X, SINAL_Y,
 } from './translationCompensation';
+import { clampNaBorda } from './computador/geometria';
+import { DEFAULTS } from './config/experiment';
 
 const escala = { iodPx: 100, videoWidth: 1280, videoHeight: 720 };
 const PX_POR_CM = 36.76;   // 23,6" 1920×1080
@@ -77,6 +79,29 @@ describe('compensarTranslacao', () => {
     const r = compensarTranslacao(0.95, 0.5,
       { x: 0.1, y: 0.6 }, { x: 0.5, y: 0.6 }, escala, PX_POR_CM, 1920, 1080);
     expect(r.x).toBeGreaterThan(1);
+  });
+
+  it('ligada por padrão, e só age com os marcos 33/263 válidos', () => {
+    expect(DEFAULTS.lateralTranslationCompensation).toBe(true);
+    // `iodPx = 0` é o que o engine mede quando os cantos externos não existem;
+    // `setCurrentFrameGeometry` então deixa a escala `null`. Nos dois casos a
+    // predição sai intacta.
+    const semEscala = compensarTranslacao(0.4, 0.5, { x: 0.3, y: 0.6 }, { x: 0.5, y: 0.6 }, null, PX_POR_CM, 1920, 1080);
+    expect(semEscala).toEqual({ x: 0.4, y: 0.5 });
+    const iodZero = compensarTranslacao(0.4, 0.5, { x: 0.3, y: 0.6 }, { x: 0.5, y: 0.6 }, { ...escala, iodPx: 0 }, PX_POR_CM, 1920, 1080);
+    expect(iodZero).toEqual({ x: 0.4, y: 0.5 });
+  });
+
+  it('o clamp de borda existente segura o outlier no domínio da tela', () => {
+    // Nariz "pulou" 40 % do quadro num único frame: a correção crua passa de 1
+    // (o teste acima garante que ela apareça), e é o clamp final de `mapGaze`
+    // — suave no app, duro no Modo Computador — que a segura em [0,1].
+    const r = compensarTranslacao(0.95, 0.5,
+      { x: 0.1, y: 0.6 }, { x: 0.5, y: 0.6 }, escala, PX_POR_CM, 1920, 1080);
+    expect(r.x).toBeGreaterThan(1);
+    expect(clampNaBorda(r.x, 'suave', { tamanhoPx: 1920 })).toBe(1);
+    expect(clampNaBorda(r.x, 'duro', { margemPx: 0, tamanhoPx: 1920 })).toBe(1);
+    expect(clampNaBorda(-r.x, 'suave', { tamanhoPx: 1920 })).toBe(0);
   });
 
   it('sem referência devolve a predição intacta', () => {

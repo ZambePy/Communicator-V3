@@ -71,7 +71,10 @@ export const PraticaGuiada: React.FC<{
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}>
+    <div
+      className="entrada-encadeada"
+      style={{ display: 'flex', flexDirection: 'column', gap: '1.4rem' }}
+    >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
         <h2
           style={{

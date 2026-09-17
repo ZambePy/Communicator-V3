@@ -1119,6 +1119,9 @@ function finishTest(
     localStorage.setItem('accuracyResult', JSON.stringify({
       meanError, medianError: agg.medianError, p90Error: agg.p90Error, maxError: agg.maxError,
       meanErrorDeg, jitterRMS, score, colorClass, timestamp: Date.now(),
+      // Linha de base do vigia de recalibração (`vigiaDeRecalibracao.ts`):
+      // BCEA e viés deste teste são o que o uso recente é comparado contra.
+      bceaPx2, biasX: agg.biasX, biasY: agg.biasY,
     }));
   } catch { /* storage indisponível */ }
 

@@ -384,13 +384,12 @@ describe('checagem de faixa de distância', () => {
     expect(c.value).toBe(4);
   });
 
-  it('fora da faixa vira falha e derruba canStart', () => {
+  it('fora da faixa é INFORMAÇÃO (warn), não falha — a correção continua', () => {
     const r = evaluateReadiness(goodSnapshot(), {
-      distanceRange: { status: 'out', deltaCm: -30, message: 'fora da faixa' },
+      distanceRange: { status: 'out', deltaCm: -30, message: 'além da faixa' },
     });
-    expect(r.checks.find((x) => x.id === 'distanceRange')!.status).toBe('fail');
-    expect(r.canStart).toBe(false);
-    // Mas não bloqueia de forma dura: dá para calibrar de novo aqui mesmo.
+    expect(r.checks.find((x) => x.id === 'distanceRange')!.status).toBe('warn');
+    expect(r.canStart).toBe(true);
     expect(r.blockedHard).toBe(false);
   });
 
@@ -410,6 +409,6 @@ describe('checagem de faixa de distância', () => {
       distanceRange: { status: 'out', deltaCm: 25, message: 'fora' },
     });
     expect(r.checks.find((x) => x.id === 'distance')!.status).toBe('ok');
-    expect(r.checks.find((x) => x.id === 'distanceRange')!.status).toBe('fail');
+    expect(r.checks.find((x) => x.id === 'distanceRange')!.status).toBe('warn');
   });
 });

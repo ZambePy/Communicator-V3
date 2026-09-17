@@ -106,10 +106,29 @@ export function criarEstado(): EstadoDaCorrecao {
   };
 }
 
+/**
+ * De onde veio a seleção.
+ *
+ *  - `app`      um botão do IrisFlow dentro da janela do app;
+ *  - `overlay`  um botão da barra da sobreposição do Modo Computador (clique
+ *               esquerdo/direito, rolar…): alvo grande, desenhado por nós;
+ *  - `externo`  qualquer coisa do sistema — ícone de 32 px, barra do Windows,
+ *               botão de outro programa. NUNCA vira rótulo: o dwell concluído
+ *               num ícone pequeno não diz que a pessoa olhava o centro dele.
+ */
+export type OrigemDaSelecao = 'app' | 'overlay' | 'externo';
+
+/** Menor alvo da sobreposição que vale como rótulo, em px (lado menor). */
+export const ALVO_MINIMO_OVERLAY_PX = 96;
+
 /** Condições de sistema sob as quais um dwell concluído vale como rótulo. */
 export interface ContextoDaSelecao {
   /** O alvo é grande e sem vizinho acionável (`data-isolado`). */
   alvoIsolado: boolean;
+  /** Ausente = `app`. */
+  origem?: OrigemDaSelecao;
+  /** Lado menor do alvo, em px. Exigido (≥ 96) quando `origem = 'overlay'`. */
+  tamanhoDoAlvoPx?: number;
   /** O rastreamento está degradado: a posição não vale como rótulo. */
   degradado: boolean;
   /** Modo apresentação: nada do que acontece na tela é uso real. */
@@ -137,12 +156,25 @@ export interface ContextoDaSelecao {
  * sozinho, e ela merece ser lida e testada sem um DOM em volta.
  */
 export function deveAprender(ctx: ContextoDaSelecao): boolean {
+  if (!origemAceita(ctx.origem ?? 'app', ctx.tamanhoDoAlvoPx)) return false;
   if (!ctx.alvoIsolado) return false;
   if (ctx.degradado) return false;
   if (ctx.apresentacao) return false;
   if (ctx.emergencia) return false;
   if (ctx.alvoEspecial) return false;
   if (ctx.saturado) return false;
+  return true;
+}
+
+/**
+ * A origem pode virar rótulo? `externo` nunca; `overlay` só com alvo de pelo
+ * menos `ALVO_MINIMO_OVERLAY_PX`; `app` sempre (as outras guardas decidem).
+ */
+export function origemAceita(origem: OrigemDaSelecao, tamanhoDoAlvoPx?: number): boolean {
+  if (origem === 'externo') return false;
+  if (origem === 'overlay') {
+    return typeof tamanhoDoAlvoPx === 'number' && tamanhoDoAlvoPx >= ALVO_MINIMO_OVERLAY_PX;
+  }
   return true;
 }
 
@@ -295,14 +327,40 @@ export function fracaoDoTetoDaCorrecao(): number | null {
   return Math.min(1, norma(estadoGlobal.offset) / TETO_NORMALIZADO);
 }
 
+/**
+ * Sessão do Modo Computador em curso.
+ *
+ * Com ela ativa, só a SOBREPOSIÇÃO alimenta a correção, e só com alvo grande:
+ * o dwell do app está suspenso, mas uma seleção que chegasse por outro caminho
+ * (clique externo relatado pelo processo principal, ícone do Windows) não pode
+ * ensinar o modelo.
+ */
+let sessaoDoComputadorAtiva = false;
+
+export function definirSessaoDoComputador(ativa: boolean): void {
+  sessaoDoComputadorAtiva = ativa;
+}
+
+export function sessaoDoComputador(): boolean {
+  return sessaoDoComputadorAtiva;
+}
+
 /** Chamado pelo dispatcher quando um dwell elegível conclui. */
 export function aprenderComSelecao(entrada: {
   centroDoAlvo: Ponto;
   olhar: Ponto;
   agoraMs: number;
   viewport: { largura: number; altura: number };
+  /** Ausente = `app`. */
+  origem?: OrigemDaSelecao;
+  tamanhoDoAlvoPx?: number;
 }): boolean {
   if (!ligado) return false;
+  const origem = entrada.origem ?? 'app';
+  if (!origemAceita(origem, entrada.tamanhoDoAlvoPx)) return false;
+  // No Modo Computador só a sobreposição ensina: a janela do app está oculta
+  // e qualquer seleção "do app" ali é acidente.
+  if (sessaoDoComputadorAtiva && origem !== 'overlay') return false;
   const r = registrarSelecao(estadoGlobal, entrada);
   estadoGlobal = r.estado;
   return r.aceita;

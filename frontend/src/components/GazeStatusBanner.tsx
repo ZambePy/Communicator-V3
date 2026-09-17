@@ -70,6 +70,25 @@ interface Props {
    * software assistivo é pior que mostrar só o mais grave.
    */
   distanceAdvice?: string | null;
+  /**
+   * Ação de reajuste rápido (2 s olhando o centro), quando ela resolve o que o
+   * banner está dizendo. `null` some com o botão.
+   *
+   * Só aparece nos avisos em que reancorar É a saída — distância diferente da
+   * calibração, ou postura que a referência lenta se recusou (corretamente) a
+   * absorver. Nos erros de câmera e de calibração inválida não aparece: lá o
+   * reajuste não conserta nada e o botão só ensinaria a apertá-lo por reflexo.
+   */
+  onReancorar?: (() => void) | null;
+  /** Reajuste em curso: o botão vira rótulo e para de aceitar clique. */
+  reancorando?: boolean;
+  /**
+   * A referência geométrica lenta está parada há tempo demais porque a pessoa
+   * está numa postura que não é a da calibração (`sugereReancoragem`).
+   * Precedência abaixo da distância: quando os dois valem, a distância explica
+   * melhor.
+   */
+  avisoDePostura?: boolean;
 }
 
 const WRAP: React.CSSProperties = {
@@ -107,6 +126,9 @@ export const GazeStatusBanner: React.FC<Props> = ({
   avisoDeBorda = null,
   avisoDeOlhosFechados = null,
   avisoDeCamera = null,
+  onReancorar = null,
+  reancorando = false,
+  avisoDePostura = false,
 }) => {
   // `state` continua no contrato e e IGNORADO: era a entrada do unico aviso que
   // saiu ("Ainda nao ha calibracao"). Fica no tipo porque o `GazeProvider`
@@ -116,6 +138,8 @@ export const GazeStatusBanner: React.FC<Props> = ({
   let tom: 'erro' | 'aviso' | null = null;
   let titulo = '';
   let detalhe = '';
+  /** O reajuste de 2 s resolve ESTE aviso? */
+  let reajustavel = false;
 
   if (cameraError) {
     tom = 'erro';
@@ -158,6 +182,19 @@ export const GazeStatusBanner: React.FC<Props> = ({
     tom = 'aviso';
     titulo = 'Distância diferente da calibração';
     detalhe = distanceAdvice;
+    // Aqui — e só aqui — reancorar é a saída: 2 s olhando o centro refazem a
+    // base de distância e as referências geométricas sem retreinar o modelo.
+    reajustavel = true;
+  } else if (avisoDePostura) {
+    // Abaixo da distância: os dois pedem o mesmo reajuste, e quando os dois
+    // valem ao mesmo tempo a distância é a causa mais provável e a mais fácil
+    // de entender ("você está mais perto do que quando calibrou").
+    tom = 'aviso';
+    titulo = 'Postura diferente da calibração';
+    detalhe =
+      'Você está há um tempo numa posição diferente da que calibrou. O cursor ' +
+      'continua funcionando; um reajuste de 2 segundos deixa a mira no lugar.';
+    reajustavel = true;
   } else if (avisoDeCamera) {
     // Por último: é a situação mais benigna e a única que se resolve em
     // Configurações, não na cadeira. Só aparece quando a câmera mudou.
@@ -189,12 +226,38 @@ export const GazeStatusBanner: React.FC<Props> = ({
         <span aria-hidden="true" style={{ fontSize: '1.7rem', lineHeight: 1 }}>
           {tom === 'erro' ? '⛔' : '⚠️'}
         </span>
-        <span>
+        <span style={{ flex: 1 }}>
           <strong style={{ display: 'block', fontSize: '1.15rem', marginBottom: '0.2rem' }}>
             {titulo}
           </strong>
           {detalhe}
         </span>
+        {reajustavel && onReancorar && (
+          <button
+            type="button"
+            onClick={reancorando ? undefined : onReancorar}
+            disabled={reancorando}
+            // Sem `data-no-dwell`, ao contrário do cartão que o contém: o
+            // dispatcher lê a marca no PRÓPRIO elemento, então este botão é
+            // dwellável de propósito — quem precisa dele está usando o olhar e
+            // não tem como alcançar um mouse. O alvo é grande pela mesma razão.
+            style={{
+              flexShrink: 0,
+              minWidth: 148,
+              minHeight: 56,
+              padding: '0.6rem 1.1rem',
+              borderRadius: '0.7rem',
+              border: `2px solid ${cores.fg}`,
+              background: reancorando ? 'transparent' : cores.fg,
+              color: reancorando ? cores.fg : cores.bg,
+              fontSize: '1.02rem',
+              fontWeight: 700,
+              cursor: reancorando ? 'default' : 'pointer',
+            }}
+          >
+            {reancorando ? 'Olhe o centro…' : 'Reajustar (2 s)'}
+          </button>
+        )}
       </div>
     </div>
   );

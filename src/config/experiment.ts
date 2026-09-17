@@ -31,8 +31,31 @@ export interface ExperimentConfig {
   polynomialFeatures: boolean;
   /** Compensação geométrica de pose (d·tan Δ) na saída e nos alvos de treino. */
   geometricPoseCompensation: boolean;
-  /** Compensação de translação lateral da cabeça. */
+  /**
+   * Compensação de translação lateral da cabeça (nariz em unidades da
+   * distância cantal — ver `translationCompensation.ts`).
+   *
+   * Ligada: só age quando os marcos 33/263 do quadro corrente são válidos
+   * (`iodPx > 0`), zera o eixo cujo deslocamento é implausível e o clamp de
+   * borda segura o resultado final.
+   */
   lateralTranslationCompensation: boolean;
+  /**
+   * Referência geométrica LENTA para pose e centro facial (dois relógios).
+   *
+   * A referência contra a qual `poseCompensation`/`translationCompensation`
+   * medem o Δ deixa de ser a média congelada da calibração e passa a ser uma
+   * EMA com constante de tempo de ~30 s, que nasce nela. A postura que migra
+   * ao longo de meia hora é absorvida; uma virada de cabeça em 200 ms entra
+   * inteira no Δ. Ver `referenciaLenta.ts`.
+   */
+  referenciaLenta: boolean;
+  /**
+   * EMA curta (≤ 150 ms) dos ângulos do L2CS durante a FIXAÇÃO, solta pela
+   * velocidade angular na sacada. Reduz o ruído de precisão sem atrasar a
+   * sacada. Ver `l2cs/suavizacao.ts`.
+   */
+  suavizarL2csNaFixacao: boolean;
   /**
    * Correção contínua aprendida com os dwells concluídos (sprint S3).
    *
@@ -116,7 +139,9 @@ export const DEFAULTS: ExperimentConfig = {
   l2cs: 'auto',
   polynomialFeatures: true,
   geometricPoseCompensation: true,
-  lateralTranslationCompensation: false,
+  lateralTranslationCompensation: true,
+  referenciaLenta: true,
+  suavizarL2csNaFixacao: true,
   correcaoPorDwell: true,
   eyeNet: 'off',
   filterMode: 'oneEuro',

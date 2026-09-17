@@ -554,6 +554,9 @@ export interface L2CSGazeInput {
   pitch: number;
   valid: boolean;
   confidence?: number;
+  /** Instante do quadro, em ms. Habilita o reuso do último ângulo válido em
+   *  `buildL2CSBlock` quando a leitura corrente é obsoleta. */
+  nowMs?: number;
 }
 
 /** Vetor completo por olho (37 dims + bloco L2CS quando `l2csGaze` é passado
@@ -661,6 +664,7 @@ export function extractCompactFeatures(
       l2csGaze.valid,
       face.cameraDistanceEstimate,
       l2csGaze.confidence,
+      l2csGaze.nowMs,
     );
     for (let i = 0; i < block.length; i++) {
       compLeft.push(block[i]);

@@ -1,4 +1,5 @@
 import logoNegativo from '../../assets/brand/irisflow-wordmark-negativo.png';
+import simbolo from '../../assets/brand/irisflow-simbolo.png';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -47,8 +48,11 @@ export const IntroScreen: React.FC = () => {
         position: 'relative',
       }}
     >
+      {/* Encadeado: a íris entra, depois o nome, depois o botão. A ordem em
+          que aparecem é a ordem em que se lê a tela — e quem lê com o olhar
+          precisa que alguém diga por onde começar. */}
       <div
-        className="animate-fade-in-up"
+        className="entrada-encadeada"
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -148,15 +152,16 @@ const SimboloDaIris: React.FC = () => (
     className="iris-simbolo"
     style={{
       position: 'relative',
-      width: 160,
-      height: 160,
+      width: 176,
+      height: 176,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
     }}
   >
     <span className="iris-simbolo__halo" />
-    <span className="iris-simbolo__anel" />
-    <span className="iris-simbolo__pupila" />
+    {/* O símbolo de verdade (a íris em espiral da marca), não um anel genérico.
+        A espiral gira devagar; o halo respira. É o único movimento da tela. */}
+    <img src={simbolo} alt="" draggable={false} className="iris-simbolo__marca" />
   </div>
 );

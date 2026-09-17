@@ -35,6 +35,7 @@ import { preflight, podeComecar } from '@tracker/diagnostics/preflight';
 import { isAccuracyTesting } from '@tracker/accuracy';
 import { stepBlinkClick, criarEstadoBlinkClick } from '@tracker/interaction/blinkClick';
 import { GazeStatusBanner } from '../components/GazeStatusBanner';
+import { ReancoragemOverlay, DURACAO_DO_REAJUSTE_MS } from '../components/ReancoragemOverlay';
 import { ScanningMode } from '../components/ScanningMode';
 import type { FilterPreset, FilterPresetV2 } from '@tracker/oneEuroFilter';
 import { aprenderComSelecao, deveAprender } from '@tracker/interaction/correcaoPorDwell';
@@ -148,6 +149,57 @@ interface GazeContextValue {
 }
 
 const GazeContext = createContext<GazeContextValue | null>(null);
+
+/**
+ * Propriedades do cursor cujo último valor escrito é memorizado.
+ *
+ * `anelVisivel` não é do cursor: é a opacidade do `<svg>` do anel de
+ * progresso, que mora ao lado dele e sofria do mesmo problema.
+ */
+interface EstiloDeCursorEmCache {
+  transform: string;
+  background: string;
+  boxShadow: string;
+  border: string;
+  opacity: string;
+  anelVisivel: string;
+}
+
+const NOME_CSS: Record<keyof Omit<EstiloDeCursorEmCache, 'anelVisivel'>, string> = {
+  transform: 'transform',
+  background: 'background',
+  boxShadow: 'box-shadow',
+  border: 'border',
+  opacity: 'opacity',
+};
+
+/**
+ * Escreve uma propriedade do cursor SÓ quando ela mudou.
+ *
+ * Chamada a 30 Hz. Uma comparação de string por propriedade compra: nenhum
+ * reparse do `box-shadow` de três camadas, nenhuma invalidação de caixa pelo
+ * `border`, e — a que mais pesava — nenhum reinício por quadro da transição
+ * `background 120ms` enquanto o dwell enche.
+ */
+function escreverNoCursor(
+  el: HTMLElement,
+  cache: EstiloDeCursorEmCache,
+  prop: keyof Omit<EstiloDeCursorEmCache, 'anelVisivel'>,
+  valor: string
+): void {
+  if (cache[prop] === valor) return;
+  cache[prop] = valor;
+  // `setProperty` com string vazia REMOVE a propriedade, que é exatamente o
+  // que `el.style.border = ''` fazia antes.
+  if (valor === '') el.style.removeProperty(NOME_CSS[prop]);
+  else el.style.setProperty(NOME_CSS[prop], valor);
+}
+
+/** Esconde o cursor sem tocar em nada que já esteja no valor certo. */
+function esconderCursor(el: HTMLElement, cache: EstiloDeCursorEmCache): void {
+  escreverNoCursor(el, cache, 'transform', 'translate3d(-9999px,-9999px,0)');
+  escreverNoCursor(el, cache, 'opacity', '0');
+}
 
 export const useGaze = (): GazeContextValue => {
   const ctx = useContext(GazeContext);
@@ -286,7 +338,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // garante que as tracks sejam paradas mesmo assim.
   const streamRef = useRef<MediaStream | null>(null);
   /** Identidade da câmera aberta nesta sessão (para o FOV por câmera). */
-  const cameraAtualRef = useRef<{ chave: string | null; rotulo: string }>({ chave: null, rotulo: '' });
+  const cameraAtualRef = useRef<{ chave: string | null; rotulo: string }>({
+    chave: null,
+    rotulo: '',
+  });
   const [avisoDeCamera, setAvisoDeCamera] = useState<string | null>(null);
   // O aviso é de configuração, não de operação: some sozinho depois de um
   // tempo de leitura, para não competir com os avisos que pedem ação agora.
@@ -305,6 +360,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   /** Aviso de distância fora da faixa de calibração. */
   const [distanceAdvice, setDistanceAdvice] = useState<string | null>(null);
   const avisoDistanciaRef = useRef(new AvisoDeDistancia());
+  /** A referência lenta está parada há tempo demais por postura diferente. */
+  const [avisoDePostura, setAvisoDePostura] = useState(false);
+  /** Reajuste rápido (alvo único de 2 s) em curso. */
+  const [reancorando, setReancorando] = useState(false);
   const [calibrationInvalidated, setCalibrationInvalidated] = useState<string | null>(null);
   const isDegradedRef = useRef(false);
   const wasDwellingRef = useRef(false);
@@ -348,6 +407,29 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const avisoDeOlhosFechadosRef = useRef<string | null>(null);
   // O `<circle>` do anel de progresso, quando a flag está ligada.
   const anelRef = useRef<SVGCircleElement | null>(null);
+  /**
+   * Último valor ESCRITO em cada propriedade não-geométrica do cursor.
+   *
+   * O caminho quente roda a 30 Hz. `transform` muda a cada amostra e precisa
+   * ser escrito a cada amostra; `background`, `box-shadow`, `border` e
+   * `opacity` mudam só em transição de estado — mas eram escritos junto,
+   * sempre. Custava três coisas: o `box-shadow` (três sombras, uma com blur)
+   * era reparseado e repintado 30×/s, o `border` invalidava a caixa do
+   * elemento 30×/s, e — a pior — a transição `background 120ms` do cursor era
+   * REINICIADA a cada quadro durante o dwell, porque a cor muda com o
+   * progresso: uma transição que nunca termina e repinta sem parar.
+   *
+   * Comparar com o último valor escrito custa uma comparação de string e
+   * elimina as três.
+   */
+  const ultimoEstiloDoCursorRef = useRef<EstiloDeCursorEmCache>({
+    transform: '',
+    background: '',
+    boxShadow: '',
+    border: '',
+    opacity: '',
+    anelVisivel: '',
+  });
   // Piscada como clique. Desligada por default; ver a flag.
   const blinkClickRef = useRef(criarEstadoBlinkClick());
   // Nó que está com o realce `gaze-hover` aplicado no DOM.
@@ -674,8 +756,16 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       'z-index:9999',
       'transform:translate3d(-9999px,-9999px,0)',
       'transform-origin:center center',
-      'will-change:transform, background',
-      'transition:opacity 600ms ease 300ms, background 120ms ease',
+      // `transform` e `opacity` são as duas propriedades que o compositor
+      // anima sozinho. `background` estava aqui e não é uma delas: a dica não
+      // promovia nada e ainda pedia uma camada a mais ao navegador.
+      'will-change:transform, opacity',
+      // A transição de `background` SAIU. A cor do cursor muda com o
+      // progresso do dwell, ou seja, a cada amostra: a 30 Hz a transição de
+      // 120 ms era reiniciada antes de chegar à metade, e o resultado era
+      // repintura contínua sem nenhum ganho visual — a cor já varia suave
+      // porque o próprio valor varia suave.
+      'transition:opacity 600ms ease 300ms',
       'opacity:0',
     ].join(';');
     document.body.appendChild(cursor);
@@ -743,13 +833,23 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       devMode = on;
     });
 
-    let cbInvocations = 0;
+    // O `<svg>` do anel sofria do mesmo mal do cursor: `opacity = '0'` escrito
+    // a cada quadro fora do dwell. Mesma solução, memória própria.
+    const definirOpacidadeDoAnel = (valor: string) => {
+      const svg = anelRef.current?.ownerSVGElement;
+      if (!svg) return;
+      const cache = ultimoEstiloDoCursorRef.current;
+      if (cache.anelVisivel === valor) return;
+      cache.anelVisivel = valor;
+      svg.style.opacity = valor;
+    };
+    const mostrarAnel = () => definirOpacidadeDoAnel('1');
+    const esconderAnel = () => definirOpacidadeDoAnel('0');
+
+    let avisouCursorAusente = false;
     const unsubGaze = engine.subscribe((sample) => {
       if (devMode) {
-        if (cursorRef.current) {
-          cursorRef.current.style.transform = 'translate3d(-9999px,-9999px,0)';
-          cursorRef.current.style.opacity = '0';
-        }
+        if (cursorRef.current) esconderCursor(cursorRef.current, ultimoEstiloDoCursorRef.current);
         return;
       }
 
@@ -1021,9 +1121,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const escondePeloTeste = isAccuracyTesting && !EXPERIMENT.cursorNoTesteDePrecisao;
         if (isInCalibration || !isCalibrated || escondePeloTeste) {
           // Hard-hide: move offscreen + opacity 0
-          cursorRef.current.style.transform = 'translate3d(-9999px,-9999px,0)';
-          cursorRef.current.style.opacity = '0';
-          if (anelRef.current) anelRef.current.ownerSVGElement!.style.opacity = '0';
+          esconderCursor(cursorRef.current, ultimoEstiloDoCursorRef.current);
+          esconderAnel();
 
           // O fallback de gaze perdido não roda aqui (não há cursor para
           // segurar), mas a mensagem dele precisa ser limpa: um "Posicione o
@@ -1096,9 +1195,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
 
           if (!fb.mostrarCursor || fb.posicao === null) {
-            cursorRef.current.style.transform = 'translate3d(-9999px,-9999px,0)';
-            cursorRef.current.style.opacity = '0';
-            if (anelRef.current) anelRef.current.ownerSVGElement!.style.opacity = '0';
+            esconderCursor(cursorRef.current, ultimoEstiloDoCursorRef.current);
+            esconderAnel();
           } else {
             // Geometria e cores vêm do módulo puro — em especial o `offsetPx`:
             // um meio-tamanho escrito à mão aqui viraria viés constante assim
@@ -1116,16 +1214,36 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               dwellPct,
             });
 
-            cursorRef.current.style.transform = `translate3d(${fb.posicao.x - est.offsetPx}px, ${fb.posicao.y - est.offsetPx}px, 0) scale(${est.escala})`;
-            cursorRef.current.style.opacity =
-              fb.estado === 'segurando' ? '0.5' : sample.hasFace ? '1' : '0.35';
-            cursorRef.current.style.background = est.preenchimento;
+            const cache = ultimoEstiloDoCursorRef.current;
+            const cur = cursorRef.current;
+            // `transform` é o único que muda de verdade a cada amostra.
+            escreverNoCursor(
+              cur,
+              cache,
+              'transform',
+              `translate3d(${fb.posicao.x - est.offsetPx}px, ${fb.posicao.y - est.offsetPx}px, 0) scale(${est.escala})`
+            );
+            escreverNoCursor(
+              cur,
+              cache,
+              'opacity',
+              fb.estado === 'segurando' ? '0.5' : sample.hasFace ? '1' : '0.35'
+            );
+            escreverNoCursor(cur, cache, 'background', est.preenchimento);
             // O anel duplo é o que torna o cursor visível sobre QUALQUER
             // fundo: nenhuma cor sozinha contrasta com todos, e o vermelho
             // translúcido de antes sumia sobre o botão de emergência — que é
             // o pior alvo possível para o cursor sumir.
-            cursorRef.current.style.boxShadow = est.anel;
-            cursorRef.current.style.border = est.tracejado ? '2px dashed rgba(234,179,8,0.9)' : '';
+            //
+            // O valor só depende do TAMANHO do cursor, que não muda em
+            // sessão: escrito uma vez, ignorado nos outros ~30 mil quadros.
+            escreverNoCursor(cur, cache, 'boxShadow', est.anel);
+            escreverNoCursor(
+              cur,
+              cache,
+              'border',
+              est.tracejado ? '2px dashed rgba(234,179,8,0.9)' : ''
+            );
 
             // Anel de progresso do dwell.
             if (anelRef.current) {
@@ -1134,22 +1252,19 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const g = geometriaDoAnel(est.tamanhoPx, dwellPct);
                 anelRef.current.setAttribute('stroke-dashoffset', String(g.offset));
                 svg.style.transform = `translate3d(${fb.posicao.x - g.centro}px, ${fb.posicao.y - g.centro}px, 0)`;
-                svg.style.opacity = '1';
+                mostrarAnel();
               } else {
-                svg.style.opacity = '0';
+                esconderAnel();
               }
             }
           }
         }
-      } else if (cbInvocations === 0) {
+      } else if (!avisouCursorAusente) {
+        // Uma vez por sessão: o cursor não existir é uma falha de montagem, e
+        // repetir o aviso a 30 Hz enche o console sem acrescentar nada.
+        avisouCursorAusente = true;
         console.warn('[IrisFlow] gaze subscribe callback disparou mas cursorRef.current é null');
       }
-      if (cbInvocations === 0 || cbInvocations === 30) {
-        console.log(
-          `[IrisFlow] gaze callback #${cbInvocations} — x=${sample.x.toFixed(0)} y=${sample.y.toFixed(0)} hasFace=${sample.hasFace} cursor=${!!cursorRef.current}`
-        );
-      }
-      cbInvocations++;
       // Fan out to subscribers.
       subscribersRef.current.forEach((cb) => {
         try {
@@ -1212,13 +1327,26 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // FOV da anterior deixava toda distância errada sem sintoma.
         try {
           const track = stream.getVideoTracks()[0];
-          const chave = chaveDaCamera({ deviceId: track?.getSettings().deviceId, label: track?.label });
+          const chave = chaveDaCamera({
+            deviceId: track?.getSettings().deviceId,
+            label: track?.label,
+          });
           cameraAtualRef.current = { chave, rotulo: track?.label ?? '' };
           const s0 = settingsRef.current;
-          const r = resolverFovParaCamera(s0.fovPorCamera, chave, s0.ultimaCameraChave, s0.cameraHorizontalFovDeg);
-          const mudouFov = s0.cameraHorizontalFovDeg === null || Math.abs(s0.cameraHorizontalFovDeg - r.fovDeg) > 1e-6;
+          const r = resolverFovParaCamera(
+            s0.fovPorCamera,
+            chave,
+            s0.ultimaCameraChave,
+            s0.cameraHorizontalFovDeg
+          );
+          const mudouFov =
+            s0.cameraHorizontalFovDeg === null ||
+            Math.abs(s0.cameraHorizontalFovDeg - r.fovDeg) > 1e-6;
           if (mudouFov || (chave !== null && chave !== s0.ultimaCameraChave)) {
-            updateSettingsRef.current({ cameraHorizontalFovDeg: r.fovDeg, ultimaCameraChave: chave ?? s0.ultimaCameraChave });
+            updateSettingsRef.current({
+              cameraHorizontalFovDeg: r.fovDeg,
+              ultimaCameraChave: chave ?? s0.ultimaCameraChave,
+            });
           }
           if (r.aviso) {
             console.warn('[camera]', r.aviso);
@@ -1514,9 +1642,18 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // though the object identity never changes.
   const calibration = useMemo<CalibrationApi>(
     () => ({
-      startCalibrationMode: (opts) => engineRef.current?.calibration.startCalibrationMode(opts),
+      // Sem engine não há modo de calibração para entrar: `false` é a resposta
+      // honesta. O `undefined` do encadeamento opcional se lê como "deu certo"
+      // em qualquer `if` do chamador, que é o oposto do que aconteceu.
+      startCalibrationMode: (opts) =>
+        engineRef.current?.calibration.startCalibrationMode(opts) ?? false,
       getCalibrationTargets: () => engineRef.current?.calibration.getCalibrationTargets() ?? [],
       getCalibrationMode: () => engineRef.current?.calibration.getCalibrationMode() ?? null,
+      // Perfil da grade (`padrao` | `computador`) e motivo da última recusa.
+      // Repasse puro: sem engine, `false` / o perfil padrão / nenhuma recusa.
+      setPerfil: (perfil) => engineRef.current?.calibration.setPerfil(perfil) ?? false,
+      getPerfil: () => engineRef.current?.calibration.getPerfil() ?? 'padrao',
+      getRecusa: () => engineRef.current?.calibration.getRecusa() ?? null,
       startCollectingPoint: (x, y, onDone) =>
         engineRef.current?.calibration.startCollectingPoint(x, y, onDone),
       // Sem engine não há treino — mas devolver em silêncio deixa a tela
@@ -1546,8 +1683,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       getTargetsSkipped: () => engineRef.current?.calibration.getTargetsSkipped() ?? [],
       // Rodada extra nos alvos que o modelo pior generalizou (sprint S4).
       // Barata: lê o `looByTarget` já em cache do treino que acabou.
-      iniciarRodadaDeReforco: () =>
-        engineRef.current?.calibration.iniciarRodadaDeReforco() ?? [],
+      iniciarRodadaDeReforco: () => engineRef.current?.calibration.iniciarRodadaDeReforco() ?? [],
       // Segunda posição de cabeça (sprint S7). A tela precisa PEDIR a mudança
       // de posição antes de chamar: sem isso a rodada duplica a mesma pose.
       iniciarRodadaDeSegundaPose: () =>
@@ -1560,7 +1696,11 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         engineRef.current?.calibration.definirAlvoDaPerseguicao(x, y),
       finalizarPerseguicao: () =>
         engineRef.current?.calibration.finalizarPerseguicao() ?? {
-          aproveitados: 0, vistos: 0, fracaoSeguida: 0, correlacaoMediana: null, utilizavel: false,
+          aproveitados: 0,
+          vistos: 0,
+          fracaoSeguida: 0,
+          correlacaoMediana: null,
+          utilizavel: false,
         },
       abort: () => engineRef.current?.calibration.abort(),
       clear: () => engineRef.current?.calibration.clear(),
@@ -1601,6 +1741,11 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Aviso de distância a 2 Hz, não por quadro: a distância muda na escala de
   // segundos. A histerese do `AvisoDeDistancia` cuida da estabilidade, e o
   // `setState` só acontece quando o texto muda.
+  //
+  // O aviso de POSTURA vem junto, na mesma cadência e pela mesma razão: é a
+  // referência geométrica lenta dizendo que está parada há mais de um minuto e
+  // meio porque a pessoa não está na postura em que calibrou. Os dois avisos
+  // têm a mesma saída — o reajuste de 2 s — e por isso são lidos juntos.
   useEffect(() => {
     const id = setInterval(() => {
       const faixa = engineRef.current?.calibration.getDistanceRange?.() ?? null;
@@ -1608,8 +1753,39 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         engineRef.current?.calibration.getCalibrationDistancesCm().screenCm ?? null;
       const r = avisoDistanciaRef.current.avaliar(faixa?.screenDistanceNowCm ?? null, calibradaCm);
       setDistanceAdvice((anterior) => (anterior === r.mensagem ? anterior : r.mensagem));
+      const postura = engineRef.current?.sugereReancoragem?.() ?? false;
+      setAvisoDePostura((anterior) => (anterior === postura ? anterior : postura));
     }, 500);
     return () => clearInterval(id);
+  }, []);
+
+  /**
+   * Reajuste rápido: 2 s com a pessoa olhando o centro. Quem conta o tempo é o
+   * ENGINE — o overlay só desenha o anel fechando, e some quando a promessa
+   * resolve. Assim o que aparece na tela não pode divergir do que foi colhido.
+   *
+   * Reentrância: o engine já encerra uma reancoragem anterior ao começar outra,
+   * e o `reancorando` mantém o botão desabilitado enquanto isso.
+   */
+  const reancorar = useCallback(() => {
+    const eng = engineRef.current;
+    if (!eng) return;
+    setReancorando(true);
+    void eng
+      .reancorarReferencias({ duracaoMs: DURACAO_DO_REAJUSTE_MS })
+      .then((r) => {
+        console.log(
+          `[calib] reajuste rápido: ${r.amostras} amostra(s)` +
+            (r.distanciaCm > 0
+              ? `, nova base ${r.distanciaCm.toFixed(1)} cm`
+              : ', sem amostras suficientes — nada foi alterado')
+        );
+        // Reancorou: a referência lenta recomeçou no zero, então o aviso de
+        // postura some sem esperar o próximo tick de 500 ms.
+        if (r.amostras > 0) setAvisoDePostura(false);
+      })
+      .catch((e) => console.warn('[calib] reajuste rápido falhou:', e))
+      .finally(() => setReancorando(false));
   }, []);
 
   const value = useMemo<GazeContextValue>(
@@ -1673,7 +1849,12 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         avisoDeBorda={avisoDeBorda}
         avisoDeOlhosFechados={avisoDeOlhosFechados}
         avisoDeCamera={avisoDeCamera}
+        avisoDePostura={avisoDePostura}
+        onReancorar={reancorar}
+        reancorando={reancorando}
       />
+      {/* Alvo único de 2 s: aparece só durante a coleta do reajuste rápido. */}
+      {reancorando && <ReancoragemOverlay duracaoMs={DURACAO_DO_REAJUSTE_MS} />}
       {/* A varredura fica DENTRO do provider e FORA do `DwellContext`: ela não
           depende de dwell e não deve re-renderizar a cada alternância dele. */}
       <ScanningMode />
