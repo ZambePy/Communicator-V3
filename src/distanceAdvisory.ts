@@ -1,8 +1,9 @@
 // Aviso de distância fora da faixa de calibração.
 //
 // `distanceCompensation.ts` CORRIGE a predição quando a distância muda. Este
-// módulo AVISA: em algum ponto a correção deixa de bastar, e a resposta certa
-// passa a ser pedir que a pessoa volte para onde calibrou. A compensação usa
+// módulo INFORMA que a posição mudou — a correção continua aplicada em
+// qualquer estado, e a saída para um desvio grande é reancorar as referências
+// olhando o centro (`reancorarReferencias`), não voltar à cadeira. A compensação usa
 // limiares ABSOLUTOS em cm (a física da correção é aditiva); o aviso usa
 // PERCENTUAL da distância de calibração, porque 10 cm a 40 cm é um quarto do
 // caminho e a 100 cm é um décimo.
@@ -127,10 +128,11 @@ export class AvisoDeDistancia {
 /**
  * Texto do aviso.
  *
- * A direção da AÇÃO é o oposto do desvio, e é fácil errar: quem está PERTO
- * demais precisa se AFASTAR. O texto diz o que fazer, não o que está errado —
- * "afaste-se um pouco" é acionável, "você está a 16% da distância calibrada"
- * não é.
+ * INFORMA, não manda de volta à cadeira: a compensação de distância continua
+ * ativa em qualquer estado (fator clampado), e exigir que alguém com ELA
+ * reproduza a posição da cadeira não é um requisito razoável. O que a pessoa
+ * pode fazer, se a precisão cair, é reancorar olhando o centro — e é isso que
+ * o texto oferece.
  *
  * E não traz números: o percentual é provisório, e comunicar um número
  * provisório ao cuidador transmite uma precisão que não existe.
@@ -138,9 +140,11 @@ export class AvisoDeDistancia {
 export function mensagemPara(estado: EstadoDistancia): string | null {
   switch (estado) {
     case 'perto':
-      return 'Você está mais perto da tela do que quando calibrou. Afaste-se um pouco para manter a precisão.';
+      return 'Você está mais perto da tela do que quando calibrou. A correção automática está compensando; ' +
+        'se a precisão cair nas bordas, reancore olhando o centro da tela.';
     case 'longe':
-      return 'Você está mais longe da tela do que quando calibrou. Aproxime-se um pouco para manter a precisão.';
+      return 'Você está mais longe da tela do que quando calibrou. A correção automática está compensando; ' +
+        'se a precisão cair nas bordas, reancore olhando o centro da tela.';
     case 'dentro':
     case 'desconhecido':
       return null;

@@ -71,6 +71,11 @@ export const DELTA_WARN_FAR_CM = 18;
 export const MIN_RATIO = 0.6;
 export const MAX_RATIO = 1.6;
 
+/**
+ * `warn` e `out` são graus de INFORMAÇÃO sobre quanto a distância mudou. Em
+ * nenhum deles a compensação é degradada ou bloqueada: `ratio` é sempre
+ * aplicado, clampado em [`MIN_RATIO`, `MAX_RATIO`].
+ */
 export type DistanceRangeStatus = 'ok' | 'warn' | 'out' | 'unknown';
 
 export interface DistanceRange {
@@ -142,16 +147,21 @@ export function evaluateDistanceRange(
   const sentido = deltaCm < 0 ? 'mais perto' : 'mais longe';
   const abs = Math.abs(deltaCm).toFixed(0);
 
+  // O status é INFORMAÇÃO, não recado: em `warn` e `out` a correção aditiva
+  // continua sendo aplicada com o fator clampado — ninguém é mandado de volta
+  // à cadeira. O texto diz o que o sistema está fazendo e o que a pessoa pode
+  // esperar; a saída para um desvio grande é reancorar olhando o centro, não
+  // reposicionar o corpo.
   const message =
     status === 'ok'
       ? deltaCm >= -1.5 && deltaCm <= 1.5
         ? 'Na mesma distância da calibração.'
         : `${abs} cm ${sentido} que na calibração — dentro da faixa, compensado automaticamente.`
       : status === 'warn'
-      ? `${abs} cm ${sentido} que na calibração. A compensação ainda atua, mas a precisão ` +
-        `cai nas bordas. Aproxime-se da posição em que calibrou, ou recalibre aqui.`
-      : `${abs} cm ${sentido} que na calibração — fora da faixa que a compensação cobre. ` +
-        `Volte para perto da posição de calibração ou refaça a calibração nesta posição.`;
+      ? `${abs} cm ${sentido} que na calibração. A correção automática continua ativa; ` +
+        `a precisão pode cair um pouco nas bordas.`
+      : `${abs} cm ${sentido} que na calibração — além da faixa medida. A correção continua ` +
+        `ativa com o fator limitado; se o cursor errar nas bordas, reancore olhando o centro da tela.`;
 
   return { status, deltaCm, screenDistanceNowCm: screenNow, ratio, message };
 }

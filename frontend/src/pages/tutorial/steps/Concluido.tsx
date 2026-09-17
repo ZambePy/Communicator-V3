@@ -14,6 +14,7 @@ export const Concluido: React.FC = () => {
 
   return (
     <div
+      className="entrada-encadeada"
       style={{
         display: 'flex',
         flexDirection: 'column',

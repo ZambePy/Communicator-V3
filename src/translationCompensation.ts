@@ -75,6 +75,13 @@ export interface EscalaFacial {
   iodPx: number;
   videoWidth: number;
   videoHeight: number;
+  /**
+   * Distância cantal DESTA pessoa, em cm, medida com a íris como régua
+   * (`escalaMetrica.ts`). Ausente, vale a constante genérica de 9,0 cm — que
+   * erra ±10 % de pessoa para pessoa e, como esta correção é 1:1 em
+   * centímetros, esse erro vai inteiro para o cursor.
+   */
+  cantalCm?: number;
 }
 
 /**
@@ -95,10 +102,14 @@ export function deslocamentoCm(
   const dy = atual.y - referencia.y;
   if (!Number.isFinite(dx) || !Number.isFinite(dy)) return { x: 0, y: 0 };
   // Normalizado → pixels de vídeo (x pela largura, y pela altura) → múltiplos
-  // da distância interocular → cm.
+  // da distância cantal → cm.
+  const cantalCm =
+    Number.isFinite(escala.cantalCm) && (escala.cantalCm as number) > 0
+      ? (escala.cantalCm as number)
+      : CANTHAL_DISTANCE_CM;
   return {
-    x: (CANTHAL_DISTANCE_CM * dx * videoWidth) / iodPx,
-    y: (CANTHAL_DISTANCE_CM * dy * videoHeight) / iodPx,
+    x: (cantalCm * dx * videoWidth) / iodPx,
+    y: (cantalCm * dy * videoHeight) / iodPx,
   };
 }
 

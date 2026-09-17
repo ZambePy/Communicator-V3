@@ -117,6 +117,9 @@ export const ChecksDaCamera: React.FC<{
       role="status"
       aria-live="polite"
       data-testid="checks-da-camera"
+      // Os três checks entram um depois do outro: a lista se lê de cima para
+      // baixo, e aparecer nessa ordem é o que diz isso sem texto nenhum.
+      className="entrada-encadeada"
       style={{
         display: 'flex',
         flexDirection: 'column',

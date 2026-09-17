@@ -625,10 +625,14 @@ export function evaluateReadiness(
     // suficientes?". Este pergunta "a posição de agora está dentro da faixa que
     // a compensação cobre?". São restrições independentes: dá para estar bem
     // enquadrado e ainda assim longe demais da posição em que se calibrou.
+    //
+    // `out` NÃO é falha: a correção aditiva continua aplicada com o fator
+    // clampado, e o item só informa quanto a posição mudou. Falhar aqui
+    // mandava a pessoa de volta à cadeira por um número que o sistema já
+    // compensa.
     if (ctx.distanceRange && ctx.distanceRange.status !== 'unknown') {
       const dr = ctx.distanceRange;
-      const status: CheckStatus =
-        dr.status === 'ok' ? 'ok' : dr.status === 'warn' ? 'warn' : 'fail';
+      const status: CheckStatus = dr.status === 'ok' ? 'ok' : 'warn';
       checks.push({
         id: 'distanceRange', status, value: dr.deltaCm,
         message: dr.message,

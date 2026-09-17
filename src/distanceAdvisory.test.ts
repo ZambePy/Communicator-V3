@@ -34,28 +34,29 @@ describe('os três estados', () => {
     }
   });
 
-  it('perto demais: avisa para AFASTAR', () => {
+  it('perto demais: informa, sem mandar afastar', () => {
     const a = new AvisoDeDistancia();
     const r = a.avaliar(45, CALIB);   // −25%
     expect(r.estado).toBe('perto');
     expect(r.desvioRelativo).toBeCloseTo(-0.25, 6);
-    expect(r.mensagem).toMatch(/afaste/i);
-    // E NÃO pode dizer para aproximar.
-    expect(r.mensagem).not.toMatch(/aproxime/i);
+    expect(r.mensagem).toMatch(/mais perto/i);
+    expect(r.mensagem).not.toMatch(/afaste|aproxime|volte/i);
   });
 
-  it('longe demais: avisa para APROXIMAR', () => {
+  it('longe demais: informa, sem mandar aproximar', () => {
     const a = new AvisoDeDistancia();
     const r = a.avaliar(80, CALIB);   // +33%
     expect(r.estado).toBe('longe');
     expect(r.desvioRelativo).toBeCloseTo(0.3333, 3);
-    expect(r.mensagem).toMatch(/aproxime/i);
-    expect(r.mensagem).not.toMatch(/afaste/i);
+    expect(r.mensagem).toMatch(/mais longe/i);
+    expect(r.mensagem).not.toMatch(/afaste|aproxime|volte/i);
   });
 
-  it('a direção da AÇÃO é o oposto do desvio — o erro fácil de cometer', () => {
-    expect(mensagemPara('perto')).toMatch(/afaste/i);
-    expect(mensagemPara('longe')).toMatch(/aproxime/i);
+  it('o texto diz que a correção continua e oferece a reancoragem', () => {
+    for (const e of ['perto', 'longe'] as const) {
+      expect(mensagemPara(e)).toMatch(/correção automática/i);
+      expect(mensagemPara(e)).toMatch(/reancore/i);
+    }
   });
 
   it('o texto não traz o percentual — ele é provisório', () => {

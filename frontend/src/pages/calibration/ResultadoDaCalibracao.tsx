@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, AlertTriangle, RefreshCw, ArrowRight } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { NumeroAnimado } from '../../components/ui/NumeroAnimado';
 import {
   lerCalibracao,
   nivelDeQualidade,
@@ -70,6 +71,19 @@ export const ResultadoDaCalibracao: React.FC<{
   const Icone = leitura.veredicto === 'bom' ? CheckCircle2 : AlertTriangle;
   const nivel = nivelDeQualidade(leitura);
 
+  // A BARRA ENCHE, não aparece cheia.
+  //
+  // Os degraus já tinham `transition` com atraso escalonado, e ela nunca
+  // rodava: no primeiro render eles já estavam na cor final, e transição não
+  // dispara no valor inicial. Começar em zero e subir para `nivel` logo depois
+  // da montagem é o que transforma o mesmo CSS numa barra que enche — e a
+  // barra enchendo é o que diz "isto acabou de ser medido".
+  const [nivelAceso, setNivelAceso] = useState(0);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setNivelAceso(nivel));
+    return () => cancelAnimationFrame(id);
+  }, [nivel]);
+
   return (
     <main
       role="main"
@@ -127,7 +141,10 @@ export const ResultadoDaCalibracao: React.FC<{
                   flex: 1,
                   height: 14,
                   borderRadius: 7,
-                  background: i < nivel ? tom.cor : 'var(--color-card-border)',
+                  // `data-aceso` e o rótulo acessível seguem o valor REAL desde
+                  // o primeiro quadro; só a COR espera a animação. Quem lê por
+                  // leitor de tela ou por teste não depende de quadro nenhum.
+                  background: i < nivelAceso ? tom.cor : 'var(--color-card-border)',
                   transition: 'background 0.4s ease',
                   transitionDelay: `${i * 90}ms`,
                 }}
@@ -193,17 +210,23 @@ export const ResultadoDaCalibracao: React.FC<{
         {/* Os números, para quem está medindo. */}
         {tecnico && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+            {/* Os números contam até o valor: são o resultado de uma medida que
+                acabou de acontecer, e chegar neles se lê diferente de já estar
+                neles. A frase inteira sai de um nó só — ver `NumeroAnimado`. */}
             {leitura.looErrorPx !== null && (
-              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--color-text-base)' }}>
-                {t('calib.resultado.erro', { px: Math.round(leitura.looErrorPx) })}
-              </span>
+              <NumeroAnimado
+                valor={leitura.looErrorPx}
+                formatar={(n) => t('calib.resultado.erro', { px: Math.round(n) })}
+                style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--color-text-base)' }}
+              />
             )}
             {leitura.derivaGraus !== null && (
-              <span style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--color-text-base)' }}>
-                {t('calib.resultado.deriva', {
-                  g: leitura.derivaGraus.toFixed(1).replace('.', ','),
-                })}
-              </span>
+              <NumeroAnimado
+                valor={leitura.derivaGraus}
+                casas={1}
+                formatar={(n) => t('calib.resultado.deriva', { g: n.toFixed(1).replace('.', ',') })}
+                style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--color-text-base)' }}
+              />
             )}
           </div>
         )}

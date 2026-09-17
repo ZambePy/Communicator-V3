@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import React from 'react';
 import { GazeStatusBanner } from './GazeStatusBanner';
@@ -19,16 +19,34 @@ const semProblemas = {
   calibrationInvalidated: null,
 };
 
+/**
+ * As asserções checam o TEXTO QUE `mensagemPara` DEVOLVE, não uma redação
+ * específica. A redação é do núcleo (`distanceAdvisory`) e `distanceAdvisory
+ * .test.ts` é quem a cobre; travá-la aqui de novo fazia este arquivo quebrar
+ * a cada ajuste de palavra no núcleo, sem que o banner tivesse regredido em
+ * nada — que é exatamente o que ele existe para detectar. O que este arquivo
+ * garante é o que o cabeçalho acima promete: o texto CHEGA à tela, e a
+ * precedência não o engole.
+ */
+function textoDe(estado: 'perto' | 'longe'): string {
+  const m = mensagemPara(estado);
+  if (!m) throw new Error(`mensagemPara('${estado}') devolveu null`);
+  return m;
+}
+
 describe('o aviso de distância chega à tela', () => {
-  it('perto demais: o banner manda AFASTAR', () => {
+  it('perto demais: o banner diz o que o núcleo mandou dizer sobre estar PERTO', () => {
     render(<GazeStatusBanner {...semProblemas} distanceAdvice={mensagemPara('perto')} />);
     expect(screen.getByTestId('gaze-status-banner')).toBeInTheDocument();
-    expect(screen.getByText(/afaste-se/i)).toBeInTheDocument();
+    expect(screen.getByText(textoDe('perto'))).toBeInTheDocument();
+    // E não o de longe: as duas direções não podem sair trocadas.
+    expect(screen.queryByText(textoDe('longe'))).not.toBeInTheDocument();
   });
 
-  it('longe demais: o banner manda APROXIMAR', () => {
+  it('longe demais: o banner diz o que o núcleo mandou dizer sobre estar LONGE', () => {
     render(<GazeStatusBanner {...semProblemas} distanceAdvice={mensagemPara('longe')} />);
-    expect(screen.getByText(/aproxime-se/i)).toBeInTheDocument();
+    expect(screen.getByText(textoDe('longe'))).toBeInTheDocument();
+    expect(screen.queryByText(textoDe('perto'))).not.toBeInTheDocument();
   });
 
   it('dentro da faixa: banner nenhum', () => {
@@ -86,7 +104,7 @@ describe('a ordem de precedência', () => {
       />
     );
     expect(screen.queryByText(/ainda não há calibração/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/afaste-se/i)).toBeInTheDocument();
+    expect(screen.getByText(textoDe('perto'))).toBeInTheDocument();
   });
 
   it('sozinha, a falta de calibração não produz banner nenhum', () => {
@@ -113,5 +131,87 @@ describe('a ordem de precedência', () => {
     expect(cardAviso.style.backgroundColor).toBe('rgb(120, 53, 15)');
     expect(cardErro.style.backgroundColor).toBe('rgb(127, 29, 29)');
     expect(cardAviso.style.backgroundColor).not.toBe(cardErro.style.backgroundColor);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Reajuste rápido (alvo único de 2 s).
+//
+// A saída para "a geometria saiu do lugar" é reancorar, não recalibrar. O botão
+// só pode aparecer nos avisos em que isso é verdade — nos erros de câmera e de
+// calibração inválida ele não conserta nada, e um botão que não conserta ensina
+// a apertar botões por reflexo.
+// -----------------------------------------------------------------------------
+describe('o botão de reajuste rápido', () => {
+  it('aparece no aviso de distância e chama de volta ao ser clicado', () => {
+    const onReancorar = vi.fn();
+    render(
+      <GazeStatusBanner
+        {...semProblemas}
+        distanceAdvice={mensagemPara('perto')}
+        onReancorar={onReancorar}
+      />
+    );
+    const botao = screen.getByRole('button', { name: /reajustar/i });
+    fireEvent.click(botao);
+    expect(onReancorar).toHaveBeenCalledTimes(1);
+  });
+
+  it('aparece no aviso de postura, que não tem outra saída na tela', () => {
+    render(<GazeStatusBanner {...semProblemas} avisoDePostura onReancorar={() => {}} />);
+    expect(screen.getByTestId('gaze-status-banner')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /reajustar/i })).toBeInTheDocument();
+  });
+
+  it('a distância tem precedência sobre a postura: um banner, não dois', () => {
+    render(
+      <GazeStatusBanner
+        {...semProblemas}
+        distanceAdvice={mensagemPara('longe')}
+        avisoDePostura
+        onReancorar={() => {}}
+      />
+    );
+    expect(screen.getAllByTestId('gaze-status-banner')).toHaveLength(1);
+    expect(screen.getByText(textoDe('longe'))).toBeInTheDocument();
+  });
+
+  it('NÃO aparece em erro de câmera nem em calibração inválida', () => {
+    const semCamera = render(
+      <GazeStatusBanner {...semProblemas} cameraError="x" onReancorar={() => {}} />
+    );
+    expect(semCamera.queryByRole('button', { name: /reajustar/i })).toBeNull();
+    semCamera.unmount();
+
+    render(
+      <GazeStatusBanner
+        {...semProblemas}
+        calibrationInvalidated="a tela mudou de tamanho"
+        onReancorar={() => {}}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /reajustar/i })).toBeNull();
+  });
+
+  it('durante a coleta o botão para de aceitar clique', () => {
+    const onReancorar = vi.fn();
+    render(
+      <GazeStatusBanner
+        {...semProblemas}
+        distanceAdvice={mensagemPara('perto')}
+        onReancorar={onReancorar}
+        reancorando
+      />
+    );
+    const botao = screen.getByRole('button', { name: /olhe o centro/i });
+    expect(botao).toBeDisabled();
+    fireEvent.click(botao);
+    expect(onReancorar).not.toHaveBeenCalled();
+  });
+
+  it('sem callback não há botão — o aviso continua aparecendo', () => {
+    render(<GazeStatusBanner {...semProblemas} distanceAdvice={mensagemPara('perto')} />);
+    expect(screen.getByTestId('gaze-status-banner')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /reajustar/i })).toBeNull();
   });
 });

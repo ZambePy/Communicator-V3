@@ -71,11 +71,24 @@ describe('evaluateDistanceRange', () => {
     expect(evaluateDistanceRange(38, 30, 60).status).toBe('ok');
   });
 
-  it('fora da faixa → out, com instrução de recalibrar', () => {
+  it('fora da faixa → out, e a correção CONTINUA (o status é informação)', () => {
     const r = evaluateDistanceRange(60, 30, 60);   // +30 cm
     expect(r.status).toBe('out');
-    expect(r.message).toMatch(/fora da faixa/);
-    expect(r.message).toMatch(/recalibra|refaça/i);
+    expect(r.message).toMatch(/além da faixa/);
+    // Nada de "volte à cadeira": a correção aditiva segue com o fator clampado.
+    expect(r.message).not.toMatch(/volte|recalibr|refaça/i);
+    expect(r.message).toMatch(/correção continua/i);
+    expect(r.ratio).toBeCloseTo(90 / 60, 6);
+  });
+
+  it('em warn e out o fator é aplicado, clampado — nunca 1 nem bloqueado', () => {
+    const warn = evaluateDistanceRange(45, 30, 60);   // +15 cm → warn
+    expect(warn.status).toBe('warn');
+    expect(warn.ratio).toBeCloseTo(75 / 60, 6);
+    expect(warn.message).not.toMatch(/aproxime|afaste|volte/i);
+    const out = evaluateDistanceRange(10, 30, 60);    // −20 cm → out
+    expect(out.status).toBe('out');
+    expect(out.ratio).toBeCloseTo(Math.max(MIN_RATIO, 40 / 60), 6);
   });
 
   it('o fator é clampado mesmo com medição absurda', () => {

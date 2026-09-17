@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { buildRuntimeInfo } from '../../utils/runtimeInfo';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { useGaze } from '../../context/GazeContext';
 import { useSettings } from '../../context/SettingsContext';
 import { BackButton } from '../../components/ui/BackButton';
@@ -20,6 +20,7 @@ import { ReadinessPanel } from '../../components/ui/ReadinessPanel';
 import { ChecksDaCamera } from '../../components/ui/ChecksDaCamera';
 import { isDevMode } from '../../devMode';
 import { PreparoDaCalibracao } from '../calibration/PreparoDaCalibracao';
+import { ordemDaGrade } from '../calibration/ordemDaGrade';
 import { tutorialConcluido } from '../../services/local/tutorialProfile';
 import { useAuth } from '../../context/AuthContext';
 
@@ -65,6 +66,17 @@ const ACCENT = '#1B54A8'; // IrisFlow Azul
 
 const SUCCESS = '#22C55E';
 const DANGER = '#EF4444';
+
+/** Diâmetro da bola que percorre a grade. */
+const TAMANHO_DA_BOLA_PX = 36;
+/**
+ * Duração do deslocamento entre dois alvos.
+ *
+ * Cabe com folga na pausa de confirmação de 1200 ms — a bola chega, para, e só
+ * então a coleta do alvo seguinte abre. Mais rápido que isso o olho perde a
+ * perseguição e volta a saltar; mais lento, a calibração inteira estica.
+ */
+const DESLOCAMENTO_DA_BOLA_MS = 620;
 
 const humanMessage: Record<string, string> = {
   singular_matrix:
@@ -133,6 +145,15 @@ export const CalibrationCheck: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastCompletedPoint, setLastCompletedPoint] = useState<number | null>(null);
   const [preparing, setPreparing] = useState(false);
+  /**
+   * A janela de coleta deste alvo está ABERTA.
+   *
+   * É o único gatilho do pulso da bola: pulsar fora da coleta ensinaria o
+   * paciente a fixar quando ninguém está medindo — e a não fixar quando
+   * alguém está. Liga imediatamente antes de `startCollectingPoint` e desliga
+   * no callback, em qualquer desfecho.
+   */
+  const [coletando, setColetando] = useState(false);
   const PREPARE_MS = 1500;
 
   const [opticalCondition, setOpticalCondition] = useState<OpticalCondition>('desconhecido');
@@ -174,7 +195,7 @@ export const CalibrationCheck: React.FC = () => {
   // rodou. Nesse render `calibrationMode` ainda era `null`, então a lista era
   // a que `getCalibrationTargets()` devolvia ANTES do modo ser aplicado — a
   // grade nominal, calculada no load do módulo com a geometria default. O
-  // `shuffleOrderRef` já era montado sobre a lista NOVA. Os índices de uma
+  // `ordemDaSequenciaRef` já era montado sobre a lista NOVA. Os índices de uma
   // lista indexavam a outra: em modo rápido a UI mostrava 4 cantos e o engine
   // coletava TL/TC/TR/ML da grade de 9; em modo completo divergiam sempre que
   // a distância medida da sessão ≠ default (que é o caso normal).
@@ -225,7 +246,20 @@ export const CalibrationCheck: React.FC = () => {
   // O que a tela desenha: os alvos da sessão quando existe uma, senão o preview.
   const activePoints: CalibrationPointUI[] = sessionPoints ?? nominalPoints;
 
-  const shuffleOrderRef = useRef<number[]>([]);
+  /**
+   * Onde a bola está agora. `null` só quando a grade ainda não existe — aí não
+   * há o que seguir com os olhos e a tela não desenha bola nenhuma.
+   */
+  const alvoDaBola: CalibrationPointUI | null = activePoints[currentIndex] ?? null;
+
+  /**
+   * A cor da bola. Verde por um instante ao fechar um ponto — é a única
+   * confirmação que sobrou depois que o ✓ em elemento separado saiu, e ela
+   * acontece no próprio nó que já está na tela, sem nada aparecer nem sumir.
+   */
+  const tintaDaBola = lastCompletedPoint !== null ? SUCCESS : ACCENT;
+
+  const ordemDaSequenciaRef = useRef<number[]>([]);
   const isMounted = useRef(true);
   /** Quando a coleta começou — vira `calibration_seconds` no resumo para o cuidador. */
   const calibracaoIniciadaEmRef = useRef<number | null>(null);
@@ -389,8 +423,14 @@ export const CalibrationCheck: React.FC = () => {
         if (action === 'continue') {
           // Resumo para o app do cuidador (acurácia, precisão, taxa de acerto,
           // condições). Só agregados — o relatório completo fica no disco.
-          const duracaoS = inicioDaCalibracaoMs ? Math.round((Date.now() - inicioDaCalibracaoMs) / 1000) : null;
-          try { emitirResultadoDeCalibracao(result, meta, duracaoS); } catch (e) { console.warn('[cloud] resumo não emitido', e); }
+          const duracaoS = inicioDaCalibracaoMs
+            ? Math.round((Date.now() - inicioDaCalibracaoMs) / 1000)
+            : null;
+          try {
+            emitirResultadoDeCalibracao(result, meta, duracaoS);
+          } catch (e) {
+            console.warn('[cloud] resumo não emitido', e);
+          }
         }
         if (action === 'redo') {
           // Attempt descartado — não exporta um JSONL parcial.
@@ -418,14 +458,20 @@ export const CalibrationCheck: React.FC = () => {
    */
   const iniciarSequencia = (targets: readonly { x: number; y: number }[]) => {
     const sessionTargets = commitSessionTargets(targets);
-    const order = sessionTargets.map((_, i) => i);
-    for (let i = order.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [order[i], order[j]] = [order[j], order[i]];
-    }
-    shuffleOrderRef.current = order;
+    // ORDEM DE LEITURA, não sorteada.
+    //
+    // A ordem era embaralhada (Fisher-Yates) para evitar que o paciente
+    // antecipasse o próximo alvo. Com UMA bola percorrendo a grade, a ordem
+    // sorteada custa mais do que rende: cada alvo vira um salto atravessando a
+    // tela, o olho chega depois da bola, e os primeiros quadros da janela de
+    // coleta registram o olhar ainda em trânsito. O percurso contínuo é o que
+    // permite PERSEGUIR a bola em vez de caçá-la — e a perseguição chega no
+    // alvo junto com ela.
+    const order = ordemDaGrade(sessionTargets);
+    ordemDaSequenciaRef.current = order;
     setCompletedList([]);
     setLastCompletedPoint(null);
+    setColetando(false);
     setCurrentIndex(order[0]);
 
     setPreparing(true);
@@ -438,7 +484,7 @@ export const CalibrationCheck: React.FC = () => {
 
   const startNextPoint = (step: number) => {
     if (!isMounted.current) return;
-    const order = shuffleOrderRef.current;
+    const order = ordemDaSequenciaRef.current;
 
     if (step >= order.length) {
       setStage('testing');
@@ -542,13 +588,22 @@ export const CalibrationCheck: React.FC = () => {
           `(${activePointsRef.current.length} alvos). Coleta abortada.`
       );
       setErrorMessage('Erro interno na grade de calibração. Tente novamente.');
+      setColetando(false);
       setStage('tutorial');
       return;
     }
+    setColetando(true);
     calibration.startCollectingPoint?.(pt.x / 100, pt.y / 100, (success: boolean) => {
       if (!isMounted.current) return;
+      setColetando(false);
       if (success) {
         retryCountRef.current = 0;
+        // A bola parte para o PRÓXIMO alvo já aqui, dentro da pausa de
+        // confirmação: é essa janela — sem pulso — que o deslocamento ocupa.
+        // Adiar para `startNextPoint` faria a bola deslizar e pulsar ao mesmo
+        // tempo, e o pulso deixaria de significar "estou medindo agora".
+        const proximo = order[step + 1];
+        if (proximo !== undefined) setCurrentIndex(proximo);
         setLastCompletedPoint(pointIdx);
         setCompletedList((prev) => [...prev, pointIdx]);
         setTimeout(() => {
@@ -558,6 +613,10 @@ export const CalibrationCheck: React.FC = () => {
         retryCountRef.current++;
         if (retryCountRef.current >= MAX_RETRIES_PER_POINT) {
           retryCountRef.current = 0;
+          // Desistiu deste alvo: a bola segue caminho igual, sem pulso, para
+          // o percurso não travar num ponto que não vai render amostra.
+          const proximo = order[step + 1];
+          if (proximo !== undefined) setCurrentIndex(proximo);
           setCompletedList((prev) => [...prev, pointIdx]);
           setTimeout(() => {
             if (isMounted.current) startNextPoint(step + 1);
@@ -687,12 +746,7 @@ export const CalibrationCheck: React.FC = () => {
         `(configurada), câmera ${cameraCm === null ? 'não medida' : `${cameraCm.toFixed(1)} cm`}.`
     );
 
-    // Congela as distâncias desta calibração. A compensação de distância usa
-    // a VARIAÇÃO em relação a estes dois números para reescalar a predição
-    // quando o paciente sentar mais perto ou mais longe depois.
-    calibration.setCalibrationDistancesCm?.(cameraCm, screenCm);
-
-    calibration.startCalibrationMode?.({
+    const aceitou = calibration.startCalibrationMode?.({
       quick,
       opticalCondition,
       geometry: {
@@ -704,6 +758,40 @@ export const CalibrationCheck: React.FC = () => {
         viewingDistanceCm: screenCm,
       },
     });
+
+    // `startCalibrationMode` RECUSA por estado (contraluz forte) devolvendo
+    // `false`, sem lançar. Ignorar o retorno deixava a tela entrar em
+    // `calibrating` com o motor parado: a bola azul pulsava no primeiro alvo
+    // para sempre, sem mensagem e sem saída a não ser o botão Voltar. Aqui a
+    // tela volta ao início e diz o motivo, que é acionável (fechar a cortina,
+    // virar a mesa) — ao contrário de um travamento mudo.
+    if (aceitou === false) {
+      const recusa = calibration.getRecusa?.() ?? null;
+      console.warn(`[calib] início recusado: ${recusa?.motivo ?? 'motivo desconhecido'}`);
+      finalizeAutoRecordingRef.current(false);
+      setStage('tutorial');
+      setPreparing(false);
+      setCompletedList([]);
+      setSessionPoints(null);
+      setErrorMessage(
+        recusa?.mensagem ??
+          'Não foi possível começar a calibração agora. Verifique a iluminação e tente de novo.'
+      );
+      return;
+    }
+
+    // Congela as distâncias desta calibração. A compensação de distância usa
+    // a VARIAÇÃO em relação a estes dois números para reescalar a predição
+    // quando o paciente sentar mais perto ou mais longe depois.
+    //
+    // DEPOIS da recusa, nunca antes: estas duas variáveis são as MESMAS que o
+    // modelo já treinado usa em produção (`mapGaze` → `evaluateDistanceRange`,
+    // e o ganho `d·tan Δ` da compensação de pose). Escritas antes, uma recusa
+    // por contraluz deixava o modelo em uso com a base de distância da sessão
+    // que nem chegou a começar: o paciente sentado 10 cm mais perto passava a
+    // ter razão 1,0 no lugar de 0,85, ~140 px de erro na borda em 1080p, sem
+    // nenhum sinal na tela.
+    calibration.setCalibrationDistancesCm?.(cameraCm, screenCm);
 
     const targets = calibration.getCalibrationTargets?.() ?? [];
     iniciarSequencia(targets);
@@ -1060,7 +1148,8 @@ export const CalibrationCheck: React.FC = () => {
                   }
                 )}
               >
-                {l2csReady && (checksProntos ? '👁  Começar (9 pontos)' : 'Ajuste a câmera para começar')}
+                {l2csReady &&
+                  (checksProntos ? '👁  Começar (9 pontos)' : 'Ajuste a câmera para começar')}
                 {l2csStatus === 'loading' && (
                   <>
                     <Loader2 size={20} style={{ animation: 'cfSpin 1s linear infinite' }} />
@@ -1256,126 +1345,75 @@ export const CalibrationCheck: React.FC = () => {
               </div>
             )}
 
-            {/* Pontos de calibração */}
-            {activePoints.map((pt, idx) => {
-              const isCurrent = idx === currentIndex;
-              const isDone = completedList.includes(idx);
-              const isJustFinished = idx === lastCompletedPoint;
+            {/* ── A bola ───────────────────────────────────────────────────
+                UMA bola percorre a grade inteira. Não é um elemento por alvo:
+                é o MESMO nó mudando de posição, e é essa continuidade que
+                deixa o olho PERSEGUIR a bola. Nove elementos que acendem e
+                apagam dariam nove saltos sacádicos, e o olho chega no alvo
+                novo depois que a janela de coleta já abriu.
 
-              return (
+                O marcador cinza de "o alvo vai aparecer aqui" saiu de vez: ele
+                disputava a fixação com o único ponto que se quer fixar, e
+                sobre fundo preto qualquer segundo ponto claro é distrator.
+
+                São dois nós porque as duas animações precisam de `transform`
+                ao mesmo tempo: o externo POSICIONA (translate + transição) e o
+                interno PULSA (scale). Num nó só, a animação do pulso
+                sobrescreveria a posição e a bola voltaria para o canto. */}
+            {alvoDaBola && (
+              <div
+                data-testid="calib-bola"
+                data-calibration-target=""
+                data-coletando={coletando ? 'true' : 'false'}
+                aria-hidden="true"
+                className="cf-bola-posicao"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  width: TAMANHO_DA_BOLA_PX,
+                  height: TAMANHO_DA_BOLA_PX,
+                  zIndex: 30,
+                  // SEM `pointer-events: none`, de propósito. O
+                  // `EmergencyContext` esconde o botão de socorro quando um
+                  // `[data-calibration-target]` passa por baixo dele, e a
+                  // busca é por `elementsFromPoint` — que não devolve
+                  // elemento com `pointer-events: none`. A bola sumiria atrás
+                  // do botão e aquele ponto seria coletado com o paciente
+                  // olhando para outra coisa. A bola não é alvo de dwell de
+                  // qualquer jeito: durante a coleta só a emergência é
+                  // acionável (ver o dispatcher no `GazeContext`).
+                  willChange: 'transform',
+                  // `vw`/`vh` e não `left`/`top` em %: a transição de
+                  // `transform` roda no compositor e não invalida layout —
+                  // e o contêiner desta tela é exatamente 100vw × 100vh.
+                  // O `-50%` centraliza a bola no alvo (é do tamanho DELA).
+                  transform: `translate3d(calc(${alvoDaBola.x}vw - 50%), calc(${alvoDaBola.y}vh - 50%), 0)`,
+                  transition: `transform ${DESLOCAMENTO_DA_BOLA_MS}ms cubic-bezier(0.33, 0, 0.2, 1)`,
+                }}
+              >
                 <div
-                  key={idx}
-                  data-calibration-target=""
+                  className={`cf-bola${coletando ? ' cf-bola--coletando' : ''}`}
                   style={{
-                    position: 'absolute',
-                    left: `${pt.x}%`,
-                    top: `${pt.y}%`,
-                    transform: 'translate(-50%, -50%)',
-                    width: 80,
-                    height: 80,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: isCurrent ? 30 : 10,
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: '50%',
+                    // `color` é a tinta da bola INTEIRA: o preenchimento, os
+                    // dois anéis e o halo do pulso saem todos de
+                    // `currentColor`. Uma cor cravada no CSS deixaria o brilho
+                    // azul em volta de uma bola verde no instante da
+                    // confirmação.
+                    color: tintaDaBola,
+                    backgroundColor: tintaDaBola,
+                    // 2E ≈ 18 % e BF ≈ 75 % de opacidade: o anel colado e o
+                    // brilho externo, a mesma geometria do alvo antigo.
+                    boxShadow: `0 0 0 8px ${tintaDaBola}2E, 0 0 36px ${tintaDaBola}BF`,
+                    transition:
+                      'color 220ms ease, background-color 220ms ease, box-shadow 220ms ease',
                   }}
-                >
-                  {/* ── Ponto atual ── */}
-                  {isCurrent && !isJustFinished && (
-                    <div
-                      style={{
-                        position: 'relative',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      {/* Halo pulsante — "olhe aqui" */}
-                      <div
-                        style={{
-                          position: 'absolute',
-                          width: 72,
-                          height: 72,
-                          borderRadius: '50%',
-                          background:
-                            'radial-gradient(circle, rgba(27, 84, 168, 0.22) 0%, transparent 70%)',
-                          animation: 'cfRadarPing 2.2s ease-out infinite',
-                        }}
-                      />
-                      {/* Anel rotativo de guia */}
-                      <div
-                        style={{
-                          position: 'absolute',
-                          width: 52,
-                          height: 52,
-                          borderRadius: '50%',
-                          border: '2px solid rgba(27, 84, 168, 0.40)',
-                          animation: 'cfHalo 3s linear infinite',
-                        }}
-                      />
-                      {/* Ponto central — azul, limpo, sem elementos sobre ele.
-                          Pisca durante a acomodação (600 ms) e só depois entra
-                          no pulso lento: ver `cfPiscarAlvo` nos keyframes. */}
-                      <div
-                        className="cf-alvo-ativo"
-                        style={{
-                          width: 34,
-                          height: 34,
-                          borderRadius: '50%',
-                          background: ACCENT,
-                          boxShadow: `0 0 0 8px rgba(27, 84, 168, 0.18), 0 0 36px ${ACCENT}`,
-                          animation:
-                            'cfPiscarAlvo 600ms steps(1, end) 1 both, cfPulse 1.2s 600ms infinite alternate',
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {/* ── Recém concluído ── */}
-                  {isJustFinished && (
-                    <div
-                      style={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: '50%',
-                        background: SUCCESS,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        boxShadow: `0 0 24px rgba(34,197,94,0.70)`,
-                        animation: 'cfScaleIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both',
-                      }}
-                    >
-                      <CheckCircle2 size={28} color="#fff" />
-                    </div>
-                  )}
-
-                  {/* ── Feito, não recente ── */}
-                  {isDone && !isJustFinished && (
-                    <div
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: '50%',
-                        background: SUCCESS,
-                        opacity: 0.35,
-                      }}
-                    />
-                  )}
-
-                  {/* ── Pendente ── */}
-                  {!isCurrent && !isDone && (
-                    <div
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.13)',
-                      }}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                />
+              </div>
+            )}
           </>
         )}
 
@@ -1674,38 +1712,53 @@ export const CalibrationCheck: React.FC = () => {
             0%   { transform: scale(0.1); opacity: 0.9; }
             100% { transform: scale(2.8); opacity: 0; }
           }
-          @keyframes cfHalo {
-            from { transform: rotate(0deg)   scale(1);    border-color: rgba(27, 84, 168, 0.40); }
-            50%  { transform: rotate(180deg) scale(1.06); border-color: rgba(27, 84, 168, 0.20); }
-            to   { transform: rotate(360deg) scale(1);    border-color: rgba(27, 84, 168, 0.40); }
-          }
           @keyframes cfSpin    { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
           @keyframes cfFadeUp  { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-          @keyframes cfScaleIn { from { opacity:0; transform:scale(0.4); } to { opacity:1; transform:scale(1); } }
           @keyframes cfPulseRed { from { opacity: 0.55; } to { opacity: 1; } }
 
           /*
-           * Alvo piscante antes da coleta (sprint S2 / macete A6).
+           * A bola que percorre a grade.
            *
-           * O protocolo de Nyström pisca cada alvo 200 ms aceso / 200 ms
-           * apagado ANTES de exibi-lo estável, para garantir que o olho já
-           * esteja NO alvo quando a janela abre, em vez de chegando nele. Os
-           * 600 ms de acomodação que o engine descarta rendem mais assim.
-           *
-           * A duração é exatamente a da acomodação: aceso 200, apagado 200,
-           * aceso 200 — duas transições em 600 ms, abaixo do limite de três
-           * flashes por segundo da WCAG 2.3.1. Não aumentar a frequência.
+           * Só as propriedades transform e opacity animam — as duas que o
+           * compositor resolve sozinho. Um box-shadow animado repintaria o
+           * halo inteiro a cada quadro, e este é o único elemento em
+           * movimento numa tela em que a fixação do paciente É o dado sendo
+           * medido: qualquer engasgo aqui vira amostra ruim.
            */
-          @keyframes cfPiscarAlvo {
-            0%,   32.9%  { opacity: 1; }
-            33%,  65.9%  { opacity: 0.12; }
-            66%,  100%   { opacity: 1; }
+          .cf-bola { position: relative; }
+          /* O halo do pulso herda a tinta da bola por currentColor: azul
+             enquanto mede, verde no instante em que o ponto fecha. */
+          .cf-bola::after {
+            content: '';
+            position: absolute;
+            inset: -20px;
+            border-radius: 50%;
+            background: radial-gradient(circle, currentColor 0%, transparent 70%);
+            opacity: 0;
+            pointer-events: none;
           }
 
-          /* Quem pediu menos movimento não recebe piscada: o alvo aparece
-             estável e a acomodação faz o trabalho sozinha. */
+          /* O pulso é o sinal de "estou medindo AGORA". Existe só enquanto a
+             janela de coleta está aberta — ver o estado coletando. */
+          .cf-bola--coletando { animation: cfBolaPulso 1.1s ease-in-out infinite alternate; }
+          .cf-bola--coletando::after { animation: cfBolaHalo 1.1s ease-in-out infinite alternate; }
+
+          @keyframes cfBolaPulso {
+            from { transform: scale(0.90); }
+            to   { transform: scale(1.14); }
+          }
+          @keyframes cfBolaHalo {
+            from { opacity: 0.10; transform: scale(0.80); }
+            to   { opacity: 0.32; transform: scale(1.25); }
+          }
+
+          /* Quem pediu menos movimento recebe a bola PARADA: ela reposiciona
+             de um alvo para o outro sem deslizar e sem pulsar. O alvo continua
+             óbvio — é o único ponto aceso na tela. */
           @media (prefers-reduced-motion: reduce) {
-            .cf-alvo-ativo { animation: none !important; opacity: 1 !important; }
+            .cf-bola,
+            .cf-bola::after { animation: none !important; }
+            .cf-bola-posicao { transition: none !important; }
           }
         `}</style>
       </main>

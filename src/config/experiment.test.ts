@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { loadEnvOverrides, sanitizeExperiment, EXPERIMENT } from './experiment';
+import { loadEnvOverrides, sanitizeExperiment, EXPERIMENT, DEFAULTS } from './experiment';
 
 // A config de experimento em Node aceita override via env-var
 // `IRISFLOW_EXP_<key>=<value>`. Estes testes garantem que:
@@ -159,5 +159,38 @@ describe('EXPERIMENT (snapshot)', () => {
     expect(EXPERIMENT).toHaveProperty('l2csCadenceMs');
     expect(EXPERIMENT).toHaveProperty('polynomialFeatures');
     expect(EXPERIMENT).toHaveProperty('gazeLostFallback');
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Defaults que são DECISÕES, não acidentes. Cada linha aqui tem um motivo no
+// comentário de `ExperimentConfig`; mudar o default exige mudar o motivo.
+// -----------------------------------------------------------------------------
+describe('defaults decididos', () => {
+  it('compensações geométricas ligadas: pose, translação lateral e referência lenta', () => {
+    expect(DEFAULTS.geometricPoseCompensation).toBe(true);
+    expect(DEFAULTS.lateralTranslationCompensation).toBe(true);
+    expect(DEFAULTS.referenciaLenta).toBe(true);
+  });
+
+  it('estabilizador de fixação ON; suavização do L2CS na fixação ON', () => {
+    expect(DEFAULTS.estabilizarFixacao).toBe(true);
+    expect(DEFAULTS.suavizarL2csNaFixacao).toBe(true);
+    // O One Euro fica como está: o preset é decidido no engine, não aqui.
+    expect(DEFAULTS.filterMode).toBe('oneEuro');
+  });
+
+  it('normalizarRollNoCrop OFF — o checkpoint Gaze360 não foi treinado com roll cancelado', () => {
+    expect(DEFAULTS.normalizarRollNoCrop).toBe(false);
+  });
+
+  it('blocoL2csCompleto OFF — as 7 dims mudam o FEATURE_VECTOR_ID e invalidam perfis', () => {
+    expect(DEFAULTS.blocoL2csCompleto).toBe(false);
+  });
+
+  it('L2CS em `auto`: cadência e tamanho são decididos pelo provider efetivo', () => {
+    expect(DEFAULTS.l2cs).toBe('auto');
+    expect(DEFAULTS.l2csInputSize).toBe(448);
+    expect(DEFAULTS.l2csCadenceMs).toBe(100);
   });
 });
