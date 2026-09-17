@@ -1,13 +1,28 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { MessageSquare } from 'lucide-react';
+import { GazeButton } from '../components/ui/GazeButton';
+import { PrimaryButton } from '../components/ui/PrimaryButton';
+
+/**
+ * Primeiro sucesso.
+ *
+ * Vem depois da calibração e do tutorial, na primeira vez: um único cartão em
+ * destaque — Comunicação — para a pessoa selecionar pelo olhar. Ao abrir, o
+ * módulo mostra uma vez "Você acabou de controlar o IrisFlow usando apenas o
+ * olhar." (ver `useAvisoDePrimeiroSucesso`).
+ *
+ * A saída secundária ("ir para o menu") existe porque nenhuma tela deste
+ * produto pode ter uma única porta: se o dwell no cartão não sair hoje, o
+ * cuidador ainda leva ao menu com um clique.
+ */
+
+export const ESTADO_PRIMEIRO_SUCESSO = { primeiroSucesso: true } as const;
 
 export const WelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const timer = setTimeout(() => navigate('/menu'), 5000);
-    return () => clearTimeout(timer);
-  }, [navigate]);
+  const { t } = useTranslation();
 
   return (
     <main
@@ -15,139 +30,99 @@ export const WelcomeScreen: React.FC = () => {
       aria-labelledby="welcome-title"
       style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #eef4ff 0%, #dbeafe 50%, #e0f2fe 100%)',
+        background: 'var(--settings-bg)',
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        position: 'relative',
-        overflow: 'hidden',
+        gap: '2.5rem',
+        padding: '2rem',
       }}
     >
       <div
-        aria-hidden="true"
-        className="bg-orb animate-float"
-        style={{
-          width: 480,
-          height: 480,
-          background: 'radial-gradient(circle, rgba(27,84,168,0.25), transparent)',
-          top: '-10%',
-          left: '-8%',
-        }}
-      />
-      <div
-        aria-hidden="true"
-        className="bg-orb animate-float"
-        style={{
-          width: 560,
-          height: 560,
-          background: 'radial-gradient(circle, rgba(20,180,180,0.18), transparent)',
-          bottom: '-12%',
-          right: '-8%',
-          animationDelay: '2s',
-        }}
-      />
-      <div
-        aria-hidden="true"
-        className="bg-orb animate-float"
-        style={{
-          width: 300,
-          height: 300,
-          background: 'radial-gradient(circle, rgba(27,84,168,0.12), transparent)',
-          top: '60%',
-          left: '60%',
-          animationDelay: '3.5s',
-        }}
-      />
-
-      <div
-        className="glass animate-fade-in-up"
+        className="animate-fade-in-up"
         style={{
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '2rem',
-          padding: '4rem 5rem',
-          borderRadius: '3rem',
-          maxWidth: 620,
-          width: '90%',
+          gap: '0.6rem',
           textAlign: 'center',
-          position: 'relative',
-          zIndex: 10,
         }}
       >
-        <img
-          src="/LOGO.png"
-          alt=""
-          aria-hidden="true"
-          className="animate-float"
+        <h1
+          id="welcome-title"
           style={{
-            height: 130,
-            width: 'auto',
-            objectFit: 'contain',
-            filter: 'drop-shadow(0 8px 24px rgba(27,84,168,0.3))',
-          }}
-          onError={(e) => (e.currentTarget.style.display = 'none')}
-        />
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <h1
-            id="welcome-title"
-            style={{
-              fontSize: '3.5rem',
-              fontWeight: 900,
-              fontStyle: 'italic',
-              background: 'linear-gradient(135deg, #1B54A8, #2563eb)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              lineHeight: 1.1,
-              margin: 0,
-            }}
-          >
-            Bem vindo!
-          </h1>
-          <p
-            style={{
-              fontSize: '1.1rem',
-              color: 'var(--color-text-base)', opacity: 0.9,
-              fontWeight: 500,
-              fontFamily: 'system-ui, sans-serif',
-            }}
-          >
-            Posicione-se em frente à câmera.
-            <br />O sistema será iniciado em instantes...
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => navigate('/menu')}
-          aria-label="Iniciar agora e ir ao menu principal"
-          style={{
-            marginTop: '0.5rem',
-            padding: '1rem 3rem',
-            background: 'linear-gradient(135deg, #1B54A8, #2563eb)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '999px',
-            fontSize: '1.25rem',
-            fontWeight: 700,
-            fontFamily: 'Boldonse, sans-serif',
-            cursor: 'pointer',
-            boxShadow: '0 8px 32px rgba(27,84,168,0.4)',
-            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-3px)';
-            e.currentTarget.style.boxShadow = '0 16px 40px rgba(27,84,168,0.5)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 8px 32px rgba(27,84,168,0.4)';
+            fontSize: '2.4rem',
+            fontWeight: 800,
+            margin: 0,
+            color: 'var(--color-text-base)',
+            lineHeight: 1.15,
           }}
         >
-          Iniciar Agora
-        </button>
+          {t('primeiroSucesso.title')}
+        </h1>
+        <p style={{ margin: 0, fontSize: '1.35rem', color: 'var(--color-text-muted)' }}>
+          {t('primeiroSucesso.lead')}{' '}
+          <strong style={{ color: 'var(--color-primary)' }}>{t('primeiroSucesso.alvo')}</strong>
+        </p>
       </div>
+
+      <GazeButton
+        onClick={() => navigate('/phrases', { replace: true, state: ESTADO_PRIMEIRO_SUCESSO })}
+        aria-label={t('primeiroSucesso.alvoAria')}
+        width={360}
+        height={300}
+        isolado
+        className="animate-scale-in primeiro-sucesso-alvo"
+        style={{
+          borderRadius: '1.6rem',
+          background: 'var(--color-card-bg)',
+          border: '2px solid var(--color-primary)',
+          boxShadow: '0 0 0 8px rgba(27, 84, 168, 0.16), 0 16px 40px var(--color-card-shadow)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '1rem',
+            padding: '1rem',
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: 96,
+              height: 96,
+              borderRadius: '50%',
+              background: '#ff8a8a',
+              color: '#0f172a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
+            }}
+          >
+            <MessageSquare size={50} />
+          </span>
+          <span style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--color-text-base)' }}>
+            {t('primeiroSucesso.alvo')}
+          </span>
+          <span style={{ fontSize: '1.05rem', color: 'var(--color-text-muted)' }}>
+            {t('primeiroSucesso.alvoDescricao')}
+          </span>
+        </div>
+      </GazeButton>
+
+      <PrimaryButton
+        type="button"
+        variant="ghost"
+        onClick={() => navigate('/menu', { replace: true })}
+        style={{ opacity: 0.8 }}
+      >
+        {t('primeiroSucesso.menu')}
+      </PrimaryButton>
     </main>
   );
 };

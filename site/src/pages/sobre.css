@@ -1,0 +1,90 @@
+/* ============================================================
+   Página "A empresa".
+
+   A equipe não vira grade de cartões: são três pessoas, e uma
+   lista com filete separando cada linha diz isso melhor do que
+   três retângulos iguais. Nome à esquerda, o que a pessoa faz
+   à direita, na mesma linha de base.
+   ============================================================ */
+
+.team {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.team__row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: var(--sp-5);
+  align-items: start;
+  padding: var(--sp-5) 0;
+  border-top: 1px solid var(--line);
+}
+
+.team__name {
+  font-size: 1.1rem;
+  margin: 0 0 6px;
+}
+
+.team__role {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--ok);
+}
+
+.team__text {
+  margin: 0;
+  font-size: 0.99rem;
+  max-width: 58ch;
+}
+
+/* --- Objetivos de Desenvolvimento Sustentável --- */
+
+.sdg {
+  margin-top: var(--sp-7);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line);
+}
+
+.sdg__intro {
+  font-size: 0.95rem;
+  color: var(--text-dim);
+  max-width: 72ch;
+  margin-bottom: var(--sp-5);
+}
+
+.sdg__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--sp-5);
+}
+
+.sdg__n {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1;
+  color: var(--ok);
+  margin-bottom: var(--sp-3);
+}
+
+.sdg__title {
+  font-size: 1rem;
+  margin: 0 0 6px;
+}
+
+.sdg__text {
+  margin: 0;
+  font-size: 0.93rem;
+}
+
+@media (max-width: 760px) {
+  .team__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-3);
+  }
+}

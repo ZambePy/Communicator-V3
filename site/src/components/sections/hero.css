@@ -1,0 +1,168 @@
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  /* O cabeçalho e transparente e flutua sobre esta faixa, então a
+     altura dele entra no respiro superior. */
+  padding-block: calc(var(--header-h) + var(--sp-6)) var(--sp-9);
+  overflow: hidden;
+}
+
+.hero__inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 900px;
+}
+
+.hero__logo {
+  margin-bottom: var(--sp-4);
+}
+
+.hero__tagline {
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 2vw, 1.5rem);
+  color: var(--text-soft);
+  letter-spacing: 0.02em;
+  margin: 0 0 var(--sp-6);
+  position: relative;
+  padding-bottom: var(--sp-5);
+}
+
+/* Filete que se desenha sob a assinatura, separando marca e mensagem. */
+.hero__tagline::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  translate: -50% 0;
+  width: 74px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--blue-400), var(--teal-300));
+  transform-origin: center;
+  animation: hero-rule 900ms var(--ease-out) 500ms both;
+}
+
+@keyframes hero-rule {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+.hero__title {
+  font-size: var(--fs-display);
+  line-height: 1.16;
+  margin-bottom: var(--sp-5);
+  /* As quebras são feitas a mão no JSX; limitar a largura aqui
+     provocaria uma segunda quebra automática dentro da máscara. */
+  max-width: 100%;
+}
+
+.hero__title-mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.08em;
+}
+
+.hero__title-line {
+  display: block;
+  animation: word-rise 1s var(--ease-out) both;
+}
+
+.hero__lead {
+  max-width: 62ch;
+  margin-bottom: var(--sp-5);
+}
+
+/* Eco visual do campo de texto do produto. */
+.hero__say {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--sp-4) var(--sp-5);
+  margin-bottom: var(--sp-6);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--teal);
+  background: var(--surface-2);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  min-width: min(430px, 100%);
+  text-align: left;
+}
+
+.hero__say-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.hero__say-text {
+  margin: 0;
+  font-size: 1.28rem;
+  font-weight: 500;
+  color: var(--text);
+  min-height: 1.6em;
+}
+
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  justify-content: center;
+  margin-bottom: var(--sp-4);
+}
+
+.hero__fine {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.hero__scroll {
+  position: absolute;
+  bottom: var(--sp-5);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.hero__scroll-line {
+  width: 1px;
+  height: 44px;
+  background: linear-gradient(180deg, transparent, var(--teal-300));
+  animation: float-slow 3s var(--ease-in-out) infinite;
+}
+
+.hero__scroll-text {
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+@media (max-width: 720px) {
+  .hero {
+    min-height: auto;
+    padding-block: calc(var(--header-h) + var(--sp-5)) var(--sp-8);
+  }
+  .hero__scroll {
+    display: none;
+  }
+}

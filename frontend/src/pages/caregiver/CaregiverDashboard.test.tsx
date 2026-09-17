@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
+import i18n from '../../i18n';
 import { CaregiverDashboard } from './CaregiverDashboard';
 
 let mockIsCaregiver = false;
@@ -39,9 +40,10 @@ vi.mock('../../components/ui/CaregiverPageLayout', () => ({
 }));
 
 describe('CaregiverDashboard PIN & Keypad Access', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockIsCaregiver = false;
+    await i18n.changeLanguage('pt-BR');
   });
 
   it('deve exibir tela de restrição e permitir autenticar pelo teclado virtual numérico', () => {

@@ -1,0 +1,93 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.logo__img {
+  width: auto;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* A assinatura horizontal tem proporcao 2417x1320, com muito ar em
+   volta do desenho; a altura util e definida pelo tamanho escolhido. */
+.logo--full .logo__img {
+  height: var(--logo-h, 46px);
+}
+
+.logo--symbol .logo__img {
+  height: var(--logo-h, 34px);
+  width: var(--logo-h, 34px);
+}
+
+.logo--sm {
+  --logo-h: 38px;
+}
+.logo--md {
+  --logo-h: 52px;
+}
+.logo--lg {
+  --logo-h: 78px;
+}
+.logo--xl {
+  --logo-h: clamp(88px, 13vw, 150px);
+}
+
+.logo__img {
+  transition: transform var(--dur) var(--ease-spring);
+}
+
+.logo:hover .logo__img {
+  transform: scale(1.03);
+}
+
+/* ---------- símbolo isolado, com halo e aneis ---------- */
+.irismark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  margin-inline: auto;
+}
+
+.irismark__img {
+  position: relative;
+  z-index: 2;
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 40px rgba(2, 7, 16, 0.45));
+}
+
+.irismark__img.is-spinning {
+  animation: iris-spin 44s linear infinite;
+}
+
+.irismark__halo {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(45, 100, 190, 0.55), transparent 68%);
+  filter: blur(30px);
+  animation: iris-pulse 6s var(--ease-in-out) infinite;
+}
+
+.irismark__ring {
+  position: absolute;
+  inset: 4%;
+  border-radius: 50%;
+  border: 1px solid var(--accent-line);
+  animation: ring-expand 5s var(--ease-out) infinite;
+}
+
+.irismark__ring--2 {
+  animation-delay: 2.5s;
+  border-color: var(--ok-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .irismark__img.is-spinning {
+    animation: none;
+  }
+}

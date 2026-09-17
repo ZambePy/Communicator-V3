@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  UserCog,
   Clock,
+  UserCog,
   Mic,
   Volume2,
   VolumeX,
@@ -53,7 +53,8 @@ import {
 import { useCloud } from '../cloud/CloudContext';
 import { infoDoApp } from '../cloud/armazenamento';
 import { LanguageSwitcher } from '../components/ui/LanguageSwitcher';
-import { GazeButton } from '../components/ui/GazeButton';
+import { PortaoDoPin } from '../components/ui/PortaoDoPin';
+import { useDevMode } from '../devMode';
 import { useGaze } from '../context/GazeContext';
 import { useReminders } from '../context/ReminderContext';
 import {
@@ -147,13 +148,13 @@ const MonitorBrightnessSlider: React.FC = () => {
           fontSize: '0.95rem',
           fontWeight: 700,
           marginBottom: '0.5rem',
-          color: 'var(--color-text-base, #1e293b)',
+          color: 'var(--color-text-base)',
         }}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Monitor size={16} /> Brilho do monitor (todo o sistema)
         </span>
-        <span style={{ color: '#1B54A8' }}>{value}%</span>
+        <span style={{ color: 'var(--color-primary)' }}>{value}%</span>
       </label>
       <input
         id="brightness-monitor"
@@ -167,12 +168,12 @@ const MonitorBrightnessSlider: React.FC = () => {
           setCurrent(v);
           updateSettings({ monitorBrightness: v });
         }}
-        style={{ width: '100%', accentColor: '#1B54A8', height: '2rem', cursor: 'pointer' }}
+        style={{ width: '100%', accentColor: 'var(--color-primary)', height: '2rem', cursor: 'pointer' }}
       />
       <div
         style={{
           fontSize: '0.75rem',
-          color: 'var(--color-text-base, #94a3b8)',
+          color: 'var(--color-text-muted)',
           opacity: 0.7,
           marginTop: '0.25rem',
         }}
@@ -200,10 +201,9 @@ export const SettingsScreen: React.FC = () => {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
   const { isCaregiver, loginCaregiver } = useAuth();
+  const devMode = useDevMode();
   const toast = useToast();
 
-  const [pin, setPin] = useState('');
-  const [pinError, setPinError] = useState<string | null>(null);
 
   // Estado da voz clonada local (só para mostrar a situação; a tela própria
   // faz a importação e o download do modelo).
@@ -486,17 +486,6 @@ export const SettingsScreen: React.FC = () => {
     );
   };
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginCaregiver(pin)) {
-      setPinError(null);
-      setPin('');
-    } else {
-      setPinError(t('settings.auth.pinError'));
-      setPin('');
-    }
-  };
-
   const handleBackup = () => {
     const data = JSON.stringify(settings, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
@@ -511,233 +500,13 @@ export const SettingsScreen: React.FC = () => {
 
   if (!isCaregiver) {
     return (
-      <main
-        role="main"
-        aria-labelledby="settings-auth-title"
-        style={{
-          minHeight: '100vh',
-          background:
-            'var(--settings-bg, linear-gradient(160deg, #f0f4ff 0%, #e8f0fb 50%, #f1f5f9 100%))',
-          transition: 'background 0.4s ease',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '2rem',
-        }}
-      >
-        <div
-          className="glass animate-fade-in-up"
-          style={{
-            padding: '3rem',
-            borderRadius: '2.5rem',
-            maxWidth: 480,
-            width: '100%',
-            textAlign: 'center',
-          }}
-        >
-          <div
-            aria-hidden="true"
-            style={{
-              width: '5rem',
-              height: '5rem',
-              background: 'linear-gradient(135deg, #dbeafe, #eff6ff)',
-              borderRadius: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 1.5rem',
-            }}
-          >
-            <UserCog size={40} color="#1B54A8" />
-          </div>
-          <h2
-            id="settings-auth-title"
-            style={{ fontSize: '2rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.5rem' }}
-          >
-            {t('settings.auth.title')}
-          </h2>
-          <p
-            style={{
-              color: 'var(--color-text-base)',
-              opacity: 0.9,
-              marginBottom: '2rem',
-              fontFamily: 'system-ui, sans-serif',
-            }}
-          >
-            {t('settings.auth.hint')}
-          </p>
-
-          <form
-            onSubmit={handleLogin}
-            style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
-          >
-            <label htmlFor="caregiver-pin" className="sr-only">
-              {t('settings.auth.pinLabel')}
-            </label>
-            <input
-              id="caregiver-pin"
-              type="password"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              maxLength={8}
-              autoComplete="one-time-code"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="••••"
-              aria-invalid={pinError ? true : undefined}
-              aria-describedby={pinError ? 'pin-error' : undefined}
-              style={{
-                textAlign: 'center',
-                fontSize: '3rem',
-                letterSpacing: '1rem',
-                padding: '1rem',
-                borderRadius: '1rem',
-                border: pinError ? '2px solid #dc2626' : '2px solid #e2e8f0',
-                outline: 'none',
-                fontFamily: 'Boldonse, sans-serif',
-              }}
-            />
-            {pinError && (
-              <p id="pin-error" role="alert" style={{ color: '#dc2626', fontSize: '0.9rem' }}>
-                {pinError}
-              </p>
-            )}
-
-            {/* Teclado Numérico Virtual */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '0.75rem',
-                margin: '1.5rem 0',
-                maxWidth: '300px',
-                alignSelf: 'center',
-                width: '100%',
-              }}
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-                <button
-                  key={num}
-                  type="button"
-                  onClick={() => pin.length < 8 && setPin((p) => p + num)}
-                  style={{
-                    height: '60px',
-                    borderRadius: '1rem',
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    fontSize: '1.5rem',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    color: '#1e293b',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-                  }}
-                >
-                  {num}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setPin('')}
-                style={{
-                  height: '60px',
-                  borderRadius: '1rem',
-                  background: '#fef2f2',
-                  border: '1px solid #fee2e2',
-                  fontSize: '1.1rem',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  color: '#ef4444',
-                }}
-              >
-                Limpar
-              </button>
-              <button
-                type="button"
-                onClick={() => pin.length < 8 && setPin((p) => p + '0')}
-                style={{
-                  height: '60px',
-                  borderRadius: '1rem',
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  fontSize: '1.5rem',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  color: '#1e293b',
-                }}
-              >
-                0
-              </button>
-              <button
-                type="button"
-                onClick={() => setPin((p) => p.slice(0, -1))}
-                style={{
-                  height: '60px',
-                  borderRadius: '1rem',
-                  background: '#f1f5f9',
-                  border: '1px solid #e2e8f0',
-                  fontSize: '1.1rem',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  color: '#475569',
-                }}
-              >
-                Apagar
-              </button>
-            </div>
-
-            {/* A SAÍDA precisa ser alcançável POR OLHAR.
-                O teclado numérico acima é do cuidador, com mouse, e por isso
-                pode ter teclas de 60 px. Mas /settings é um dos cartões do menu
-                do paciente: ele chega aqui por fixação, por engano ou por
-                curiosidade, e cai neste portão. Com um "Cancelar" de ~50 px de
-                altura, a única forma de sair era chamar alguém — uma tela sem
-                saída, que é a pior coisa que este produto pode ter. */}
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
-              <GazeButton
-                type="button"
-                onClick={() => navigate('/menu')}
-                aria-label={t('common.cancel')}
-                height={200}
-                data-dwell-ms={1800}
-                noWarn
-                style={{
-                  flex: 1,
-                  minHeight: 200,
-                  padding: '1rem',
-                  background: '#f1f5f9',
-                  borderRadius: '1rem',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '1.15rem',
-                  fontWeight: 700,
-                  color: 'var(--color-text-base)',
-                  opacity: 0.9,
-                }}
-              >
-                {t('common.cancel')}
-              </GazeButton>
-              <button
-                type="submit"
-                aria-label={t('settings.auth.submit')}
-                style={{
-                  flex: 1,
-                  padding: '1rem',
-                  background: 'linear-gradient(135deg, #1B54A8, #2563eb)',
-                  borderRadius: '1rem',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  fontWeight: 700,
-                  color: 'white',
-                  boxShadow: '0 4px 16px rgba(27,84,168,0.3)',
-                }}
-              >
-                {t('settings.auth.submit')}
-              </button>
-            </div>
-          </form>
-        </div>
-      </main>
+      <PortaoDoPin
+        titulo={t('settings.auth.title')}
+        dica={t('settings.auth.hint')}
+        aoEntrar={loginCaregiver}
+        mensagemDeErro={t('settings.auth.pinError')}
+        aoCancelar={() => navigate('/menu')}
+      />
     );
   }
 
@@ -758,8 +527,8 @@ export const SettingsScreen: React.FC = () => {
           aria-labelledby="dashboard-link-title"
           style={{
             ...cardStyle,
-            background: 'rgba(34, 197, 94, 0.08)',
-            borderColor: 'rgba(34, 197, 94, 0.2)',
+            background: 'var(--tint-info-bg)',
+            borderColor: 'var(--tint-info-border)',
           }}
         >
           <h2
@@ -769,7 +538,7 @@ export const SettingsScreen: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
-              color: '#4ade80',
+              color: 'var(--color-primary)',
               marginTop: 0,
             }}
           >
@@ -777,7 +546,7 @@ export const SettingsScreen: React.FC = () => {
           </h2>
           <p
             style={{
-              color: '#cbd5e1',
+              color: 'var(--color-text-muted)',
               opacity: 0.9,
               marginBottom: '1.5rem',
               fontSize: '1rem',
@@ -791,17 +560,17 @@ export const SettingsScreen: React.FC = () => {
             onClick={() => navigate('/caregiver')}
             style={{
               padding: '0.8rem 1.8rem',
-              background: '#22c55e',
+              background: 'var(--color-primary)',
               border: 'none',
               color: 'white',
               borderRadius: '0.75rem',
               fontWeight: 700,
               cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)',
+              boxShadow: '0 4px 12px var(--color-card-shadow)',
               fontSize: '1rem',
               transition: 'background 0.2s',
             }}
-            {...hoverAndFocusBackground('#22c55e', '#15803d')}
+            {...hoverAndFocusBackground('var(--color-primary)', 'var(--color-primary-dark, #143e80)')}
           >
             {t('settings.dashboardLink.button')}
           </button>
@@ -825,8 +594,8 @@ export const SettingsScreen: React.FC = () => {
           aria-labelledby="guide-link-title"
           style={{
             ...cardStyle,
-            background: 'rgba(245, 158, 11, 0.08)',
-            borderColor: 'rgba(245, 158, 11, 0.2)',
+            background: 'var(--tint-info-bg)',
+            borderColor: 'var(--tint-info-border)',
           }}
         >
           <h2
@@ -836,7 +605,7 @@ export const SettingsScreen: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
-              color: '#f59e0b',
+              color: 'var(--color-primary)',
               marginTop: 0,
             }}
           >
@@ -844,7 +613,7 @@ export const SettingsScreen: React.FC = () => {
           </h2>
           <p
             style={{
-              color: '#cbd5e1',
+              color: 'var(--color-text-muted)',
               opacity: 0.9,
               marginBottom: '1.5rem',
               fontSize: '1rem',
@@ -858,17 +627,17 @@ export const SettingsScreen: React.FC = () => {
             onClick={() => navigate('/caregiver/guide?from=/settings')}
             style={{
               padding: '0.8rem 1.8rem',
-              background: '#f59e0b',
+              background: 'var(--color-primary)',
               border: 'none',
               color: 'white',
               borderRadius: '0.75rem',
               fontWeight: 700,
               cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
+              boxShadow: '0 4px 12px var(--color-card-shadow)',
               fontSize: '1rem',
               transition: 'background 0.2s',
             }}
-            {...hoverAndFocusBackground('#f59e0b', '#d97706')}
+            {...hoverAndFocusBackground('var(--color-primary)', 'var(--color-primary-dark, #143e80)')}
           >
             Abrir Guia do Cuidador
           </button>
@@ -883,8 +652,8 @@ export const SettingsScreen: React.FC = () => {
               marginBottom: '1.25rem',
             }}
           >
-            <Clock size={28} color="#1B54A8" aria-hidden="true" />
-            <h2 id="dwell-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>
+            <Clock size={28} color="var(--color-primary)" aria-hidden="true" />
+            <h2 id="dwell-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
               {t('settings.dwell.title')}
             </h2>
           </div>
@@ -908,11 +677,11 @@ export const SettingsScreen: React.FC = () => {
             }}
           >
             {settings.soundEnabled ? (
-              <Volume2 size={28} color="#1B54A8" aria-hidden="true" />
+              <Volume2 size={28} color="var(--color-primary)" aria-hidden="true" />
             ) : (
-              <VolumeX size={28} color="#64748b" aria-hidden="true" />
+              <VolumeX size={28} color="var(--color-text-muted)" aria-hidden="true" />
             )}
-            <h2 id="sound-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>
+            <h2 id="sound-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
               {t('settings.sound.title')}
             </h2>
           </div>
@@ -924,8 +693,8 @@ export const SettingsScreen: React.FC = () => {
               padding: '1rem 1.5rem',
               borderRadius: '1rem',
               border: '2px solid var(--color-card-border)',
-              background: settings.soundEnabled ? '#1B54A8' : 'white',
-              color: settings.soundEnabled ? 'white' : '#475569',
+              background: settings.soundEnabled ? 'var(--color-primary)' : 'var(--color-card-bg)',
+              color: settings.soundEnabled ? 'white' : 'var(--color-text-base)',
               cursor: 'pointer',
               fontWeight: 700,
             }}
@@ -945,16 +714,16 @@ export const SettingsScreen: React.FC = () => {
             }}
           >
             {settings.theme === 'dark' ? (
-              <Moon size={28} color="#1B54A8" aria-hidden="true" />
+              <Moon size={28} color="var(--color-primary)" aria-hidden="true" />
             ) : (
-              <Sun size={28} color="#1B54A8" aria-hidden="true" />
+              <Sun size={28} color="var(--color-primary)" aria-hidden="true" />
             )}
             <h2
               id="theme-title"
               style={{
                 fontSize: '1.25rem',
                 fontWeight: 700,
-                color: 'var(--color-text-base, #1e293b)',
+                color: 'var(--color-text-base)',
               }}
             >
               Tema Visual
@@ -987,9 +756,9 @@ export const SettingsScreen: React.FC = () => {
                     cursor: 'pointer',
                     fontWeight: 700,
                     border: '2px solid',
-                    background: active ? '#1B54A8' : 'transparent',
-                    color: active ? 'white' : 'var(--color-text-base, #475569)',
-                    borderColor: active ? '#1B54A8' : '#e2e8f0',
+                    background: active ? 'var(--color-primary)' : 'transparent',
+                    color: active ? 'white' : 'var(--color-text-base)',
+                    borderColor: active ? 'var(--color-primary)' : 'var(--color-card-border)',
                   }}
                 >
                   {icon} {label}
@@ -1010,13 +779,13 @@ export const SettingsScreen: React.FC = () => {
           <div
             style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}
           >
-            <SunDim size={28} color="#1B54A8" aria-hidden="true" />
+            <SunDim size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="visual-comfort-title"
               style={{
                 fontSize: '1.25rem',
                 fontWeight: 700,
-                color: 'var(--color-text-base, #1e293b)',
+                color: 'var(--color-text-base)',
               }}
             >
               Conforto Visual
@@ -1026,7 +795,7 @@ export const SettingsScreen: React.FC = () => {
             style={{
               margin: '0 0 1.25rem',
               fontSize: '0.95rem',
-              color: 'var(--color-text-base, #64748b)',
+              color: 'var(--color-text-muted)',
               opacity: 0.75,
               lineHeight: 1.5,
             }}
@@ -1046,11 +815,11 @@ export const SettingsScreen: React.FC = () => {
                 fontSize: '0.95rem',
                 fontWeight: 700,
                 marginBottom: '0.5rem',
-                color: 'var(--color-text-base, #1e293b)',
+                color: 'var(--color-text-base)',
               }}
             >
               <span>Brilho da tela do IrisFlow</span>
-              <span style={{ color: '#1B54A8' }}>
+              <span style={{ color: 'var(--color-primary)' }}>
                 {Math.round(settings.brightnessLevel * 100)}%
               </span>
             </label>
@@ -1067,14 +836,14 @@ export const SettingsScreen: React.FC = () => {
               aria-valuemin={40}
               aria-valuemax={100}
               aria-valuenow={Math.round(settings.brightnessLevel * 100)}
-              style={{ width: '100%', accentColor: '#1B54A8', height: '2rem', cursor: 'pointer' }}
+              style={{ width: '100%', accentColor: 'var(--color-primary)', height: '2rem', cursor: 'pointer' }}
             />
             <div
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 fontSize: '0.75rem',
-                color: 'var(--color-text-base, #94a3b8)',
+                color: 'var(--color-text-muted)',
                 opacity: 0.7,
                 marginTop: '0.25rem',
               }}
@@ -1098,18 +867,18 @@ export const SettingsScreen: React.FC = () => {
               justifyContent: 'space-between',
               gap: '1rem',
               padding: '0.85rem 1rem',
-              background: 'var(--color-primary-light, #f1f5f9)',
+              background: 'var(--color-primary-light)',
               borderRadius: '0.9rem',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <Droplet size={22} color="#d97706" aria-hidden="true" />
+              <Droplet size={22} color="var(--color-warn)" aria-hidden="true" />
               <div>
                 <div
                   style={{
                     fontWeight: 700,
                     fontSize: '0.95rem',
-                    color: 'var(--color-text-base, #1e293b)',
+                    color: 'var(--color-text-base)',
                   }}
                 >
                   Filtro âmbar
@@ -1117,7 +886,7 @@ export const SettingsScreen: React.FC = () => {
                 <div
                   style={{
                     fontSize: '0.8rem',
-                    color: 'var(--color-text-base, #64748b)',
+                    color: 'var(--color-text-muted)',
                     opacity: 0.75,
                   }}
                 >
@@ -1137,7 +906,7 @@ export const SettingsScreen: React.FC = () => {
                 borderRadius: 999,
                 border: 'none',
                 cursor: 'pointer',
-                background: settings.amberFilter ? '#d97706' : '#cbd5e1',
+                background: settings.amberFilter ? 'var(--color-warn)' : 'var(--field-border)',
                 position: 'relative',
                 transition: 'background 0.2s',
               }}
@@ -1151,7 +920,7 @@ export const SettingsScreen: React.FC = () => {
                   width: 24,
                   height: 24,
                   borderRadius: '50%',
-                  background: 'white',
+                  background: 'var(--color-card-bg)',
                   boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
                   transition: 'left 0.2s',
                 }}
@@ -1172,7 +941,7 @@ export const SettingsScreen: React.FC = () => {
           >
             <h2
               id="language-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}
+              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
             >
               {t('settings.language.title')}
             </h2>
@@ -1191,8 +960,8 @@ export const SettingsScreen: React.FC = () => {
               marginBottom: '1.25rem',
             }}
           >
-            <Mic size={28} color="#1B54A8" aria-hidden="true" />
-            <h2 id="voice-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>
+            <Mic size={28} color="var(--color-primary)" aria-hidden="true" />
+            <h2 id="voice-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
               {t('settings.voice.title')}
             </h2>
             {/* O mesmo selo da tela de voz. Quem vê "Voz personalizada" nos
@@ -1205,9 +974,9 @@ export const SettingsScreen: React.FC = () => {
                 textTransform: 'uppercase',
                 padding: '0.2rem 0.55rem',
                 borderRadius: '0.5rem',
-                background: '#fef3c7',
-                color: '#92400e',
-                border: '1px solid #fbbf24',
+                background: 'var(--tint-warn-bg)',
+                color: 'var(--tint-warn-text)',
+                border: '1px solid var(--tint-warn-border)',
               }}
             >
               Experimental
@@ -1234,7 +1003,7 @@ export const SettingsScreen: React.FC = () => {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.85rem 1.5rem',
-                background: '#1e293b',
+                background: 'var(--color-primary)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '1rem',
@@ -1244,7 +1013,7 @@ export const SettingsScreen: React.FC = () => {
             >
               <Mic size={20} aria-hidden="true" /> {t('settings.voice.open')}
             </button>
-            <span role="status" style={{ color: estadoDaVoz?.voz.importada && estadoDaVoz.ativa ? '#16a34a' : 'var(--color-text-base)', fontWeight: 700, opacity: estadoDaVoz?.voz.importada ? 1 : 0.8 }}>
+            <span role="status" style={{ color: estadoDaVoz?.voz.importada && estadoDaVoz.ativa ? 'var(--color-ok)' : 'var(--color-text-base)', fontWeight: 700, opacity: estadoDaVoz?.voz.importada ? 1 : 0.8 }}>
               {estadoDaVoz === null
                 ? t('settings.voice.onlyDesktop')
                 : estadoDaVoz.voz.importada
@@ -1256,10 +1025,10 @@ export const SettingsScreen: React.FC = () => {
             style={{
               marginTop: '1.25rem',
               padding: '1rem 1.25rem',
-              background: '#fffbeb',
-              border: '1px solid #fde68a',
+              background: 'var(--tint-warn-bg)',
+              border: '1px solid var(--tint-warn-border)',
               borderRadius: '1rem',
-              color: '#92400e',
+              color: 'var(--tint-warn-text)',
               fontSize: '0.85rem',
               fontFamily: 'system-ui, sans-serif',
             }}
@@ -1274,8 +1043,8 @@ export const SettingsScreen: React.FC = () => {
             baixa modelo e não fala com a rede. */}
         <section aria-labelledby="assistente-title" style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-            <Sparkles size={28} color="#F0A030" aria-hidden="true" />
-            <h2 id="assistente-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>
+            <Sparkles size={28} color="var(--color-accent)" aria-hidden="true" />
+            <h2 id="assistente-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
               Assistente de escrita
             </h2>
           </div>
@@ -1306,9 +1075,9 @@ export const SettingsScreen: React.FC = () => {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.85rem 1.5rem',
-                background: assistenteLigado ? '#1e293b' : 'transparent',
-                color: assistenteLigado ? 'white' : '#1e293b',
-                border: assistenteLigado ? 'none' : '2px solid #94a3b8',
+                background: assistenteLigado ? 'var(--color-primary)' : 'transparent',
+                color: assistenteLigado ? 'white' : 'var(--color-text-base)',
+                border: assistenteLigado ? 'none' : '2px solid var(--field-border)',
                 borderRadius: '1rem',
                 cursor: 'pointer',
                 fontWeight: 700,
@@ -1337,8 +1106,8 @@ export const SettingsScreen: React.FC = () => {
               style={{
                 padding: '0.85rem 1.25rem',
                 background: 'transparent',
-                color: '#b91c1c',
-                border: '2px solid #fecaca',
+                color: 'var(--tint-danger-text)',
+                border: '2px solid var(--tint-danger-border)',
                 borderRadius: '1rem',
                 cursor: 'pointer',
                 fontWeight: 700,
@@ -1354,8 +1123,8 @@ export const SettingsScreen: React.FC = () => {
             entender uma falha à distância. */}
         <section aria-labelledby="apresentacao-title" style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-            <Monitor size={28} color="#1B54A8" aria-hidden="true" />
-            <h2 id="apresentacao-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>
+            <Monitor size={28} color="var(--color-primary)" aria-hidden="true" />
+            <h2 id="apresentacao-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
               Apresentação e suporte
             </h2>
           </div>
@@ -1387,9 +1156,9 @@ export const SettingsScreen: React.FC = () => {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.85rem 1.5rem',
-                background: apresentacao ? '#F0A030' : 'transparent',
-                color: apresentacao ? '#1a1205' : '#1e293b',
-                border: apresentacao ? 'none' : '2px solid #94a3b8',
+                background: apresentacao ? 'var(--color-accent)' : 'transparent',
+                color: apresentacao ? '#1a1205' : 'var(--color-text-base)',
+                border: apresentacao ? 'none' : '2px solid var(--field-border)',
                 borderRadius: '1rem',
                 cursor: 'pointer',
                 fontWeight: 700,
@@ -1409,7 +1178,7 @@ export const SettingsScreen: React.FC = () => {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.85rem 1.5rem',
-                background: '#1e293b',
+                background: 'var(--color-primary)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '1rem',
@@ -1438,9 +1207,9 @@ export const SettingsScreen: React.FC = () => {
                 alignItems: 'center',
                 gap: '0.5rem',
                 padding: '0.85rem 1.5rem',
-                background: relatosLigados ? '#1e293b' : 'transparent',
-                color: relatosLigados ? 'white' : '#1e293b',
-                border: relatosLigados ? 'none' : '2px solid #94a3b8',
+                background: relatosLigados ? 'var(--color-primary)' : 'transparent',
+                color: relatosLigados ? 'white' : 'var(--color-text-base)',
+                border: relatosLigados ? 'none' : '2px solid var(--field-border)',
                 borderRadius: '1rem',
                 cursor: 'pointer',
                 fontWeight: 700,
@@ -1465,8 +1234,8 @@ export const SettingsScreen: React.FC = () => {
               style={{
                 padding: '0.85rem 1.25rem',
                 background: 'transparent',
-                color: cloud.vinculo ? '#1e293b' : '#94a3b8',
-                border: '2px solid #cbd5e1',
+                color: cloud.vinculo ? 'var(--color-text-base)' : 'var(--color-text-muted)',
+                border: '2px solid var(--field-border)',
                 borderRadius: '1rem',
                 cursor: cloud.vinculo ? 'pointer' : 'not-allowed',
                 fontWeight: 700,
@@ -1479,10 +1248,10 @@ export const SettingsScreen: React.FC = () => {
             style={{
               marginTop: '1rem',
               padding: '1rem 1.25rem',
-              background: '#f0f9ff',
-              border: '1px solid #bae6fd',
+              background: 'var(--tint-info-bg)',
+              border: '1px solid var(--tint-info-border)',
               borderRadius: '1rem',
-              color: '#075985',
+              color: 'var(--tint-info-text)',
               fontSize: '0.85rem',
               fontFamily: 'system-ui, sans-serif',
               lineHeight: 1.6,
@@ -1501,7 +1270,7 @@ export const SettingsScreen: React.FC = () => {
               alignItems: 'center',
               gap: '0.75rem',
               flexWrap: 'wrap',
-              color: '#475569',
+              color: 'var(--color-text-muted)',
               fontSize: '0.9rem',
               fontFamily: 'system-ui, sans-serif',
             }}
@@ -1527,7 +1296,7 @@ export const SettingsScreen: React.FC = () => {
                 onClick={() => void instalarAtualizacao()}
                 style={{
                   padding: '0.6rem 1rem',
-                  background: '#F0A030',
+                  background: 'var(--color-accent)',
                   color: '#1a1205',
                   border: 'none',
                   borderRadius: '0.85rem',
@@ -1546,8 +1315,8 @@ export const SettingsScreen: React.FC = () => {
                 style={{
                   padding: '0.6rem 1rem',
                   background: 'transparent',
-                  color: '#1e293b',
-                  border: '2px solid #cbd5e1',
+                  color: 'var(--color-text-base)',
+                  border: '2px solid var(--field-border)',
                   borderRadius: '0.85rem',
                   cursor: 'pointer',
                   fontWeight: 700,
@@ -1560,6 +1329,8 @@ export const SettingsScreen: React.FC = () => {
         </section>
 
 
+        {/* Suavização do cursor (presets do filtro One-Euro): parâmetro de engenharia. O cuidador ajusta o tempo de dwell, não o filtro. */}
+        {devMode && (
         <section aria-labelledby="filter-title" style={cardStyle}>
           <div
             style={{
@@ -1569,10 +1340,10 @@ export const SettingsScreen: React.FC = () => {
               marginBottom: '1.25rem',
             }}
           >
-            <Clock size={28} color="#1B54A8" aria-hidden="true" />
+            <Clock size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="filter-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}
+              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
             >
               Suavização do cursor
             </h2>
@@ -1616,9 +1387,9 @@ export const SettingsScreen: React.FC = () => {
                       cursor: 'pointer',
                       fontWeight: 700,
                       border: '2px solid',
-                      background: active ? 'linear-gradient(135deg, #1B54A8, #2563eb)' : 'white',
-                      color: active ? 'white' : '#475569',
-                      borderColor: active ? '#1B54A8' : '#e2e8f0',
+                      background: active ? 'var(--color-primary)' : 'var(--color-card-bg)',
+                      color: active ? 'white' : 'var(--color-text-base)',
+                      borderColor: active ? 'var(--color-primary)' : 'var(--color-card-border)',
                     }}
                   >
                     {label}
@@ -1628,6 +1399,7 @@ export const SettingsScreen: React.FC = () => {
             )}
           </div>
         </section>
+        )}
 
         <section aria-labelledby="accuracy-title" style={cardStyle}>
           <div
@@ -1638,10 +1410,10 @@ export const SettingsScreen: React.FC = () => {
               marginBottom: '1.25rem',
             }}
           >
-            <Target size={28} color="#1B54A8" aria-hidden="true" />
+            <Target size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="accuracy-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}
+              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
             >
               Teste de precisão
             </h2>
@@ -1916,7 +1688,7 @@ export const SettingsScreen: React.FC = () => {
                 padding: '0.6rem 1.2rem',
                 borderRadius: '1.5rem',
                 border: 'none',
-                background: 'var(--color-accent, #1B54A8)',
+                background: 'var(--color-primary)',
                 color: '#fff',
                 fontSize: '0.88rem',
                 fontWeight: 700,
@@ -1955,7 +1727,7 @@ export const SettingsScreen: React.FC = () => {
               padding: '1rem 1.5rem',
               borderRadius: '1rem',
               border: 'none',
-              background: accuracyRunning ? '#94a3b8' : 'linear-gradient(135deg, #1B54A8, #2563eb)',
+              background: accuracyRunning ? 'var(--color-text-muted)' : 'var(--color-primary)',
               color: 'white',
               fontWeight: 700,
               cursor: accuracyRunning ? 'not-allowed' : 'pointer',
@@ -1973,10 +1745,10 @@ export const SettingsScreen: React.FC = () => {
               style={{
                 marginTop: '1.25rem',
                 padding: '1rem 1.25rem',
-                background: '#f0f9ff',
-                border: '1px solid #bae6fd',
+                background: 'var(--tint-info-bg)',
+                border: '1px solid var(--tint-info-border)',
                 borderRadius: '1rem',
-                color: '#0c4a6e',
+                color: 'var(--tint-info-text)',
                 fontSize: '0.9rem',
                 fontFamily: 'system-ui, sans-serif',
               }}
@@ -2000,6 +1772,8 @@ export const SettingsScreen: React.FC = () => {
           )}
         </section>
 
+        {/* Gravador de sessão: ferramenta de desenvolvimento (frames brutos para reprocessar o rastreador). Não é ajuste de cuidador. */}
+        {devMode && (
         <section aria-labelledby="recorder-title" style={cardStyle}>
           <div
             style={{
@@ -2009,10 +1783,10 @@ export const SettingsScreen: React.FC = () => {
               marginBottom: '1.25rem',
             }}
           >
-            <Video size={28} color="#1B54A8" aria-hidden="true" />
+            <Video size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="recorder-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}
+              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
             >
               Gravador de sessão
             </h2>
@@ -2040,8 +1814,8 @@ export const SettingsScreen: React.FC = () => {
                 borderRadius: '1rem',
                 border: 'none',
                 background: recActive
-                  ? 'linear-gradient(135deg, #dc2626, #b91c1c)'
-                  : 'linear-gradient(135deg, #1B54A8, #2563eb)',
+                  ? 'var(--color-danger)'
+                  : 'var(--color-primary)',
                 color: 'white',
                 fontWeight: 700,
                 cursor: 'pointer',
@@ -2067,7 +1841,7 @@ export const SettingsScreen: React.FC = () => {
                 padding: '1rem 1.5rem',
                 borderRadius: '1rem',
                 border: '2px solid var(--color-card-border)',
-                background: recStats.frames === 0 ? '#e2e8f0' : 'var(--color-card-bg)',
+                background: recStats.frames === 0 ? 'var(--field-bg)' : 'var(--color-card-bg)',
                 color: 'var(--color-text-base)',
                 opacity: recStats.frames === 0 ? 0.5 : 0.9,
                 fontWeight: 700,
@@ -2105,12 +1879,12 @@ export const SettingsScreen: React.FC = () => {
               style={{
                 marginLeft: 'auto',
                 padding: '0.75rem 1.25rem',
-                background: recActive ? '#fef2f2' : '#f1f5f9',
-                border: `1px solid ${recActive ? '#fecaca' : '#e2e8f0'}`,
+                background: recActive ? 'var(--tint-danger-bg)' : 'var(--field-bg)',
+                border: `1px solid ${recActive ? 'var(--tint-danger-border)' : 'var(--field-border)'}`,
                 borderRadius: '0.75rem',
                 fontSize: '0.9rem',
                 fontFamily: 'system-ui, sans-serif',
-                color: recActive ? '#991b1b' : '#475569',
+                color: recActive ? 'var(--tint-danger-text)' : 'var(--color-text-muted)',
                 fontWeight: 600,
               }}
             >
@@ -2120,6 +1894,7 @@ export const SettingsScreen: React.FC = () => {
             </div>
           </div>
         </section>
+        )}
 
         {/* Lembretes e Rotinas do Paciente */}
         <section aria-labelledby="reminders-title" style={cardStyle}>
@@ -2131,10 +1906,10 @@ export const SettingsScreen: React.FC = () => {
               marginBottom: '1.5rem',
             }}
           >
-            <Clock size={28} color="#1B54A8" aria-hidden="true" />
+            <Clock size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="reminders-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}
+              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
             >
               Lembretes e Rotina Diária
             </h2>
@@ -2154,7 +1929,7 @@ export const SettingsScreen: React.FC = () => {
             <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label
                 htmlFor="reminder-title"
-                style={{ fontSize: '0.9rem', fontWeight: 600, color: '#475569' }}
+                style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-text-muted)' }}
               >
                 Atividade / Lembrete
               </label>
@@ -2188,7 +1963,7 @@ export const SettingsScreen: React.FC = () => {
             >
               <label
                 htmlFor="reminder-time"
-                style={{ fontSize: '0.9rem', fontWeight: 600, color: '#475569' }}
+                style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-text-muted)' }}
               >
                 Horário
               </label>
@@ -2216,7 +1991,7 @@ export const SettingsScreen: React.FC = () => {
                 padding: '0.85rem 1.5rem',
                 borderRadius: '0.75rem',
                 border: 'none',
-                background: '#1B54A8',
+                background: 'var(--color-primary)',
                 color: '#ffffff',
                 fontWeight: 700,
                 fontSize: '1rem',
@@ -2237,14 +2012,14 @@ export const SettingsScreen: React.FC = () => {
               style={{
                 fontSize: '1.05rem',
                 fontWeight: 700,
-                color: '#475569',
+                color: 'var(--color-text-muted)',
                 marginBottom: '1rem',
               }}
             >
               Lembretes Agendados ({reminders.length})
             </h3>
             {reminders.length === 0 ? (
-              <p style={{ fontSize: '0.95rem', color: '#94a3b8', fontStyle: 'italic', margin: 0 }}>
+              <p style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>
                 Nenhum lembrete configurado no momento.
               </p>
             ) : (
@@ -2272,7 +2047,7 @@ export const SettingsScreen: React.FC = () => {
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          color: '#1B54A8',
+                          color: 'var(--color-primary)',
                           fontWeight: 700,
                           fontSize: '0.9rem',
                         }}
@@ -2300,7 +2075,7 @@ export const SettingsScreen: React.FC = () => {
                       style={{
                         background: 'transparent',
                         border: 'none',
-                        color: '#ef4444',
+                        color: 'var(--color-danger)',
                         cursor: 'pointer',
                         padding: '0.5rem',
                         borderRadius: '0.5rem',
@@ -2337,10 +2112,10 @@ export const SettingsScreen: React.FC = () => {
               marginBottom: '1.25rem',
             }}
           >
-            <UserCog size={28} color="#1B54A8" aria-hidden="true" />
+            <UserCog size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="clinical-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}
+              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
             >
               Histórico Clínico e Telemetria (LGPD)
             </h2>
@@ -2355,10 +2130,10 @@ export const SettingsScreen: React.FC = () => {
               marginBottom: '1.5rem',
               fontSize: '0.95rem',
               lineHeight: 1.5,
-              color: '#334155',
+              color: 'var(--color-text-base)',
             }}
           >
-            <p style={{ margin: '0 0 0.75rem 0', fontWeight: 700, color: '#1B54A8' }}>
+            <p style={{ margin: '0 0 0.75rem 0', fontWeight: 700, color: 'var(--color-primary)' }}>
               🔒 Proteção de Dados e Privacidade (LGPD)
             </p>
             <p style={{ margin: 0 }}>
@@ -2374,7 +2149,7 @@ export const SettingsScreen: React.FC = () => {
                 marginTop: '1.25rem',
                 cursor: 'pointer',
                 fontWeight: 700,
-                color: '#1e293b',
+                color: 'var(--color-text-base)',
               }}
             >
               <input
@@ -2415,21 +2190,21 @@ export const SettingsScreen: React.FC = () => {
                     style={{
                       fontSize: '1.05rem',
                       fontWeight: 700,
-                      color: '#475569',
+                      color: 'var(--color-text-muted)',
                       margin: '0 0 1rem 0',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.5rem',
                     }}
                   >
-                    <Activity size={20} color="#1B54A8" /> Histórico de Calibrações (
+                    <Activity size={20} color="var(--color-primary)" /> Histórico de Calibrações (
                     {clinicalData.calibrations.length})
                   </h3>
                   {clinicalData.calibrations.length === 0 ? (
                     <p
                       style={{
                         fontSize: '0.9rem',
-                        color: '#94a3b8',
+                        color: 'var(--color-text-muted)',
                         fontStyle: 'italic',
                         margin: 0,
                       }}
@@ -2458,12 +2233,12 @@ export const SettingsScreen: React.FC = () => {
                               alignItems: 'center',
                               padding: '0.6rem 0.85rem',
                               background: 'var(--color-card-bg)',
-                              border: `1.5px solid ${isHighError ? '#fca5a5' : 'var(--color-card-border)'}`,
+                              border: `1.5px solid ${isHighError ? 'var(--tint-danger-border)' : 'var(--color-card-border)'}`,
                               borderRadius: '0.75rem',
                             }}
                           >
                             <span
-                              style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}
+                              style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontWeight: 500 }}
                             >
                               {dateStr}
                             </span>
@@ -2471,7 +2246,7 @@ export const SettingsScreen: React.FC = () => {
                               style={{
                                 fontSize: '0.95rem',
                                 fontWeight: 800,
-                                color: isHighError ? '#ef4444' : '#16a34a',
+                                color: isHighError ? 'var(--color-danger)' : 'var(--color-ok)',
                               }}
                             >
                               {c.errorDeg.toFixed(2)}° {isHighError ? '(Alto)' : '(Excelente)'}
@@ -2486,9 +2261,9 @@ export const SettingsScreen: React.FC = () => {
                       style={{
                         marginTop: '1rem',
                         fontSize: '0.8rem',
-                        color: '#64748b',
-                        background: 'rgba(245, 158, 11, 0.05)',
-                        border: '1px solid rgba(245, 158, 11, 0.2)',
+                        color: 'var(--color-text-muted)',
+                        background: 'var(--tint-warn-bg)',
+                        border: '1px solid var(--tint-warn-border)',
                         borderRadius: '0.5rem',
                         padding: '0.5rem 0.75rem',
                         lineHeight: 1.4,
@@ -2514,20 +2289,20 @@ export const SettingsScreen: React.FC = () => {
                     style={{
                       fontSize: '1.05rem',
                       fontWeight: 700,
-                      color: '#475569',
+                      color: 'var(--color-text-muted)',
                       margin: '0 0 1rem 0',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.5rem',
                     }}
                   >
-                    <MessageSquare size={20} color="#1B54A8" /> Frases mais Comuns
+                    <MessageSquare size={20} color="var(--color-primary)" /> Frases mais Comuns
                   </h3>
                   {clinicalData.sentences.length === 0 ? (
                     <p
                       style={{
                         fontSize: '0.9rem',
-                        color: '#94a3b8',
+                        color: 'var(--color-text-muted)',
                         fontStyle: 'italic',
                         margin: 0,
                       }}
@@ -2567,7 +2342,7 @@ export const SettingsScreen: React.FC = () => {
                               fontSize: '0.85rem',
                               fontWeight: 800,
                               background: 'rgba(27, 84, 168, 0.08)',
-                              color: '#1B54A8',
+                              color: 'var(--color-primary)',
                               padding: '0.2rem 0.5rem',
                               borderRadius: '0.5rem',
                             }}
@@ -2593,20 +2368,20 @@ export const SettingsScreen: React.FC = () => {
                     style={{
                       fontSize: '1.05rem',
                       fontWeight: 700,
-                      color: '#475569',
+                      color: 'var(--color-text-muted)',
                       margin: '0 0 1rem 0',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.5rem',
                     }}
                   >
-                    <Clock size={20} color="#1B54A8" /> Atividade por Período
+                    <Clock size={20} color="var(--color-primary)" /> Atividade por Período
                   </h3>
                   {clinicalData.sentences.length === 0 ? (
                     <p
                       style={{
                         fontSize: '0.9rem',
-                        color: '#94a3b8',
+                        color: 'var(--color-text-muted)',
                         fontStyle: 'italic',
                         margin: 0,
                       }}
@@ -2632,7 +2407,7 @@ export const SettingsScreen: React.FC = () => {
                                 justifyContent: 'space-between',
                                 alignItems: 'center',
                                 fontSize: '0.95rem',
-                                color: '#475569',
+                                color: 'var(--color-text-muted)',
                               }}
                             >
                               <span style={{ fontWeight: 600 }}>{name}</span>
@@ -2657,7 +2432,7 @@ export const SettingsScreen: React.FC = () => {
                     padding: '0.85rem 1.5rem',
                     borderRadius: '0.75rem',
                     border: 'none',
-                    background: '#1B54A8',
+                    background: 'var(--color-primary)',
                     color: '#ffffff',
                     fontWeight: 700,
                     cursor: 'pointer',
@@ -2674,9 +2449,9 @@ export const SettingsScreen: React.FC = () => {
                   style={{
                     padding: '0.85rem 1.5rem',
                     borderRadius: '0.75rem',
-                    border: '1.5px solid #fca5a5',
+                    border: '1.5px solid var(--tint-danger-border)',
                     background: 'transparent',
-                    color: '#ef4444',
+                    color: 'var(--color-danger)',
                     fontWeight: 700,
                     cursor: 'pointer',
                     display: 'flex',
@@ -2685,13 +2460,13 @@ export const SettingsScreen: React.FC = () => {
                     transition: 'all 0.2s',
                   }}
                   onMouseOver={(e) => {
-                    e.currentTarget.style.background = '#fef2f2';
+                    e.currentTarget.style.background = 'var(--tint-danger-bg)';
                   }}
                   onMouseOut={(e) => {
                     e.currentTarget.style.background = 'transparent';
                   }}
                   onFocus={(e) => {
-                    e.currentTarget.style.background = '#fef2f2';
+                    e.currentTarget.style.background = 'var(--tint-danger-bg)';
                   }}
                   onBlur={(e) => {
                     e.currentTarget.style.background = 'transparent';
@@ -2702,7 +2477,7 @@ export const SettingsScreen: React.FC = () => {
               </div>
             </div>
           ) : (
-            <p style={{ fontSize: '0.95rem', color: '#94a3b8', fontStyle: 'italic', margin: 0 }}>
+            <p style={{ fontSize: '0.95rem', color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>
               Ative a autorização de coleta acima para visualizar o painel histórico e evolução de
               calibrações.
             </p>
@@ -2719,10 +2494,10 @@ export const SettingsScreen: React.FC = () => {
               marginBottom: '1.25rem',
             }}
           >
-            <Download size={28} color="#1B54A8" aria-hidden="true" />
+            <Download size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="backup-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}
+              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
             >
               {t('settings.backup.title')}
             </h2>
@@ -2752,7 +2527,7 @@ export const SettingsScreen: React.FC = () => {
         <p
           style={{
             fontSize: '0.75rem',
-            color: '#94a3b8',
+            color: 'var(--color-text-muted)',
             fontFamily: 'system-ui, sans-serif',
             textAlign: 'center',
           }}

@@ -1,0 +1,114 @@
+.pipeline {
+  background: var(--bg-soft);
+  border-block: 1px solid var(--line);
+}
+
+.pipeline__title {
+  max-width: 18ch;
+  margin-bottom: var(--sp-4);
+}
+
+.pipeline__lead {
+  max-width: 60ch;
+  margin-bottom: var(--sp-8);
+}
+
+.pipeline__track {
+  position: relative;
+  padding-left: 64px;
+}
+
+.pipeline__line {
+  position: absolute;
+  left: 22px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.pipeline__line-fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: top;
+  background: linear-gradient(180deg, var(--accent), var(--ok));
+  box-shadow: 0 0 14px rgba(63, 214, 194, 0.6);
+  transition: transform 120ms linear;
+}
+
+.pipeline__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-7);
+}
+
+.pipeline__step {
+  position: relative;
+  margin: 0;
+  opacity: 0.4;
+  transform: translateY(10px);
+  transition:
+    opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out);
+}
+
+.pipeline__step.is-on {
+  opacity: 1;
+  transform: none;
+}
+
+.pipeline__dot {
+  position: absolute;
+  left: -52px;
+  top: 6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  background: var(--bg);
+  transition:
+    border-color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+
+.pipeline__step.is-on .pipeline__dot {
+  border-color: var(--teal);
+  background: var(--teal);
+  box-shadow: 0 0 0 6px var(--ok-soft);
+}
+
+.pipeline__num {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  color: var(--ok);
+  display: block;
+  margin-bottom: var(--sp-2);
+}
+
+.pipeline__body h3 {
+  margin-bottom: var(--sp-2);
+  font-size: 1.35rem;
+}
+
+.pipeline__body p {
+  margin: 0;
+  max-width: 68ch;
+}
+
+@media (max-width: 640px) {
+  .pipeline__track {
+    padding-left: 44px;
+  }
+  .pipeline__line {
+    left: 12px;
+  }
+  .pipeline__dot {
+    left: -40px;
+  }
+}

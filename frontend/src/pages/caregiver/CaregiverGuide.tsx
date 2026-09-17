@@ -73,7 +73,7 @@ export const CaregiverGuide: React.FC = () => {
           }}
         >
           <h3 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Video size={24} color="#10b981" /> 1. Posicionamento da Câmera
+            <Video size={24} color="var(--color-primary)" /> 1. Posicionamento da Câmera
           </h3>
           <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '1.05rem', lineHeight: 1.6 }}>
             <li>
@@ -123,7 +123,7 @@ export const CaregiverGuide: React.FC = () => {
           }}
         >
           <h3 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Eye size={24} color="#8b5cf6" /> 3. Uso de Óculos e Lentes
+            <Eye size={24} color="var(--color-primary)" /> 3. Uso de Óculos e Lentes
           </h3>
           <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '1.05rem', lineHeight: 1.6 }}>
             <li>

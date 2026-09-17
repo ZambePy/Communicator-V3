@@ -23,7 +23,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       justifyContent: 'space-between',
       marginBottom: '2rem',
       paddingBottom: '1rem',
-      borderBottom: '1px solid rgba(226, 232, 240, 0.8)',
+      borderBottom: '1px solid var(--color-card-border)',
     }}
   >
     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -31,12 +31,25 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           {icon && <div style={{ display: 'flex', alignItems: 'center' }}>{icon}</div>}
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+          <h1
+            style={{
+              fontSize: '1.75rem',
+              fontWeight: 800,
+              color: 'var(--color-text-base)',
+              margin: 0,
+            }}
+          >
             {title}
           </h1>
         </div>
         {subtitle && (
-          <p style={{ margin: '0.25rem 0 0 0', color: '#64748b', fontSize: '0.95rem' }}>
+          <p
+            style={{
+              margin: '0.25rem 0 0 0',
+              color: 'var(--color-text-muted)',
+              fontSize: '0.95rem',
+            }}
+          >
             {subtitle}
           </p>
         )}
@@ -45,4 +58,3 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     {actions && <div style={{ display: 'flex', gap: '0.75rem' }}>{actions}</div>}
   </header>
 );
-

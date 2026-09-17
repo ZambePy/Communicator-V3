@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { lerCalibracao, LOO_BOM_PX, DERIVA_ALTA_GRAUS } from './veredito';
+import {
+  lerCalibracao,
+  nivelDeQualidade,
+  LOO_BOM_PX,
+  DERIVA_ALTA_GRAUS,
+  type LeituraDaCalibracao,
+} from './veredito';
 import type { CalibrationFitDiagnostics } from '@tracker/calibration';
 
 // -----------------------------------------------------------------------------
@@ -141,5 +147,33 @@ describe('o que a tela precisa mostrar', () => {
 
   it('grade ok e LOO baixo não têm motivo a explicar', () => {
     expect(lerCalibracao(diag({ looErrorPx: 68 })).motivo).toBeNull();
+  });
+});
+
+describe('nivelDeQualidade — cinco degraus, sem unidade', () => {
+  const leitura = (over: Partial<LeituraDaCalibracao>): LeituraDaCalibracao => ({
+    veredicto: 'bom',
+    motivo: null,
+    looErrorPx: 50,
+    derivaGraus: null,
+    ...over,
+  });
+
+  it('erro pequeno enche a barra', () => {
+    expect(nivelDeQualidade(leitura({ looErrorPx: 30 }))).toBe(5);
+  });
+
+  it('a fronteira do "bom" é o nível 3', () => {
+    expect(nivelDeQualidade(leitura({ looErrorPx: LOO_BOM_PX }))).toBe(3);
+    expect(nivelDeQualidade(leitura({ veredicto: 'aceitavel', looErrorPx: LOO_BOM_PX + 1 }))).toBe(2);
+  });
+
+  it('"refazer" é sempre o nível mais baixo, seja qual for o número', () => {
+    expect(nivelDeQualidade(leitura({ veredicto: 'refazer', looErrorPx: 10 }))).toBe(1);
+  });
+
+  it('sem número, não inventa extremo', () => {
+    expect(nivelDeQualidade(leitura({ looErrorPx: null }))).toBe(4);
+    expect(nivelDeQualidade(leitura({ veredicto: 'aceitavel', looErrorPx: null }))).toBe(3);
   });
 });

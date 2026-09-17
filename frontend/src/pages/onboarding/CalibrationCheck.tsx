@@ -17,6 +17,8 @@ import { resolveCalibrationDistances } from '@tracker/calibrationDistances';
 import { getResumoDoPonto } from '@tracker/calibration';
 import { esperarPintura } from '@tracker/aguardarPintura';
 import { ReadinessPanel } from '../../components/ui/ReadinessPanel';
+import { ChecksDaCamera } from '../../components/ui/ChecksDaCamera';
+import { isDevMode } from '../../devMode';
 import { PreparoDaCalibracao } from '../calibration/PreparoDaCalibracao';
 import { tutorialConcluido } from '../../services/local/tutorialProfile';
 import { useAuth } from '../../context/AuthContext';
@@ -79,7 +81,11 @@ const AUTO_RECORD_STORAGE_KEY = 'irisflow.autoRecordOnCalibrate';
 
 export const CalibrationCheck: React.FC = () => {
   const navigate = useNavigate();
-  const { currentProfile: perfilAtual } = useAuth();
+  const { currentProfile: perfilAtual, isCaregiver } = useAuth();
+  // Os três checks do paciente liberam o início; o painel detalhado (onze
+  // checks, viewport, cintilação) é do cuidador e do modo desenvolvedor.
+  const [checksProntos, setChecksProntos] = useState(true);
+  const mostrarDetalhes = isCaregiver || isDevMode();
   const { calibration, l2csStatus, getSessionUptimeMs, recording, getDiagnostics } = useGaze();
   // Geometria física do posto de uso. Fonte ÚNICA para (a) o erro angular do
   // relatório e (b) o posicionamento dos alvos pelo orçamento de
@@ -95,6 +101,7 @@ export const CalibrationCheck: React.FC = () => {
   // preso na tela de pré-calibração para sempre, esperando um modelo que nunca
   // vai carregar porque ninguém pediu que carregasse.
   const l2csReady = l2csStatus === 'ready' || l2csStatus === 'disabled';
+  const podeComecar = l2csReady && checksProntos;
   const l2csFailed = l2csStatus === 'error';
 
   const [stage, setStage] = useState<
@@ -857,13 +864,10 @@ export const CalibrationCheck: React.FC = () => {
                     color: TEXT_PRIMARY,
                   }}
                 >
-                  Calibração
+                  Vamos ensinar o IrisFlow a entender o seu olhar
                 </h1>
-                <p style={{ fontSize: '1.1rem', color: TEXT_DIM, margin: 0, lineHeight: 1.65 }}>
-                  Um ponto <strong style={{ color: ACCENT }}>azul</strong> vai aparecer na tela.
-                  <br />
-                  Olhe <strong style={{ color: TEXT_PRIMARY }}>direto para ele</strong> e fique
-                  parado até sumir.
+                <p style={{ fontSize: '1.15rem', color: TEXT_DIM, margin: 0, lineHeight: 1.65 }}>
+                  Siga o ponto <strong style={{ color: ACCENT }}>azul</strong> com os olhos.
                 </p>
               </div>
 
@@ -878,9 +882,11 @@ export const CalibrationCheck: React.FC = () => {
                   mudam o resultado — inclusive "pisque normalmente", que a
                   versao ingenua ("nao pisque") inverte com o pior efeito
                   possivel: o olho resseca durante a coleta. */}
-              <PreparoDaCalibracao />
+              <ChecksDaCamera onPronto={setChecksProntos} />
 
-              <ReadinessPanel />
+              {mostrarDetalhes && <PreparoDaCalibracao />}
+
+              {mostrarDetalhes && <ReadinessPanel />}
 
               {errorMessage && (
                 <div
@@ -1018,26 +1024,26 @@ export const CalibrationCheck: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleStart(false)}
-                disabled={!l2csReady}
+                disabled={!podeComecar}
                 data-dwell-ms="2500"
                 data-testid="start-calibration-full"
-                aria-disabled={!l2csReady}
+                aria-disabled={!podeComecar}
                 aria-describedby="l2cs-status-message"
                 style={{
-                  background: l2csReady ? ACCENT : 'rgba(255,255,255,0.10)',
-                  color: l2csReady ? '#fff' : TEXT_DIM,
+                  background: podeComecar ? ACCENT : 'rgba(255,255,255,0.10)',
+                  color: podeComecar ? '#fff' : TEXT_DIM,
                   border: 'none',
                   padding: '1rem 3rem',
                   borderRadius: '2rem',
                   fontSize: '1.15rem',
                   fontWeight: 800,
-                  cursor: l2csReady ? 'pointer' : 'not-allowed',
+                  cursor: podeComecar ? 'pointer' : 'not-allowed',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.7rem',
                   transition: 'all 0.2s',
-                  boxShadow: l2csReady ? '0 8px 24px rgba(27, 84, 168, 0.40)' : 'none',
-                  opacity: l2csReady ? 1 : 0.75,
+                  boxShadow: podeComecar ? '0 8px 24px rgba(27, 84, 168, 0.40)' : 'none',
+                  opacity: podeComecar ? 1 : 0.75,
                 }}
                 {...hoverAndFocus(
                   (el) => {
@@ -1054,7 +1060,7 @@ export const CalibrationCheck: React.FC = () => {
                   }
                 )}
               >
-                {l2csReady && '👁  Começar (9 pontos)'}
+                {l2csReady && (checksProntos ? '👁  Começar (9 pontos)' : 'Ajuste a câmera para começar')}
                 {l2csStatus === 'loading' && (
                   <>
                     <Loader2 size={20} style={{ animation: 'cfSpin 1s linear infinite' }} />
@@ -1220,8 +1226,10 @@ export const CalibrationCheck: React.FC = () => {
               <span
                 style={{ fontSize: '0.8rem', color: TEXT_DIM, fontVariantNumeric: 'tabular-nums' }}
               >
-                {completedList.length} /{' '}
-                <span data-testid="calib-progress-total">{activePoints.length}</span>
+                {String(completedList.length).padStart(2, '0')} /{' '}
+                <span data-testid="calib-progress-total">
+                  {String(activePoints.length).padStart(2, '0')}
+                </span>
               </span>
             </div>
 
@@ -1244,7 +1252,7 @@ export const CalibrationCheck: React.FC = () => {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {errorMessage ?? '👁  Prepare-se… olhe para o ponto azul'}
+                {errorMessage ?? '👁  Siga o ponto com os olhos.'}
               </div>
             )}
 

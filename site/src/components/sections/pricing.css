@@ -1,0 +1,292 @@
+.pricing__title {
+  margin-bottom: var(--sp-4);
+}
+
+.pricing__lead {
+  max-width: 62ch;
+  margin-bottom: var(--sp-7);
+}
+
+/* --- grade de três planos --- */
+.plans {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-5);
+  align-items: stretch;
+  margin-bottom: var(--sp-7);
+}
+
+.plan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-6);
+  overflow: hidden;
+  transition:
+    transform var(--dur) var(--ease-spring),
+    border-color var(--dur) var(--ease-out);
+}
+
+.plan:hover {
+  transform: translateY(-4px);
+  border-color: var(--line-strong);
+}
+
+.plan--recommended {
+  border-color: var(--ok);
+  box-shadow: 0 12px 40px -18px rgba(0, 166, 147, 0.45);
+}
+
+.plan--recommended::before {
+  content: '';
+  position: absolute;
+  inset: -40% -10% auto -10%;
+  height: 70%;
+  background: radial-gradient(60% 100% at 50% 0%, rgba(0, 166, 147, 0.22), transparent 70%);
+  pointer-events: none;
+}
+
+.plan__ribbon {
+  position: absolute;
+  top: var(--sp-4);
+  right: var(--sp-4);
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(135deg, var(--ok), var(--teal));
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.plan__head {
+  position: relative;
+  padding-bottom: var(--sp-5);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--sp-5);
+}
+
+.plan__name {
+  font-size: 1.4rem;
+  /* Sem esta folga o número do preco encosta no nome do plano em
+     corpos grandes. */
+  margin-bottom: var(--sp-3);
+}
+
+.plan__tagline {
+  font-size: 0.94rem;
+  color: var(--text-dim);
+  margin: 0 0 var(--sp-4);
+  min-height: 2.8em;
+}
+
+.plan__price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: var(--sp-3);
+  padding-top: 0.12em;
+}
+
+.plan__currency {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  color: var(--text-soft);
+}
+
+.plan__amount {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 4.4vw, 3.4rem);
+  line-height: 1;
+  color: var(--text);
+}
+
+.plan__period {
+  font-size: 0.94rem;
+  color: var(--text-dim);
+}
+
+.plan__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text-dim);
+}
+
+.plan__list {
+  list-style: none;
+  margin: 0 0 var(--sp-6);
+  padding: 0;
+  flex: 1;
+}
+
+.plan__list li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  font-size: 0.95rem;
+  color: var(--text-soft);
+  animation: slide-right 560ms var(--ease-out) both;
+}
+
+.plan__check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.plan__check svg {
+  width: 13px;
+  height: 13px;
+}
+
+.plan__fine {
+  margin: var(--sp-3) 0 0;
+  font-size: 0.86rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* --- garantias abaixo da grade --- */
+.pricing__guarantees {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-6);
+}
+
+.guarantee {
+  display: flex;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  transition:
+    transform var(--dur) var(--ease-spring),
+    border-color var(--dur) var(--ease-out);
+}
+
+.guarantee:hover {
+  transform: translateY(-3px);
+  border-color: var(--line-strong);
+}
+
+.guarantee__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--ok-soft);
+  border: 1px solid var(--ok-line);
+  color: var(--ok);
+}
+
+.guarantee h3 {
+  font-size: 1.08rem;
+  margin-bottom: 6px;
+}
+
+.guarantee p {
+  margin: 0;
+  font-size: 0.94rem;
+}
+
+.pricing__note {
+  margin: 0;
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  font-size: 0.94rem;
+  text-align: center;
+}
+
+.pricing__note a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+@media (max-width: 1024px) {
+  .plans {
+    grid-template-columns: 1fr;
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .pricing__guarantees {
+    grid-template-columns: 1fr;
+  }
+
+  .plan__tagline {
+    min-height: 0;
+  }
+}
+
+/* Ressalva de disponibilidade: aparece só no plano que depende de um
+   módulo ainda em construção. Fica antes do botão, de propósito. */
+.plan__note {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  margin: 0 0 var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.plan__note svg {
+  flex: none;
+  color: var(--warn);
+  margin-top: 2px;
+}
+
+/* --- aviso da beta: a contratação está pausada --- */
+.pricing__beta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-6);
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--ok-line);
+  background: var(--ok-soft);
+}
+
+.pricing__beta strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+
+.pricing__beta p {
+  margin: 0;
+  font-size: 0.94rem;
+  max-width: 60ch;
+}
+
+/* Card sem compra: o botão desabilitado não deve parecer clicável. */
+.plan .btn[disabled] {
+  cursor: not-allowed;
+}

@@ -1,0 +1,98 @@
+/* ============================================================
+   Faixa "quem espera do outro lado".
+
+   É a única parte do site que não argumenta: enumera. Por isso
+   nada aqui é cartão, nada tem sombra e nada se move sozinho —
+   o peso vem do tamanho do texto e do espaço em volta dele.
+   ============================================================ */
+
+/* Fundo padrão de propósito: a faixa anterior (o problema) já é soft e
+   ruidosa de números. Aqui o respiro é parte do conteúdo. */
+.human__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
+  gap: var(--sp-8);
+  align-items: start;
+}
+
+.human__title {
+  max-width: 16ch;
+  margin: 0 0 var(--sp-6);
+}
+
+/* As três linhas são a peça central: corpo grande, uma por linha,
+   ancoradas por um filete que as lê como um conjunto. */
+.human__lines {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--sp-5);
+  border-left: 2px solid var(--ok-line);
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.human__lines li {
+  margin: 0;
+  font-size: clamp(1.12rem, 1.75vw, 1.45rem);
+  line-height: 1.45;
+  color: var(--text);
+  max-width: 34ch;
+  text-wrap: pretty;
+}
+
+/* O relato da pesquisa entra deslocado, em voz mais baixa. */
+.human__report {
+  padding-top: var(--sp-2);
+}
+
+.human__quote {
+  position: relative;
+  margin: 0 0 var(--sp-4);
+  padding-top: var(--sp-6);
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--text-soft);
+  max-width: 46ch;
+}
+
+.human__quote::before {
+  content: '“';
+  position: absolute;
+  top: 0;
+  left: -0.06em;
+  font-family: var(--font-display);
+  font-size: 4.2rem;
+  line-height: 1;
+  color: var(--ok);
+  opacity: 0.28;
+}
+
+.human__source {
+  margin: 0 0 var(--sp-6);
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
+.human__close {
+  margin: 0;
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line);
+  font-size: 1rem;
+  color: var(--text-soft);
+  max-width: 46ch;
+}
+
+.human__close strong {
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  .human__inner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-7);
+  }
+
+  .human__title {
+    max-width: 20ch;
+  }
+}

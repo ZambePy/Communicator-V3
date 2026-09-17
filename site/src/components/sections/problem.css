@@ -1,0 +1,165 @@
+.problem {
+  background: var(--bg-soft);
+  border-block: 1px solid var(--line);
+}
+
+.problem__title {
+  max-width: 20ch;
+  font-size: var(--fs-h2);
+  margin-bottom: var(--sp-5);
+}
+
+.problem__lead {
+  max-width: 70ch;
+  margin-bottom: var(--sp-7);
+}
+
+.problem__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-4);
+}
+
+.problem__stat {
+  padding: var(--sp-5);
+  border-left: 2px solid var(--line-strong);
+  transition: border-color var(--dur) var(--ease-out);
+}
+
+.problem__stat:hover {
+  border-left-color: var(--teal);
+}
+
+.problem__stat-value {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  line-height: 1;
+  color: var(--text);
+  margin-bottom: var(--sp-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.problem__stat p {
+  margin: 0;
+  font-size: 0.98rem;
+  max-width: 30ch;
+}
+
+.problem__note {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  max-width: 84ch;
+  padding-left: var(--sp-5);
+  border-left: 2px solid var(--line);
+  margin-bottom: var(--sp-8);
+}
+
+/* --- contraste de preco --- */
+.problem__contrast {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--sp-5);
+  align-items: stretch;
+}
+
+.contrast-card {
+  height: 100%;
+  padding: var(--sp-6);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  transition:
+    transform var(--dur) var(--ease-spring),
+    box-shadow var(--dur) var(--ease-out);
+}
+
+.contrast-card:hover {
+  transform: translateY(-5px);
+}
+
+.contrast-card--them {
+  background: linear-gradient(150deg, var(--danger-soft), transparent);
+  border-color: var(--danger-line);
+}
+
+.contrast-card--us {
+  background: linear-gradient(150deg, var(--ok-soft), transparent);
+  border-color: var(--ok-line);
+  box-shadow: var(--glow);
+}
+
+.contrast-card__label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.contrast-card__price {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.contrast-card--us .contrast-card__price {
+  color: var(--ok);
+}
+
+.contrast-card p {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.contrast-vs {
+  display: grid;
+  place-items: center;
+  align-self: center;
+}
+
+.contrast-vs span {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: var(--text-dim);
+}
+
+@media (max-width: 860px) {
+  .problem__contrast {
+    grid-template-columns: 1fr;
+  }
+  .contrast-vs {
+    justify-self: center;
+  }
+}
+
+/* As condições atendidas, antes de qualquer número: quem lê precisa se
+   reconhecer (ou reconhecer um familiar) antes de saber o preço. */
+.problem__conditions {
+  list-style: none;
+  padding: 0;
+  margin: var(--sp-6) 0 var(--sp-5);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--sp-4);
+}
+.problem__conditions li {
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.problem__conditions h3 { font-size: 1.05rem; margin: 0 0 var(--sp-2); }
+.problem__conditions p { margin: 0; color: var(--text-soft); font-size: 0.95rem; line-height: 1.55; }
+.problem__why { max-width: 70ch; margin-bottom: var(--sp-6); }

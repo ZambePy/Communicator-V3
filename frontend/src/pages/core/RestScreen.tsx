@@ -10,6 +10,7 @@ export const RestScreen: React.FC = () => {
     <main
       role="main"
       aria-labelledby="rest-title"
+      className="tela-de-descanso"
       style={{
         width: '100vw',
         height: '100vh',

@@ -6,7 +6,8 @@
     "save": "Salvar",
     "loading": "Carregando…",
     "close": "Fechar",
-    "menu": "Menu"
+    "menu": "Menu",
+    "backAria": "Voltar para a tela anterior"
   },
   "menu": {
     "tabs": {
@@ -100,12 +101,7 @@
       "devMode": "Modo Desenvolvedor"
     },
     "intro": {
-      "title": "Comunicação e autonomia pelo olhar",
-      "tagline": "O IrisFlow Communicator transforma o movimento dos olhos em fala, escrita e controle do computador — sem toque, sem voz e sem mover a cabeça.",
-      "patientTitle": "Para quem usa",
-      "patientBody": "Navega e se comunica olhando para a tela. Nada precisa ser digitado nem apertado.",
-      "caregiverTitle": "Para quem acompanha",
-      "caregiverBody": "Configura o app, acompanha o uso e recebe os alertas. Esta parte inicial é sua.",
+      "tagline": "Sua voz começa pelo seu olhar.",
       "language": "Idioma",
       "start": "Começar"
     }
@@ -326,8 +322,8 @@
       "estatico": "Animação desligada: as três etapas estão acima, em ordem."
     },
     "pratica": {
-      "title": "Vamos praticar",
-      "lead": "Olhe para o alvo e segure. Não há erro aqui, nem tempo esgotado.",
+      "title": "Experimente. Olhe para o círculo azul.",
+      "lead": "Mantenha o olhar até o anel fechar. Não há erro aqui, nem tempo esgotado.",
       "alvo": "Alvo {{n}}",
       "restantes": "Faltam {{n}}",
       "fim": "Pronto. Foi assim que deve parecer.",
@@ -335,7 +331,8 @@
       "lento": "Você segurou mais do que precisava. Dá para diminuir o tempo.",
       "bom": "Bom. Foi assim que deve parecer.",
       "indeterminado": "Registrado.",
-      "ajustar": "Ajustar o tempo"
+      "ajustar": "Ajustar o tempo",
+      "deNovo": "Perfeito. Agora de novo."
     },
     "ajuste": {
       "title": "O tempo certo é o seu",
@@ -397,7 +394,10 @@
       "deriva": "Movimento da cabeça: {{g}}°",
       "seguir": "Seguir assim",
       "refazerBtn": "Refazer a calibração",
-      "semObrigacao": "Refazer é sempre opcional — quem decide é você."
+      "semObrigacao": "Refazer é sempre opcional — quem decide é você.",
+      "tituloPaciente": "Seu olhar foi configurado.",
+      "qualidade": "Qualidade do rastreamento: {{n}} de {{total}}",
+      "qualidadeAria": "Qualidade do rastreamento: nível {{n}} de {{total}}"
     },
     "relatorio": {
       "title": "Relatório da sessão",
@@ -494,5 +494,34 @@
     "melhor": "Melhor: {{graus}}°",
     "pior": "Pior: {{graus}}°",
     "total": "{{n}} medições"
+  },
+  "pin": {
+    "limpar": "Limpar",
+    "apagar": "Apagar"
+  },
+  "checksCamera": {
+    "rosto": "Rosto encontrado",
+    "iluminacao": "Iluminação adequada",
+    "enquadramento": "Distância e enquadramento",
+    "ok": "(ok)",
+    "pendente": "(aguardando)",
+    "aviso": "Não conseguimos confirmar tudo ainda. Você pode continuar mesmo assim — se o cursor não seguir bem o olhar, vale ajustar a luz ou a distância e calibrar de novo."
+  },
+  "dicas": {
+    "entendi": "Entendi",
+    "comunicacao": "Olhe para uma frase e mantenha o olhar: ela será falada em voz alta.",
+    "computador": "Ao ativar, o cursor sai do aplicativo e passa a seguir o seu olhar pelo Windows. A barra lateral traz o IrisFlow de volta.",
+    "pictogramas": "Cada figura fala uma necessidade. Olhe e mantenha o olhar para falar.",
+    "jogos": "Os jogos são treino do olhar. Sem pontuação, sem tempo — pare quando quiser.",
+    "conversa": "As mensagens do cuidador aparecem aqui. Olhe para uma delas para ouvi-la."
+  },
+  "primeiroSucesso": {
+    "title": "Você está pronto.",
+    "lead": "Agora olhe para:",
+    "alvo": "Comunicação",
+    "alvoAria": "Comunicação: frases rápidas e pictogramas",
+    "alvoDescricao": "Frases rápidas e pictogramas",
+    "menu": "Ir para o menu",
+    "aviso": "Você acabou de controlar o IrisFlow usando apenas o olhar."
   }
 }

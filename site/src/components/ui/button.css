@@ -1,0 +1,146 @@
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 0.88rem 1.65rem;
+  border: 1.5px solid transparent;
+  border-radius: var(--r-pill);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.2;
+  cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
+  text-align: center;
+  transition:
+    transform var(--dur) var(--ease-spring),
+    box-shadow var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out);
+}
+
+.btn--lg {
+  padding: 1.05rem 2.1rem;
+  font-size: 1.06rem;
+}
+
+.btn--full {
+  width: 100%;
+}
+
+.btn__content {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* Brilho que acompanha o ponteiro. */
+.btn__shine {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(
+    150px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 255, 255, 0.26),
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease-out);
+}
+
+.btn:hover .btn__shine {
+  opacity: 1;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.btn:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.btn:disabled,
+.btn.is-loading {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+}
+
+/* --- variantes --- */
+.btn--primary {
+  background: var(--blue);
+  color: #fff;
+  box-shadow: var(--glow);
+}
+
+.btn--primary:hover {
+  background: var(--blue-700);
+  box-shadow: 0 18px 44px rgba(27, 84, 168, 0.34);
+}
+
+.on-dark .btn--primary {
+  background: linear-gradient(135deg, var(--blue-400), var(--blue));
+}
+
+.on-dark .btn--primary:hover {
+  background: linear-gradient(135deg, var(--blue-400), var(--blue-500));
+}
+
+.btn--teal {
+  background: var(--teal-600);
+  color: #fff;
+  box-shadow: 0 12px 32px rgba(0, 166, 147, 0.26);
+}
+
+.btn--teal:hover {
+  background: #016f63;
+  box-shadow: 0 18px 44px rgba(0, 166, 147, 0.34);
+}
+
+.on-dark .btn--teal {
+  background: linear-gradient(135deg, var(--teal-300), var(--teal));
+  color: #04231f;
+}
+
+.btn--secondary {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.btn--secondary:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: var(--accent-soft);
+}
+
+.on-dark .btn--secondary {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.on-dark .btn--secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: var(--blue-300);
+  color: #fff;
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--text-soft);
+  padding-inline: 1rem;
+}
+
+.btn--ghost:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}

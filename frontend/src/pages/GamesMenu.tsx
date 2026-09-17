@@ -12,6 +12,7 @@ import {
   Wind,
 } from 'lucide-react';
 import { GazeButton } from '../components/ui/GazeButton';
+import { DicaContextual } from '../components/ui/DicaContextual';
 
 interface ActivityCard {
   route: string;
@@ -168,7 +169,7 @@ export const GamesMenu: React.FC = () => {
         style={{
           width: 450,
           height: 450,
-          background: 'radial-gradient(circle, rgba(147, 51, 234, 0.15), transparent)',
+          background: 'radial-gradient(circle, rgba(27, 84, 168, 0.15), transparent)',
           bottom: '-10%',
           left: '-5%',
           animationDelay: '-3s',
@@ -212,7 +213,7 @@ export const GamesMenu: React.FC = () => {
                 width: '56px',
                 height: '56px',
                 borderRadius: '1.25rem',
-                background: 'linear-gradient(135deg, #e11d48, #be123c)',
+                background: 'var(--color-primary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -250,6 +251,8 @@ export const GamesMenu: React.FC = () => {
           </div>
         </div>
       </header>
+
+      <DicaContextual id="jogos" />
 
       <div
         style={{

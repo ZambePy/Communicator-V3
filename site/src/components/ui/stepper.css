@@ -1,0 +1,108 @@
+.stepper {
+  position: relative;
+  margin-bottom: var(--sp-6);
+  padding-bottom: var(--sp-4);
+}
+
+.stepper ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  position: relative;
+  z-index: 1;
+}
+
+.stepper__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0;
+  flex: 1;
+}
+
+.stepper__dot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 0.92rem;
+  font-weight: 700;
+  transition:
+    background var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+
+.stepper__dot svg {
+  width: 16px;
+  height: 16px;
+}
+
+.stepper__item.is-current .stepper__dot {
+  border-color: var(--accent);
+  color: #fff;
+  background: var(--blue);
+  box-shadow: 0 0 0 6px var(--accent-soft);
+}
+
+.stepper__item.is-done .stepper__dot {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: #fff;
+  animation: pop-check 340ms var(--ease-spring);
+}
+
+.stepper__label {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  transition: color var(--dur) var(--ease-out);
+}
+
+.stepper__item.is-current .stepper__label {
+  color: var(--text);
+}
+
+.stepper__item.is-done .stepper__label {
+  color: var(--text-soft);
+}
+
+.stepper__bar {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 18px;
+  height: 2px;
+  transform-origin: left;
+  background: linear-gradient(90deg, var(--teal), var(--accent));
+  transition: transform var(--dur-slow) var(--ease-out);
+  z-index: 0;
+}
+
+.stepper::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 18px;
+  height: 2px;
+  background: var(--line);
+}
+
+@media (max-width: 700px) {
+  .stepper__label {
+    display: none;
+  }
+  .stepper ol {
+    justify-content: flex-start;
+  }
+}

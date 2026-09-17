@@ -347,10 +347,10 @@ export const BubblePopGame: React.FC = () => {
                 height={84}
                 style={{
                   borderRadius: '1.75rem',
-                  background: 'linear-gradient(135deg, #4f46e5, #4338ca)',
+                  background: 'var(--color-primary)',
                   color: '#ffffff',
                   border: '2px solid rgba(255,255,255,0.3)',
-                  boxShadow: '0 10px 28px rgba(79,70,229,0.35)',
+                  boxShadow: '0 10px 28px rgba(27,84,168,0.35)',
                 }}
                 aria-label="Jogar novamente"
               >

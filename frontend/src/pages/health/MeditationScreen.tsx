@@ -167,12 +167,12 @@ export const MeditationScreen: React.FC = () => {
               width: 220,
               height: 220,
               borderRadius: '50%',
-              background: 'radial-gradient(circle, #e879f9, #c026d3)',
+              background: 'radial-gradient(circle, #60a5fa, var(--color-primary))',
               // A transição dura o mesmo que a fase: o crescimento do círculo É
               // o guia da inspiração, então ele precisa acabar quando ela acaba.
               transition: `transform ${DURACAO_DA_FASE_MS}ms ease-in-out`,
               transform: `scale(${escala})`,
-              boxShadow: '0 0 60px rgba(192,38,211,0.45)',
+              boxShadow: '0 0 60px rgba(27,84,168,0.45)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -195,10 +195,10 @@ export const MeditationScreen: React.FC = () => {
             aria-label={ativa ? 'Pausar a sessão de respiração' : 'Iniciar a sessão de respiração'}
             style={{
               borderRadius: '1.75rem',
-              background: ativa ? 'var(--color-card-bg)' : 'linear-gradient(135deg, #c026d3, #a21caf)',
-              color: ativa ? '#a21caf' : '#ffffff',
-              border: ativa ? '3px solid #c026d3' : '2px solid rgba(255,255,255,0.3)',
-              boxShadow: ativa ? 'none' : '0 10px 26px rgba(192,38,211,0.35)',
+              background: ativa ? 'var(--color-card-bg)' : 'var(--color-primary)',
+              color: ativa ? 'var(--color-primary)' : '#ffffff',
+              border: ativa ? '3px solid var(--color-primary)' : '2px solid rgba(255,255,255,0.3)',
+              boxShadow: ativa ? 'none' : '0 10px 26px rgba(27,84,168,0.35)',
             }}
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.35rem', fontWeight: 800 }}>

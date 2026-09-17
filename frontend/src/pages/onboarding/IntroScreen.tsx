@@ -1,18 +1,22 @@
+import logoNegativo from '../../assets/brand/irisflow-wordmark-negativo.png';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { UserRound, HeartHandshake, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { LanguageSwitcher } from '../../components/ui/LanguageSwitcher';
 import { INTRO_SEEN_KEY } from './bootDestination';
 
 /**
- * Boas-vindas — uma tela só.
+ * Boas-vindas — a primeira abertura.
  *
- * Responde três coisas antes de o cuidador decidir se continua: o que o
- * produto faz, quem usa, e em que idioma. O seletor de idioma vale já aqui,
- * porque escolher "English" e continuar lendo português seria pior do que não
- * oferecer a escolha.
+ * Fundo limpo, o símbolo respirando, o nome, uma frase e um botão. Nenhum
+ * parágrafo: quem chega aqui ainda não sabe se o produto é para ele, e a
+ * explicação que convence é a experiência dos próximos três minutos — a
+ * câmera entendendo a pessoa, o primeiro alvo preenchendo, a calibração.
+ *
+ * O idioma continua escolhível aqui, discreto no rodapé: escolher "English" e
+ * continuar lendo português seria pior do que não oferecer a escolha.
  */
 export const IntroScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -39,137 +43,120 @@ export const IntroScreen: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '2.5rem 2rem',
-        gap: '2rem',
+        gap: '3rem',
+        position: 'relative',
       }}
     >
       <div
         className="animate-fade-in-up"
         style={{
-          width: '100%',
-          maxWidth: 760,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '2.25rem',
+          gap: '2rem',
           textAlign: 'center',
         }}
       >
+        <SimboloDaIris />
+
         <div
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.15rem' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem', alignItems: 'center' }}
         >
-          <img
-            src="/LOGO.png"
-            alt="IrisFlow"
-            style={{ width: 230, height: 'auto' }}
-            onError={(e) => (e.currentTarget.style.display = 'none')}
-          />
+          {/* Wordmark negativo (recorte do logotipo do site), para fundo escuro. O símbolo
+              animado acima já é a íris; aqui entra só a marca, sem repetir a
+              íris num segundo desenho. */}
           <h1
             id="intro-title"
+            className="font-display"
             style={{
-              fontSize: '2.35rem',
-              fontWeight: 800,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '0.35rem',
+              fontSize: '1.15rem',
+              fontWeight: 400,
               margin: 0,
-              lineHeight: 1.15,
+              lineHeight: 1.2,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
               color: 'var(--color-text-base)',
             }}
           >
-            {t('onboarding.intro.title')}
+            <img
+              src={logoNegativo}
+              alt="IrisFlow"
+              draggable={false}
+              style={{ width: 'min(300px, 60vw)', height: 'auto', display: 'block' }}
+            />
+            <span style={{ opacity: 0.8 }}>Communicator</span>
           </h1>
           <p
             style={{
               margin: 0,
-              fontSize: '1.15rem',
-              lineHeight: 1.6,
-              maxWidth: 620,
+              fontSize: '1.35rem',
+              lineHeight: 1.5,
               color: 'var(--color-text-base)',
-              opacity: 0.82,
+              opacity: 0.85,
             }}
           >
             {t('onboarding.intro.tagline')}
           </p>
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: '1.25rem',
-            width: '100%',
-          }}
-        >
-          <Papel
-            icone={<UserRound size={26} color="#1B54A8" aria-hidden="true" />}
-            titulo={t('onboarding.intro.patientTitle')}
-            corpo={t('onboarding.intro.patientBody')}
-          />
-          <Papel
-            icone={<HeartHandshake size={26} color="#1B54A8" aria-hidden="true" />}
-            titulo={t('onboarding.intro.caregiverTitle')}
-            corpo={t('onboarding.intro.caregiverBody')}
-          />
-        </div>
-
-        <div
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem' }}
-        >
-          <span
-            style={{
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              opacity: 0.65,
-              color: 'var(--color-text-base)',
-            }}
-          >
-            {t('onboarding.intro.language')}
-          </span>
-          <LanguageSwitcher />
-        </div>
-
         <PrimaryButton
           type="button"
           onClick={comecar}
-          style={{ padding: '1.15rem 3rem', fontSize: '1.2rem', borderRadius: '1.5rem' }}
+          style={{
+            padding: '1.25rem 3.5rem',
+            fontSize: '1.25rem',
+            borderRadius: '1.5rem',
+            minHeight: 72,
+          }}
         >
           {t('onboarding.intro.start')} <ArrowRight size={22} aria-hidden="true" />
         </PrimaryButton>
+      </div>
+
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          opacity: 0.75,
+        }}
+      >
+        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+          {t('onboarding.intro.language')}
+        </span>
+        <LanguageSwitcher />
       </div>
     </main>
   );
 };
 
-const Papel: React.FC<{ icone: React.ReactNode; titulo: string; corpo: string }> = ({
-  icone,
-  titulo,
-  corpo,
-}) => (
+/**
+ * A íris da marca, em CSS: um anel que respira devagar e uma pupila fixa.
+ * Sem imagem — a animação é a única coisa que se move na tela, e o movimento
+ * é lento de propósito (quem olha é alguém que vai fixar o olhar por 1,5 s
+ * para clicar; nada aqui pode competir com isso).
+ */
+const SimboloDaIris: React.FC = () => (
   <div
-    className="glass-card"
+    aria-hidden="true"
+    className="iris-simbolo"
     style={{
-      background: 'var(--color-card-bg)',
-      border: '1px solid var(--color-card-border)',
-      borderRadius: '1.4rem',
-      padding: '1.6rem 1.4rem',
+      position: 'relative',
+      width: 160,
+      height: 160,
       display: 'flex',
-      flexDirection: 'column',
       alignItems: 'center',
-      gap: '0.7rem',
-      boxShadow: '0 8px 24px rgba(27,84,168,0.06)',
-      textAlign: 'center',
+      justifyContent: 'center',
     }}
   >
-    {icone}
-    <strong style={{ fontSize: '1.08rem', fontWeight: 800, color: 'var(--color-text-base)' }}>
-      {titulo}
-    </strong>
-    <span
-      style={{
-        fontSize: '0.95rem',
-        lineHeight: 1.55,
-        color: 'var(--color-text-base)',
-        opacity: 0.8,
-      }}
-    >
-      {corpo}
-    </span>
+    <span className="iris-simbolo__halo" />
+    <span className="iris-simbolo__anel" />
+    <span className="iris-simbolo__pupila" />
   </div>
 );

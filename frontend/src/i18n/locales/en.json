@@ -6,7 +6,8 @@
     "save": "Save",
     "loading": "Loading…",
     "close": "Close",
-    "menu": "Menu"
+    "menu": "Menu",
+    "backAria": "Go back to the previous screen"
   },
   "menu": {
     "tabs": {
@@ -100,12 +101,7 @@
       "devMode": "Developer Mode"
     },
     "intro": {
-      "title": "Communication and independence through gaze",
-      "tagline": "IrisFlow Communicator turns eye movement into speech, writing and computer control — no touch, no voice, no head movement.",
-      "patientTitle": "For the person using it",
-      "patientBody": "Navigates and communicates by looking at the screen. Nothing needs to be typed or pressed.",
-      "caregiverTitle": "For the caregiver",
-      "caregiverBody": "Sets up the app, follows usage and receives alerts. This first part is yours.",
+      "tagline": "Your voice begins with your gaze.",
       "language": "Language",
       "start": "Get started"
     }
@@ -326,16 +322,17 @@
       "estatico": "Animation off: the three stages are above, in order."
     },
     "pratica": {
-      "title": "Let's practise",
-      "lead": "Look at the target and hold. There is no wrong here, and no time limit.",
+      "title": "Try it. Look at the blue circle.",
+      "lead": "Hold your gaze until the ring closes. There is no mistake here, and no time limit.",
       "alvo": "Target {{n}}",
       "restantes": "{{n}} to go",
-      "fim": "Done. That is how it should feel.",
+      "fim": "Done. That is what it should feel like.",
       "rapido": "The click came before your gaze settled. Want a longer time?",
       "lento": "You held longer than needed. You could shorten the time.",
       "bom": "Good. That is how it should feel.",
       "indeterminado": "Recorded.",
-      "ajustar": "Adjust the time"
+      "ajustar": "Adjust the time",
+      "deNovo": "Perfect. Now again."
     },
     "ajuste": {
       "title": "The right time is yours",
@@ -397,7 +394,10 @@
       "deriva": "Head movement: {{g}}°",
       "seguir": "Carry on",
       "refazerBtn": "Redo calibration",
-      "semObrigacao": "Redoing is always optional — it is your call."
+      "semObrigacao": "Redoing is always optional — it is your call.",
+      "tituloPaciente": "Your gaze is set up.",
+      "qualidade": "Tracking quality: {{n}} of {{total}}",
+      "qualidadeAria": "Tracking quality: level {{n}} of {{total}}"
     },
     "relatorio": {
       "title": "Session report",
@@ -494,5 +494,34 @@
     "melhor": "Best: {{graus}}°",
     "pior": "Worst: {{graus}}°",
     "total": "{{n}} measurements"
+  },
+  "pin": {
+    "limpar": "Clear",
+    "apagar": "Delete"
+  },
+  "checksCamera": {
+    "rosto": "Face found",
+    "iluminacao": "Lighting is good",
+    "enquadramento": "Distance and framing",
+    "ok": "(ok)",
+    "pendente": "(waiting)",
+    "aviso": "We could not confirm everything yet. You can continue anyway — if the cursor does not follow your gaze well, adjust the light or distance and calibrate again."
+  },
+  "dicas": {
+    "entendi": "Got it",
+    "comunicacao": "Look at a phrase and hold your gaze: it will be spoken aloud.",
+    "computador": "Once enabled, the cursor leaves the app and follows your gaze across Windows. The side bar brings IrisFlow back.",
+    "pictogramas": "Each picture speaks a need. Look and hold your gaze to speak it.",
+    "jogos": "Games are gaze practice. No score, no timer — stop whenever you want.",
+    "conversa": "Caregiver messages appear here. Look at one to hear it."
+  },
+  "primeiroSucesso": {
+    "title": "You are ready.",
+    "lead": "Now look at:",
+    "alvo": "Communication",
+    "alvoAria": "Communication: quick phrases and pictograms",
+    "alvoDescricao": "Quick phrases and pictograms",
+    "menu": "Go to the menu",
+    "aviso": "You just controlled IrisFlow using only your gaze."
   }
 }

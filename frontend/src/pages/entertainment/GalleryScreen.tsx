@@ -140,7 +140,7 @@ export const GalleryScreen: React.FC = () => {
                 width: '52px',
                 height: '52px',
                 borderRadius: '1rem',
-                background: 'linear-gradient(135deg, #9333ea, #6366f1)',
+                background: 'var(--color-primary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

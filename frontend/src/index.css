@@ -129,6 +129,15 @@ body,
   /* Campos de formulario. */
   --field-bg: #ffffff;
   --field-border: #cbd5e1;
+
+  /* Texto secundario e cores SOLIDAS de estado (icones, selos, barras).
+     As tintas acima sao caixas; estas sao a cor em si, para nao espalhar
+     mais um `#16a34a` ou `#64748b` literal por tela. */
+  --color-text-muted: #475569;
+  --color-ok: #16a34a;
+  --color-warn: #d97706;
+  --color-danger: #dc2626;
+  --color-accent: #f0a030;
 }
 
 /* Modo escuro (via classe no html) */
@@ -161,6 +170,12 @@ html.dark {
 
   --field-bg: rgba(15, 23, 42, 0.6);
   --field-border: rgba(148, 163, 184, 0.28);
+
+  --color-text-muted: #94a3b8;
+  --color-ok: #4ade80;
+  --color-warn: #fbbf24;
+  --color-danger: #f87171;
+  --color-accent: #f0a030;
 }
 
 /* Glassmorphism utilitário refinado */
@@ -417,37 +432,6 @@ select:focus-visible,
 .gallery-item:hover,
 .gallery-item:focus-within {
   transform: scale(1.03);
-}
-
-/* Dwell progress — feedback visual para seleção por olhar */
-.dwell-wrapper {
-  position: relative;
-  overflow: hidden;
-}
-.dwell-progress {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to right,
-    rgba(27, 84, 168, 0.22) var(--dwell-pct, 0%),
-    transparent var(--dwell-pct, 0%)
-  );
-  pointer-events: none;
-  border-radius: inherit;
-}
-.dwell-ring {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: conic-gradient(
-    #1b54a8 calc(var(--dwell-pct, 0%) * 3.6deg),
-    rgba(27, 84, 168, 0.15) 0
-  );
-  transition: background 0.05s linear;
-  pointer-events: none;
 }
 
 /* Gaze feedback - aplicado dinamicamente pelo GazeContext ao hitTarget */
@@ -962,7 +946,9 @@ select:focus-visible,
 /* Estado desabilitado */
 .gaze-button:disabled,
 .gaze-button[data-no-dwell='true'] {
-  opacity: 0.4;
+  /* 0,55 e não 0,4: sobre o fundo escuro, 0,4 apagava o rótulo junto com o
+     botão. Desabilitado precisa parecer inerte, não ilegível. */
+  opacity: 0.55;
   cursor: not-allowed;
   pointer-events: none;
 }
@@ -1183,4 +1169,140 @@ input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   border-radius: inherit;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Símbolo da íris nas boas-vindas: anel que respira e halo que se expande.
+ * Movimento lento e contínuo — o único da tela.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.iris-simbolo__halo,
+.iris-simbolo__anel,
+.iris-simbolo__pupila {
+  position: absolute;
+  border-radius: 50%;
+}
+.iris-simbolo__halo {
+  width: 160px;
+  height: 160px;
+  background: radial-gradient(circle, rgba(27, 84, 168, 0.28) 0%, transparent 70%);
+  animation: irisHalo 4s ease-in-out infinite;
+}
+.iris-simbolo__anel {
+  width: 104px;
+  height: 104px;
+  border: 10px solid var(--color-primary);
+  box-shadow:
+    0 0 0 6px rgba(27, 84, 168, 0.15),
+    0 0 40px rgba(27, 84, 168, 0.35);
+  animation: irisRespira 4s ease-in-out infinite;
+}
+.iris-simbolo__pupila {
+  width: 34px;
+  height: 34px;
+  background: var(--color-text-base);
+}
+@keyframes irisRespira {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+@keyframes irisHalo {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Efeitos que comunicam ESTADO (ver `utils/feedbackVisual.ts`).
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/* Rastreamento: a interface esmaece sem rosto e volta a brilhar quando o olhar
+   é detectado de novo. A transição É o sinal — nada pisca. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* Abaixo do aviso de rastreamento (1000000) e da emergência (999999): o
+     véu escurece o conteúdo, nunca o que explica o próprio véu. */
+  z-index: 999990;
+  background: var(--color-bg-base);
+  opacity: 0;
+  transition: opacity 0.7s ease;
+}
+html[data-gaze='perdido'] body::after {
+  opacity: 0.45;
+}
+html[data-gaze='degradado'] body::after {
+  opacity: 0.18;
+}
+
+/* Anel de dwell nos alvos que NÃO são `.gaze-button` (botões comuns, links):
+   o `GazeContext` publica `--gaze-dwell-progress` em qualquer alvo apontado,
+   mas só o GazeButton desenhava o anel. Sem isto, metade dos alvos enchia
+   em silêncio. `.gaze-hover` já põe `position: relative`. */
+.gaze-hover:not(.gaze-button)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 4px solid transparent;
+  background: conic-gradient(
+      var(--color-primary, #1b54a8) calc(var(--gaze-dwell-progress, 0) * 360deg),
+      transparent 0
+    )
+    border-box;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+}
+
+/* Seleção confirmada: um anel que se expande e some no alvo escolhido por
+   dwell. `outline` de propósito — não entra no layout e funciona em qualquer
+   elemento, inclusive nos que não são `.gaze-button`. */
+.gaze-selecionado {
+  animation: gazeConfirma 0.45s ease-out both;
+}
+@keyframes gazeConfirma {
+  0% {
+    outline: 4px solid rgba(96, 165, 250, 0.9);
+    outline-offset: 0px;
+  }
+  100% {
+    outline: 4px solid rgba(96, 165, 250, 0);
+    outline-offset: 16px;
+  }
+}
+
+/* Modo Descanso entra devagar: escurecer de uma vez é um susto para quem
+   veio descansar os olhos. */
+.tela-de-descanso {
+  animation: fadeIn 1.2s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::after {
+    transition: none;
+  }
+  .gaze-selecionado {
+    animation: none;
+    outline: 4px solid rgba(96, 165, 250, 0.9);
+  }
+  .iris-simbolo__halo,
+  .iris-simbolo__anel {
+    animation: none;
+  }
 }

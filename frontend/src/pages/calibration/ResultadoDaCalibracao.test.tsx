@@ -38,10 +38,10 @@ const diag = (veredicto: string, over: Record<string, unknown> = {}) =>
     ...over,
   }) as unknown as CalibrationFitDiagnostics;
 
-const montar = (d: CalibrationFitDiagnostics | null) =>
+const montar = (d: CalibrationFitDiagnostics | null, mostrarNumeros = true) =>
   render(
     <MemoryRouter>
-      <ResultadoDaCalibracao diagnostico={d} aoSeguir={vi.fn()} />
+      <ResultadoDaCalibracao diagnostico={d} aoSeguir={vi.fn()} mostrarNumeros={mostrarNumeros} />
     </MemoryRouter>
   );
 
@@ -116,6 +116,28 @@ describe('os numeros ficam visiveis para quem mede', () => {
   it('mostra a deriva em graus', () => {
     montar(diag('ok', { poseDrift: { targets: 8, yawDeg: 2.5, pitchDeg: 1, rollDeg: 1 } }));
     expect(screen.getByText(/2,5°/)).toBeInTheDocument();
+  });
+});
+
+describe('o paciente ve niveis, nao numeros', () => {
+  it('esconde px e graus e mostra a barra de cinco niveis', () => {
+    montar(diag('ok', { looErrorPx: 123 }), false);
+    expect(screen.queryByText(/123 px/)).toBeNull();
+    expect(screen.queryByText(/erro médio da calibração/i)).toBeNull();
+    expect(screen.getByText('Seu olhar foi configurado.')).toBeInTheDocument();
+    const barra = screen.getByTestId('barra-de-qualidade');
+    expect(barra.querySelectorAll('span[data-aceso]').length).toBe(Number(barra.dataset.nivel));
+    expect(Number(barra.dataset.nivel)).toBeGreaterThanOrEqual(1);
+    expect(Number(barra.dataset.nivel)).toBeLessThanOrEqual(5);
+  });
+
+  it('calibracao boa enche mais a barra que uma ruim', () => {
+    const { unmount } = montar(diag('ok', { looErrorPx: 30 }), false);
+    const boa = Number(screen.getByTestId('barra-de-qualidade').dataset.nivel);
+    unmount();
+    montar(diag('sessao_ruim'), false);
+    const ruim = Number(screen.getByTestId('barra-de-qualidade').dataset.nivel);
+    expect(boa).toBeGreaterThan(ruim);
   });
 });
 

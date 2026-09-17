@@ -1,0 +1,27 @@
+.modules__title {
+  max-width: 22ch;
+  margin-bottom: var(--sp-4);
+}
+
+.modules__lead {
+  max-width: 74ch;
+  margin-bottom: var(--sp-7);
+}
+
+.modules__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+  gap: var(--sp-4);
+}
+
+.modules__item {
+  margin: 0;
+  display: flex;
+}
+
+.modules__item > * {
+  width: 100%;
+}

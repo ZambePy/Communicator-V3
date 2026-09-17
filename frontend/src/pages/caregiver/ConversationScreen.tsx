@@ -13,6 +13,7 @@ import {
   ultimaPerguntaDoCuidador,
 } from '../../services/assistente';
 import type { Message } from '../../cloud/types';
+import { DicaContextual } from '../../components/ui/DicaContextual';
 
 /**
  * Conversa com o cuidador — o outro lado da aba "Conversa" do app mobile.
@@ -111,6 +112,7 @@ export const ConversationScreen: React.FC = () => {
   return (
     <GazePageLayout showBack backRoute="/menu">
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', gap: '1rem', boxSizing: 'border-box' }}>
+        <DicaContextual id="conversa" />
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
           <div>
             <h1 style={{ fontSize: '2.2rem', fontWeight: 900, margin: 0, color: 'var(--color-text-base)' }}>
