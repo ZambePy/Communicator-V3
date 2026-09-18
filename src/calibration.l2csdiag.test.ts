@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeFitDiagnostics } from './calibration';
-import { ACTIVE_FEATURE_SET, l2csSlotsInSet } from './extractor';
+import { ACTIVE_FEATURE_SET, activeFeatureDims, l2csSlotsInSet } from './extractor';
 
 /**
  * O relatório `accuracy-report-1788225161304` publicou `l2csValidFraction: 0`
@@ -26,7 +26,7 @@ function amostras(dims: number, preencherSlots: number[] | null) {
         const v = Array.from({ length: dims }, (_, d) => (d === 0 ? x : d === 1 ? y : rnd() * 0.01));
         // Zera tudo que for slot angular e depois preenche só o pedido: assim o
         // teste controla exatamente quantas amostras têm bloco "válido".
-        for (const s of l2csSlotsInSet('irisCore+l2cs')) if (s < v.length) v[s] = 0;
+        for (const s of l2csSlotsInSet(ACTIVE_FEATURE_SET)) if (s < v.length) v[s] = 0;
         if (preencherSlots) for (const s of preencherSlots) if (s < v.length) v[s] = 0.3;
         featuresLeft.push(v); featuresRight.push([...v]);
         targets.push({ screenX: x, screenY: y });
@@ -50,12 +50,16 @@ function amostras(dims: number, preencherSlots: number[] | null) {
 // caminho sob teste.
 describe('l2csValidFraction — distingue "não se aplica" de "falhou"', { timeout: 20_000 }, () => {
   it('conjunto ativo hoje carrega bloco: mede em vez de devolver null', () => {
-    // `irisCore+l2cs` leva as posições [4, 5]. Com o L2CS efetivamente entrando
-    // no vetor, o relatório passa a ter valor de decisão (`x%` de amostras com
-    // ângulo válido), em vez de `null` como no cenário histórico do `irisCore`.
+    // O conjunto ativo leva as DUAS últimas posições como bloco angular. A
+    // asserção é derivada, não literal: o arranjo do vetor de íris já mudou uma
+    // vez (6 dims → 4), e travar "[4, 5]" fazia este teste falhar por uma
+    // mudança que não tem relação com o que ele mede. Com o L2CS efetivamente
+    // entrando no vetor, o relatório passa a ter valor de decisão (`x%` de
+    // amostras com ângulo válido), em vez de `null` como no histórico.
+    const dims = activeFeatureDims() as number;
     const slots = l2csSlotsInSet(ACTIVE_FEATURE_SET);
-    expect(slots).toEqual([4, 5]);
-    const a = amostras(6, slots);
+    expect(slots).toEqual([dims - 2, dims - 1]);
+    const a = amostras(dims, slots);
     const d = computeFitDiagnostics(a.featuresLeft, a.featuresRight, a.targets, undefined, { w: 1920, h: 1080 });
     expect(d.l2csValidFraction).not.toBeNull();
     // Com todos os slots preenchidos com valor não-zero: 100% válido.
@@ -69,7 +73,7 @@ describe('l2csValidFraction — distingue "não se aplica" de "falhou"', { timeo
     // `null` ("não se aplica"). Preservar essa distinção evita alarme falso.
     const slots = l2csSlotsInSet(ACTIVE_FEATURE_SET);
     expect(slots.length).toBeGreaterThan(0);
-    const a = amostras(6, null);
+    const a = amostras(activeFeatureDims() as number, null);
     const d = computeFitDiagnostics(a.featuresLeft, a.featuresRight, a.targets, undefined, { w: 1920, h: 1080 });
     expect(d.l2csValidFraction).toBe(0);
     expect(d.l2csValidFraction).not.toBeNull();

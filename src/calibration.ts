@@ -33,7 +33,12 @@ import {
   type DistanceRange,
 } from './distanceCompensation';
 import type { RecordedSampleDecision } from './telemetry/types';
-import { resetEarHistory, FEATURE_VECTOR_ID, FEATURE_FORMAT_VERSION } from './extractor';
+import {
+  resetEarHistory,
+  FEATURE_VECTOR_ID,
+  FEATURE_FORMAT_VERSION,
+  slotsAngularesNoConjunto,
+} from './extractor';
 import {
   profileRegistry,
   shouldWarnPrecisionForCondition,
@@ -53,14 +58,30 @@ function expansaoAtiva(): boolean {
   return EXPERIMENT.polynomialFeatures;
 }
 
+/**
+ * Posições que ficam FORA dos termos quadráticos na forma `parcial`: o bloco
+ * angular, que já chega linearizado pela tangente.
+ *
+ * Resolvido a cada chamada, e não uma vez no import, porque o conjunto ativo
+ * pode ser trocado por flag entre recargas e um valor congelado aqui
+ * produziria um vetor de comprimento diferente do que o modelo espera — sem
+ * erro, só deslocado.
+ */
+function dimsLinearesDaExpansao(): readonly number[] | undefined {
+  if (EXPERIMENT.formaDaExpansao !== 'parcial') return undefined;
+  const slots = slotsAngularesNoConjunto();
+  return slots.length > 0 ? slots : undefined;
+}
+
 function maybeExpand(features: number[][]): number[][] {
   if (!expansaoAtiva()) return features;
-  return features.map((f) => expandPolynomialFeatures(f));
+  const lineares = dimsLinearesDaExpansao();
+  return features.map((f) => expandPolynomialFeatures(f, lineares));
 }
 
 function maybeExpandSingle(features: number[]): number[] {
   if (!expansaoAtiva()) return features;
-  return expandPolynomialFeatures(features);
+  return expandPolynomialFeatures(features, dimsLinearesDaExpansao());
 }
 
 // ── Ponderação binocular ────────────────────────────────────────────────────
@@ -1264,11 +1285,25 @@ export interface CalibrationContext {
   /** Perfil da grade (`padrao` | `computador`). Ausente = `padrao`, e o
    *  `padrao` NÃO entra na chave, para os perfis já salvos continuarem válidos. */
   perfil?: PerfilDeCalibracao;
+  /**
+   * A expansão polinomial deixou o bloco angular fora dos termos quadráticos
+   * (`EXPERIMENT.formaDaExpansao = 'parcial'`).
+   *
+   * Precisa entrar na chave pela mesma razão do `l2csInputSize`: os
+   * coeficientes do Ridge são POSICIONAIS, e as duas formas produzem o mesmo
+   * `FEATURE_VECTOR_ID` (o corte é depois da projeção) com número e ordem de
+   * colunas diferentes. Sem isto, um perfil treinado em `completa` carregaria
+   * numa sessão `parcial` e preveria deslocado, sem erro nenhum.
+   *
+   * Ausente/`false` = `completa`, e a forma completa NÃO entra na chave, para
+   * os perfis já salvos continuarem válidos.
+   */
+  expansaoParcial?: boolean;
 }
 
 export function buildContextKeyFrom(ctx: CalibrationContext): string {
   const expKey = [
-    ctx.polynomialFeatures ? 'poly' : '',
+    ctx.polynomialFeatures ? (ctx.expansaoParcial ? 'polyparc' : 'poly') : '',
     ctx.geometricPoseCompensation ? 'posecomp' : '',
     `xf${ctx.expandFactor}`,
     `l2cs${ctx.l2csInputSize}`,
@@ -1285,6 +1320,7 @@ function buildContextKey(): string {
     featureVectorId: FEATURE_VECTOR_ID,
     formatVersion: FEATURE_FORMAT_VERSION,
     polynomialFeatures: EXPERIMENT.polynomialFeatures,
+    expansaoParcial: dimsLinearesDaExpansao() !== undefined,
     geometricPoseCompensation: EXPERIMENT.geometricPoseCompensation,
     expandFactor: EXPERIMENT.expandFactor,
     l2csInputSize: l2csInputSizeEfetivo,

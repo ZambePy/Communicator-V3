@@ -134,16 +134,17 @@ describe('projeção do vetor no conjunto ativo', () => {
   it('as dimensões entregues são as posições EXATAS do vetor completo (sem reordenar)', () => {
     // Reordenar silenciosamente seria o pior tipo de bug aqui: o modelo
     // treinaria e prediria com significados trocados, sem erro nenhum. Como
-    // `irisCore+l2cs` seleciona índices [0,1,2,3, 37,38] (não é prefixo
-    // contíguo), comparamos posição-a-posição via a mesma tabela que o
-    // extractor usa.
+    // o conjunto ativo não seleciona um prefixo contíguo do vetor completo,
+    // comparamos posição-a-posição via a mesma tabela que o extractor usa.
     const lms = makeLandmarks();
     const full = extractCompactFeatures(lms, undefined, { yaw: 0.1, pitch: 0.05, valid: true });
     const piped = extractFeatures(lms, undefined, { yaw: 0.1, pitch: 0.05, valid: true });
     const dims = activeFeatureDims() as number;
-    // Ativa hoje: irisCore(4) + tan(yaw), tan(pitch) = 6 dims nas posições
-    // [0,1,2,3, 37,38] do vetor completo.
-    const expectedIndices = [0, 1, 2, 3, 37, 38];
+    // Ativo hoje: `irisAbs+l2cs` = offsetX/offsetY + tan(yaw)/tan(pitch), nas
+    // posições [0,1, 37,38] do vetor completo. A tabela é literal de
+    // propósito — é ela que pega um reordenamento silencioso, que é o modo de
+    // falha que este teste existe para impedir.
+    const expectedIndices = [0, 1, 37, 38];
     expect(dims).toBe(expectedIndices.length);
     for (let i = 0; i < dims; i++) {
       expect(piped.featuresLeft[i]).toBe(full.featuresLeft[expectedIndices[i]]);
@@ -153,19 +154,20 @@ describe('projeção do vetor no conjunto ativo', () => {
 
   it('o bloco L2CS influencia o vetor entregue ao modelo — é a razão de ligar', () => {
     // Antes o conjunto ativo era `irisCore` (só [0..3]) e o bloco angular era
-    // descartado; com `irisCore+l2cs` as posições [4] e [5] carregam
-    // tan(yaw) e tan(pitch), então a saída do L2CS chega ao Ridge. Este teste
-    // é a inversão explícita da versão anterior.
+    // descartado; hoje as DUAS ÚLTIMAS posições carregam tan(yaw) e
+    // tan(pitch), então a saída do L2CS chega ao Ridge. Este teste é a
+    // inversão explícita da versão anterior.
     const lms = makeLandmarks();
     const comValido = extractFeatures(lms, undefined, { yaw: 0.2, pitch: 0.1, valid: true });
     const comInvalido = extractFeatures(lms, undefined, { yaw: 0, pitch: 0, valid: false });
-    // Prefixo irisCore igual (depende só de landmarks).
-    expect(comValido.featuresLeft.slice(0, 4)).toEqual(comInvalido.featuresLeft.slice(0, 4));
+    const corte = (activeFeatureDims() as number) - 2;
+    // Prefixo de íris igual (depende só de landmarks).
+    expect(comValido.featuresLeft.slice(0, corte)).toEqual(comInvalido.featuresLeft.slice(0, corte));
     // Sufixo angular diferente.
-    expect(comValido.featuresLeft.slice(4)).not.toEqual(comInvalido.featuresLeft.slice(4));
+    expect(comValido.featuresLeft.slice(corte)).not.toEqual(comInvalido.featuresLeft.slice(corte));
     // Invalid vem zerado por buildL2CSBlock.
-    expect(comInvalido.featuresLeft.slice(4)).toEqual([0, 0]);
-    expect(comInvalido.featuresRight.slice(4)).toEqual([0, 0]);
+    expect(comInvalido.featuresLeft.slice(corte)).toEqual([0, 0]);
+    expect(comInvalido.featuresRight.slice(corte)).toEqual([0, 0]);
   });
 
   it("projectFeatureSet('compact') é identidade", () => {

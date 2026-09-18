@@ -282,6 +282,10 @@ export type FeatureSet =
   | 'irisCore+l2csFull'
   | 'irisCore+l2cs+olho'
   | 'irisCore+olho'
+  | 'irisRel'
+  | 'irisRel+l2cs'
+  | 'irisAbs'
+  | 'irisAbs+l2cs'
   | 'compact';
 
 const FEATURE_SET_INDICES: Record<Exclude<FeatureSet, 'compact'>, readonly number[]> = {
@@ -315,6 +319,27 @@ const FEATURE_SET_INDICES: Record<Exclude<FeatureSet, 'compact'>, readonly numbe
    */
   'irisCore+l2cs+olho': [0, 1, 2, 3, 37, 38, 44, 45],
   'irisCore+olho': [0, 1, 2, 3, 44, 45],
+  /**
+   * Metade do bloco de íris, para matar a colinearidade (`dimsDaIris`).
+   *
+   * `offsetX` e `relX` diferem por um divisor — a largura do olho — que varia
+   * pouco entre quadros: com ±5 % de variação, a correlação entre os dois é
+   * 0,9996. Levar os quatro gasta duas dimensões num sinal só, e a expansão
+   * de grau 2 transforma isso em três colunas quase idênticas que nenhum alvo
+   * separa. São essas as direções que a penalidade anisotrópica do Ridge
+   * (`λ·m·Σ_W`) precisa sufocar — e que aqui simplesmente não nascem.
+   *
+   * `Rel` mantém as normalizadas (imunes à escala do rosto no quadro);
+   * `Abs` mantém as absolutas (sem o divisor, que é ele próprio ruidoso —
+   * a altura do olho oscila com a pálpebra).
+   *
+   * Conjuntos de ABLAÇÃO: mudam o `FEATURE_VECTOR_ID` e invalidam perfis
+   * salvos, por construção.
+   */
+  'irisRel': [2, 3],
+  'irisRel+l2cs': [2, 3, 37, 38],
+  'irisAbs': [0, 1],
+  'irisAbs+l2cs': [0, 1, 37, 38],
 };
 
 const FEATURE_SET_MIN_LENGTH: Record<Exclude<FeatureSet, 'compact'>, number> = {
@@ -323,7 +348,14 @@ const FEATURE_SET_MIN_LENGTH: Record<Exclude<FeatureSet, 'compact'>, number> = {
   'irisCore+l2csFull': 44,
   'irisCore+l2cs+olho': 46,
   'irisCore+olho': 46,
+  'irisRel': 4,
+  'irisRel+l2cs': 39,
+  'irisAbs': 2,
+  'irisAbs+l2cs': 39,
 };
+
+/** Só para teste: garante que nenhum conjunto novo fique sem mínimo declarado. */
+export const FEATURE_SET_MIN_LENGTH_FOR_TEST = FEATURE_SET_MIN_LENGTH;
 
 /** Índices do bloco ocular no vetor completo. */
 const OLHO_FULL_INDICES: readonly number[] = [44, 45];
@@ -331,21 +363,43 @@ const OLHO_FULL_INDICES: readonly number[] = [44, 45];
 /** Índices do bloco L2CS no vetor completo. */
 const L2CS_FULL_INDICES: readonly number[] = [37, 38, 39, 40, 41, 42, 43];
 
-/** Conjunto ativo. Resolvido uma vez no boot: sem L2CS, o modelo vê só as
- *  quatro dimensões de íris. */
-export const ACTIVE_FEATURE_SET: FeatureSet =
-  EXPERIMENT.eyeNet !== 'off'
+/**
+ * Conjunto ativo. Resolvido uma vez no boot: sem L2CS, o modelo vê só as
+ * dimensões de íris.
+ *
+ * `dimsDaIris` age APENAS nos caminhos de produção (`irisCore` e
+ * `irisCore+l2cs`). Os conjuntos de ablação — bloco L2CS completo e ramo
+ * ocular — já são experimentos por si; combinar dois cortes de uma vez
+ * produziria uma condição que nenhum A/B consegue atribuir.
+ */
+function resolverConjuntoAtivo(): FeatureSet {
+  if (EXPERIMENT.eyeNet !== 'off') {
     // Ramo ocular ligado: o bloco completo do L2CS (S7) não combina — seriam
     // 13 dims, e a S7 é ablação. O ramo ocular vence e avisa.
-    ? (EXPERIMENT.l2cs === 'off' ? 'irisCore+olho' : 'irisCore+l2cs+olho')
-    : EXPERIMENT.l2cs === 'off'
-      ? 'irisCore'
-      : EXPERIMENT.blocoL2csCompleto
-        ? 'irisCore+l2csFull'
-        : 'irisCore+l2cs';
+    return EXPERIMENT.l2cs === 'off' ? 'irisCore+olho' : 'irisCore+l2cs+olho';
+  }
+  if (EXPERIMENT.blocoL2csCompleto) return 'irisCore+l2csFull';
+  const semL2cs = EXPERIMENT.l2cs === 'off';
+  switch (EXPERIMENT.dimsDaIris) {
+    case 'normalizadas':
+      return semL2cs ? 'irisRel' : 'irisRel+l2cs';
+    case 'absolutas':
+      return semL2cs ? 'irisAbs' : 'irisAbs+l2cs';
+    default:
+      return semL2cs ? 'irisCore' : 'irisCore+l2cs';
+  }
+}
+
+export const ACTIVE_FEATURE_SET: FeatureSet = resolverConjuntoAtivo();
 
 if (EXPERIMENT.eyeNet !== 'off' && EXPERIMENT.blocoL2csCompleto) {
   console.warn('[extractor] eyeNet ligado: `blocoL2csCompleto` é ignorado (o conjunto ativo é o do ramo ocular).');
+}
+if (EXPERIMENT.dimsDaIris !== 'ambas' && (EXPERIMENT.eyeNet !== 'off' || EXPERIMENT.blocoL2csCompleto)) {
+  console.warn(
+    `[extractor] 'dimsDaIris=${EXPERIMENT.dimsDaIris}' é ignorado: o conjunto ativo ` +
+    `('${ACTIVE_FEATURE_SET}') é de ablação e leva o bloco de íris inteiro.`,
+  );
 }
 
 /** O conjunto ativo carrega o bloco ocular? */
@@ -362,6 +416,27 @@ export function l2csSlotsInSet(set: FeatureSet = ACTIVE_FEATURE_SET): number[] {
   const slots: number[] = [];
   for (let pos = 0; pos < indices.length; pos++) {
     if (L2CS_FULL_INDICES.includes(indices[pos])) slots.push(pos);
+  }
+  return slots;
+}
+
+/**
+ * Posições ANGULARES dentro do vetor projetado: bloco L2CS e bloco do ramo
+ * ocular juntos.
+ *
+ * São as dimensões que já chegam linearizadas pela tangente, e por isso as que
+ * a expansão parcial deixa fora dos termos quadráticos
+ * (`EXPERIMENT.formaDaExpansao = 'parcial'`). Vazio quando o conjunto não
+ * carrega nenhum bloco angular — e aí `parcial` não tem efeito, que é o
+ * resultado correto: não há nada a poupar.
+ */
+export function slotsAngularesNoConjunto(set: FeatureSet = ACTIVE_FEATURE_SET): number[] {
+  if (set === 'compact') return [...L2CS_FULL_INDICES, ...OLHO_FULL_INDICES];
+  const indices = FEATURE_SET_INDICES[set];
+  const slots: number[] = [];
+  for (let pos = 0; pos < indices.length; pos++) {
+    const i = indices[pos];
+    if (L2CS_FULL_INDICES.includes(i) || OLHO_FULL_INDICES.includes(i)) slots.push(pos);
   }
   return slots;
 }

@@ -75,49 +75,107 @@ Webcam (getUserMedia, até 1920×1080)
   │
   ├─ MediaPipe FaceLandmarker ─ 478 landmarks 3D + matriz de pose da cabeça
   │
-  ├─ L2CS-Net (ONNX, Web Worker) ─ yaw / pitch do olhar, com no máximo uma
-  │     submissão a cada 100 ms e uma inferência em voo por vez: 100 ms é o
-  │     teto da cadência, e em WASM quem manda é a latência da rede. Nos
-  │     quadros sem leitura nova o último ângulo é reusado; passada a
-  │     tolerância de idade (400 ms a 2,5 s, derivada da latência medida) a
-  │     leitura vira inválida e o bloco angular entra zerado.
-  │     WebGPU quando disponível, WASM como reserva; o provider efetivo, a
-  │     latência e a fração de leituras obsoletas vão para os diagnósticos e
+  ├─ L2CS-Net (ONNX, Web Worker) ─ yaw / pitch do olhar. A política segue o
+  │     provider efetivo: WebGPU recorta em 448² e submete a cada 100 ms;
+  │     WASM cai para 224² e ~160 ms, porque lá quem manda é a latência da
+  │     rede e insistir na resolução alta só produz leitura velha. Uma
+  │     inferência em voo por vez; o recorte e o tensor são montados no
+  │     worker. Nos quadros sem leitura nova o último ângulo válido é
+  │     REUSADO (até 600 ms) em vez de zerar o bloco — zerar produzia um
+  │     degrau que o Ridge saltava e o One Euro tentava seguir, e o cursor
+  │     pulava. Passada a tolerância de idade (400 ms a 2,5 s, derivada da
+  │     latência medida) a leitura vira inválida e aí sim o bloco entra
+  │     zerado. O provider efetivo, a latência, a fração de leituras
+  │     obsoletas e o motivo de cada bloco zerado vão para os diagnósticos e
   │     para o relatório
   │
-  ├─ Vetor de features por olho ─ 4 dimensões de íris + 2 do L2CS = 6
-  │     expansão polinomial (grau 2) → 27 dimensões por olho → StandardScaler
-  │     → Ridge por olho, com λ por eixo e penalidade branqueada pelo ruído
-  │     intra-fixação. Sem L2CS (`?ep=off`) são 4 dimensões → 14
+  ├─ Escala métrica pela íris ─ o diâmetro horizontal visível da íris é
+  │     notavelmente constante (11,7 mm, ±4 %, praticamente invariante com
+  │     etnia), e serve de régua para MEDIR a distância cantal desta pessoa
+  │     no lugar dos 9,0 cm genéricos. As duas medidas saem do mesmo quadro,
+  │     à mesma profundidade, então a distância da câmera se cancela e não é
+  │     preciso conhecer o FOV. Importa porque a compensação lateral é 1:1
+  │     em centímetros: num rosto de 8,2 cm, a constante genérica faria a
+  │     cadeira andar 4 cm e o cursor andar 4,4
+  │
+  ├─ Vetor de features por olho ─ 2 dimensões de íris (`offsetX`/`offsetY`)
+  │     + 2 do L2CS (`tan yaw` / `tan pitch`) = 4
+  │     expansão polinomial de grau 2 PARCIAL: o par angular fica só no termo
+  │     linear, porque já chega linearizado pela tangente — a geometria de
+  │     projeção é `x_tela ≈ x_olho + d·tan(yaw)`, então a 1ª ordem já é o
+  │     modelo certo e o quadrado captura só curvatura residual.
+  │     4 dims → 7 colunas por olho → StandardScaler → Ridge por olho, com λ
+  │     por eixo e penalidade branqueada pelo ruído intra-fixação
   │
   ├─ Fusão binocular ─ ponderada pela abertura de cada olho, pela
   │     confiabilidade medida no treino e pela dominância ocular configurada
   │
-  ├─ Compensação de cabeça ─ na saída, depois da fusão: primeiro a distância
-  │     (escala em torno do centro da tela), depois a pose (d·tan Δ). A de
-  │     translação lateral existe e vem por último, desligada por padrão
-  │     (`lateralTranslationCompensation`). Só a de pose também é aplicada aos
-  │     ALVOS de treino; a de distância é exclusiva da inferência
+  ├─ Referência geométrica lenta ─ dois relógios. As compensações medem um Δ
+  │     contra uma referência; congelada no instante da calibração, ela
+  │     envelhece — em ELA a postura migra ao longo da sessão, o pescoço cede,
+  │     a cabeça encosta no apoio. Uma EMA de τ = 30 s absorve essa deriva, e
+  │     uma virada de cabeça em 200 ms entra inteira no Δ porque a referência
+  │     não teve tempo de se mexer. Ela PARA quando o resíduo passa do limiar
+  │     (8° na pose, 5 cm na translação, por eixo e com histerese): cabeça
+  │     parada numa pose desviada é gesto, não deriva, e absorvê-lo comeria a
+  │     própria compensação com a pessoa ainda olhando para lá
   │
-  ├─ softClamp ─ Hermite cúbico nos 2 % de cada borda, para o ponto caber na
-  │     tela sem salto de velocidade. É a última etapa dentro de `mapGaze`,
-  │     depois das compensações
+  ├─ Compensação de cabeça ─ na saída, depois da fusão: primeiro a distância
+  │     (aditiva, fator limitado a 0,6–1,6), depois a pose (d·tan Δ), por
+  │     último a translação lateral do tronco (nariz em unidades da distância
+  │     cantal medida). Só a de pose também é aplicada aos ALVOS de treino; as
+  │     de distância e translação são exclusivas da inferência
+  │
+  ├─ Clamp de borda ─ `suave` (produção geral): Hermite cúbico nos 2 % de cada
+  │     borda, para o ponto caber na tela sem salto de velocidade. `duro` no
+  │     Modo Computador: [0, 1] com margem de 0–4 px, porque ali os alvos são
+  │     os botões da borda da tela e 2 % de amortecimento é o que fazia o
+  │     cursor "não chegar" no canto. É a última etapa dentro de `mapGaze`
   │
   ├─ Filtro temporal ─ One Euro (produção); Kalman e Kalman+EMA disponíveis
   │     para comparação (`filterMode`). Vem depois de tudo isso, no engine
   │
-  └─ Interação ─ dwell, cursor, emergência, varredura opcional, fallback
-        quando o olhar se perde
+  ├─ Interação ─ dwell, cursor, emergência, varredura opcional, fallback
+  │     quando o olhar se perde
+  │
+  └─ Correção por dwell ─ cada dwell concluído num alvo isolado é um rótulo
+        de graça: a pessoa estava olhando para onde clicou. O deslocamento
+        médio desses acertos corrige o viés residual, limitado a 8 % da tela.
+        No Modo Computador só aprende de alvos grandes da sobreposição do
+        IrisFlow — um botão de 20 px do Windows não é evidência de para onde
+        a pessoa olhava
 ```
 
+Quando a geometria sai do lugar — a pessoa sentou mais perto, escorregou na
+cadeira, apoiou a cabeça de outro jeito — a saída **não** é recalibrar. Um
+**reajuste de 2 s** olhando um alvo único no centro readota a distância medida
+e recomeça as referências de pose e de centro, sem retreinar o Ridge: o
+mapeamento íris→tela continua o mesmo, só muda o "zero" contra o qual as
+compensações medem. Ele aparece como botão no aviso de distância e no de
+postura. Os nove pontos só são pedidos quando o modelo deixou de descrever a
+pessoa — dispersão (BCEA) ou viés acima do que o último teste de precisão
+salvo registrou, ou a correção por dwell encostada no seu teto.
+
 A **calibração** apresenta 9 alvos (ou 4 no modo rápido) posicionados por um
-orçamento de excentricidade angular (≤ 16°). Cada alvo descarta os primeiros
-600 ms — sacada e acomodação — e coleta em seguida uma janela útil que cresce
-com a excentricidade, de 1680 ms no centro a 2800 ms nos cantos. Amostras com
-imagem ruim ou leitura do L2CS inválida são rejeitadas; um alvo que retenha
-menos de 15 amostras é refeito. O Ridge é treinado por olho, com λ escolhido
-por eixo em validação cruzada leave-one-target-out — cada fold deixa de fora
-um alvo inteiro, não uma amostra.
+orçamento de excentricidade angular (≤ 16°) — ou **13 alvos** no perfil
+`computador`, indo a 2 % da borda, porque ali o alvo é o canto de verdade.
+Cada alvo descarta os primeiros 600 ms — sacada e acomodação — e coleta em
+seguida uma janela útil que cresce com a excentricidade, de 1680 ms no centro
+a 2800 ms nos cantos.
+
+Amostra com bloco angular zerado **é aceita**, e isso é deliberado: rejeitá-la
+derrubava a linha inferior da grade inteira — é onde a pálpebra cobre a íris —
+e os alvos de baixo eram pulados por esgotar as tentativas, deixando o modelo
+extrapolar justamente a região onde ficam os botões mais usados. Trocamos "sem
+a linha de baixo" por "com a linha de baixo, parte dela com bloco zerado". O
+que é rejeitado continua sendo contado e vai para o diagnóstico.
+
+O Ridge é treinado por olho, com λ escolhido por eixo em validação cruzada
+leave-one-target-out — cada fold deixa de fora um alvo inteiro, não uma
+amostra. A regularização não é isotrópica: durante a janela de um alvo o olhar
+está parado por construção, logo toda variação intra-alvo é ruído, e trocar
+`λI` por `λ·m·Σ_W` (a covariância intra-alvo) penaliza forte as direções que
+só o jitter preenche. Sem isso, medimos ~30× de amplificação de ruído.
 
 Ao fim, um **teste de precisão** de 13 pontos (grade 3×3 interior mais 4
 bordas) mede a qualidade do modelo. Os alvos aparecem em **ordem sorteada**,
@@ -152,14 +210,21 @@ src/                        núcleo do pipeline (TypeScript puro, testado com Vi
   extractor.ts              features de íris e bloco angular; conjunto ativo
   featurePipeline.ts        fronteira consumida pelo engine
   ridge.ts, scaler.ts       Ridge anisotrópico com CV de λ; padronização
-  calibration/polynomial.ts expansão polinomial
+  calibration/polynomial.ts expansão polinomial de grau 2, completa ou parcial
+  escalaMetrica.ts          a íris como régua: distância cantal desta pessoa
+  referenciaLenta.ts        referência geométrica lenta (os dois relógios)
+  reancoragem.ts            acumulador do reajuste de 2 s no alvo central
+  vigiaDeRecalibracao.ts    quando os nove pontos são de fato necessários
   l2cs/                     worker ONNX, recorte, decodificação, proveniência, roll
   olho/                     ramo ocular (V2): recorte 96×64, bloco de features, provedor
   camera/                   campo de visão por câmera
   filters/                  One Euro, Kalman 2D, EMA adaptativa, hold na piscada
   interaction/              dwell, cursor, varredura, clique por piscada, fallback
   poseCompensation.ts       compensação geométrica de pose
-  distanceCompensation.ts   compensação de distância
+  distanceCompensation.ts   compensação de distância (aditiva, fator 0,6–1,6)
+  translationCompensation.ts compensação de translação lateral do tronco
+  anthropometry.ts          constantes antropométricas e seus limites
+  contraluz.ts              luz atrás da pessoa: invalida o quadro, não corrige
   cameraTuner.ts            lei de controle do ajuste da câmera
   setupReadiness.ts         prontidão do posto (distância, luz, reflexo, postura)
   qualityAnalyzer.ts        brilho, contraste, borrão e reflexo por quadro
@@ -317,7 +382,7 @@ recorte e inferir com outro é o modo de falha silencioso de um retreino.
 Definidas em `src/config/experiment.ts` e lidas uma vez no boot, de três
 fontes: `localStorage` (`irisflow.experiment`), parâmetros de URL
 (`?ep=`, `?l2cs=`, `?filtro=`, `?diagonal=`, `?rollCrop=`, `?estabilizar=`,
-`?dwellCorrige=`, `?olho=`) e variáveis de ambiente
+`?dwellCorrige=`, `?olho=`, `?expansao=`, `?dimsIris=`) e variáveis de ambiente
 `IRISFLOW_EXP_<chave>` no Electron. Pelo console: `__irisflowExp.set({...})`
 seguido de reload. A tela de Configurações do cuidador expõe as mesmas
 opções e avisa quando falta recarregar.
@@ -326,12 +391,69 @@ opções e avisa quando falta recarregar.
 |---|---|---|
 | `l2cs` | `auto` | `auto` · `webgpu` · `wasm` · `off` |
 | `l2csInputSize` | `448` | `224` · `448` |
+| `l2csCadenceMs` | `100` | 33–2000 |
 | `filterMode` | `oneEuro` | `oneEuro` · `kalman` · `kalmanEma` |
-| `geometricPoseCompensation` | `true` | |
 | `polynomialFeatures` | `true` | |
+| `formaDaExpansao` | `parcial` | `parcial` · `completa` |
+| `dimsDaIris` | `absolutas` | `absolutas` · `normalizadas` · `ambas` |
+| `geometricPoseCompensation` | `true` | |
+| `lateralTranslationCompensation` | `true` | |
+| `referenciaLenta` | `true` | |
+| `suavizarL2csNaFixacao` | `true` | |
+| `estabilizarFixacao` | `true` | |
+| `correcaoPorDwell` | `true` | |
+| `normalizarRollNoCrop` | `false` | ablação — ver abaixo |
+| `blocoL2csCompleto` | `false` | ablação — ver abaixo |
+| `eyeNet` | `off` | `off` · `onnx` |
 | `cursorSizePx` | `48` | 24–128 |
 | `blinkClick`, `scanningMode`, `dwellRingOnCursor` | `false` | |
 | `gazeLostFallback` | `true` | |
+
+Três dessas flags **invalidam perfis salvos** quando mudam, por construção:
+`dimsDaIris` e `blocoL2csCompleto` mudam o `FEATURE_VECTOR_ID`, e
+`formaDaExpansao` muda o número e a ordem das colunas que o Ridge vê (os
+coeficientes são posicionais). A invalidação é proteção, não obstáculo: sem
+ela um perfil treinado num arranjo carregaria no outro sem erro nenhum e
+preveria deslocado. Ao alternar para medir, conte uma recalibração por troca.
+
+Duas continuam desligadas de propósito. `normalizarRollNoCrop` só ajuda se a
+normalização for a MESMA do treino do checkpoint empacotado, e este projeto
+ainda não confirmou como o Gaze360 foi treinado — normalização diferente da do
+dataset piora em vez de melhorar. `blocoL2csCompleto` leva as sete dimensões
+do bloco angular em vez de duas: com nove alvos, é território de decorar.
+
+#### Arranjo do vetor: o que está medido e o que não está
+
+`formaDaExpansao: 'parcial'` e `dimsDaIris: 'absolutas'` são os defaults desde
+que o vetor foi reduzido de 27 para 7 colunas. **Eles foram adotados sem A/B na
+pessoa** — a evidência até aqui é de simulação, e está registrada aqui para que
+ninguém a confunda com medida de campo.
+
+O que a simulação mostra (mundo sintético, 9 alvos, 15 amostras por alvo, erro
+medido nos CANTOS, fora do fecho dos alvos, média de 16–24 execuções):
+
+| arranjo | colunas | erro nominal | com ptose | 20 % mais perto |
+|---|---|---|---|---|
+| `ambas` + `completa` (histórico) | 27 | referência | **4× pior** | **2,2× pior** |
+| `normalizadas` + `parcial` | 7 | −11 % | −45 % | plano |
+| `absolutas` + `parcial` (atual) | 7 | −11 % | **−47 %** | quase plano |
+
+As duas reduções são independentes e se somam: cortam eixos diferentes — a
+colinearidade na entrada (`offsetX` e `relX` diferem por um divisor que varia
+pouco: correlação ~0,9996) e os termos quadráticos que não pagam aluguel.
+
+`absolutas` ganhou de `normalizadas` por um critério de pior caso, não de média.
+As duas empatam no erro nominal e se separam nos dois modos de falha: a PTOSE
+corrompe a altura do olho, que é o divisor de `relY`, e nada no pipeline
+compensa isso; a DISTÂNCIA escala `offsetX`/`offsetY` e não escala `relX`/`relY`,
+mas para distância já existe compensação dedicada a jusante.
+
+**O que falta medir, e é o que decide:** o teste de precisão na pessoa, com a
+câmera dela, comparando `?expansao=completa&dimsIris=ambas` contra o default.
+A régua do projeto é ≥ 15 % de ganho nos cantos. Simulação não substitui isso —
+ela fixa a propriedade estrutural (tirar colunas que só o jitter preenchia não
+custa capacidade explicativa), não prevê o erro do produto. Se a medida na
+pessoa não confirmar, o caminho de volta é uma flag.
 
 ---
 

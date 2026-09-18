@@ -115,6 +115,27 @@ export function aplicarSessaoDaUrl(
     else console.warn(`[sessão] ?olho=${olho} inválido — aceitos: off, onnx.`);
   }
 
+  // Arranjo do vetor que entra no Ridge. Os dois variam a MESMA coisa por
+  // ângulos diferentes — quantas colunas nove alvos precisam determinar — e
+  // por isso andam juntos no plano de medição: `dimsIris` corta a
+  // colinearidade na entrada, `expansao` corta os termos quadráticos que não
+  // pagam aluguel.
+  const expansao = p.get('expansao');
+  if (expansao !== null) {
+    if (expansao === 'completa' || expansao === 'parcial') exp.formaDaExpansao = expansao;
+    else console.warn(`[sessão] ?expansao=${expansao} inválido — aceitos: completa, parcial.`);
+  }
+  const dimsIris = p.get('dimsIris');
+  if (dimsIris !== null) {
+    if (dimsIris === 'ambas' || dimsIris === 'normalizadas' || dimsIris === 'absolutas') {
+      exp.dimsDaIris = dimsIris;
+    } else {
+      console.warn(
+        `[sessão] ?dimsIris=${dimsIris} inválido — aceitos: ambas, normalizadas, absolutas.`,
+      );
+    }
+  }
+
   if (JSON.stringify(exp) !== expAntes) {
     localStorage.setItem(CHAVE_EXP, JSON.stringify(exp));
     mudou = true;

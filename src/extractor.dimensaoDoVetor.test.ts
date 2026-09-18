@@ -78,7 +78,7 @@ describe('o erro sobe até o featurePipeline em vez de virar vetor errado', () =
     expect(() => extractFeatures(lm, undefined, null, 1920, 1080)).toThrow();
   });
 
-  it('extractFeatures COM l2csGaze válido devolve o vetor de 6 dims', () => {
+  it('extractFeatures COM l2csGaze válido devolve o vetor do conjunto ATIVO', () => {
     const lm = rostoSintetico();
     const r = extractFeatures(
       lm,
@@ -87,11 +87,15 @@ describe('o erro sobe até o featurePipeline em vez de virar vetor errado', () =
       1920,
       1080,
     );
-    expect(r.featuresLeft).toHaveLength(6);
-    expect(r.featuresRight).toHaveLength(6);
+    // Derivado: o que este teste guarda é "o pipeline entrega a dimensão que
+    // o conjunto ativo declara", não um número. `dimsDaIris` já mudou esse
+    // número uma vez, e um literal aqui falha por uma razão que não é a dele.
+    const dims = activeFeatureDims() as number;
+    expect(r.featuresLeft).toHaveLength(dims);
+    expect(r.featuresRight).toHaveLength(dims);
   });
 
-  it('extractFeatures com l2csGaze {valid:false} também devolve 6 dims', () => {
+  it('extractFeatures com l2csGaze {valid:false} devolve a MESMA dimensão', () => {
     // O bloco é anexado ZERADO quando inválido — degradação graciosa. O que
     // não pode acontecer é o bloco sumir.
     const lm = rostoSintetico();
@@ -102,7 +106,7 @@ describe('o erro sobe até o featurePipeline em vez de virar vetor errado', () =
       1920,
       1080,
     );
-    expect(r.featuresLeft).toHaveLength(6);
+    expect(r.featuresLeft).toHaveLength(activeFeatureDims() as number);
   });
 
   it('frame sem rosto (menos de 478 landmarks) não lança — devolve vazio', () => {
