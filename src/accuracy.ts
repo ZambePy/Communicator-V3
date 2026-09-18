@@ -13,7 +13,7 @@ import {
   getCurrentCameraDistanceCm, getCalibrationTimestampMs,
 } from './calibration';
 import { REGRESSOR_MODE } from './gazeRegressor';
-import { experimentSnapshot } from './config/experiment';
+import { EXPERIMENT, experimentSnapshot } from './config/experiment';
 import { ACCLIMATION_MS, COLLECTION_MS, MIN_VALID_SAMPLE_RATIO, quadrosEsperados } from './accuracyProtocol';
 import { ACTIVE_FEATURE_SET, l2csSlotsInSet } from './extractor';
 
@@ -115,6 +115,66 @@ export interface AccuracyResult {
   /** Distância olho→CÂMERA medida durante o teste (mediana e faixa), em cm.
    *  Não é a olho→tela de `meta.distanciaCm`, que é digitada. */
   distanciaMedidaCm: { mediana: number; min: number; max: number } | null;
+  /**
+   * Em que modo esta rodada correu. Presente em TODO resultado, inclusive nos
+   * de medição, para que nenhum consumidor precise inferir pela ausência de
+   * campo — e para que um relatório de verificação não possa ser lido como se
+   * fosse de medição.
+   */
+  modo: ModoDoTeste;
+  /** Só em `'verificacao'`: as métricas de malha fechada. */
+  verificacao?: MetricasDeVerificacao;
+}
+
+/**
+ * O que a rodada está medindo.
+ *
+ * `'medicao'` — o protocolo científico: cursor ESCONDIDO, malha aberta. Mede
+ * uma propriedade do MODELO: "dado que a pessoa está olhando para o alvo, onde
+ * o sistema acha que ela está olhando?". Só vale enquanto ninguém realimenta o
+ * laço, e é a rodada que alimenta o relatório canônico e o vigia de
+ * recalibração.
+ *
+ * `'verificacao'` — cursor VISÍVEL, malha fechada. Mede outra coisa, e de
+ * propósito: "a pessoa consegue levar o cursor até o alvo, e em quanto tempo?".
+ * É a pergunta que decide se o teclado é usável, e é a que o usuário quer ver
+ * respondida quando pede para "ver o cursor durante o teste". Os números das
+ * duas rodadas NÃO são comparáveis e nunca se misturam: ver
+ * `AccuracyResult.verificacao` e o `protocolo.modo` do JSON.
+ *
+ * Por que não dá para ter as duas ao mesmo tempo, num mesmo alvo: vendo o
+ * cursor, a pessoa corrige o olhar até o cursor cair no alvo. A partir daí
+ * "olhar para o alvo" deixou de ser verdade, o erro medido vira o erro
+ * RESIDUAL da perseguição, e ele tende a zero qualquer que seja a qualidade do
+ * modelo. Não existe pós-processamento que desfaça isso — a contaminação
+ * entrou no comportamento da pessoa, não no sinal.
+ */
+export type ModoDoTeste = 'medicao' | 'verificacao';
+
+/**
+ * Raio, em px, dentro do qual o cursor conta como "sobre o alvo" na rodada de
+ * verificação.
+ *
+ * 60 px na geometria de referência são ~1,6° — a ordem do menor alvo que esta
+ * interface usa, e a mesma faixa em que `hitRateByRadius` já reporta.
+ */
+export const RAIO_DE_ACERTO_PX = 60;
+
+/** Métricas de MALHA FECHADA da rodada de verificação. Nunca se misturam com
+ *  as do protocolo — são de outra pergunta. */
+export interface MetricasDeVerificacao {
+  /** Alvos em que o cursor chegou a entrar no raio de acerto. */
+  alvosAcertados: number;
+  alvosTotais: number;
+  /** Mediana do tempo entre o alvo aparecer e o cursor entrar nele, em ms.
+   *  `null` se nenhum alvo foi acertado. */
+  tempoMedianoAteAcertarMs: number | null;
+  /** Pior tempo entre os alvos acertados, em ms. */
+  tempoMaximoAteAcertarMs: number | null;
+  /** Fração do tempo de coleta em que o cursor esteve dentro do raio, média
+   *  sobre os alvos. É o número que diz se dá para "segurar" no alvo. */
+  fracaoDoTempoNoAlvo: number | null;
+  raioPx: number;
 }
 
 /** Condição da sessão, preenchida pela UI e gravada junto do resultado. */
@@ -403,6 +463,17 @@ interface PointDiagnostic {
   name: string;
   samplesError: number[];
   meanPose?: { yaw: number; pitch: number; roll: number };
+  /**
+   * Só na rodada de VERIFICAÇÃO (malha fechada). Campos de outra pergunta,
+   * guardados ao lado dos do protocolo e nunca somados a eles.
+   */
+  malhaFechada?: {
+    /** ms entre o alvo aparecer e o cursor entrar no raio. `null` = não entrou. */
+    tempoAteAcertarMs: number | null;
+    /** Fração do tempo do alvo em que o cursor esteve dentro do raio. */
+    fracaoNoAlvo: number | null;
+    raioPx: number;
+  };
 }
 
 // Grade 3×3 de validação em 25/50/75, disjunta da grade de calibração (que
@@ -460,6 +531,43 @@ let currentFiltered: { x: number; y: number; seq: number } | null = null;
 
 export let isAccuracyTesting = false;
 
+/** Modo da rodada em curso. Sem rodada em curso, o último valor é irrelevante. */
+let modoDoTeste: ModoDoTeste = 'medicao';
+
+/** Modo da rodada em curso (ou da última). */
+export function modoDoTesteAtual(): ModoDoTeste {
+  return modoDoTeste;
+}
+
+/**
+ * O cursor de olhar pode aparecer agora?
+ *
+ * Existe para o `GazeContext` não precisar conhecer o protocolo: ele pergunta,
+ * e este módulo — que é quem sabe o que está sendo medido — responde.
+ *
+ * Fora do teste a pergunta não é dele (o contexto tem as próprias razões para
+ * esconder o cursor: calibração, sem modelo, modo desenvolvedor), então a
+ * resposta é `true` e quem decide continua sendo o contexto.
+ */
+export function cursorVisivelNoTeste(): boolean {
+  return !isAccuracyTesting || rodadaMostraCursor();
+}
+
+/**
+ * A rodada em curso (ou a que acabou de terminar) mostrava o cursor?
+ *
+ * Separada de `cursorVisivelNoTeste` porque o relatório é montado DEPOIS de
+ * `isAccuracyTesting` voltar a `false`: perguntar lá pela função pública
+ * devolveria `true` sempre, e o JSON diria que toda rodada teve cursor.
+ */
+function rodadaMostraCursor(): boolean {
+  if (modoDoTeste === 'verificacao') return true;
+  // Escotilha do operador, que já existia: ver o cursor ao vivo numa rodada de
+  // MEDIÇÃO, sabendo que ela deixa de ser comparável. A flag entra no
+  // `pipeline.experiment` do relatório justamente para isso ficar registrado.
+  return EXPERIMENT.cursorNoTesteDePrecisao === true;
+}
+
 let currentValidationTarget: { xPx: number; yPx: number; label: string } | null = null;
 
 export function getCurrentTargetPx(): { xPx: number; yPx: number; label: string } | null {
@@ -492,9 +600,54 @@ export function startAccuracyTest(
   onComplete?: (result: AccuracyResult, action: 'continue' | 'redo') => void,
   meta?: RunMeta,
   runtime?: RuntimeInfo,
+  opts?: { modo?: ModoDoTeste },
 ) {
+  // REENTRÂNCIA: uma rodada por vez.
+  //
+  // Sem esta guarda, chamar de novo com uma rodada viva cria um SEGUNDO
+  // overlay com o mesmo id e um segundo vigia, os dois escrevendo no mesmo
+  // estado de módulo. Quando o vigia órfão da primeira rodada estoura, ele
+  // chama o `onComplete` DELA — que navega, ou apaga a calibração no caminho
+  // `'redo'` — no meio da segunda medição. O caminho é real: um throw no
+  // preparo deixava a primeira rodada órfã e a tela oferecia "Tentar de novo".
+  if (isAccuracyTesting) {
+    console.warn('[accuracy] já há uma rodada em andamento; a segunda chamada foi ignorada.');
+    return;
+  }
   isAccuracyTesting = true;
+  // Default `'medicao'`: quem não pede nada continua rodando o protocolo, e
+  // nenhum chamador existente muda de comportamento.
+  modoDoTeste = opts?.modo ?? 'medicao';
 
+  try {
+    prepararRodada(onComplete, meta, runtime);
+  } catch (e) {
+    // A FLAG NÃO PODE FICAR PRESA.
+    //
+    // `isAccuracyTesting` governa o cursor de olhar do app inteiro: com ela
+    // ligada, o `GazeContext` esconde o cursor. O preparo abaixo pode lançar —
+    // os dois chamadores embrulham a chamada em try/catch exatamente porque
+    // esperam isso — e o único ponto que desligava a flag era o `finalizar()`,
+    // inalcançável se o preparo nem chegou a montar a rodada. O resultado era
+    // um app sem cursor de olhar até recarregar, sem nada na tela explicando.
+    //
+    // Desliga, limpa o que já tinha sido montado, e RELANÇA: o chamador
+    // continua vendo a falha e mostrando a mensagem que já mostrava.
+    isAccuracyTesting = false;
+    currentValidationTarget = null;
+    document.getElementById('accuracy-overlay')?.remove();
+    fecharPainelDeDiagnostico();
+    throw e;
+  }
+}
+
+/** O preparo e o disparo da rodada. Separado para o `startAccuracyTest` poder
+ *  desfazer o estado global se qualquer parte disto lançar. */
+function prepararRodada(
+  onComplete?: (result: AccuracyResult, action: 'continue' | 'redo') => void,
+  meta?: RunMeta,
+  runtime?: RuntimeInfo,
+) {
   const overlap = checkValidationOverlap(getCalibrationTargets(), ALL_VALIDATION_POINTS);
   if (overlap.length > 0) {
     console.warn(
@@ -605,6 +758,14 @@ export function startAccuracyTest(
     const poseRoll: number[] = [];
     let primeiraAmostraMs = 0;
     let ultimaAmostraMs = 0;
+    // Malha fechada (só na rodada de verificação): quando o CURSOR — a saída
+    // filtrada, que é o que a pessoa enxerga — entrou no alvo pela primeira
+    // vez, e por quanto tempo ficou lá. Coletado em variáveis próprias e
+    // agregado à parte: nada disto toca `predictedX/Y`, que continuam sendo a
+    // predição crua do modelo.
+    let tempoAteAcertarMs: number | null = null;
+    let quadrosNoAlvo = 0;
+    let quadrosDeCursor = 0;
 
     const targetScreenX = fracaoDaTelaParaPx(vp.screenX, vw);
     const targetScreenY = fracaoDaTelaParaPx(vp.screenY, vh);
@@ -620,6 +781,24 @@ export function startAccuracyTest(
       const frameNovo = currentFrameSeq !== lastSeenSeq;
 
       if (!poseBaseline && currentPose) poseBaseline = { ...currentPose };
+
+      // Malha fechada, na rodada de verificação. Corre desde `elapsed = 0`, e
+      // não a partir da acomodação: o que se mede aqui é justamente QUANTO
+      // TEMPO a pessoa leva para pousar o cursor no alvo, e esse relógio
+      // começa quando o alvo aparece. É a diferença de pergunta entre as duas
+      // rodadas, e por isso as duas contagens são separadas.
+      if (modoDoTeste === 'verificacao' && frameNovo && currentFiltered
+          && currentFiltered.seq === currentFrameSeq) {
+        quadrosDeCursor++;
+        const dentro = Math.hypot(
+          currentFiltered.x - targetScreenX,
+          currentFiltered.y - targetScreenY,
+        ) <= RAIO_DE_ACERTO_PX;
+        if (dentro) {
+          quadrosNoAlvo++;
+          if (tempoAteAcertarMs === null) tempoAteAcertarMs = elapsed;
+        }
+      }
 
       if (elapsed >= ACCLIMATION_MS && frameNovo) {
         lastSeenSeq = currentFrameSeq;
@@ -671,6 +850,11 @@ export function startAccuracyTest(
         nSamples: n,
         name: vp.name,
         samplesError: [],
+        malhaFechada: modoDoTeste === 'verificacao' ? {
+          tempoAteAcertarMs,
+          fracaoNoAlvo: quadrosDeCursor > 0 ? quadrosNoAlvo / quadrosDeCursor : null,
+          raioPx: RAIO_DE_ACERTO_PX,
+        } : undefined,
         meanPose: poseYaw.length > 0 ? {
           yaw: poseYaw.reduce((s, v) => s + v, 0) / poseYaw.length,
           pitch: posePitch.reduce((s, v) => s + v, 0) / posePitch.length,
@@ -896,6 +1080,40 @@ export function affineErrorDecomposition(
   };
 }
 
+/**
+ * Agrega as métricas de malha fechada dos pontos da rodada de verificação.
+ *
+ * Mediana e não média no tempo até acertar: um alvo em que a pessoa piscou na
+ * hora errada vira um outlier de 1,5 s que arrasta a média inteira, e o que se
+ * quer saber é o tempo típico.
+ */
+function agregarVerificacao(diagnostics: readonly PointDiagnostic[]): MetricasDeVerificacao {
+  const tempos: number[] = [];
+  const fracoes: number[] = [];
+  for (const d of diagnostics) {
+    const m = d.malhaFechada;
+    if (!m) continue;
+    if (m.tempoAteAcertarMs !== null) tempos.push(m.tempoAteAcertarMs);
+    if (m.fracaoNoAlvo !== null) fracoes.push(m.fracaoNoAlvo);
+  }
+  const mediana = (v: number[]): number | null => {
+    if (v.length === 0) return null;
+    const o = [...v].sort((a, b) => a - b);
+    const m = Math.floor(o.length / 2);
+    return o.length % 2 ? o[m] : (o[m - 1] + o[m]) / 2;
+  };
+  return {
+    alvosAcertados: tempos.length,
+    alvosTotais: diagnostics.length,
+    tempoMedianoAteAcertarMs: mediana(tempos),
+    tempoMaximoAteAcertarMs: tempos.length > 0 ? Math.max(...tempos) : null,
+    fracaoDoTempoNoAlvo: fracoes.length > 0
+      ? fracoes.reduce((a, b) => a + b, 0) / fracoes.length
+      : null,
+    raioPx: RAIO_DE_ACERTO_PX,
+  };
+}
+
 function finishTest(
   overlay: HTMLDivElement,
   pointErrors: number[],
@@ -1113,9 +1331,16 @@ function finishTest(
     poseDeltaCalibToTestDeg,
     affine,
     validationOverlap: validationOverlap && validationOverlap.length > 0 ? validationOverlap : undefined,
+    modo: modoDoTeste,
+    verificacao: modoDoTeste === 'verificacao' ? agregarVerificacao(diagnostics) : undefined,
   };
 
-  try {
+  // O `accuracyResult` do storage é a LINHA DE BASE do vigia de recalibração.
+  // Uma rodada de verificação não pode escrevê-lo: os números dela vêm de uma
+  // pessoa perseguindo o cursor, então o erro é artificialmente baixo, e o
+  // vigia passaria a comparar o uso normal contra uma régua que não existe —
+  // pedindo recalibração o tempo todo. Escrever só na medição.
+  if (modoDoTeste === 'medicao') try {
     localStorage.setItem('accuracyResult', JSON.stringify({
       meanError, medianError: agg.medianError, p90Error: agg.p90Error, maxError: agg.maxError,
       meanErrorDeg, jitterRMS, score, colorClass, timestamp: Date.now(),
@@ -1154,6 +1379,12 @@ function finishTest(
       fracaoMinimaDeAmostras: MIN_VALID_SAMPLE_RATIO,
       ordem: 'sorteada',
       sementeDaOrdem,
+      // O leitor do relatório precisa saber DE QUE pergunta são estes números
+      // antes de olhar para eles. Numa rodada de verificação o cursor estava
+      // na tela e a pessoa o perseguia: `result.meanError` mede o resíduo da
+      // perseguição, não a acurácia do modelo, e não se compara com nada.
+      modo: modoDoTeste,
+      cursorVisivel: rodadaMostraCursor(),
     },
     timestamp: new Date().toISOString(),
     resolution: `${vw}x${vh}`,
@@ -1247,12 +1478,35 @@ function finishTest(
   showDiagnosticOverlay(diagnostics, result, onComplete, motivoDeAborto);
 }
 
+/**
+ * Fecha o painel de resultados, se houver um aberto.
+ *
+ * O painel é anexado ao `body` fora do React e registra um `keydown` no
+ * documento. Sair dele pelo botão de emergência — que é global e dwellável —
+ * deixava as duas coisas vivas pelo resto da sessão: um overlay de tela cheia
+ * por cima do app e um handler de teclado que ainda responde a Espaço e R.
+ *
+ * Idempotente, e seguro de chamar quando não há painel. Chamado no começo de
+ * toda rodada e a cada troca de rota (ver `FechaPainelAoNavegar` no App).
+ */
+export function fecharPainelDeDiagnostico(): void {
+  const fechar = limparPainelDeDiagnostico;
+  limparPainelDeDiagnostico = null;
+  fechar?.();
+}
+
+/** Cleanup do painel aberto agora. `null` quando não há painel. */
+let limparPainelDeDiagnostico: (() => void) | null = null;
+
 function showDiagnosticOverlay(
   diagnostics: PointDiagnostic[],
   result: AccuracyResult,
   onComplete?: (result: AccuracyResult, action: 'continue' | 'redo') => void,
   motivoDeAborto?: string,
 ) {
+  // Um painel por vez: se o anterior ficou aberto, ele vai embora com o
+  // listener dele antes de o novo registrar o seu.
+  fecharPainelDeDiagnostico();
   const vw = document.documentElement.clientWidth;
   const vh = document.documentElement.clientHeight;
 
@@ -1447,13 +1701,34 @@ function showDiagnosticOverlay(
   function encerrar(action: 'continue' | 'redo') {
     if (encerrado) return;
     encerrado = true;
+    limparPainelDeDiagnostico = null;
     document.removeEventListener('keydown', handleKey);
+    window.removeEventListener('pagehide', aoSairDaPagina);
     overlay.classList.remove('visible');
     setTimeout(() => {
       overlay.remove();
       onComplete?.(result, action);
     }, action === 'continue' ? 300 : 0);
   }
+
+  /**
+   * Desmonta SEM chamar `onComplete`.
+   *
+   * A diferença para `encerrar` é o `onComplete`: ele navega, e em alguns
+   * caminhos apaga a calibração. Fechar o painel porque a pessoa saiu por
+   * outro caminho não pode disparar nada disso — só limpar o que ficou.
+   */
+  function desmontar() {
+    if (encerrado) return;
+    encerrado = true;
+    limparPainelDeDiagnostico = null;
+    document.removeEventListener('keydown', handleKey);
+    window.removeEventListener('pagehide', aoSairDaPagina);
+    overlay.remove();
+  }
+  const aoSairDaPagina = () => desmontar();
+  limparPainelDeDiagnostico = desmontar;
+  window.addEventListener('pagehide', aoSairDaPagina);
 
   function handleKey(e: KeyboardEvent) {
     if (e.code === 'Space') {
