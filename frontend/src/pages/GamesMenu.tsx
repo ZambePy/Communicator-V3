@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   Target,
@@ -13,6 +14,8 @@ import {
 } from 'lucide-react';
 import { GazeButton } from '../components/ui/GazeButton';
 import { DicaContextual } from '../components/ui/DicaContextual';
+import { FaixaDeMissao } from '../components/FaixaDeMissao';
+import { cumprirMissao } from './tutorial/missao';
 
 interface ActivityCard {
   route: string;
@@ -132,6 +135,7 @@ const SECOES: Secao[] = [
 ];
 
 export const GamesMenu: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   return (
@@ -252,6 +256,7 @@ export const GamesMenu: React.FC = () => {
         </div>
       </header>
 
+      <FaixaDeMissao missao="lazer" instrucao={t('tutorial.lazer.missao')} />
       <DicaContextual id="jogos" />
 
       <div
@@ -301,7 +306,14 @@ export const GamesMenu: React.FC = () => {
                       os dois, mas só o GazeButton mostra o anel de progresso —
                       sem ele o paciente não sabe se o alvo está carregando. */}
                   <GazeButton
-                    onClick={() => navigate(activity.route)}
+                    onClick={() => {
+                      // Missão do tutorial: abrir um jogo JÁ é a ação pedida.
+                      // Exigir "jogar até o fim" transformaria um convite em
+                      // prova, e o passo nem é obrigatório. Silenciosa fora do
+                      // tutorial.
+                      cumprirMissao('lazer');
+                      navigate(activity.route);
+                    }}
                     aria-label={`Abrir ${activity.title} — ${activity.subtitle}`}
                     className="action-card"
                     style={{

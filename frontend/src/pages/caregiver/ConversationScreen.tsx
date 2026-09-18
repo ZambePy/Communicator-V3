@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Check, X, Volume2, Keyboard, MessageSquare, Cloud, CloudOff, LogIn, Sparkles } from 'lucide-react';
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeGrid } from '../../components/ui/GazeGrid';
@@ -14,6 +15,8 @@ import {
 } from '../../services/assistente';
 import type { Message } from '../../cloud/types';
 import { DicaContextual } from '../../components/ui/DicaContextual';
+import { FaixaDeMissao } from '../../components/FaixaDeMissao';
+import { cumprirMissao } from '../tutorial/missao';
 
 /**
  * Conversa com o cuidador — o outro lado da aba "Conversa" do app mobile.
@@ -32,6 +35,7 @@ const hora = (iso: string) => {
 };
 
 export const ConversationScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const cloud = useCloud();
   const listaRef = useRef<HTMLDivElement>(null);
@@ -83,6 +87,9 @@ export const ConversationScreen: React.FC = () => {
     // O assistente aprende PARA QUE pergunta esta resposta serviu — é o que faz
     // a décima vez custar uma fixação em vez de uma frase inteira.
     registrarFalaDoPaciente(texto, perguntaNoAr);
+    // Missão do tutorial, quando houver uma: o que ele pediu foi RESPONDER, e
+    // é aqui que a resposta sai. Silenciosa fora do tutorial.
+    cumprirMissao('conversa');
   };
 
   const nomeDoCuidador = 'cuidador';
@@ -92,6 +99,10 @@ export const ConversationScreen: React.FC = () => {
     return (
       <GazePageLayout showBack backRoute="/menu">
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1.5rem', textAlign: 'center' }}>
+          {/* Também aqui: sem conta ligada a conversa não roda, e quem chegou
+              pelo tutorial precisa de um caminho de volta que não seja
+              adivinhar. O passo não é obrigatório — ninguém fica preso. */}
+          <FaixaDeMissao missao="conversa" instrucao={t('tutorial.conversa.missao')} />
           <CloudOff size={72} color="#94a3b8" aria-hidden="true" />
           <h1 style={{ fontSize: '2.4rem', fontWeight: 900, margin: 0, color: 'var(--color-text-base)' }}>Conversa com o cuidador</h1>
           <p style={{ fontSize: '1.3rem', maxWidth: 640, margin: 0, color: 'var(--color-text-base)', opacity: 0.8, lineHeight: 1.5 }}>
@@ -112,6 +123,7 @@ export const ConversationScreen: React.FC = () => {
   return (
     <GazePageLayout showBack backRoute="/menu">
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', gap: '1rem', boxSizing: 'border-box' }}>
+        <FaixaDeMissao missao="conversa" instrucao={t('tutorial.conversa.missao')} />
         <DicaContextual id="conversa" />
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
           <div>

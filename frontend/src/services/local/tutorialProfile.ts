@@ -7,8 +7,16 @@
  * já lhes foi ensinado.
  */
 
-/** Suba quando os passos mudarem a ponto de valer a pena reapresentá-los. */
-export const TUTORIAL_VERSION = 1;
+/**
+ * Suba quando os passos mudarem a ponto de valer a pena reapresentá-los.
+ *
+ * 2 — a jornada deixou de terminar no dwell. O tutorial passou a levar a
+ * pessoa até as telas reais (frases prontas, teclado, conversa, jogos) e a
+ * pedir que ela ESCREVA uma frase antes de seguir. Quem fez a versão 1 nunca
+ * foi convidado a escrever nada, então vale reapresentar: é justamente o passo
+ * que muda o que a pessoa acha que consegue fazer.
+ */
+export const TUTORIAL_VERSION = 2;
 
 export interface DadosDoTutorial {
   dwellMsEscolhido: number;

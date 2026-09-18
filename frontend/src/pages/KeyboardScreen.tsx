@@ -14,6 +14,9 @@ import {
 } from '../services/assistente';
 import { logSentence } from '../utils/clinicalLogger';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { FaixaDeMissao } from '../components/FaixaDeMissao';
+import { cumprirMissao } from './tutorial/missao';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * DIREÇÃO VISUAL
@@ -128,6 +131,7 @@ const EspacoGlifo: React.FC<{ width: number }> = ({ width }) => {
 };
 
 export const KeyboardScreen: React.FC = () => {
+  const { t } = useTranslation();
   const { setIsComposing } = useGaze();
   // contexto separado: assinar `useGaze()` para ler `isDwelling` faria
   // esta tela (507 linhas) re-renderizar a cada mudança de estado do engine.
@@ -238,6 +242,11 @@ export const KeyboardScreen: React.FC = () => {
       logSentence(text);
       // vai para o celular do cuidador (se a conta estiver ligada)
       emitirFalaDoPaciente(text, 'texto');
+      // Missão do tutorial, quando houver uma. Marcada AQUI, dentro do
+      // `if (text.trim())`: o que o tutorial pede é uma frase ESCRITA e
+      // falada, e um "Falar" com a linha vazia não é isso. Silenciosa e
+      // idempotente quando não há tutorial rodando.
+      cumprirMissao('digitacao');
     }
   };
 
@@ -517,6 +526,12 @@ export const KeyboardScreen: React.FC = () => {
           } as React.CSSProperties
         }
       >
+        {/* Faixa do tutorial, quando a pessoa chegou aqui por ele. Acima da
+            barra superior e no tom escuro do teclado: uma mancha clara na
+            periferia dispara sacada reflexa, que é justamente o que o desenho
+            desta tela evita. Ocupa altura própria e some junto com a missão. */}
+        <FaixaDeMissao missao="digitacao" instrucao={t('tutorial.digitacao.missao')} tom="escuro" />
+
         {/* ── Barra superior: saídas à esquerda, o que está sendo escrito à
             direita. O texto ocupa o maior espaço porque é o produto da tela. */}
         <div

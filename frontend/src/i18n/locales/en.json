@@ -310,7 +310,12 @@
       "pratica": "Practice",
       "ajuste": "Timing",
       "emergencia": "Emergency",
-      "concluido": "Done"
+      "concluido": "Done",
+      "comunicacao": "Speak",
+      "digitacao": "Write",
+      "conversa": "Talk",
+      "lazer": "Games",
+      "recursos": "The rest"
     },
     "dwell": {
       "title": "Look to click",
@@ -363,6 +368,61 @@
       "semEnsaio": "The emergency drill was not run.",
       "why": "Redo it when the dwell time stops fitting — with ALS that changes over time.",
       "button": "Redo the tutorial"
+    },
+    "passoDe": "Step {{n}} of {{total}}",
+    "comunicacao": {
+      "title": "Say something",
+      "lead": "Ready-made phrases are the shortest path from looking to being understood. You pick one and the computer speaks for you.",
+      "ir": "Open quick phrases and speak one",
+      "feito": "You just spoke using your eyes.",
+      "missao": "Tutorial: pick a phrase and hear the computer say it."
+    },
+    "digitacao": {
+      "title": "Write a sentence of your own",
+      "lead": "Ready-made phrases are fast, but they don't say everything. On the keyboard you write whatever you want: pick a group of letters, then the letter. Write anything — one word is enough — and press Speak.",
+      "ir": "Open the keyboard and write",
+      "feito": "You wrote and spoke a sentence of your own. This is what the app exists for.",
+      "travado": "This is the one step that waits for you: write a sentence on the keyboard and come back. If you'd rather not, \"Skip the tutorial\" is still there.",
+      "missao": "Tutorial: write any word and press Speak."
+    },
+    "conversa": {
+      "title": "Answer someone",
+      "lead": "In conversation you answer yes, no, or a short phrase — without writing everything again for each question.",
+      "ir": "Open conversation and answer",
+      "feito": "Answered. That's how a conversation keeps moving.",
+      "missao": "Tutorial: answer something — yes, no, or one of the phrases."
+    },
+    "lazer": {
+      "title": "And you can play, too",
+      "lead": "The games aren't decoration: they're the least tiring way to train your gaze, and they were what patients liked most in testing.",
+      "ir": "Open the games and try one",
+      "feito": "Done. The games stay in the menu, whenever you want them.",
+      "missao": "Tutorial: open one of the games."
+    },
+    "recursos": {
+      "title": "What else is here",
+      "lead": "You don't have to visit everything now. Just know it's in the menu when you need it.",
+      "lembretes": {
+        "nome": "Reminders",
+        "texto": "medication, water and rest alerts."
+      },
+      "fotos": {
+        "nome": "Photos and drawing",
+        "texto": "see your photos and draw with your eyes."
+      },
+      "descanso": {
+        "nome": "Rest",
+        "texto": "a calm screen, nothing asking for attention."
+      },
+      "noticias": {
+        "nome": "News",
+        "texto": "read the day without needing anyone."
+      },
+      "cuidador": {
+        "nome": "Caregiver",
+        "texto": "guide and settings for whoever supports you."
+      },
+      "ajustes": "Settings is deliberately outside this tutorial: it's where you change what makes gaze work, and a wrong choice there ruins the calibration. Whoever supports the patient finds everything under Settings, including redoing this tutorial."
     }
   },
   "calib": {
