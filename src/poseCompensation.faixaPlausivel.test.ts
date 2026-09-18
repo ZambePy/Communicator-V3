@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { deslocamentoPorPose, DELTA_POSE_MAX_RAD } from './poseCompensation';
+import {
+  deslocamentoPorPose,
+  DELTA_POSE_MAX_RAD,
+  DELTA_POSE_FAIXA_RAD,
+  pesoDaCompensacao,
+} from './poseCompensation';
 
 // `tan(Δyaw)` explode perto de ±π/2 (a cabeça de perfil ou a matriz
 // degenerada) e o pico entraria no filtro antes do softClamp do caller.
@@ -119,5 +124,59 @@ describe('a faixa normal de operação não muda', () => {
       DIST,
     );
     expect(r).toEqual({ dx: 0, dy: 0 });
+  });
+});
+
+// --- Regressão: a rejeição não pode ser um degrau ---------------------------
+//
+// O portão binário em 30° era a maior descontinuidade do pipeline. Na geometria
+// de referência (distanciaPx ≈ 2205) a correção no limiar vale
+// 2205 · tan(30°) ≈ 1273 px, e ela ligava/desligava entre dois quadros. Um
+// Δpose oscilando em torno de 30° — o que a matriz facial do MediaPipe faz
+// quando fica instável — arremessava o cursor de um lado ao outro da tela.
+describe('desvanecimento contínuo na borda da faixa plausível', () => {
+  const DIST = 2205; // px, geometria de referência 1920×1080 / 23,6" / 60 cm
+  const ref = { yaw: 0, pitch: 0, roll: 0 };
+  const dxPara = (yaw: number) => deslocamentoPorPose({ yaw, pitch: 0, roll: 0 }, ref, DIST).dx;
+
+  it('o peso é 1 bem antes do limiar e 0 bem depois — a rejeição continua', () => {
+    expect(pesoDaCompensacao(0)).toBe(1);
+    expect(pesoDaCompensacao(DELTA_POSE_MAX_RAD - DELTA_POSE_FAIXA_RAD)).toBe(1);
+    expect(pesoDaCompensacao(DELTA_POSE_MAX_RAD + DELTA_POSE_FAIXA_RAD)).toBe(0);
+    expect(pesoDaCompensacao(Math.PI / 3)).toBe(0); // 60° = matriz degenerada
+    expect(dxPara(Math.PI / 3)).toBe(0);
+  });
+
+  it('no meio da faixa o peso é 0,5 — leitura honesta de "não sei"', () => {
+    expect(pesoDaCompensacao(DELTA_POSE_MAX_RAD)).toBeCloseTo(0.5, 6);
+  });
+
+  it('o maior salto encolhe junto com o passo da varredura (é rampa, não degrau)', () => {
+    const varrer = (passoRad: number): number => {
+      let maior = 0;
+      let anterior = dxPara(0);
+      for (let a = passoRad; a <= Math.PI / 2.5; a += passoRad) {
+        const v = dxPara(a);
+        maior = Math.max(maior, Math.abs(v - anterior));
+        anterior = v;
+      }
+      return maior;
+    };
+    const grosso = varrer(0.01);
+    const fino = varrer(0.001);
+    // Numa descontinuidade o maior salto fica preso no tamanho do degrau
+    // (~1273 px) por menor que seja o passo. Numa rampa, ele encolhe.
+    expect(fino).toBeLessThan(grosso * 0.3);
+    expect(fino).toBeLessThan(20);
+  });
+
+  it('o sinal é contínuo ao cruzar o limiar antigo em passos minúsculos', () => {
+    const antes = dxPara(DELTA_POSE_MAX_RAD - 1e-4);
+    const depois = dxPara(DELTA_POSE_MAX_RAD + 1e-4);
+    // Antes desta correção, estes dois pontos diferiam em ~1273 px — o degrau
+    // inteiro. Agora diferem pelo declive local da rampa, ~2 px, ou seja
+    // ~600× menos. O que importa é que o número encolhe com o passo (teste
+    // acima); este aqui fixa a ordem de grandeza.
+    expect(Math.abs(depois - antes)).toBeLessThan(5);
   });
 });

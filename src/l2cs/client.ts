@@ -158,6 +158,28 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
     return sum / recentLatencies.length;
   }
 
+  /**
+   * Encerra o worker de vez.
+   *
+   * Chamado quando a inicialização falha (modelo ausente, WebGPU perdido, OOM
+   * do WASM) e quando o worker morre por erro de execução. Antes, esses dois
+   * caminhos apenas rejeitavam a promessa de `ready`: o `engine` marcava
+   * `l2csStatus = 'error'`, o bloco angular passava a sair zerado — e o worker
+   * continuava vivo, com o runtime ONNX inteiro carregado na memória, até o
+   * provider desmontar. Uma falha de modelo custava uma thread e dezenas de MB
+   * pela sessão inteira, sem nada em troca: aquele worker nunca mais serviria.
+   *
+   * Não reseta o resto do estado — quem faz isso é `stop()`. Aqui só se derruba
+   * o que não tem mais função.
+   */
+  function derrubarWorker(): void {
+    if (!worker) return;
+    worker.terminate();
+    worker = null;
+    ready = false;
+    inFlight.clear();
+  }
+
   function post(msg: L2CSWorkerRequest, transfer?: Transferable[]): void {
     if (!worker) return;
     if (transfer && transfer.length > 0) worker.postMessage(msg, transfer);
@@ -198,6 +220,9 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       readyReject?.(err);
       readyResolve = null;
       readyReject = null;
+      // Um worker que não conseguiu criar a sessão não vai responder a
+      // inferência nenhuma; segurá-lo só custa memória. Ver `derrubarWorker`.
+      derrubarWorker();
     } else if (msg.type === 'result') {
       const capturaMs = inFlight.get(msg.id);
       inFlight.delete(msg.id);
@@ -233,8 +258,9 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
         console.error('[L2CS] Worker execution error:', e.message, e.filename, e.lineno);
         readyReject?.(new Error('Worker execution error: ' + e.message));
         // Um worker que morreu depois do `ready` nunca vai responder o que
-        // está em voo; liberar aqui evita esperar o timeout.
-        inFlight.clear();
+        // está em voo; `derrubarWorker` libera os slots e ainda termina a
+        // thread, que antes ficava viva com o runtime ONNX carregado.
+        derrubarWorker();
       });
 
       readyPromise = new Promise<void>((resolve, reject) => {
@@ -246,10 +272,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
     },
 
     stop(): void {
-      if (worker) {
-        worker.terminate();
-        worker = null;
-      }
+      derrubarWorker();
       ready = false;
       meta = null;
       verificacao = null;

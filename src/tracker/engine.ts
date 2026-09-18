@@ -1062,6 +1062,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         // Sem rosto a referência lenta congela e o contraluz não é do quadro.
         calibration.alimentarReferenciaLenta(startTimeMs, false);
         calibration.setContraluzAtual(null);
+        // Encerra qualquer episódio de piscada em curso: piscada é um evento do
+        // rosto, e o rosto sumiu. Sem isto, a perda de rastreamento entra na
+        // contagem da piscada, e a piscada seguinte já nasceria "expirada".
+        blinkHold.update(false, performance.now(), { predict: () => ({ x: 0, y: 0 }), ready: false });
         if (state === 'tracking' || state === 'degraded') setState('no_face');
         // Emite a CADA frame sem rosto, não uma vez por episódio: o dispatcher
         // de dwell decide entre pausar e zerar pela idade da perda, e sem os
@@ -1419,11 +1423,29 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             targetY = calibrated.y;
             // Predição PRÉ-filtro: é o modelo que o vigia mede, não o filtro.
             vigiaDeRecalibracao.registrarPredicao(calibrated.x, calibrated.y, startTimeMs);
-          } else {
+          } else if (!calibration.isCalibrated()) {
+            // SEM calibração: ponteiro pela cabeça. É o modo em que a pessoa
+            // move o cursor com o nariz antes de calibrar, e aí o nariz É a
+            // medida — não um substituto para uma que faltou.
             const vw = document.documentElement.clientWidth;
             const vh = document.documentElement.clientHeight;
             targetX = (1.0 - landmarks[NARIZ_PONTA].x) * vw;
             targetY = landmarks[NARIZ_PONTA].y * vh;
+          } else {
+            // CALIBRADO e a predição falhou neste quadro (exceção no
+            // `predict`, ou o modelo acabou de ser invalidado).
+            //
+            // Antes isto também caía no nariz, e aí o cursor TELEPORTAVA: a
+            // posição do nariz não tem relação nenhuma com a do olhar, o salto
+            // não tem teto, e por 500 ms — até o timer de degradação virar —
+            // nada na tela dizia que aquilo não era uma leitura. Um único
+            // quadro de exceção arremessava o cursor para o outro lado e o
+            // trazia de volta.
+            //
+            // Não há posição nova a afirmar, então não se afirma nenhuma:
+            // `targetX/targetY` ficam onde estavam e o cursor para. O timer de
+            // degradação já está correndo logo abaixo (`mapGazeReturnedNull`),
+            // e é ele — não um ponto inventado — que avisa o usuário.
           }
           // Atualiza o timer de degradação. Só conta null como
           // degradação após a calibração estar completa e fora do modo de
@@ -1447,9 +1469,14 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           // qualquer coisa que se acrescente entre os dois pontos.
           recordedPreFilter = { x: targetX, y: targetY };
           // Encerra o episódio de hold: este quadro TEM medição.
-          if (cadeia?.kalmanInterno) {
-            blinkHold.update(false, performance.now(), cadeia.kalmanInterno);
-          }
+          //
+          // Incondicional, e não só quando há Kalman: o hold agora corre nos
+          // dois modos de filtro (ver o ramo da piscada). Deixar o episódio
+          // aberto faria a piscada SEGUINTE nascer já vencida — `duracaoMs`
+          // contaria desde a anterior — e o cursor entraria em degradado no
+          // primeiro quadro de uma piscada normal de 200 ms.
+          blinkHold.update(false, performance.now(), cadeia?.kalmanInterno
+            ?? { predict: () => ({ x: 0, y: 0 }), ready: false });
           stageTimer.begin(STAGE.filter);
           if (cadeia) {
             // Cadeia Kalman: trabalha em PIXELS. O `filterInNormalizedSpace`
@@ -1546,9 +1573,35 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           // velocidade zero e o cursor "salta" ao reabrir. `predict` CONSULTA
           // o filtro sem avançá-lo.
           const kalmanDaCadeia = cadeia?.kalmanInterno ?? null;
-          const hold = kalmanDaCadeia
-            ? blinkHold.update(true, performance.now(), kalmanDaCadeia)
-            : null;
+          // O HOLD RODA NOS DOIS MODOS.
+          //
+          // Antes ele só era chamado quando havia Kalman. Nos presets One Euro
+          // — que são o default — `hold` era `null`, e o ramo emitia
+          // `lastEmittedX/Y` bit a bit idêntico, com `hasFace: true` e sem
+          // degradação, PARA SEMPRE, enquanto o detector continuasse
+          // reportando piscada. É o congelamento silencioso que a gravação de
+          // 18/09 mostra: 29 quadros (967 ms) com três posições quase iguais,
+          // sem nenhum sinal na tela de que nada estava sendo medido.
+          //
+          // Sem Kalman não há o que projetar, então a posição continua sendo a
+          // última medida — mas a MÁQUINA DE ESTADOS passa a correr, e é dela
+          // que vem o teto de 2 s que separa "piscada" de "olho fechado".
+          //
+          // O stub satisfaz a assinatura sem inventar predição: `ready: false`
+          // faz o próprio `BlinkHold` devolver `posicao: null`, e `predict`
+          // nunca chega a ser chamado.
+          const hold = blinkHold.update(
+            true,
+            performance.now(),
+            kalmanDaCadeia ?? { predict: () => ({ x: 0, y: 0 }), ready: false },
+          );
+          // Passado o teto, o que se emite deixa de ser "a posição do olhar" e
+          // passa a ser "a última posição que alguém mediu, há mais de dois
+          // segundos". Isso é degradação, e tem que aparecer como tal: o
+          // cursor ganha o traço pontilhado do estado degradado e o dwell para
+          // de contar. Continuar reportando um quadro saudável era o que fazia
+          // o congelamento passar por funcionamento normal.
+          const holdExpirou = hold.estado === 'expirado';
 
           // A projeção NÃO pode virar "última posição conhecida": `emit` grava
           // `lastEmittedX/Y` sempre que `hasFace` é true, e a piscada emite com
@@ -1560,15 +1613,15 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             // Sem Kalman, ou depois do teto de 2 s, cai na posição congelada de
             // sempre — que é o comportamento default e o que sobra quando não
             // há projeção defensável.
-            x: hold?.posicao?.x ?? lastEmittedX,
-            y: hold?.posicao?.y ?? lastEmittedY,
+            x: hold.posicao?.x ?? lastEmittedX,
+            y: hold.posicao?.y ?? lastEmittedY,
             timestamp: performance.now(),
             hasFace: true,
-            degraded: !semCalibracaoBlink && degradadoNaPiscada,
+            degraded: !semCalibracaoBlink && (degradadoNaPiscada || holdExpirou),
             uncalibrated: semCalibracaoBlink,
             eyeState: 'closed',
           });
-          if (hold?.posicao) {
+          if (hold.posicao) {
             lastEmittedX = ancoraX;
             lastEmittedY = ancoraY;
           }
