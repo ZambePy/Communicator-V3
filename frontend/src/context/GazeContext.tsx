@@ -29,10 +29,11 @@ import { rolarSobOOlhar } from '../rolarSobOOlhar';
 import { estiloDoCursor, limitarTamanho } from '@tracker/interaction/cursorStyle';
 import { geometriaDoAnel } from '@tracker/interaction/dwellRing';
 import { GazeFallback } from '@tracker/interaction/gazeFallback';
+import { SeguidorDeCursor } from '@tracker/interaction/seguidorDeCursor';
 import { DetectorDeOlharForaDaTela } from '@tracker/interaction/olharForaDaTela';
 import { DetectorDeOlhosFechados } from '@tracker/interaction/olhosFechados';
 import { preflight, podeComecar } from '@tracker/diagnostics/preflight';
-import { isAccuracyTesting } from '@tracker/accuracy';
+import { cursorVisivelNoTeste } from '@tracker/accuracy';
 import { stepBlinkClick, criarEstadoBlinkClick } from '@tracker/interaction/blinkClick';
 import { GazeStatusBanner } from '../components/GazeStatusBanner';
 import { ReancoragemOverlay, DURACAO_DO_REAJUSTE_MS } from '../components/ReancoragemOverlay';
@@ -430,6 +431,49 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     opacity: '',
     anelVisivel: '',
   });
+  /**
+   * Seguidor que separa a taxa de RENDER da taxa de INFERÊNCIA.
+   *
+   * Antes daqui, o `transform` do cursor era escrito uma única vez por quadro
+   * de câmera, síncrono, dentro do callback do engine. A taxa visual do cursor
+   * era portanto a taxa da câmera (~21 Hz medidos), não a do display: ~65 % dos
+   * quadros de tela não mudavam nada, e quando mudavam recebiam o passo inteiro
+   * de uma vez. É essa distribuição — e não a taxa — que o usuário lê como
+   * "travada": nas gravações, 11,8 % dos quadros tinham salto > 30 px contra
+   * 0,9 % numa build anterior, com a MESMA taxa efetiva.
+   *
+   * O seguidor não filtra e não inventa dado: ele distribui pelos quadros de
+   * display o passo que o pipeline já decidiu, e para de se mexer quando a
+   * fonte seca. Ver `seguidorDeCursor.ts` para o custo em latência e por que
+   * ele é aceitável numa interface de dwell.
+   */
+  const seguidorRef = useRef(new SeguidorDeCursor());
+  /**
+   * O que pintar no próximo quadro de display. Escrito pelo callback do engine
+   * (taxa de amostra), lido pelo laço de render (taxa de display).
+   */
+  const pinturaRef = useRef<{
+    escondido: boolean;
+    background: string;
+    boxShadow: string;
+    border: string;
+    opacity: string;
+    escala: number;
+    offsetPx: number;
+    tamanhoPx: number;
+    /** `null` quando não há alvo sob o olhar: o anel some. */
+    anel: { dwellPct: number } | null;
+  }>({
+    escondido: true,
+    background: '',
+    boxShadow: '',
+    border: '',
+    opacity: '0',
+    escala: 1,
+    offsetPx: 0,
+    tamanhoPx: 0,
+    anel: null,
+  });
   // Piscada como clique. Desligada por default; ver a flag.
   const blinkClickRef = useRef(criarEstadoBlinkClick());
   // Nó que está com o realce `gaze-hover` aplicado no DOM.
@@ -539,18 +583,63 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // o loop precisa sustentar 30 fps. Acima disso trocaríamos precisão de
       // landmark por frames perdidos — e frame perdido também é erro.
       const MAX_USEFUL_WIDTH = 1920;
+      // Abaixo disto o ganho de pixels não paga o que se perde em cadência.
+      // Um quadro de 1080p a 15 Hz dá ao olhar UMA medida a cada 67 ms; um de
+      // 720p a 30 Hz dá duas. Para dwell e sacada a cadência vale mais, e a
+      // resolução do CROP do olho já está saturada bem antes de 1080p.
+      const FPS_MINIMO_ACEITAVEL = 24;
       const wCap = rawCaps.width as { max?: number } | undefined;
       const hCap = rawCaps.height as { max?: number } | undefined;
       if (typeof wCap?.max === 'number' && typeof hCap?.max === 'number') {
-        const cur = track.getSettings().width ?? 0;
+        const antes = track.getSettings();
+        const cur = antes.width ?? 0;
+        const curH = antes.height ?? 0;
+        const fpsAntes = typeof antes.frameRate === 'number' ? antes.frameRate : null;
         const targetW = Math.min(wCap.max, MAX_USEFUL_WIDTH);
         if (targetW > cur) {
           const targetH = Math.round((targetW * hCap.max) / wCap.max);
           try {
-            await track.applyConstraints({ width: { ideal: targetW }, height: { ideal: targetH } });
+            // `frameRate` RE-DECLARADO aqui, e não por simetria: o
+            // `applyConstraints` SUBSTITUI o conjunto de constraints da track.
+            // O `frameRate: { ideal: 30 }` pedido no `getUserMedia` sumia
+            // neste ponto, e a câmera ficava livre para entregar a cadência
+            // que o modo de maior resolução oferecesse — que em boa parte das
+            // webcams UVC é 15 fps a 1080p contra 30 a 720p. É a explicação
+            // mais simples para os ~21 Hz efetivos medidos nas gravações.
+            await track.applyConstraints({
+              width: { ideal: targetW },
+              height: { ideal: targetH },
+              frameRate: { ideal: 30 },
+            });
+            const depois = track.getSettings();
+            const fpsDepois = typeof depois.frameRate === 'number' ? depois.frameRate : null;
             console.log(
-              `[camera] resolução ${cur} → ${track.getSettings().width} (máx do driver: ${wCap.max})`
+              `[camera] resolução ${cur} → ${depois.width} (máx do driver: ${wCap.max}); ` +
+                `cadência ${fpsAntes ?? '?'} → ${fpsDepois ?? '?'} fps`
             );
+
+            // A resolução maior custou cadência: desfaz. Mais pixels num
+            // quadro que chega menos vezes é um mau negócio para o olhar, e
+            // pior ainda porque o custo aparece como "o cursor travando" —
+            // que é justamente o que não se quer trocar por nitidez.
+            if (fpsDepois !== null && fpsDepois < FPS_MINIMO_ACEITAVEL
+                && (fpsAntes === null || fpsDepois < fpsAntes) && cur > 0 && curH > 0) {
+              try {
+                await track.applyConstraints({
+                  width: { ideal: cur },
+                  height: { ideal: curH },
+                  frameRate: { ideal: 30 },
+                });
+                const revertido = track.getSettings();
+                console.warn(
+                  `[camera] ${depois.width}×${depois.height} só entrega ${fpsDepois} fps; ` +
+                    `voltando para ${revertido.width}×${revertido.height} @ ` +
+                    `${revertido.frameRate ?? '?'} fps — cadência vale mais que pixels aqui.`
+                );
+              } catch (e2) {
+                console.warn('[camera] não foi possível voltar à resolução anterior:', e2);
+              }
+            }
           } catch (e) {
             console.warn('[camera] não foi possível subir a resolução:', e);
           }
@@ -846,10 +935,74 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const mostrarAnel = () => definirOpacidadeDoAnel('1');
     const esconderAnel = () => definirOpacidadeDoAnel('0');
 
+    // ---------------------------------------------------------------------
+    // LAÇO DE RENDER DO CURSOR — roda na taxa do DISPLAY, não na da câmera.
+    //
+    // Este laço é a correção da "travada". O callback do engine agora só
+    // ALIMENTA o seguidor e descreve o estilo; quem escreve a posição no DOM é
+    // aqui, a cada quadro de tela. Sem ele, a taxa visual do cursor era a da
+    // câmera (~21 Hz medidos) e ~65 % dos quadros de display não mudavam nada,
+    // enquanto os que mudavam recebiam o passo inteiro — o padrão
+    // "para-e-teleporta" que aparece nas gravações.
+    //
+    // O laço é barato de propósito: lê dois refs, faz uma interpolação e
+    // escreve `transform` (mais as outras props só quando mudam, via
+    // `escreverNoCursor`). Nenhuma leitura de layout, nenhum `elementFromPoint`
+    // — o hit-test do dwell continua no callback do engine, na taxa da amostra,
+    // exatamente como antes.
+    let rafPintura = 0;
+    const pintar = (agoraMs: number): void => {
+      rafPintura = requestAnimationFrame(pintar);
+      const cur = cursorRef.current;
+      if (!cur) return;
+      const p = pinturaRef.current;
+      if (p.escondido) return; // quem escondeu já escreveu; não repintar por cima
+
+      const pos = seguidorRef.current.render(agoraMs);
+      if (!pos) return;
+
+      const cache = ultimoEstiloDoCursorRef.current;
+      escreverNoCursor(
+        cur,
+        cache,
+        'transform',
+        `translate3d(${pos.x - p.offsetPx}px, ${pos.y - p.offsetPx}px, 0) scale(${p.escala})`
+      );
+      // Fonte seca (amostra velha demais): o cursor congela E fica translúcido.
+      // Congelar sem avisar seria pior que travar — pareceria funcionando.
+      escreverNoCursor(cur, cache, 'opacity', pos.parado ? '0.35' : p.opacity);
+      escreverNoCursor(cur, cache, 'background', p.background);
+      // Só dependem do TAMANHO do cursor, que não muda em sessão: escritos uma
+      // vez e ignorados nos outros ~30 mil quadros pelo cache.
+      escreverNoCursor(cur, cache, 'boxShadow', p.boxShadow);
+      escreverNoCursor(cur, cache, 'border', p.border);
+
+      // Anel de progresso do dwell: agora ele também enche a 60 Hz em vez de
+      // aos trancos na taxa da amostra.
+      if (anelRef.current) {
+        if (p.anel) {
+          const g = geometriaDoAnel(p.tamanhoPx, p.anel.dwellPct);
+          anelRef.current.setAttribute('stroke-dashoffset', String(g.offset));
+          const svg = anelRef.current.ownerSVGElement;
+          if (svg) {
+            svg.style.transform = `translate3d(${pos.x - g.centro}px, ${pos.y - g.centro}px, 0)`;
+          }
+          mostrarAnel();
+        } else {
+          esconderAnel();
+        }
+      }
+    };
+    rafPintura = requestAnimationFrame(pintar);
+
     let avisouCursorAusente = false;
     const unsubGaze = engine.subscribe((sample) => {
       if (devMode) {
         if (cursorRef.current) esconderCursor(cursorRef.current, ultimoEstiloDoCursorRef.current);
+        // O laço de render também precisa saber, senão ele repinta o cursor no
+        // quadro seguinte e o modo desenvolvedor volta a mostrá-lo.
+        pinturaRef.current.escondido = true;
+        seguidorRef.current.reiniciar();
         return;
       }
 
@@ -1109,20 +1262,33 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const isInCalibration = engineRef.current?.getState() === 'calibrating';
         const isCalibrated = engineRef.current?.calibration.isCalibrated() ?? false;
 
-        // O caso (3) do comentário acima estava documentado e NÃO
-        // implementado: `isAccuracyTesting` não era lido em lugar nenhum deste
-        // arquivo, e o cursor ficava visível durante toda a medição. O
-        // participante enxerga o ponto vermelho, tenta corrigi-lo, e o erro
-        // medido passa a ser o do loop de perseguição, não o do modelo.
-        // A flag do operador vale SÓ para o teste de precisão. Na calibração
-        // o cursor continua escondido em qualquer caso: lá a pessoa precisa
-        // fixar o alvo, e um ponto se mexendo ao lado é justamente o que
-        // estraga a fixação que se está tentando coletar.
-        const escondePeloTeste = isAccuracyTesting && !EXPERIMENT.cursorNoTesteDePrecisao;
+        // Quem decide se o cursor pode aparecer DURANTE o teste é o módulo
+        // `accuracy`, não este arquivo: é ele que sabe qual pergunta a rodada
+        // está respondendo.
+        //
+        //   rodada de MEDIÇÃO     → escondido. Vendo o cursor a pessoa corrige
+        //     o olhar até ele cair no alvo, e o erro medido vira o resíduo da
+        //     perseguição — que tende a zero com qualquer modelo. A
+        //     contaminação entra no COMPORTAMENTO, então nenhum
+        //     pós-processamento a desfaz.
+        //   rodada de VERIFICAÇÃO → visível, de propósito. Ali a pergunta é
+        //     outra ("a pessoa consegue levar o cursor até o alvo, e em quanto
+        //     tempo?"), as métricas são outras (`result.verificacao`) e o
+        //     relatório diz isso em `protocolo.modo`.
+        //
+        // Na calibração o cursor continua escondido em qualquer caso: lá a
+        // pessoa precisa fixar o alvo, e um ponto se mexendo ao lado é
+        // justamente o que estraga a fixação que se está tentando coletar.
+        const escondePeloTeste = !cursorVisivelNoTeste();
         if (isInCalibration || !isCalibrated || escondePeloTeste) {
           // Hard-hide: move offscreen + opacity 0
           esconderCursor(cursorRef.current, ultimoEstiloDoCursorRef.current);
           esconderAnel();
+          // Reiniciar o seguidor é obrigatório aqui: sem isso, ao voltar a
+          // aparecer o cursor seria desenhado ATRAVESSANDO a tela desde onde
+          // parou antes de sumir. Reaparecer é descontinuidade legítima.
+          pinturaRef.current.escondido = true;
+          seguidorRef.current.reiniciar();
 
           // O fallback de gaze perdido não roda aqui (não há cursor para
           // segurar), mas a mensagem dele precisa ser limpa: um "Posicione o
@@ -1197,6 +1363,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (!fb.mostrarCursor || fb.posicao === null) {
             esconderCursor(cursorRef.current, ultimoEstiloDoCursorRef.current);
             esconderAnel();
+            pinturaRef.current.escondido = true;
+            seguidorRef.current.reiniciar();
           } else {
             // Geometria e cores vêm do módulo puro — em especial o `offsetPx`:
             // um meio-tamanho escrito à mão aqui viraria viés constante assim
@@ -1214,49 +1382,33 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               dwellPct,
             });
 
-            const cache = ultimoEstiloDoCursorRef.current;
-            const cur = cursorRef.current;
-            // `transform` é o único que muda de verdade a cada amostra.
-            escreverNoCursor(
-              cur,
-              cache,
-              'transform',
-              `translate3d(${fb.posicao.x - est.offsetPx}px, ${fb.posicao.y - est.offsetPx}px, 0) scale(${est.escala})`
-            );
-            escreverNoCursor(
-              cur,
-              cache,
-              'opacity',
-              fb.estado === 'segurando' ? '0.5' : sample.hasFace ? '1' : '0.35'
-            );
-            escreverNoCursor(cur, cache, 'background', est.preenchimento);
-            // O anel duplo é o que torna o cursor visível sobre QUALQUER
-            // fundo: nenhuma cor sozinha contrasta com todos, e o vermelho
-            // translúcido de antes sumia sobre o botão de emergência — que é
-            // o pior alvo possível para o cursor sumir.
+            // A POSIÇÃO vai para o seguidor; o ESTILO vai para o buffer de
+            // pintura. Quem escreve no DOM é o laço de render, a 60 Hz.
             //
-            // O valor só depende do TAMANHO do cursor, que não muda em
-            // sessão: escrito uma vez, ignorado nos outros ~30 mil quadros.
-            escreverNoCursor(cur, cache, 'boxShadow', est.anel);
-            escreverNoCursor(
-              cur,
-              cache,
-              'border',
-              est.tracejado ? '2px dashed rgba(234,179,8,0.9)' : ''
-            );
-
-            // Anel de progresso do dwell.
-            if (anelRef.current) {
-              const svg = anelRef.current.ownerSVGElement!;
-              if (hitTarget) {
-                const g = geometriaDoAnel(est.tamanhoPx, dwellPct);
-                anelRef.current.setAttribute('stroke-dashoffset', String(g.offset));
-                svg.style.transform = `translate3d(${fb.posicao.x - g.centro}px, ${fb.posicao.y - g.centro}px, 0)`;
-                mostrarAnel();
-              } else {
-                esconderAnel();
-              }
-            }
+            // A separação é o ponto: a posição precisa ser interpolada entre
+            // amostras (senão o cursor teleporta), enquanto cor, anel e escala
+            // podem ser atualizados na taxa da amostra sem nenhum prejuízo
+            // visual — eles não descrevem movimento.
+            seguidorRef.current.aoReceberAmostra({
+              x: fb.posicao.x,
+              y: fb.posicao.y,
+              tMs: now,
+            });
+            pinturaRef.current = {
+              escondido: false,
+              background: est.preenchimento,
+              // O anel duplo é o que torna o cursor visível sobre QUALQUER
+              // fundo: nenhuma cor sozinha contrasta com todos, e o vermelho
+              // translúcido de antes sumia sobre o botão de emergência — que é
+              // o pior alvo possível para o cursor sumir.
+              boxShadow: est.anel,
+              border: est.tracejado ? '2px dashed rgba(234,179,8,0.9)' : '',
+              opacity: fb.estado === 'segurando' ? '0.5' : sample.hasFace ? '1' : '0.35',
+              escala: est.escala,
+              offsetPx: est.offsetPx,
+              tamanhoPx: est.tamanhoPx,
+              anel: hitTarget ? { dwellPct } : null,
+            };
           }
         }
       } else if (!avisouCursorAusente) {
@@ -1628,6 +1780,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       videoRef.current?.remove();
       videoRef.current = null;
 
+      // O laço de pintura se reagenda sozinho: sem este cancelamento ele
+      // sobreviveria ao desmonte e continuaria escrevendo num nó removido.
+      cancelAnimationFrame(rafPintura);
+      seguidorRef.current.reiniciar();
       cursorRef.current?.remove();
       cursorRef.current = null;
       limparEstadoDoOlhar();

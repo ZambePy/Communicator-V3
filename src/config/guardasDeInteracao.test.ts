@@ -124,8 +124,13 @@ describe('a projeção da piscada não contamina a última posição conhecida',
     // ponto extrapolado — e passados os 2 s de teto o fallback "congela na
     // última posição real" congelava num palpite. Vazava também para os ramos
     // `!hasFace`, de features vazias, e para `getLastSample`.
+    //
+    // `hold?.` virou `hold.`: o `BlinkHold` passou a rodar nos dois modos de
+    // filtro (antes só com Kalman), então o resultado nunca mais é `null`. A
+    // guarda aceita as duas grafias — o que ela protege é a RESTAURAÇÃO, não a
+    // opcionalidade.
     expect(src).toContain('const ancoraX = lastEmittedX;');
-    expect(src).toMatch(/if\s*\(hold\?\.posicao\)\s*\{\s*lastEmittedX\s*=\s*ancoraX;/);
+    expect(src).toMatch(/if\s*\(hold\??\.posicao\)\s*\{\s*lastEmittedX\s*=\s*ancoraX;/);
   });
 });
 

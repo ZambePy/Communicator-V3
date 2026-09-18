@@ -6,6 +6,8 @@ import {
   reiniciarReusoDoBloco,
   setReusoMaxMs,
   REUSO_MAX_MS,
+  REUSO_DESVANECIMENTO_MS,
+  pesoDoReuso,
 } from './block';
 
 /**
@@ -68,11 +70,16 @@ describe('buildL2CSBlock — reuso do último ângulo válido', () => {
     expect(d.yawDeg).toBeCloseTo(0.2 * 180 / Math.PI, 6);
   });
 
-  it('passados 600 ms, volta a zerar com "stale"', () => {
+  it('passada a janela MAIS o desvanecimento, volta a zerar com "stale"', () => {
     buildL2CSBlock(0.2, -0.1, true, DIST, 0.9, 1000);
-    expect(zerado(buildL2CSBlock(0, 0, false, DIST, undefined, 1601))).toBe(true);
+    // 600 ms de janela + 200 ms de rampa. Antes o zero vinha em 601 ms, de um
+    // quadro para o outro; agora a rampa cobre esse degrau (ver o teste de
+    // continuidade abaixo) e o destino é exatamente o mesmo.
+    const t = 1000 + REUSO_MAX_MS + REUSO_DESVANECIMENTO_MS + 1;
+    expect(zerado(buildL2CSBlock(0, 0, false, DIST, undefined, t))).toBe(true);
     expect(ultimoDiagnosticoDoBloco().motivo).toBe('stale');
     expect(ultimoDiagnosticoDoBloco().reusoDeMs).toBeNull();
+    expect(ultimoDiagnosticoDoBloco().pesoDoAngulo).toBe(0);
   });
 
   it('confiança baixa isolada (1–2 leituras) reutiliza; persistente, zera', () => {
@@ -81,8 +88,9 @@ describe('buildL2CSBlock — reuso do último ângulo válido', () => {
     expect(buildL2CSBlock(0.3, 0.3, true, DIST, conf, 100)).toEqual(bom);
     expect(ultimoDiagnosticoDoBloco().motivo).toBe('stale-reuso');
     expect(buildL2CSBlock(0.3, 0.3, true, DIST, conf, 260)).toEqual(bom);
-    // Quarta inferência ruim seguida a 160 ms: já passou dos 600 ms.
-    expect(zerado(buildL2CSBlock(0.3, 0.3, true, DIST, conf, 640))).toBe(true);
+    // Confiança baixa persistente: passada a janela e o desvanecimento, zera.
+    const t = REUSO_MAX_MS + REUSO_DESVANECIMENTO_MS + 100;
+    expect(zerado(buildL2CSBlock(0.3, 0.3, true, DIST, conf, t))).toBe(true);
     expect(ultimoDiagnosticoDoBloco().motivo).toBe('confianca');
   });
 
@@ -101,7 +109,64 @@ describe('buildL2CSBlock — reuso do último ângulo válido', () => {
   it('a janela é configurável', () => {
     setReusoMaxMs(100);
     buildL2CSBlock(0.1, 0.05, true, DIST, 0.9, 0);
-    expect(zerado(buildL2CSBlock(0, 0, false, DIST, undefined, 150))).toBe(true);
+    // 100 ms de janela + 200 ms de rampa.
+    expect(zerado(buildL2CSBlock(0, 0, false, DIST, undefined, 301))).toBe(true);
+    // E dentro da janela o comportamento é o de sempre — peso cheio.
+    buildL2CSBlock(0.1, 0.05, true, DIST, 0.9, 1000);
+    expect(buildL2CSBlock(0, 0, false, DIST, undefined, 1050).some((v) => v !== 0)).toBe(true);
+    expect(ultimoDiagnosticoDoBloco().pesoDoAngulo).toBe(1);
     setReusoMaxMs(REUSO_MAX_MS);
+  });
+
+  // --- Regressão: o fim do reuso não pode ser um degrau -------------------
+  //
+  // O mecanismo de reuso existe porque, nas palavras do próprio módulo, "zero
+  // não é 'sem informação' depois do StandardScaler — é um degrau: o Ridge
+  // saltava, o cursor pulava e o One Euro travava tentando seguir". A janela
+  // de 600 ms empurrava esse degrau 600 ms para frente em vez de eliminá-lo.
+  describe('desvanecimento contínuo do reuso', () => {
+    it('o peso cai por rampa e o maior salto encolhe com a varredura', () => {
+      const varrer = (passoMs: number): number => {
+        let maior = 0;
+        let anterior = pesoDoReuso(0);
+        for (let t = 0; t <= REUSO_MAX_MS + REUSO_DESVANECIMENTO_MS + 100; t += passoMs) {
+          const w = pesoDoReuso(t);
+          maior = Math.max(maior, Math.abs(w - anterior));
+          anterior = w;
+        }
+        return maior;
+      };
+      const grosso = varrer(20);
+      const fino = varrer(2.5);
+      // Num degrau o maior salto fica preso em 1,0 por menor que seja o passo.
+      expect(fino).toBeLessThan(grosso * 0.3);
+      expect(fino).toBeLessThan(0.05);
+    });
+
+    it('os dois extremos reproduzem o comportamento antigo', () => {
+      expect(pesoDoReuso(0)).toBe(1);
+      expect(pesoDoReuso(REUSO_MAX_MS)).toBe(1);
+      expect(pesoDoReuso(REUSO_MAX_MS + REUSO_DESVANECIMENTO_MS)).toBe(0);
+      expect(pesoDoReuso(10_000)).toBe(0);
+      expect(pesoDoReuso(-1)).toBe(0);
+    });
+
+    it('o ângulo desvanece, e os SETE termos chegam a zero juntos', () => {
+      // O desvanecimento é no ângulo, não no vetor: em qualquer instante o
+      // bloco continua sendo o bloco de ALGUM olhar, com os quadráticos e o
+      // cruzado coerentes com os lineares. E como todos os sete termos têm
+      // fator tan(yaw) ou tan(pitch), ângulo zero dá exatamente os mesmos sete
+      // zeros de antes.
+      buildL2CSBlock(0.2, -0.1, true, DIST, 0.9, 0);
+      const meio = buildL2CSBlock(0, 0, false, DIST, undefined,
+        REUSO_MAX_MS + REUSO_DESVANECIMENTO_MS / 2);
+      const w = pesoDoReuso(REUSO_MAX_MS + REUSO_DESVANECIMENTO_MS / 2);
+      expect(w).toBeGreaterThan(0);
+      expect(w).toBeLessThan(1);
+      expect(meio[0]).toBeCloseTo(Math.tan(0.2 * w), 12);   // linear em yaw
+      expect(meio[4]).toBeCloseTo(Math.tan(0.2 * w) ** 2, 12); // quadrático coerente
+      expect(meio[6]).toBeCloseTo(Math.tan(0.2 * w) * Math.tan(-0.1 * w), 12); // cruzado
+      expect(ultimoDiagnosticoDoBloco().pesoDoAngulo).toBeCloseTo(w, 12);
+    });
   });
 });

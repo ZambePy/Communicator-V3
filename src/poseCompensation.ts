@@ -68,6 +68,48 @@ export interface Pose {
 export const DELTA_POSE_MAX_RAD = Math.PI / 6;
 
 /**
+ * Meia-largura da faixa em que a compensação DESVANECE, em radianos (≈5°).
+ *
+ * Por que existe: `DELTA_POSE_MAX_RAD` era um portão binário, e essa é a maior
+ * descontinuidade que havia no pipeline. Na geometria de referência
+ * (1920×1080, 23,6", 60 cm → ~2205 px de distância) a correção no limiar vale
+ * `2205 · tan(30°) ≈ 1273 px` — mais da metade da largura da tela — e ela
+ * ligava e desligava de um quadro para o outro. Um Δpose oscilando em torno de
+ * 30°, que é exatamente o que acontece quando a matriz facial do MediaPipe fica
+ * instável, arremessava o cursor de um lado ao outro a cada quadro.
+ *
+ * A rejeição continua: acima de `DELTA_POSE_MAX_RAD + FAIXA` a compensação é
+ * ZERO, igual a antes, porque a justificativa original segue valendo — um Δ de
+ * 60° é matriz degenerada, não cabeça girada, e compensar por lixo clampado
+ * seria fabricar correção. O que muda é só a BORDA: em vez de um degrau, uma
+ * rampa suave de ~10° de largura. No meio dela o peso é 0,5, que é a leitura
+ * honesta de "não sei se este Δ é real".
+ */
+export const DELTA_POSE_FAIXA_RAD = Math.PI / 36;
+
+/** Hermite 3t²−2t³: contínua em valor e em derivada nas duas pontas. */
+function suavePasso(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Peso da compensação para um Δ de pose, em [0,1].
+ *
+ * 1 até `DELTA_POSE_MAX_RAD − FAIXA`, 0 a partir de `DELTA_POSE_MAX_RAD + FAIXA`,
+ * e uma rampa suave entre os dois. Exportada para o teste poder afirmar a
+ * continuidade diretamente, sem depender da geometria.
+ */
+export function pesoDaCompensacao(delta: number): number {
+  if (!Number.isFinite(delta)) return 0;
+  const a = Math.abs(delta);
+  const inicio = DELTA_POSE_MAX_RAD - DELTA_POSE_FAIXA_RAD;
+  const fim = DELTA_POSE_MAX_RAD + DELTA_POSE_FAIXA_RAD;
+  return 1 - suavePasso((a - inicio) / (fim - inicio));
+}
+
+/**
  * Deslocamento em pixels que a rotação da cabeça causa no ponto olhado.
  *
  * `distanciaPx` é a distância olho–tela expressa em pixels de tela: o mesmo
@@ -88,31 +130,36 @@ export function deslocamentoPorPose(
   const dpitch = atual.pitch - referencia.pitch;
   if (!Number.isFinite(dyaw) || !Number.isFinite(dpitch)) return { dx: 0, dy: 0 };
 
-  // Δpose fora da faixa plausível ZERA aquele eixo.
+  // Δpose fora da faixa plausível DESVANECE aquele eixo até zero.
   //
   // `yaw` vem de `atan2`, que salta de sinal quando a cabeça vira de perfil ou
   // a matriz degenera; `dyaw` chega perto de ±π/2 e `tan` explode para
   // milhões de pixels. O `softClamp` do caller segura o valor FINAL, mas o
   // pico já entrou no filtro temporal e leva vários frames para decair.
   //
-  // Zerar em vez de clampar é deliberado: um Δ de 60° entre a calibração e o
+  // Chegar a zero é deliberado e não mudou: um Δ de 60° entre a calibração e o
   // frame corrente não é rotação de cabeça, é matriz degenerada. Compensar por
   // um número que sabemos ser lixo — mesmo clampado — seria fabricar correção.
-  // Zero significa "não sei compensar este frame", e o frame seguinte volta ao
-  // normal sozinho.
+  //
+  // O que mudou é a BORDA. Antes era um portão binário em 30°, e na geometria
+  // de referência isso ligava e desligava ~1273 px de correção entre dois
+  // quadros consecutivos — a maior descontinuidade do pipeline inteiro. Agora o
+  // peso cai suavemente numa faixa de ~10° centrada no limiar (ver
+  // `pesoDaCompensacao`). Fora da faixa, o comportamento é idêntico ao anterior.
   //
   // Os eixos são avaliados INDEPENDENTEMENTE: um yaw absurdo não descarta um
   // pitch plausível. Mesma proteção que `block.ts` já aplica com `CLAMP_RAD`.
-  const yawOk = Math.abs(dyaw) <= DELTA_POSE_MAX_RAD;
-  const pitchOk = Math.abs(dpitch) <= DELTA_POSE_MAX_RAD;
+  const pesoYaw = pesoDaCompensacao(dyaw);
+  const pesoPitch = pesoDaCompensacao(dpitch);
 
   // `-0` sai naturalmente quando o desvio é zero e o sinal é negativo. É
   // inofensivo em aritmética, mas vaza para o JSON do relatório como `-0` e
   // faz comparação exata falhar sem motivo. Normalizado aqui, uma vez.
   const semZeroNegativo = (v: number) => (v === 0 ? 0 : v);
   return {
-    dx: yawOk ? semZeroNegativo(SINAL_YAW_X * distanciaPx * Math.tan(dyaw)) : 0,
-    dy: pitchOk ? semZeroNegativo(SINAL_PITCH_Y * distanciaPx * Math.tan(dpitch)) : 0,
+    dx: pesoYaw > 0 ? semZeroNegativo(pesoYaw * SINAL_YAW_X * distanciaPx * Math.tan(dyaw)) : 0,
+    dy:
+      pesoPitch > 0 ? semZeroNegativo(pesoPitch * SINAL_PITCH_Y * distanciaPx * Math.tan(dpitch)) : 0,
   };
 }
 

@@ -66,9 +66,20 @@ vi.mock('./SettingsContext', () => ({
 }));
 
 import { GazeProvider } from './GazeContext';
+import { instalarRelogioDeQuadros, type RelogioDeQuadros } from '../test/quadros';
 
 /** Quantas amostras uma sessão de um segundo entrega. */
 const AMOSTRAS_POR_SEGUNDO = 30;
+
+/**
+ * Quadros de display por amostra: 60 Hz de tela contra 30 Hz de câmera.
+ *
+ * É o número que mudou de significado. Antes a posição do cursor era escrita
+ * uma vez por AMOSTRA (o quadro sem amostra não desenhava nada, e o quadro com
+ * amostra recebia o passo inteiro — o "para-e-teleporta" das gravações). Agora
+ * é escrita uma vez por QUADRO, com o passo dividido entre eles.
+ */
+const QUADROS_POR_AMOSTRA = 2;
 
 function amostra(x: number, y: number): GazeSample {
   return {
@@ -124,8 +135,19 @@ function contarEscritas(
 }
 
 describe('GazeContext — o caminho quente a 30 Hz', () => {
+  let relogio: RelogioDeQuadros;
+
+  /** Emite uma amostra e deixa os quadros de display correspondentes rodarem. */
+  function emitirEPintar(x: number, y: number): void {
+    act(() => {
+      emitir(amostra(x, y));
+    });
+    relogio.quadros(QUADROS_POR_AMOSTRA);
+  }
+
   beforeEach(() => {
     emitir = () => {};
+    relogio = instalarRelogioDeQuadros();
     vi.clearAllMocks();
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
@@ -142,6 +164,7 @@ describe('GazeContext — o caminho quente a 30 Hz', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
   });
   afterEach(() => {
+    relogio.restaurar();
     vi.restoreAllMocks();
   });
 
@@ -160,13 +183,13 @@ describe('GazeContext — o caminho quente a 30 Hz', () => {
 
     const rendersNaMontagem = renders;
 
-    act(() => {
-      for (let i = 0; i < AMOSTRAS_POR_SEGUNDO; i++) emitir(amostra(400 + i, 300 + i));
-    });
+    for (let i = 0; i < AMOSTRAS_POR_SEGUNDO; i++) emitirEPintar(400 + i, 300 + i);
 
     // Nada mudou de ESTADO: nem rosto perdido, nem dwell, nem degradado. O
-    // cursor andou 30 vezes e o React não soube de nada — é isso que mantém a
-    // latência do cursor no custo de uma escrita de `transform`.
+    // cursor andou 60 vezes (um segundo de quadros) e o React não soube de
+    // nada — é isso que mantém a latência do cursor no custo de uma escrita de
+    // `transform`. O laço de pintura entra nessa conta: ele roda a 60 Hz e não
+    // pode tocar em estado do React nem uma vez.
     expect(renders).toBe(rendersNaMontagem);
   });
 
@@ -178,9 +201,7 @@ describe('GazeContext — o caminho quente a 30 Hz', () => {
     );
 
     // Primeira amostra: estabelece os valores. As seguintes é que contam.
-    act(() => {
-      emitir(amostra(400, 300));
-    });
+    emitirEPintar(400, 300);
 
     const contagem = contarEscritas(cursor(), [
       'background',
@@ -190,14 +211,19 @@ describe('GazeContext — o caminho quente a 30 Hz', () => {
       'transform',
     ]);
 
-    act(() => {
-      for (let i = 1; i <= AMOSTRAS_POR_SEGUNDO; i++) emitir(amostra(400 + i, 300 + i));
-    });
+    for (let i = 1; i <= AMOSTRAS_POR_SEGUNDO; i++) emitirEPintar(400 + i, 300 + i);
 
-    // A posição muda a cada amostra — essa escrita é o trabalho útil.
-    expect(contagem.transform).toBe(AMOSTRAS_POR_SEGUNDO);
+    const QUADROS = AMOSTRAS_POR_SEGUNDO * QUADROS_POR_AMOSTRA;
+
+    // A posição muda a cada QUADRO — essa escrita é o trabalho útil, e é o
+    // trabalho que o desacoplamento acrescentou de propósito. O mesmo caminho
+    // percorrido, em passos menores.
+    expect(contagem.transform).toBe(QUADROS);
+    expect(contagem.transform).toBeGreaterThan(AMOSTRAS_POR_SEGUNDO);
     // Estas não mudam com a posição. Antes eram 30 escritas por segundo cada
     // uma; a de `background` ainda reiniciava uma transição CSS a cada quadro.
+    // Dobrar a taxa de pintura NÃO pode dobrar o custo delas: o cache é o que
+    // torna o laço de 60 Hz mais barato que o de 30 Hz que ele substituiu.
     expect(contagem.background).toBe(0);
     expect(contagem['box-shadow']).toBe(0);
     expect(contagem.border).toBe(0);
@@ -213,18 +239,18 @@ describe('GazeContext — o caminho quente a 30 Hz', () => {
           <div />
         </GazeProvider>
       );
-      act(() => {
-        emitir(amostra(400, 300));
-      });
+      emitirEPintar(400, 300);
 
       const contagem = contarEscritas(cursor(), ['transform', 'opacity']);
-      act(() => {
-        for (let i = 0; i < AMOSTRAS_POR_SEGUNDO; i++) emitir(amostra(400 + i, 300 + i));
-      });
+      for (let i = 0; i < AMOSTRAS_POR_SEGUNDO; i++) emitirEPintar(400 + i, 300 + i);
 
       // Durante a calibração o cursor fica parado fora da tela. Antes, as duas
       // propriedades eram reescritas com o MESMO valor 30 vezes por segundo,
       // durante os 1–2 minutos inteiros da coleta.
+      //
+      // Com o laço de pintura isto vale duplamente: são 60 oportunidades por
+      // segundo de repintar um cursor que não deve aparecer. O laço tem que
+      // sair na primeira linha, e é isso que a contagem zero prova.
       expect(contagem.transform).toBe(0);
       expect(contagem.opacity).toBe(0);
     } finally {

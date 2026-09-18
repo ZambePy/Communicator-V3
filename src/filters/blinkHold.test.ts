@@ -128,6 +128,57 @@ describe('piscada e perda de rosto são casos distintos', () => {
   });
 });
 
+/**
+ * REGRESSÃO — o teto valia só na metade dos modos de filtro.
+ *
+ * O engine só chamava `blinkHold.update` quando a cadeia tinha Kalman. Nos
+ * presets One Euro (que são o default) o ramo da piscada emitia
+ * `lastEmittedX/Y` idêntico, com `hasFace: true` e sem degradar, enquanto o
+ * detector continuasse reportando piscada — sem teto nenhum. É o
+ * congelamento silencioso medido na gravação de 18/09: 29 quadros (967 ms) com
+ * três posições quase iguais.
+ *
+ * O hold agora roda nos dois modos, recebendo um Kalman "não pronto" quando
+ * não há nenhum. Este bloco fixa o contrato desse caminho: sem posição a
+ * afirmar, mas COM a máquina de estados correndo — que é de onde vem o teto.
+ */
+describe('sem Kalman (presets One Euro)', () => {
+  const semKalman = () => ({ predict: () => ({ x: 0, y: 0 }), ready: false });
+
+  it('segura sem posição dentro do teto, e EXPIRA depois dele', () => {
+    const k = semKalman();
+    const h = new BlinkHold();
+    const dentro = h.update(true, 1000, k);
+    expect(dentro.estado).toBe('segurando');
+    expect(dentro.posicao).toBeNull();      // nada a projetar, e é honesto
+    expect(dentro.preservarDwell).toBe(true);
+
+    const fora = h.update(true, 1000 + BLINK_HOLD_MAX_MS + 1, k);
+    expect(fora.estado).toBe('expirado');
+    expect(fora.posicao).toBeNull();
+    expect(fora.preservarDwell).toBe(false);
+  });
+
+  it('uma piscada normal de 300 ms NÃO expira', () => {
+    // O teto existe para separar piscada de olho fechado. Se uma piscada comum
+    // expirasse, o cursor entraria em degradado dez vezes por minuto.
+    const k = semKalman();
+    const h = new BlinkHold();
+    for (let t = 0; t <= 300; t += 33) {
+      expect(h.update(true, 1000 + t, k).estado).toBe('segurando');
+    }
+    expect(h.update(false, 1333, k).estado).toBe('normal');
+  });
+
+  it('nunca chama `predict` — não há modelo de velocidade para consultar', () => {
+    let chamadas = 0;
+    const k = { predict: () => { chamadas++; return { x: 0, y: 0 }; }, ready: false };
+    const h = new BlinkHold();
+    for (let t = 0; t <= 3000; t += 100) h.update(true, 1000 + t, k);
+    expect(chamadas).toBe(0);
+  });
+});
+
 describe('guardas', () => {
   it('o hold NÃO avança o estado do Kalman', () => {
     // Se avançasse, o hold reescreveria o modelo com dados que não existem, e

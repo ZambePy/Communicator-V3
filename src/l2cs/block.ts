@@ -85,9 +85,20 @@ export interface DiagnosticoBloco {
   confidence: number | null;
   /** Idade do ângulo reutilizado, em ms; `null` fora do reuso. */
   reusoDeMs: number | null;
+  /**
+   * Com que força o ângulo entrou no vetor, em [0,1].
+   *
+   * `1` = leitura válida, ou reuso dentro da janela cheia. `0` = sete zeros.
+   * Entre os dois, o desvanecimento do reuso (ver `REUSO_DESVANECIMENTO_MS`).
+   * Quem pondera amostra — a calibração — precisa deste número: um bloco
+   * atenuado não é um bloco bom, mesmo não sendo exatamente zero.
+   */
+  pesoDoAngulo: number;
 }
 
-let ultimoDiag: DiagnosticoBloco = { motivo: null, yawDeg: 0, pitchDeg: 0, confidence: null, reusoDeMs: null };
+let ultimoDiag: DiagnosticoBloco = {
+  motivo: null, yawDeg: 0, pitchDeg: 0, confidence: null, reusoDeMs: null, pesoDoAngulo: 1,
+};
 
 /**
  * Por quanto tempo o último ângulo válido é reutilizado quando a leitura
@@ -101,6 +112,49 @@ let ultimoDiag: DiagnosticoBloco = { motivo: null, yawDeg: 0, pitchDeg: 0, confi
  * inferências a 100–160 ms de cadência cabem na janela).
  */
 export const REUSO_MAX_MS = 600;
+
+/**
+ * Largura da rampa em que o ângulo reutilizado DESVANECE até zero, em ms.
+ *
+ * Por que existe: a janela de reuso era um portão. No instante em que ela
+ * vencia, o vetor passava de `termos(ângulo)` para sete zeros de um quadro
+ * para o outro — e o comentário de `REUSO_MAX_MS` acima já explica por que
+ * isso é grave: "zero não é 'sem informação' depois do StandardScaler — é um
+ * degrau". O mecanismo criado para EVITAR o degrau tinha um degrau na saída.
+ *
+ * O desvanecimento é feito no ÂNGULO, não nos sete termos. A diferença
+ * importa: escalar os termos produziria um vetor que não corresponde a ângulo
+ * nenhum (os quadráticos e o cruzado deixariam de ser coerentes com os
+ * lineares), enquanto escalar o ângulo mantém o bloco sempre válido para
+ * ALGUM olhar. E o destino é idêntico ao anterior: todos os sete termos têm
+ * fator `tan(yaw)` ou `tan(pitch)`, então ângulo zero dá exatamente os mesmos
+ * sete zeros de antes.
+ *
+ * 200 ms: curto o bastante para não fingir medição por meio segundo a mais,
+ * longo o bastante para a transição não ser vista como salto (~6 quadros).
+ */
+export const REUSO_DESVANECIMENTO_MS = 200;
+
+/** Hermite 3t²−2t³: contínua em valor e em derivada nas duas pontas. */
+function suavePasso(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Peso do ângulo reutilizado para uma dada idade.
+ *
+ * `1` até `janelaMs`, `0` a partir de `janelaMs + REUSO_DESVANECIMENTO_MS`,
+ * rampa suave entre os dois. Exportada para o teste afirmar a continuidade
+ * sem depender do estado global do módulo.
+ */
+export function pesoDoReuso(idadeMs: number, janelaMs: number = reusoMaxMs): number {
+  if (!Number.isFinite(idadeMs) || idadeMs < 0) return 0;
+  if (idadeMs <= janelaMs) return 1;
+  return 1 - suavePasso((idadeMs - janelaMs) / REUSO_DESVANECIMENTO_MS);
+}
+
 let reusoMaxMs = REUSO_MAX_MS;
 
 export function setReusoMaxMs(ms: number): void {
@@ -112,7 +166,9 @@ let ultimoValido: { yaw: number; pitch: number; emMs: number } | null = null;
 
 export function reiniciarReusoDoBloco(): void {
   ultimoValido = null;
-  ultimoDiag = { motivo: null, yawDeg: 0, pitchDeg: 0, confidence: null, reusoDeMs: null };
+  ultimoDiag = {
+    motivo: null, yawDeg: 0, pitchDeg: 0, confidence: null, reusoDeMs: null, pesoDoAngulo: 1,
+  };
 }
 
 /** Diagnóstico do último `buildL2CSBlock`. Válido para o quadro corrente. */
@@ -137,7 +193,12 @@ export function buildL2CSBlock(
 ): number[] {
   const conf = typeof confidence === 'number' ? confidence : null;
   const anotar = (motivo: DiagnosticoBloco['motivo'], reusoDeMs: number | null = null) => {
-    ultimoDiag = { motivo, yawDeg: yaw * GRAUS, pitchDeg: pitch * GRAUS, confidence: conf, reusoDeMs };
+    ultimoDiag = {
+      motivo, yawDeg: yaw * GRAUS, pitchDeg: pitch * GRAUS, confidence: conf, reusoDeMs,
+      // `anotar` só é chamada nos caminhos que devolvem sete zeros e no
+      // caminho feliz; este último sobrescreve o peso logo abaixo.
+      pesoDoAngulo: motivo === null ? 1 : 0,
+    };
   };
 
   // Reuso do último ângulo válido, quando a leitura corrente não vale por
@@ -146,16 +207,25 @@ export function buildL2CSBlock(
   const reutilizar = (motivoSeExpirado: 'stale' | 'confianca'): number[] => {
     if (nowMs !== undefined && ultimoValido !== null) {
       const idade = nowMs - ultimoValido.emMs;
-      if (idade >= 0 && idade <= reusoMaxMs) {
-        // O diagnóstico descreve o ângulo que ENTROU no vetor — o reutilizado.
+      const w = idade >= 0 ? pesoDoReuso(idade) : 0;
+      if (w > 0) {
+        // O ângulo desvanece com a idade em vez de sumir de uma vez. Ver
+        // `REUSO_DESVANECIMENTO_MS`: dentro da janela `w` vale 1 e o
+        // comportamento é idêntico ao anterior; passada a janela ele decai por
+        // uma rampa de 200 ms até os mesmos sete zeros de sempre.
+        const yawUsado = ultimoValido.yaw * w;
+        const pitchUsado = ultimoValido.pitch * w;
+        // O diagnóstico descreve o ângulo que ENTROU no vetor — o reutilizado,
+        // já com o peso aplicado.
         ultimoDiag = {
           motivo: 'stale-reuso',
-          yawDeg: ultimoValido.yaw * GRAUS,
-          pitchDeg: ultimoValido.pitch * GRAUS,
+          yawDeg: yawUsado * GRAUS,
+          pitchDeg: pitchUsado * GRAUS,
           confidence: conf,
           reusoDeMs: idade,
+          pesoDoAngulo: w,
         };
-        return termos(ultimoValido.yaw, ultimoValido.pitch, dProxy);
+        return termos(yawUsado, pitchUsado, dProxy);
       }
     }
     anotar(motivoSeExpirado);

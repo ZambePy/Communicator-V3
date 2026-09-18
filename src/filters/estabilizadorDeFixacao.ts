@@ -25,9 +25,36 @@
  *
  * Dispersão I-DT clássica — (máx − mín) em X mais (máx − mín) em Y sobre a
  * janela — comparada a um limiar em GRAUS, convertido para pixels pela
- * geometria da tela. Com histerese: entra em fixação abaixo de 1,0° e só sai
- * acima de 1,5°. Sem histerese o estado oscilaria a cada quadro no limiar, e o
- * cursor pularia entre a média e a amostra crua.
+ * geometria da tela. Entra em fixação abaixo de 1,0°, sai acima de 1,5°.
+ *
+ * ## A saída é um PESO, não uma chave
+ *
+ * A primeira versão comutava: ou a saída era a média, ou era a amostra crua. A
+ * histerese existia para o estado não oscilar no limiar — e o comentário
+ * original dizia exatamente por quê: "o cursor pularia entre a média e a
+ * amostra crua".
+ *
+ * Pularia mesmo, e pulava: a média pode estar a até `DESLOCAMENTO_MAX_DEG`
+ * (0,5°) da amostra, e na geometria de referência isso são ~19 px. Todo
+ * cruzamento de limiar somava esses 19 px de UMA VEZ, e a histerese só
+ * espaçava os pulos — não os eliminava. Pior, o pulo caía nos dois piores
+ * instantes possíveis: no começo da sacada (média → cru) e, principalmente, no
+ * FIM dela (cru → média), que é exatamente quando a pessoa está pousando no
+ * alvo. O mesmo valia para `MIN_AMOSTRAS`: depois de cada sacada a janela
+ * recomeçava com uma amostra, e na quarta a média entrava inteira de um quadro
+ * para o outro.
+ *
+ * Agora a saída é `x + w · (média − x)`, com `w` contínuo em [0,1]:
+ *
+ *   w = enchimento(n) · dispersão(d)
+ *
+ * `enchimento` sobe de 0 (uma amostra) a 1 (`MIN_AMOSTRAS`); `dispersão` cai de
+ * 1 (≤ 1,0°) a 0 (≥ 1,5°). Os dois extremos reproduzem EXATAMENTE o
+ * comportamento anterior — `w = 1` é a média de antes, `w = 0` é a amostra crua
+ * de antes — e o que some é só o degrau entre eles. Como a saída passou a ser
+ * contínua na dispersão, a histerese deixou de ser necessária para o cursor;
+ * ela permanece apenas no `estado` REPORTADO, que é diagnóstico e não muda o
+ * que se desenha.
  *
  * Sem geometria não há como converter graus em pixels, e aí este estágio se
  * declara inativo e devolve a entrada intacta — nunca um chute.
@@ -51,6 +78,10 @@ export const LIMIAR_SACADA_DEG = 1.5;
  * Quatro: com menos, a dispersão de uma janela recém-criada é pequena
  * simplesmente porque ela tem poucos pontos, e toda sacada começaria
  * classificada como fixação.
+ *
+ * Continua sendo o número que fecha o estado `'fixando'`; o que mudou é que a
+ * MÉDIA não espera mais por ele de forma binária: o peso sobe por uma rampa de
+ * `1` a `MIN_AMOSTRAS` amostras, em vez de saltar de 0 a 1 na quarta.
  */
 export const MIN_AMOSTRAS = 4;
 
@@ -84,8 +115,39 @@ export interface SaidaDoEstabilizador {
   estado: EstadoDoOlho;
   /** Dispersão da janela em graus. `null` sem geometria ou janela curta. */
   dispersaoDeg: number | null;
-  /** Amostras que compuseram a média. 1 = a saída é a própria entrada. */
+  /** Amostras na janela que alimentou a média. 1 = a saída é a entrada. */
   amostrasNaMedia: number;
+  /**
+   * Peso com que a média entrou na saída, em [0,1].
+   *
+   * É a grandeza exata: `amostrasNaMedia` diz quantas amostras existiam,
+   * este diz quanto delas foi usado. `0` = saída idêntica à entrada,
+   * `1` = média pura (o comportamento antigo nos dois extremos).
+   */
+  pesoDaMedia: number;
+}
+
+/** Hermite 3t²−2t³: contínua em valor e em derivada nas duas pontas. */
+function suavePasso(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Peso da média para uma janela de `n` amostras com dispersão `dispersaoDeg`.
+ *
+ * Exportada para o teste poder afirmar a continuidade diretamente, sem passar
+ * pela geometria nem pelo estado interno.
+ */
+export function pesoDaMedia(n: number, dispersaoDeg: number | null): number {
+  if (!Number.isFinite(n) || n < 2 || dispersaoDeg === null || !Number.isFinite(dispersaoDeg)) {
+    return 0;
+  }
+  const enchimento = suavePasso((n - 1) / Math.max(1, MIN_AMOSTRAS - 1));
+  const faixa = LIMIAR_SACADA_DEG - LIMIAR_FIXACAO_DEG;
+  const dispersao = 1 - suavePasso((dispersaoDeg - LIMIAR_FIXACAO_DEG) / faixa);
+  return enchimento * dispersao;
 }
 
 export class EstabilizadorDeFixacao {
@@ -121,7 +183,7 @@ export class EstabilizadorDeFixacao {
 
   processar(x: number, y: number, nowMs: number): SaidaDoEstabilizador {
     if (!this.ativo || !Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(nowMs)) {
-      return { x, y, estado: 'movendo', dispersaoDeg: null, amostrasNaMedia: 1 };
+      return { x, y, estado: 'movendo', dispersaoDeg: null, amostrasNaMedia: 1, pesoDaMedia: 0 };
     }
 
     this.janela.push({ x, y, t: nowMs });
@@ -136,37 +198,48 @@ export class EstabilizadorDeFixacao {
     if (this.janela.length === 0) this.janela.push({ x, y, t: nowMs });
 
     const px = this.pxPorGrau as number;
-    const dispersaoDeg = this.janela.length >= 2 ? this.dispersaoPx() / px : null;
+    const n = this.janela.length;
+    const dispersaoDeg = n >= 2 ? this.dispersaoPx() / px : null;
 
-    if (this.janela.length < MIN_AMOSTRAS || dispersaoDeg === null) {
-      this.estado = 'movendo';
-      return { x, y, estado: 'movendo', dispersaoDeg, amostrasNaMedia: 1 };
-    }
-
-    // Histerese: o limiar de entrada é mais exigente que o de saída.
-    const limiar = this.estado === 'fixando' ? LIMIAR_SACADA_DEG : LIMIAR_FIXACAO_DEG;
-    if (dispersaoDeg > limiar) {
-      // Sacada: a média é veneno aqui, porque mistura a partida com a chegada.
-      // A janela vai fora inteira para a próxima fixação começar limpa.
+    // Sacada declarada: a janela vai fora inteira, para a próxima fixação
+    // começar limpa. Descartar aqui NÃO produz degrau na saída — a rampa de
+    // dispersão já zerou o peso em `LIMIAR_SACADA_DEG`, então a saída deste
+    // quadro seria a amostra crua de qualquer forma.
+    if (dispersaoDeg !== null && dispersaoDeg > LIMIAR_SACADA_DEG) {
       this.estado = 'movendo';
       this.janela.length = 0;
       this.janela.push({ x, y, t: nowMs });
-      return { x, y, estado: 'movendo', dispersaoDeg, amostrasNaMedia: 1 };
+      return { x, y, estado: 'movendo', dispersaoDeg, amostrasNaMedia: 1, pesoDaMedia: 0 };
     }
 
-    this.estado = 'fixando';
+    // Estado REPORTADO. Mantém a histerese original (entra em 1,0°, sai em
+    // 1,5°) e o mínimo de amostras: é o que a diagnóstica e as gravações leem,
+    // e mudar o critério mudaria o significado de série histórica. Ele já não
+    // decide o que se desenha — quem decide é o peso abaixo.
+    const limiar = this.estado === 'fixando' ? LIMIAR_SACADA_DEG : LIMIAR_FIXACAO_DEG;
+    this.estado = n >= MIN_AMOSTRAS && dispersaoDeg !== null && dispersaoDeg <= limiar
+      ? 'fixando'
+      : 'movendo';
+
+    const w = pesoDaMedia(n, dispersaoDeg);
+    if (w <= 0) {
+      return { x, y, estado: this.estado, dispersaoDeg, amostrasNaMedia: 1, pesoDaMedia: 0 };
+    }
+
     let sx = 0;
     let sy = 0;
     for (const a of this.janela) {
       sx += a.x;
       sy += a.y;
     }
-    const n = this.janela.length;
-    let mx = sx / n;
-    let my = sy / n;
+    // Mistura contínua entre a amostra e a média da janela. Em `w = 1` isto é
+    // a média pura; em `w = 0` é a amostra. Nenhum dos dois extremos mudou.
+    let mx = x + (sx / n - x) * w;
+    let my = y + (sy / n - y) * w;
 
     // Teto de deslocamento: a média pode limpar ruído, não inventar posição.
-    // Ver `DESLOCAMENTO_MAX_DEG`.
+    // Aplicado DEPOIS da mistura, sobre o que realmente sai — ver
+    // `DESLOCAMENTO_MAX_DEG`.
     const maxPx = DESLOCAMENTO_MAX_DEG * px;
     const dx = mx - x;
     const dy = my - y;
@@ -180,9 +253,10 @@ export class EstabilizadorDeFixacao {
     return {
       x: mx,
       y: my,
-      estado: 'fixando',
+      estado: this.estado,
       dispersaoDeg,
       amostrasNaMedia: n,
+      pesoDaMedia: w,
     };
   }
 }
