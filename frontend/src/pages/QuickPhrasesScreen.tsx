@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { emitirFalaDoPaciente } from '../cloud/eventos';
 import { falar } from '../services/voz';
 import { MessageSquare, AlertCircle, Tv, Wind, Activity, ChevronRight, ChevronLeft } from 'lucide-react';
@@ -8,6 +9,8 @@ import { GazeButton } from '../components/ui/GazeButton';
 import { logSentence } from '../utils/clinicalLogger';
 import { DicaContextual } from '../components/ui/DicaContextual';
 import { useAvisoDePrimeiroSucesso } from './useAvisoDePrimeiroSucesso';
+import { FaixaDeMissao } from '../components/FaixaDeMissao';
+import { cumprirMissao } from './tutorial/missao';
 
 const PHRASES = [
   {
@@ -72,6 +75,7 @@ const PHRASES = [
 export const TEXTOS_DAS_FRASES_RAPIDAS = PHRASES.map((p) => p.text);
 
 export const QuickPhrasesScreen: React.FC = () => {
+  const { t } = useTranslation();
   const [currentPage, setCurrentPage] = useState(0);
   useAvisoDePrimeiroSucesso();
 
@@ -79,6 +83,11 @@ export const QuickPhrasesScreen: React.FC = () => {
     void falar(text, { rate: 0.9 }).catch((e) => console.warn('[voz] falha ao falar:', e));
     logSentence(text);
     emitirFalaDoPaciente(text, 'frase');
+    // Missão do tutorial, se houver uma em curso. Marcada AQUI e não no
+    // `onClick` do cartão: o que o tutorial pediu foi "ouça o computador falar
+    // uma frase", e é neste ponto que isso acontece. Silenciosa e idempotente
+    // quando não há tutorial rodando, que é o caso comum.
+    cumprirMissao('comunicacao');
   };
 
   const itemsPerPage = 5;
@@ -97,6 +106,7 @@ export const QuickPhrasesScreen: React.FC = () => {
           boxSizing: 'border-box',
         }}
       >
+        <FaixaDeMissao missao="comunicacao" instrucao={t('tutorial.comunicacao.missao')} />
         <DicaContextual id="comunicacao" />
         <div style={{ marginBottom: '2.5rem', textAlign: 'center' }}>
           <h1 style={{ fontSize: '2.75rem', fontWeight: 800, color: 'var(--color-text-base)', margin: '0 0 0.5rem 0' }}>

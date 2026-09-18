@@ -310,7 +310,12 @@
       "pratica": "Prática",
       "ajuste": "Tempo",
       "emergencia": "Emergência",
-      "concluido": "Pronto"
+      "concluido": "Pronto",
+      "comunicacao": "Falar",
+      "digitacao": "Escrever",
+      "conversa": "Conversar",
+      "lazer": "Jogos",
+      "recursos": "O resto"
     },
     "dwell": {
       "title": "Olhar para clicar",
@@ -363,6 +368,61 @@
       "semEnsaio": "A emergência não foi ensaiada.",
       "why": "Refaça quando o tempo de permanência deixar de servir — em ELA isso muda com o tempo.",
       "button": "Refazer o tutorial"
+    },
+    "passoDe": "Passo {{n}} de {{total}}",
+    "comunicacao": {
+      "title": "Dizer alguma coisa",
+      "lead": "As frases prontas são o caminho mais curto entre olhar e ser entendido. Você escolhe uma e o computador fala por você.",
+      "ir": "Abrir as frases prontas e falar uma",
+      "feito": "Você acabou de falar pelo olhar.",
+      "missao": "Tutorial: escolha uma frase e ouça o computador falá-la."
+    },
+    "digitacao": {
+      "title": "Escrever uma frase sua",
+      "lead": "Frase pronta é rápido, mas não diz tudo. No teclado você escreve o que quiser: escolha um grupo de letras, depois a letra. Escreva qualquer coisa — uma palavra basta — e toque em Falar.",
+      "ir": "Abrir o teclado e escrever",
+      "feito": "Você escreveu e falou uma frase sua. É isto que o app existe para fazer.",
+      "travado": "Este é o único passo que espera por você: escreva uma frase no teclado e volte. Se preferir, \"Pular o tutorial\" continua disponível.",
+      "missao": "Tutorial: escreva qualquer palavra e toque em Falar."
+    },
+    "conversa": {
+      "title": "Responder a alguém",
+      "lead": "Na conversa você responde sim, não, ou uma frase curta — sem precisar escrever tudo de novo a cada pergunta.",
+      "ir": "Abrir a conversa e responder",
+      "feito": "Resposta dada. É assim que a conversa anda rápido.",
+      "missao": "Tutorial: responda alguma coisa — sim, não, ou uma das frases."
+    },
+    "lazer": {
+      "title": "E também dá para brincar",
+      "lead": "Os jogos não são enfeite: são a forma menos cansativa de treinar o olhar, e foram a parte que os pacientes mais gostaram nos testes.",
+      "ir": "Abrir os jogos e experimentar um",
+      "feito": "Pronto. Os jogos ficam no menu, sempre que você quiser.",
+      "missao": "Tutorial: abra um dos jogos."
+    },
+    "recursos": {
+      "title": "O que mais tem aqui",
+      "lead": "Você não precisa visitar tudo agora. Só saber que está no menu, para quando precisar.",
+      "lembretes": {
+        "nome": "Lembretes",
+        "texto": "avisos de remédio, água, descanso."
+      },
+      "fotos": {
+        "nome": "Fotos e desenho",
+        "texto": "ver suas fotos e desenhar com o olhar."
+      },
+      "descanso": {
+        "nome": "Descanso",
+        "texto": "uma tela calma, sem nada pedindo atenção."
+      },
+      "noticias": {
+        "nome": "Notícias",
+        "texto": "ler o dia sem precisar de ninguém."
+      },
+      "cuidador": {
+        "nome": "Cuidador",
+        "texto": "guia e ajustes de quem acompanha você."
+      },
+      "ajustes": "Ajustes fica de fora deste tutorial de propósito: é lá que se muda o que faz o olhar funcionar, e uma escolha errada ali estraga a calibração. Quem acompanha o paciente encontra tudo em Ajustes, incluindo refazer este tutorial."
     }
   },
   "calib": {
