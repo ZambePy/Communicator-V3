@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   licenseService as servicoPadrao,
   getDeviceBinding,
@@ -126,7 +126,27 @@ export const LicenseProvider: React.FC<{
   const [blockedReason, setBlockedReason] = useState<BlockedReason | null>(null);
   const [lastVerifiedAt, setLastVerifiedAt] = useState<number | null>(null);
 
+  /**
+   * Geração do estado da licença.
+   *
+   * Sobe a cada mutação (verificar, entrar, transferir, sair). `verificar`
+   * fala com a rede e aplica a resposta depois do `await`; sem esta marca, uma
+   * verificação lenta sobrescreve o que aconteceu no meio do caminho.
+   *
+   * O caso concreto: o cuidador desvincula o aparelho → o `CloudContext` chama
+   * `reverificar()`, cuja resposta será `revoked` → o usuário é mandado para o
+   * login e entra de novo, com licença válida → a verificação atrasada chega e
+   * roda `apagar()` + `blocked`. O app apaga uma licença que a pessoa acabou de
+   * pagar e a tranca do lado de fora. O espelho é igual de ruim: uma
+   * verificação em voo durante o `sair()` regrava a licença e deixa o usuário
+   * `'active'` depois de um logout explícito.
+   */
+  const geracao = useRef(0);
+
   const verificar = useCallback(async () => {
+    const minhaGeracao = ++geracao.current;
+    /** Nada mudou desde que esta verificação começou? */
+    const vigente = () => geracao.current === minhaGeracao;
     const gravada = ler();
     if (!gravada) {
       setStatus('none');
@@ -136,6 +156,9 @@ export const LicenseProvider: React.FC<{
 
     const device = getDeviceBinding();
     const r = await service.verify(gravada.token, getDeviceId());
+    // Houve login, transferência ou logout enquanto a rede respondia: a
+    // resposta é sobre um estado que já não existe. Descarta em silêncio.
+    if (!vigente()) return;
 
     if (r.ok) {
       const agora = Date.now();
@@ -175,6 +198,7 @@ export const LicenseProvider: React.FC<{
   }, [verificar]);
 
   const aplicarLogin = useCallback((r: LoginResult): LoginResult => {
+    geracao.current++;
     if (r.ok) {
       const agora = Date.now();
       gravar(paraGravada(r.license, agora));
@@ -199,6 +223,9 @@ export const LicenseProvider: React.FC<{
   );
 
   const sair = useCallback(async () => {
+    // Antes do `await`: a decisão de sair já foi tomada, e uma verificação em
+    // voo não pode ressuscitar a sessão quando responder.
+    geracao.current++;
     const gravada = ler();
     if (gravada) {
       try {

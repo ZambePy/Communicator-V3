@@ -24,16 +24,37 @@ const ICONE = {
   bloqueio: OctagonX,
 } as const;
 
-/** Mede a taxa de rAF em ~30 quadros. */
+/**
+ * Mede a taxa de rAF em ~30 quadros.
+ *
+ * Com TETO DE TEMPO: numa janela oculta o navegador congela o
+ * `requestAnimationFrame` (é o mesmo comportamento que `electron/main.ts`
+ * documenta), e sem o teto esta promessa nunca resolveria. Quem a espera —
+ * `rodar()` — só limpa o intervalo de coleta DEPOIS dela, então uma promessa
+ * pendurada deixava um `setInterval` de 100 ms e um vetor sem teto crescendo
+ * pelo resto da sessão. Resolver `null` é a resposta honesta: a taxa não pôde
+ * ser medida.
+ */
 function medirHz(): Promise<number | null> {
   return new Promise((resolve) => {
     const t: number[] = [];
+    let encerrado = false;
+    const terminar = (v: number | null) => {
+      if (encerrado) return;
+      encerrado = true;
+      clearTimeout(teto);
+      resolve(v);
+    };
+    // 3 s cobrem 30 quadros com folga até em 10 Hz; abaixo disso a janela
+    // está oculta ou a máquina está em apuros, e os dois querem `null`.
+    const teto = setTimeout(() => terminar(null), 3000);
     const passo = () => {
+      if (encerrado) return;
       t.push(performance.now());
       if (t.length <= 30) requestAnimationFrame(passo);
       else {
         const dt = (t[t.length - 1] - t[0]) / (t.length - 1);
-        resolve(dt > 0 ? 1000 / dt : null);
+        terminar(dt > 0 ? 1000 / dt : null);
       }
     };
     requestAnimationFrame(passo);
@@ -63,11 +84,19 @@ export const PreflightPanel: React.FC = () => {
     const janela: ReadinessSnapshot[] = [];
     const coleta = setInterval(() => {
       const atual = getDiagnostics();
-      if (atual) janela.push(snapshotDe(atual));
+      // Teto explícito: 100 ms × 40 = 4 s de janela, bem além dos ~2 s que a
+      // medição usa. Sem teto, qualquer caminho em que o `clearInterval` não
+      // rodasse faria este vetor crescer sem limite.
+      if (atual && janela.length < 40) janela.push(snapshotDe(atual));
     }, 100);
-    const hz = await medirHz();
-    await new Promise((r) => setTimeout(r, 1500));
-    clearInterval(coleta);
+    let hz: number | null = null;
+    try {
+      hz = await medirHz();
+      await new Promise((r) => setTimeout(r, 1500));
+    } finally {
+      // `finally`: o intervalo morre mesmo que algo acima lance.
+      clearInterval(coleta);
+    }
 
     const avaliacao = itensDeProntidao(janela, settings.cameraHorizontalFovDeg ?? null);
     const prontidao = avaliacao.itens;

@@ -48,6 +48,26 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
 
   const ativoRef = useRef(false);
 
+  /**
+   * Fica `false` quando o hook desmonta.
+   *
+   * `iniciar()` espera o IPC que sobe a sobreposição nativa, e só DEPOIS
+   * suspende o dwell do app e assina o olhar. Se a tela sair de cena durante
+   * essa espera — o próprio `onParou('emergencia')` navega, e a limpeza abaixo
+   * documenta que um banner também pode —, a limpeza roda ANTES da
+   * continuação: ela devolve o dwell, e em seguida a continuação o suspende de
+   * novo, para sempre. `dwellSuspenso` é global no `GazeContext` e o único
+   * caller de `suspenderDwell(false)` é este hook, que já não existe mais.
+   * Resultado: clique por olhar e por piscada mortos no app inteiro, sem
+   * recuperação a não ser recarregar — perda total de entrada para quem só
+   * tem o olhar.
+   */
+  const montado = useRef(true);
+  useEffect(() => {
+    montado.current = true;
+    return () => { montado.current = false; };
+  }, []);
+
   // Corta o fluxo de olhar e devolve o dwell ao app. Chamado em toda saída.
   const pararFluxo = useCallback(() => {
     cancelarFluxoRef.current?.();
@@ -88,6 +108,13 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
       tamanhoCursorPx: tamanhoDoCursorNoSistema(EXPERIMENT.cursorSizePx),
       lupa: true,
     });
+    if (!montado.current) {
+      // A tela saiu enquanto a sobreposição subia. Se ela SUBIU, precisa
+      // descer: a limpeza do efeito já passou e viu `ativoRef.current === false`,
+      // então ninguém mais vai derrubá-la.
+      if (r.ok) void ponte.parar();
+      return;
+    }
     if (!r.ok) {
       setIniciando(false);
       setErro(r.motivo);
