@@ -280,35 +280,6 @@ html.dark {
   transform: scale(0.97);
 }
 
-/* Teclado Virtual */
-.key-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: white;
-  border-radius: 1rem;
-  border: 2px solid #e2e8f0;
-  font-size: 2.25rem;
-  font-weight: 700;
-  color: #1e293b;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    transform 0.1s,
-    box-shadow 0.15s,
-    border-color 0.15s;
-  box-shadow: 0 3px 0px #cbd5e1;
-  user-select: none;
-}
-.key-btn:hover {
-  background: #f0f7ff;
-  border-color: #1b54a8;
-  box-shadow: 0 3px 0px #1b54a8;
-}
-.key-btn:active {
-  transform: translateY(3px);
-  box-shadow: none;
-}
 
 /* Orb de fundo */
 .bg-orb {
@@ -1402,5 +1373,43 @@ html[data-gaze='degradado'] body::after {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Filtro âmbar — bloqueio da componente azul do espectro.
+
+   O `SettingsContext` já aplicava a classe `amber-filter` no <html> desde
+   sempre, e a tela de Configurações já tinha o interruptor. Só que a REGRA
+   nunca existiu: o cuidador de um paciente com fotofobia ligava o filtro e
+   nada acontecia. Um interruptor que não faz nada é pior que interruptor
+   nenhum — ensina que a tela mente.
+
+   Véu fixo em `::after` em vez de `filter: sepia()` no <html> por dois
+   motivos: `filter` numa raiz cria um contexto de empilhamento que quebra os
+   `position: fixed` dos filhos (cursor de gaze, overlays de emergência,
+   modais), e ele já está ocupado pelo controle de brilho — os dois brigariam
+   pela mesma propriedade.
+
+   `mix-blend-mode: multiply` escurece o azul preservando o desenho por baixo,
+   que é o efeito que a lente âmbar física produz. `pointer-events: none` é
+   obrigatório: sem isso o véu comeria todo clique e todo dwell do app.
+────────────────────────────────────────────────────────────────────────────── */
+html.amber-filter::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  /* Acima de qualquer conteúdo, abaixo dos avisos críticos (z-index 1000000)
+     e do cursor de gaze — um filtro de conforto não pode tingir o banner que
+     diz que a câmera caiu. */
+  z-index: 999998;
+  pointer-events: none;
+  background: rgba(255, 176, 66, 0.22);
+  mix-blend-mode: multiply;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.amber-filter::after {
+    transition: none;
   }
 }

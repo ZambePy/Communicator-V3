@@ -123,9 +123,37 @@ const SettingsContext = createContext<{
   updateSettings: (s: Partial<Settings>) => void;
 }>({ settings: defaultSettings, updateSettings: () => {} });
 
-// Detecta preferência de sistema uma única vez no boot. Usado só quando
-// não existe valor salvo — respeita a escolha explícita do usuário depois.
+/**
+ * Tema TRAVADO, temporariamente.
+ *
+ * `'dark'` fixa o app no azul escuro da identidade; `null` devolve a escolha
+ * ao cuidador exatamente como era. Um valor só, num lugar só — é o que torna
+ * isto reversível sem arqueologia.
+ *
+ * Por que travar, além do pedido: hoje o tema claro está QUEBRADO em boa
+ * parte do app. Vários módulos foram escritos dark-first, com fundo em
+ * `var(--color-bg-base)` mas texto e borda cravados em branco — galeria,
+ * fotos, notícias, jogos, teclado ocular. O caso mais irônico é o próprio
+ * `CaregiverPageLayout`, que tem `#0f172a` cravado: o cuidador clica em
+ * "Modo Claro" e a tela onde ele clicou não muda de cor. O seletor já não
+ * descrevia o que fazia.
+ *
+ * O valor salvo em disco NÃO é apagado. Ele fica lá, inerte, e volta a valer
+ * sozinho no dia em que esta constante virar `null`.
+ */
+export const TEMA_FIXO: Theme | null = 'dark';
+
+/**
+ * Tema inicial.
+ *
+ * O `prefers-color-scheme` do SISTEMA vencia o default clínico: numa
+ * instalação nova, num Windows em modo claro (o padrão de fábrica), o
+ * IrisFlow abria CLARO — sem ninguém ter pedido, contra a evidência citada
+ * no default acima. Com `TEMA_FIXO` esse caminho morre; sem ela, ele volta,
+ * e aí a checagem de sistema é legítima porque o usuário ainda não escolheu.
+ */
 function initialTheme(saved: Partial<Settings> | null): Theme {
+  if (TEMA_FIXO) return TEMA_FIXO;
   if (saved?.theme) return saved.theme;
   if (typeof window !== 'undefined' && window.matchMedia) {
     return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
@@ -138,7 +166,9 @@ function initialTheme(saved: Partial<Settings> | null): Theme {
 function applyVisualComfort(s: Pick<Settings, 'theme' | 'brightnessLevel' | 'amberFilter'>): void {
   const html = document.documentElement;
 
-  html.classList.toggle('dark', s.theme === 'dark');
+  // `TEMA_FIXO` vence qualquer `updateSettings({ theme })` que escape — hoje
+  // só a tela de Configurações escreve isso, mas a rede vale para o futuro.
+  html.classList.toggle('dark', (TEMA_FIXO ?? s.theme) === 'dark');
   html.classList.toggle('amber-filter', s.amberFilter === true);
 
   // Clamp por segurança — slider da UI já limita, mas localStorage pode
@@ -351,11 +381,40 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // faz uma correção da diagonal valer na hora: `screenPxPerCm()` está no
   // caminho quente da compensação de pose.
   useEffect(() => {
-    aplicarGeometriaDoUsuario(settings.viewingDistanceCm, settings.screenDiagonalIn);
-    setSessionGeometry({
-      viewingDistanceCm: settings.viewingDistanceCm,
-      screenDiagonalIn: settings.screenDiagonalIn,
-    });
+    const aplicar = () => {
+      aplicarGeometriaDoUsuario(settings.viewingDistanceCm, settings.screenDiagonalIn);
+      setSessionGeometry({
+        viewingDistanceCm: settings.viewingDistanceCm,
+        screenDiagonalIn: settings.screenDiagonalIn,
+      });
+    };
+    aplicar();
+
+    // REDIMENSIONAR a janela também muda a geometria.
+    //
+    // `pxPerCmFromScreen` deriva a densidade de `clientWidth`/`clientHeight`
+    // do documento. Sem este listener os tokens ficavam congelados no valor do
+    // primeiro render: o cuidador maximizava a janela e `--gaze-target-min`
+    // continuava calculado para a janela pequena — o app passava a achar que
+    // 5° eram menos pixels do que são, e parava de avisar que os alvos
+    // estavam abaixo do mínimo.
+    //
+    // `requestAnimationFrame` agrupa a rajada de eventos de um arrasto de
+    // janela num recálculo por quadro; o cálculo é aritmética simples, mas
+    // escrever custom properties no `<html>` invalida estilo da árvore toda.
+    let pendente = 0;
+    const aoRedimensionar = () => {
+      if (pendente) return;
+      pendente = requestAnimationFrame(() => {
+        pendente = 0;
+        aplicar();
+      });
+    };
+    window.addEventListener('resize', aoRedimensionar);
+    return () => {
+      window.removeEventListener('resize', aoRedimensionar);
+      if (pendente) cancelAnimationFrame(pendente);
+    };
   }, [settings.viewingDistanceCm, settings.screenDiagonalIn]);
 
   // Sem o `useMemo`, todo render do provider re-renderizaria todos os

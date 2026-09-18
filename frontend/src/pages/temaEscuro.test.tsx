@@ -75,6 +75,17 @@ const COR_SO_CLARA =
   /(rgba?\(\s*255\s*,\s*255\s*,\s*255)|#ffffff\b|#fff\b|#f0f4ff|#e8f0fb|#f1f5f9|#f8fafc|#fef2f2|#fecaca|#f0fdf4|#bbf7d0|#eff6ff|#bfdbfe|#fffbeb|#fde68a|#e2e8f0/gi;
 
 /** Linhas de comentario nao pintam nada — e explicam justamente estas cores. */
+/** Lê um arquivo do app, com caminho relativo a `frontend/src/`. */
+const ler = (rel: string) => readFileSync(resolve(AQUI, '..', rel), 'utf8');
+
+/** O mesmo, sem linhas de comentário — um hex citado num comentário que
+ *  explica por que ele saiu não é um hex cravado no código. */
+const lerCodigo = (rel: string) =>
+  ler(rel)
+    .split('\n')
+    .filter((l) => !ehComentario(l))
+    .join('\n');
+
 const ehComentario = (linha: string) => {
   const t = linha.trim();
   return t.startsWith('//') || t.startsWith('*') || t.startsWith('/*');
@@ -116,4 +127,62 @@ describe('o fundo da pagina acompanha o tema', () => {
       expect(fonte).toContain('var(--settings-bg)');
     });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tema TRAVADO no escuro.
+//
+// O seletor de tema saiu da tela enquanto `TEMA_FIXO` estiver travado, e o
+// caminho que fazia o app abrir CLARO sozinho numa instalação nova — o
+// `prefers-color-scheme` do sistema vencendo o default clínico — foi cortado.
+// Estes testes travam as duas coisas.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('o tema está travado no escuro', () => {
+  it('`TEMA_FIXO` é "dark" — e é o único lugar a mudar para destravar', async () => {
+    const { TEMA_FIXO } = await import('../context/SettingsContext');
+    expect(TEMA_FIXO).toBe('dark');
+  });
+
+  it('a preferência do SISTEMA não abre o app no claro', () => {
+    // `initialTheme` consultava `matchMedia('(prefers-color-scheme: light)')`
+    // antes de cair no default `dark`. Num Windows em modo claro — o padrão de
+    // fábrica — a instalação nova abria clara, contra a evidência clínica
+    // citada no próprio default.
+    const src = ler('context/SettingsContext.tsx');
+    const i = src.indexOf('function initialTheme');
+    expect(i).toBeGreaterThan(-1);
+    const corpo = src.slice(i, src.indexOf('}', src.indexOf('return', i)));
+    // A primeira coisa que a função faz é obedecer à trava.
+    expect(corpo).toMatch(/if\s*\(TEMA_FIXO\)\s*return TEMA_FIXO;/);
+    expect(corpo.indexOf('TEMA_FIXO')).toBeLessThan(corpo.indexOf('prefers-color-scheme'));
+  });
+
+  it('a classe `dark` no <html> não obedece a um theme avulso enquanto travado', () => {
+    const src = ler('context/SettingsContext.tsx');
+    expect(src).toMatch(/classList\.toggle\('dark',\s*\(TEMA_FIXO \?\? s\.theme\) === 'dark'\)/);
+  });
+
+  it('o seletor de tema não aparece em Configurações enquanto travado', () => {
+    const src = ler('pages/SettingsScreen.tsx');
+    expect(src).toMatch(/\{TEMA_FIXO === null && \(/);
+    // E não foi APAGADO: volta inteiro quando a constante virar null.
+    expect(src).toContain('Modo Claro');
+    expect(src).toContain('aria-labelledby="theme-title"');
+  });
+
+  it('os hardcodes que ficavam ILEGÍVEIS no escuro viraram token', () => {
+    // `#e0f2fe` de fundo sem `color` na linha "este computador": o texto
+    // herdava o token claro e sumia. Era o único texto invisível de verdade.
+    expect(lerCodigo('pages/settings/VozScreen.tsx')).not.toContain('#e0f2fe');
+    // Gradiente claro de tela cheia no fallback de TODA rota lazy.
+    expect(lerCodigo('App.tsx')).not.toContain('#f0f4ff');
+    // As três paletas de toast do app inteiro.
+    const toast = lerCodigo('context/ToastContext.tsx');
+    for (const hex of ['#dcfce7', '#fee2e2', '#dbeafe']) expect(toast).not.toContain(hex);
+  });
+
+  it('a janela do Electron nasce escura — sem flash branco antes do primeiro frame', () => {
+    const main = readFileSync(resolve(AQUI, '../../../electron/main.ts'), 'utf8');
+    expect(main).toMatch(/backgroundColor:\s*'#0f172a'/);
+  });
 });

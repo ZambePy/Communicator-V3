@@ -41,14 +41,26 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
     <div
       style={{
         position: 'relative',
-        width: '100vw',
-        height: '100vh',
-        background: bare ? '#000000' : 'var(--color-bg-base)', // Agora usa fundo branco/claro do tema
+        // `100%`, não `100vw`: com barra de rolagem vertical, `100vw` inclui a
+        // largura da barra e o elemento fica ~15 px mais largo que a área
+        // visível — barra horizontal no `body` sem nada a rolar.
+        width: '100%',
+        height: '100dvh',
+        background: bare ? '#000000' : 'var(--color-bg-base)',
         color: 'var(--color-text-base)',
         overflow: 'hidden',
         boxSizing: 'border-box',
-        padding: bare ? 0 : '9.5rem 3rem 3rem 3rem', // Espaço para a barra superior (2rem + 6rem do cabeçalho)
+        // O padding era fixo: 9.5rem + 3rem = 200 px verticais, 26 % da altura
+        // de uma tela de 768. O topo existe só para liberar o botão Voltar de
+        // 96 px; num notebook esse espaço vale mais como conteúdo. Com
+        // `clamp`, tela grande mantém a respiração original e tela pequena
+        // devolve ~90 px à grade — sem encolher alvo nenhum.
+        padding: bare
+          ? 0
+          : 'clamp(6.5rem, 4rem + 7vh, 9.5rem) clamp(1rem, 2.5vw, 3rem) clamp(1rem, 3vh, 3rem)',
         fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       {/* Cabeçalho de Navegação e Emergência Canônica */}
@@ -56,9 +68,9 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
         <div
           style={{
             position: 'absolute',
-            top: '2rem',
-            left: '3rem',
-            right: '3rem',
+            top: 'clamp(1rem, 2.5vh, 2rem)',
+            left: 'clamp(1rem, 2.5vw, 3rem)',
+            right: 'clamp(1rem, 2.5vw, 3rem)',
             height: BACK_BUTTON_SIZE_PX,
             display: 'flex',
             justifyContent: 'space-between',
@@ -78,7 +90,12 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
             data-no-dwell="true"
             className="gaze-rest-zone"
             style={{
-              width: '320px', // Equivalente a 8.0° (GAZE_TOKENS.restZoneMinDeg)
+              // 320 px era o valor de 8,0° na tela de referência, cravado. Em
+              // tela estreita ele espremia o cabeçalho; o mínimo continua
+              // sendo respeitado quando há espaço, e encolhe antes de empurrar
+              // os outros dois elementos para fora.
+              width: 'min(320px, 34vw)',
+              flexShrink: 1,
               height: '4.5rem',
               background: 'transparent',
               border: '2px dashed var(--color-card-border)',
@@ -102,7 +119,17 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
       )}
 
       {/* Conteúdo Principal */}
-      <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <div
+        style={{
+          width: '100%',
+          // `flex: 1` + `minHeight: 0` no lugar de `height: 100%`: é o par que
+          // permite o conteúdo encolher dentro do pai e entregar a rolagem ao
+          // filho (a grade), em vez de estourar a caixa e ser cortado.
+          flex: 1,
+          minHeight: 0,
+          position: 'relative',
+        }}
+      >
         {children}
       </div>
 
@@ -110,11 +137,11 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
       {activeReminder && (
         <div
           style={{
+            // Véu do modal: `inset: 0` cobre a janela inteira sem depender de
+            // `100vw`, que com barra de rolagem fica mais largo que a área
+            // visível e cria rolagem horizontal.
             position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
+            inset: 0,
             background: 'rgba(2, 6, 23, 0.8)',
             backdropFilter: 'blur(4px)',
             zIndex: 99999,

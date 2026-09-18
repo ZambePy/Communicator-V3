@@ -29,18 +29,18 @@ export const useToast = () => useContext(ToastContext);
 
 const palette: Record<ToastKind, { bg: string; color: string; icon: React.ReactNode }> = {
   success: {
-    bg: '#dcfce7',
-    color: '#065f46',
+    bg: 'var(--tint-ok-bg)',
+    color: 'var(--tint-ok-text)',
     icon: <CheckCircle2 size={22} color="#16a34a" aria-hidden="true" />,
   },
   error: {
-    bg: '#fee2e2',
-    color: '#991b1b',
+    bg: 'var(--tint-danger-bg)',
+    color: 'var(--tint-danger-text)',
     icon: <AlertTriangle size={22} color="#dc2626" aria-hidden="true" />,
   },
   info: {
-    bg: '#dbeafe',
-    color: '#1e3a8a',
+    bg: 'var(--tint-info-bg)',
+    color: 'var(--tint-info-text)',
     icon: <Info size={22} color="#1B54A8" aria-hidden="true" />,
   },
 };

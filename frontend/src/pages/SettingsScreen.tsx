@@ -25,7 +25,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { env } from '../config/env';
-import { useSettings } from '../context/SettingsContext';
+import { useSettings, TEMA_FIXO } from '../context/SettingsContext';
 import { deriveHorizontalFovDeg } from '@tracker/cameraTuner';
 import { registrarFov } from '@tracker/camera/fovPorCamera';
 import { resumoDaFicha } from '@tracker/l2cs/proveniencia';
@@ -727,70 +727,79 @@ export const SettingsScreen: React.FC = () => {
           </button>
         </section>
 
-        {/* Tema */}
-        <section aria-labelledby="theme-title" style={cardStyle}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              marginBottom: '1.25rem',
-            }}
-          >
-            {settings.theme === 'dark' ? (
-              <Moon size={28} color="var(--color-primary)" aria-hidden="true" />
-            ) : (
-              <Sun size={28} color="var(--color-primary)" aria-hidden="true" />
-            )}
-            <h2
-              id="theme-title"
+        {/*
+          Tema — escondido enquanto `TEMA_FIXO` estiver travado.
+
+          Não apagado: o seletor volta inteiro quando a constante virar `null`,
+          e a preferência que o cuidador já tinha em disco volta com ele. Um
+          controle que não muda nada é pior que controle nenhum — ensina que a
+          tela mente.
+        */}
+        {TEMA_FIXO === null && (
+          <section aria-labelledby="theme-title" style={cardStyle}>
+            <div
               style={{
-                fontSize: '1.25rem',
-                fontWeight: 700,
-                color: 'var(--color-text-base)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                marginBottom: '1.25rem',
               }}
             >
-              Tema Visual
-            </h2>
-          </div>
-          <div
-            role="radiogroup"
-            aria-labelledby="theme-title"
-            style={{ display: 'flex', gap: '1rem' }}
-          >
-            {[
-              { key: 'light', label: 'Modo Claro', icon: <Sun size={20} /> },
-              { key: 'dark', label: 'Modo Escuro', icon: <Moon size={20} /> },
-            ].map(({ key, label, icon }) => {
-              const active = settings.theme === key;
-              return (
-                <button
-                  key={key}
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => updateSettings({ theme: key as 'light' | 'dark' })}
-                  style={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.5rem',
-                    padding: '1rem',
-                    borderRadius: '1rem',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                    border: '2px solid',
-                    background: active ? 'var(--color-primary)' : 'transparent',
-                    color: active ? 'white' : 'var(--color-text-base)',
-                    borderColor: active ? 'var(--color-primary)' : 'var(--color-card-border)',
-                  }}
-                >
-                  {icon} {label}
-                </button>
-              );
-            })}
-          </div>
-        </section>
+              {settings.theme === 'dark' ? (
+                <Moon size={28} color="var(--color-primary)" aria-hidden="true" />
+              ) : (
+                <Sun size={28} color="var(--color-primary)" aria-hidden="true" />
+              )}
+              <h2
+                id="theme-title"
+                style={{
+                  fontSize: '1.25rem',
+                  fontWeight: 700,
+                  color: 'var(--color-text-base)',
+                }}
+              >
+                Tema Visual
+              </h2>
+            </div>
+            <div
+              role="radiogroup"
+              aria-labelledby="theme-title"
+              style={{ display: 'flex', gap: '1rem' }}
+            >
+              {[
+                { key: 'light', label: 'Modo Claro', icon: <Sun size={20} /> },
+                { key: 'dark', label: 'Modo Escuro', icon: <Moon size={20} /> },
+              ].map(({ key, label, icon }) => {
+                const active = settings.theme === key;
+                return (
+                  <button
+                    key={key}
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => updateSettings({ theme: key as 'light' | 'dark' })}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.5rem',
+                      padding: '1rem',
+                      borderRadius: '1rem',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      border: '2px solid',
+                      background: active ? 'var(--color-primary)' : 'transparent',
+                      color: active ? 'white' : 'var(--color-text-base)',
+                      borderColor: active ? 'var(--color-primary)' : 'var(--color-card-border)',
+                    }}
+                  >
+                    {icon} {label}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Conforto Visual — Camadas 2 e 3 do plano de brilho.
          *

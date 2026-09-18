@@ -61,12 +61,78 @@ function cspMetaPlugin(env: Record<string, string>): Plugin {
   };
 }
 
+/**
+ * Estado limpo a cada execução de desenvolvimento.
+ *
+ * Ligado por `IRISFLOW_DEV_FRESH=1` — sem a variável, nada acontece.
+ *
+ * Por que aqui, e não num `useEffect` ou no `main.tsx`: o script injetado roda
+ * ANTES do módulo da aplicação, e três leituras acontecem já na avaliação dos
+ * imports — `EXPERIMENT = load()` em `src/config/experiment.ts`, o detector de
+ * idioma do i18next, e o grafo de `@tracker/calibration` que o splash puxa.
+ * Um reset dentro do React chegaria tarde para os três: o app começaria a
+ * sessão com as flags e o idioma da execução anterior.
+ *
+ * `apply: 'serve'` torna impossível vazar para produção — `vite build` nunca
+ * executa este plugin. É o mesmo mecanismo que o `cspMetaPlugin` usa ao
+ * contrário (`apply: 'build'`).
+ *
+ * O que NÃO é apagado, e por quê:
+ *  - `irisflow_device_id`: apagá-lo faz a máquina parecer nova para o servidor
+ *    de licenças e CONSOME uma ativação do plano a cada execução.
+ *  - `screenDiagonalIn` / `viewingDistanceCm`: são a geometria física medida do
+ *    posto. Zerá-las devolve o default de 23,6" e muda o tamanho mínimo de
+ *    alvo e a grade de calibração — ou seja, faria você testar noutra tela.
+ *
+ * Isto NÃO toca em dado de usuário instalado: o app empacotado carrega
+ * `file://` e o dev carrega `http://localhost:5173`. São origens diferentes,
+ * com armazenamentos fisicamente separados.
+ */
+function devFreshStartPlugin(): Plugin {
+  const ligado = process.env.IRISFLOW_DEV_FRESH === '1';
+  return {
+    name: 'irisflow-dev-fresh-start',
+    apply: 'serve',
+    transformIndexHtml() {
+      if (!ligado) return [];
+      return [
+        {
+          tag: 'script',
+          injectTo: 'head-prepend',
+          children: `(() => {
+  try {
+    var PRESERVAR = ['irisflow_device_id'];
+    var GEOMETRIA = ['screenDiagonalIn', 'viewingDistanceCm', 'screenGeometrySource'];
+    var guardados = {};
+    PRESERVAR.forEach(function (k) { var v = localStorage.getItem(k); if (v !== null) guardados[k] = v; });
+    var settings = null;
+    try { settings = JSON.parse(localStorage.getItem('irisflow_settings') || 'null'); } catch (e) { settings = null; }
+    localStorage.clear();
+    sessionStorage.clear();
+    Object.keys(guardados).forEach(function (k) { localStorage.setItem(k, guardados[k]); });
+    if (settings && typeof settings === 'object') {
+      var g = {};
+      var tem = false;
+      GEOMETRIA.forEach(function (k) { if (settings[k] !== undefined) { g[k] = settings[k]; tem = true; } });
+      if (tem) { g.schemaVersion = settings.schemaVersion; localStorage.setItem('irisflow_settings', JSON.stringify(g)); }
+    }
+    console.warn('[dev] IRISFLOW_DEV_FRESH=1 — armazenamento local zerado; o app comeca como instalacao nova.');
+  } catch (e) {
+    console.warn('[dev] nao foi possivel zerar o armazenamento local:', e);
+  }
+})();`,
+        },
+      ];
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   // Caminhos relativos: o Electron carrega o build via `file://`, onde `/assets`
   // apontaria para a raiz do disco.
   base: './',
-  plugins: [react(), saveAccuracyReportPlugin(), cspMetaPlugin(loadEnv(mode, __dirname, 'VITE_'))],
+  plugins: [react(), devFreshStartPlugin(), saveAccuracyReportPlugin(), cspMetaPlugin(loadEnv(mode, __dirname, 'VITE_'))],
   // Carimbo do build, desenhado num canto da tela de calibração.
   //
   // Três rodadas de depuração foram gastas com o navegador servindo um bundle

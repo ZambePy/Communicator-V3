@@ -71,7 +71,21 @@ export const MainMenu: React.FC = () => {
             justamente quem ela existe para servir. */}
         <EstadoDaSessao />
 
-        <div style={{ flex: 1, minHeight: 0, maxWidth: 1280, width: '100%', margin: '0 auto' }}>
+        {/*
+          A largura máxima era um número fixo, e desperdiçava 544 px em 1920 —
+          era a causa do "fica tudo pequeno no meio da tela grande". Com `min()` o
+          conteúdo cresce até 92 % da largura disponível e o teto sobe para
+          1600, que ainda mantém a linha de leitura confortável.
+        */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            maxWidth: 'min(1600px, 92%)',
+            width: '100%',
+            margin: '0 auto',
+          }}
+        >
           <GazeGrid columns={3} rows={3} gap={28}>
             {MODULES.map((module) => (
               <GazeButton
@@ -93,7 +107,7 @@ export const MainMenu: React.FC = () => {
                     alignItems: 'center',
                     justifyContent: 'center',
                     textAlign: 'center',
-                    padding: '1rem',
+                    padding: 'clamp(0.5rem, 1.2vh, 1rem)',
                     width: '100%',
                   }}
                 >
@@ -101,15 +115,18 @@ export const MainMenu: React.FC = () => {
                     aria-hidden="true"
                     style={{
                       position: 'relative',
-                      width: 88,
-                      height: 88,
+                      // Era 88×88 fixo. O selo é decoração: em tela pequena ele
+                      // consumia altura que o alvo precisa. Encolher o selo NÃO
+                      // encolhe o alvo — o alvo é a caixa do botão inteiro.
+                      width: 'clamp(52px, 7vh, 88px)',
+                      height: 'clamp(52px, 7vh, 88px)',
                       borderRadius: '50%',
                       background: module.badge,
                       color: '#0f172a',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      marginBottom: '1rem',
+                      marginBottom: 'clamp(0.4rem, 1vh, 1rem)',
                       boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
                     }}
                   >
@@ -131,7 +148,7 @@ export const MainMenu: React.FC = () => {
                   </div>
                   <div
                     style={{
-                      fontSize: '1.7rem',
+                      fontSize: 'clamp(1.15rem, 2.2vh, 1.7rem)',
                       fontWeight: 800,
                       color: 'var(--color-text-base)',
                       letterSpacing: '-0.01em',
@@ -142,7 +159,7 @@ export const MainMenu: React.FC = () => {
                   </div>
                   <div
                     style={{
-                      fontSize: '1.05rem',
+                      fontSize: 'clamp(0.85rem, 1.4vh, 1.05rem)',
                       opacity: 0.7,
                       marginTop: '0.45rem',
                       fontWeight: 500,

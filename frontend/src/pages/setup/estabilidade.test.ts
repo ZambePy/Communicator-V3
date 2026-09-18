@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { ESTABILIDADE_EXIGIDA_MS, inicial, acumular, msEstavel, estavel } from './estabilidade';
+import {
+  ESTABILIDADE_EXIGIDA_MS,
+  ESPERA_MAXIMA_MS,
+  inicial,
+  acumular,
+  msEstavel,
+  estavel,
+  podeSeguir,
+  liberadoPorEspera,
+} from './estabilidade';
 
 // -----------------------------------------------------------------------------
 // O portão do passo de posicionamento.
@@ -100,5 +109,51 @@ describe('robustez do relógio', () => {
     const s = acumular(inicial(), true, 5000);
     expect(msEstavel(s, 1000)).toBe(0);
     expect(estavel(s, 1000)).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Válvula de escape da porta de posicionamento.
+//
+// A janela de 3 s é boa regra e armadilha ruim: quem tem movimento involuntário
+// de cabeça, câmera ruim ou sala escura pode nunca encadear três segundos
+// verdes, e "Continuar" ficava desabilitado para sempre — o mesmo desfecho do
+// bug do tutorial, com a pessoa concluindo que o app travou.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('a porta de posicionamento não prende ninguém', () => {
+  const T0 = 1000;
+
+  it('abre por estabilidade, como antes', () => {
+    const e = acumular(inicial(), true, T0);
+    expect(podeSeguir(e, T0 + ESTABILIDADE_EXIGIDA_MS, T0)).toBe(true);
+    expect(liberadoPorEspera(e, T0 + ESTABILIDADE_EXIGIDA_MS, T0)).toBe(false);
+  });
+
+  it('continua fechada enquanto há tempo e não houve estabilidade', () => {
+    const e = inicial();
+    expect(podeSeguir(e, T0 + 10_000, T0)).toBe(false);
+    expect(podeSeguir(e, T0 + ESPERA_MAXIMA_MS - 1, T0)).toBe(false);
+  });
+
+  it('abre por ESPERA quando a estabilidade nunca vem', () => {
+    const e = inicial();
+    expect(podeSeguir(e, T0 + ESPERA_MAXIMA_MS, T0)).toBe(true);
+    // E a tela precisa saber que foi por espera, para avisar.
+    expect(liberadoPorEspera(e, T0 + ESPERA_MAXIMA_MS, T0)).toBe(true);
+  });
+
+  it('verde picotado não engana a espera nem a estabilidade', () => {
+    // Trinta lampejos de 100 ms não são três segundos parados.
+    let e = inicial();
+    for (let k = 0; k < 30; k++) {
+      e = acumular(e, true, T0 + k * 200);
+      e = acumular(e, false, T0 + k * 200 + 100);
+    }
+    expect(estavel(e, T0 + 6000)).toBe(false);
+    expect(podeSeguir(e, T0 + 6000, T0)).toBe(false);
+  });
+
+  it('a espera é generosa: ninguém chega nela por pressa', () => {
+    expect(ESPERA_MAXIMA_MS).toBeGreaterThan(ESTABILIDADE_EXIGIDA_MS * 10);
   });
 });
