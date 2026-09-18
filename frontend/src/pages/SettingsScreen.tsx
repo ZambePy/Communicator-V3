@@ -23,6 +23,7 @@ import {
   Monitor,
   Sparkles,
   RotateCcw,
+  MousePointer2,
 } from 'lucide-react';
 import { env } from '../config/env';
 import { useSettings, TEMA_FIXO } from '../context/SettingsContext';
@@ -71,7 +72,7 @@ import {
 } from '../utils/clinicalLogger';
 import { CaregiverPageLayout } from '../components/ui/CaregiverPageLayout';
 import { AtalhoDePreparo } from './setup/AtalhoDePreparo';
-import { startAccuracyTest } from '@tracker/accuracy';
+import { startAccuracyTest, type ModoDoTeste } from '@tracker/accuracy';
 import { buildRuntimeInfo } from '../utils/runtimeInfo';
 import type { AccuracyResult, RunMeta } from '@tracker/accuracy';
 import type { FilterPresetV2 } from '@tracker/oneEuroFilter';
@@ -398,7 +399,18 @@ export const SettingsScreen: React.FC = () => {
     distanciaCm: settings.viewingDistanceCm,
     telaPolegadas: settings.screenDiagonalIn,
   });
-  const handleAccuracyTest = () => {
+  /**
+   * Roda o teste de precisão.
+   *
+   * `'medicao'` é o protocolo de sempre: cursor escondido, malha aberta, e é
+   * dela que saem os números comparáveis entre sessões.
+   *
+   * `'verificacao'` é a rodada em que o CURSOR APARECE e a pessoa tenta pousar
+   * nos alvos. Responde outra pergunta — "dá para usar?" em vez de "quanto
+   * erra?" — e por isso tem métricas próprias e não escreve a linha de base do
+   * vigia de recalibração. As duas não se comparam, e o relatório diz qual foi.
+   */
+  const handleAccuracyTest = (modo: ModoDoTeste = 'medicao') => {
     if (!calibration.isCalibrated()) {
       toast.error('Calibre primeiro para rodar o teste de precisão.');
       return;
@@ -475,6 +487,16 @@ export const SettingsScreen: React.FC = () => {
             `Teste de precisão sem amostras (${r.pontosNaoMedidos} de ` +
               `${r.pontosMedidos + r.pontosNaoMedidos} pontos). Verifique o rastreamento e repita.`
           );
+        } else if (r.modo === 'verificacao' && r.verificacao) {
+          // De propósito NÃO mostra `meanError` aqui: numa rodada com cursor
+          // ele mede o resíduo da perseguição, e exibi-lo ao lado do número da
+          // medição convidaria exatamente a comparação que não se pode fazer.
+          const v = r.verificacao;
+          const t = v.tempoMedianoAteAcertarMs;
+          toast.success(
+            `Verificação: ${v.alvosAcertados}/${v.alvosTotais} alvos alcançados` +
+              (t !== null ? ` · ${(t / 1000).toFixed(1)}s (mediana) até pousar` : '')
+          );
         } else {
           toast.success(
             `Precisão: ${Math.round(r.meanError)}px médio (${r.meanErrorDeg.toFixed(2)}°) — ${r.score}`
@@ -485,7 +507,8 @@ export const SettingsScreen: React.FC = () => {
         // sessão assim não diz em que condição foi medida.
       },
       metaWithUptime,
-      buildRuntimeInfo(getDiagnostics())
+      buildRuntimeInfo(getDiagnostics()),
+      { modo }
     );
   };
 
@@ -1783,27 +1806,65 @@ export const SettingsScreen: React.FC = () => {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleAccuracyTest}
-            disabled={accuracyRunning}
-            aria-label="Testar precisão"
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={() => handleAccuracyTest('medicao')}
+              disabled={accuracyRunning}
+              aria-label="Testar precisão"
+              style={{
+                padding: '1rem 1.5rem',
+                borderRadius: '1rem',
+                border: 'none',
+                background: accuracyRunning ? 'var(--color-text-muted)' : 'var(--color-primary)',
+                color: 'white',
+                fontWeight: 700,
+                cursor: accuracyRunning ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <Target size={20} aria-hidden="true" />{' '}
+              {accuracyRunning ? 'Rodando…' : 'Testar precisão'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleAccuracyTest('verificacao')}
+              disabled={accuracyRunning}
+              aria-label="Verificar com cursor"
+              style={{
+                padding: '1rem 1.5rem',
+                borderRadius: '1rem',
+                border: '2px solid var(--color-primary)',
+                background: 'transparent',
+                color: 'var(--color-text-base)',
+                fontWeight: 700,
+                cursor: accuracyRunning ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <MousePointer2 size={20} aria-hidden="true" /> Verificar com cursor
+            </button>
+          </div>
+          <p
             style={{
-              padding: '1rem 1.5rem',
-              borderRadius: '1rem',
-              border: 'none',
-              background: accuracyRunning ? 'var(--color-text-muted)' : 'var(--color-primary)',
-              color: 'white',
-              fontWeight: 700,
-              cursor: accuracyRunning ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
+              marginTop: '0.6rem',
+              fontSize: '0.85rem',
+              opacity: 0.75,
+              maxWidth: '46rem',
+              fontFamily: 'system-ui, sans-serif',
             }}
           >
-            <Target size={20} aria-hidden="true" />{' '}
-            {accuracyRunning ? 'Rodando…' : 'Testar precisão'}
-          </button>
+            <strong>Testar precisão</strong> mede quanto o sistema erra: o cursor fica escondido,
+            porque quem o vê corrige o olhar e o erro medido deixa de ser o do sistema.{' '}
+            <strong>Verificar com cursor</strong> responde outra pergunta — se dá para levar o
+            cursor até cada alvo, e em quanto tempo. Os dois resultados não se comparam, e o
+            relatório registra qual foi.
+          </p>
 
           {lastAccuracy && (
             <div

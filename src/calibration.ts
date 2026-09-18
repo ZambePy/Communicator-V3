@@ -1559,9 +1559,27 @@ export const MAX_ECCENTRICITY_DEG = 16;
  * tela para baixo.
  *
  * ⚠️ ESTE NÚMERO PRECISA CASAR COM O LAYOUT. Se a interface puser botão em
- * `y = 0,95` e a calibração só chegar a `y ≈ 0,88`, a extrapolação apenas mudou
- * de lugar — de dentro do modelo para fora dele. Os dois orçamentos, o da grade
- * e o do layout do paciente, se decidem juntos.
+ * `y = 0,95` e a calibração só chegar perto de `y = 0,84`, a extrapolação
+ * apenas mudou de lugar — de dentro do modelo para fora dele. Os dois
+ * orçamentos, o da grade e o do layout do paciente, se decidem juntos.
+ *
+ * O número foi MEDIDO, e não é o que o aviso original dizia. Rodando
+ * `computeCalibrationTargets` nas geometrias reais:
+ *
+ *   1920×1080 23,6" @60cm → ys = 0,050 · 0,500 · 0,8375
+ *   1920×1080 15,6" @50cm → ys = 0,050 · 0,500 · 0,8375
+ *   1366×768  14"   @55cm → ys = 0,050 · 0,500 · 0,8375
+ *   2560×1440 27"   @70cm → ys = 0,050 · 0,500 · 0,8375
+ *
+ * A linha de baixo fica em **0,8375 em QUALQUER tela**, não em 0,88: nas
+ * geometrias plausíveis o extent vertical satura em `MAX_EXTENT_FRACTION`
+ * (0,45), e aí `eyBaixo` é sempre o termo proporcional `0,45 · 12/16 =
+ * 0,3375`. A parte da tela abaixo disso — 16 % da altura — é prevista por
+ * EXTRAPOLAÇÃO, em todas as telas, hoje.
+ *
+ * Ver `regiaoCalibrada` logo abaixo e o teste `calibration.coberturaDaTela`,
+ * que fixa esses números e falha se a grade deixar de cobrir o topo (onde vive
+ * o botão de emergência).
  */
 export const MAX_ECCENTRICITY_DEG_BAIXO = 12;
 
@@ -1718,6 +1736,33 @@ export function computeCalibrationTargets(
   const out: { x: number; y: number }[] = [];
   for (const y of ys) for (const x of xs) out.push({ x, y });
   return out;
+}
+
+/**
+ * Retângulo da tela, em fração, que a grade de calibração de fato cobre.
+ *
+ * É a fronteira entre INTERPOLAR e EXTRAPOLAR. Dentro dela o Ridge prevê entre
+ * pontos que viu; fora, ele continua devolvendo um número — sem nenhum aviso —
+ * e o erro cresce sem teto, que é o modo de falha clássico de um modelo
+ * polinomial regularizado.
+ *
+ * Existe para que o layout possa ser conferido contra a calibração em vez de
+ * contra um palpite: enquanto este número vivia só num comentário, ele estava
+ * ERRADO por 0,04 de tela (ver `MAX_ECCENTRICITY_DEG_BAIXO`). Função pura, sem
+ * estado de módulo — é o que permite o teste varrer geometrias.
+ */
+export function regiaoCalibrada(
+  geometry: CalibrationGeometry,
+): { x0: number; x1: number; y0: number; y1: number } {
+  const alvos = computeCalibrationTargets(geometry);
+  const xs = alvos.map((a) => a.x);
+  const ys = alvos.map((a) => a.y);
+  return {
+    x0: Math.min(...xs),
+    x1: Math.max(...xs),
+    y0: Math.min(...ys),
+    y1: Math.max(...ys),
+  };
 }
 
 /**
@@ -2192,8 +2237,14 @@ export function feedRawData(featuresLeft: number[], featuresRight: number[], qua
       if (sessionPoseSamples.length > 120) sessionPoseSamples.shift();
     }
     if (alvoDaPerseguicao && featuresLeft.length >= 2 && featuresRight.length >= 2) {
-      const blocoZeradoP = L2CS_SLOTS.length > 0
-        && L2CS_SLOTS.every((i) => featuresLeft[i] === 0 && featuresRight[i] === 0);
+      // "Zerado" para efeito de PESO inclui o bloco apenas ATENUADO: desde que
+      // o reuso desvanece em rampa (ver `REUSO_DESVANECIMENTO_MS`), existe uma
+      // faixa em que os sete termos não são zero mas também não descrevem uma
+      // leitura fresca. Tratá-los como bons daria peso cheio a uma amostra
+      // construída sobre um ângulo que já está decaindo.
+      const blocoZeradoP = (L2CS_SLOTS.length > 0
+        && L2CS_SLOTS.every((i) => featuresLeft[i] === 0 && featuresRight[i] === 0))
+        || ultimoDiagnosticoDoBloco().pesoDoAngulo < 1;
       quadrosDaPerseguicao.push({
         featuresLeft, featuresRight,
         quality: quality ?? null,
@@ -2284,9 +2335,13 @@ export function feedRawData(featuresLeft: number[], featuresRight: number[], qua
   // Bloco angular inválido (L2CS stale ou implausível) chega como zeros. Um
   // zero não é "sem informação" depois do StandardScaler: vira um z-score
   // grande que diz "olhar para o centro" num alvo periférico.
-  const blocoZerado = L2CS_SLOTS.length > 0
+  // Idem ao ramo da perseguição acima: bloco atenuado pelo desvanecimento do
+  // reuso conta como zerado para o peso. A CONTAGEM por motivo, logo abaixo,
+  // continua sendo a de antes — quem estava em reuso não vira "stale".
+  const blocoExatamenteZerado = L2CS_SLOTS.length > 0
     && L2CS_SLOTS.every((i) => featuresLeft[i] === 0 && featuresRight[i] === 0);
-  if (blocoZerado) {
+  const blocoZerado = blocoExatamenteZerado || ultimoDiagnosticoDoBloco().pesoDoAngulo < 1;
+  if (blocoExatamenteZerado) {
     // CONTA, mas NÃO rejeita mais. A quebra por causa continua alimentando o
     // console e o relatório (`l2csValidFraction`), que é o que permite saber
     // depois quanta amostra entrou com o bloco angular zerado.
