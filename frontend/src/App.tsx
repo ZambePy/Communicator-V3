@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext';
 import { LicenseProvider } from './context/LicenseContext';
 import { ProtectedRoute } from './components/ui/ProtectedRoute';
 import { TransicaoDeRota } from './components/ui/TransicaoDeRota';
+import { FechaPaineisAoNavegar } from './components/FechaPaineisAoNavegar';
 import { PreparoGate } from './pages/setup/PreparoGate';
 import { GraceBanner } from './components/ui/GraceBanner';
 import { SettingsProvider } from './context/SettingsContext';
@@ -194,6 +195,7 @@ function App() {
                       <FaixaDeAtualizacao />
                       <GraceBanner />
                       <CloudBanners />
+                      <FechaPaineisAoNavegar />
                       <DebugHUD />
                       <PreflightPanel />
                       <FatigueIndicator />

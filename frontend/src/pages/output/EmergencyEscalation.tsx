@@ -9,7 +9,7 @@ import { useAuth } from '../../context/AuthContext';
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeButton } from '../../components/ui/GazeButton';
 import { GazeGrid } from '../../components/ui/GazeGrid';
-import { playTone } from '../../utils/emergencyAudio';
+import { playTone, getSharedAudioContext } from '../../utils/emergencyAudio';
 
 const EMERGENCIES = [
   { id: 'pain', labelKey: 'emergency.items.pain', icon: HeartPulse },
@@ -40,13 +40,18 @@ export const EmergencyEscalation: React.FC = () => {
     setTriggered(label);
     setEscalated(false);
 
-    // Som de bip forte inicial
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (AudioCtx) {
+    // Som de bip forte inicial.
+    //
+    // No contexto COMPARTILHADO: este era o único caminho deste arquivo que
+    // ainda criava um `AudioContext` por acionamento e fechava só o oscilador.
+    // Cada emergência atendida e re-disparada gastava uma vaga do mesmo
+    // orçamento de ~50 contextos que o alarme de escalonamento precisa — e
+    // quando ele acaba, quem para de tocar é justamente o alarme que dispara
+    // quando ninguém veio.
+    const audioCtx = getSharedAudioContext();
+    if (audioCtx) {
       try {
-        const audioCtx = new AudioCtx();
+        if (audioCtx.state === 'suspended') void audioCtx.resume();
         const oscillator = audioCtx.createOscillator();
         oscillator.type = 'square';
         oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);

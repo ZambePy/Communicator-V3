@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, Sparkles, Image as ImageIcon, Download, Check, RefreshCw, ArrowLeft, Clock } from 'lucide-react';
 import { GazeButton } from '../../components/ui/GazeButton';
+import { getSharedAudioContext } from '../../utils/emergencyAudio';
 
 export interface CapturedPhoto {
   id: string;
@@ -104,11 +105,26 @@ export const PhotoCaptureScreen: React.FC = () => {
   }, []);
 
   // Efeitos Sonoros com Web Audio API
+  //
+  // CONTEXTO COMPARTILHADO, e não um por bipe.
+  //
+  // Esta tela tocava ~5 sons por foto (três tiques da contagem, o obturador e
+  // o som de salvar) criando um `AudioContext` em cada um e nunca fechando
+  // nenhum. O Chromium limita ~50 contextos por documento: por volta da décima
+  // foto o construtor passa a lançar, o `catch` abaixo engole, e o som some em
+  // silêncio pelo resto da sessão — e cada contexto vazado ainda segura uma
+  // thread de áudio e a saída de hardware.
+  //
+  // O mesmo defeito já tinha sido corrigido duas vezes no app (ver o cabeçalho
+  // de `utils/emergencyAudio.ts`); a correção não tinha chegado aqui. Os
+  // osciladores continuam sendo criados por som — são baratos; o contexto é
+  // que é escasso.
   const playSound = useCallback((type: 'tick' | 'shutter' | 'success') => {
     try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
+      const ctx = getSharedAudioContext();
+      if (!ctx) return;
+      // Pode estar suspenso pela política de autoplay até o primeiro gesto.
+      if (ctx.state === 'suspended') void ctx.resume();
       const now = ctx.currentTime;
 
       if (type === 'tick') {

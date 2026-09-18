@@ -81,25 +81,49 @@ export const SetupWizard: React.FC = () => {
   const [diagonal, setDiagonal] = useState<number | null>(null);
   const [origemDaDiagonal, setOrigemDaDiagonal] = useState<'edid' | 'manual'>('edid');
 
+  /**
+   * Geração da abertura de câmera em curso.
+   *
+   * Trocar de câmera enquanto a anterior ainda está abrindo é fácil: os botões
+   * de escolha não se desabilitam durante o pedido, e `getUserMedia` demora.
+   * Sem esta marca, as duas chamadas paravam o MESMO stream antigo, as duas
+   * escreviam em `streamRef.current`, e o stream perdedor ficava órfão — com a
+   * luz da webcam acesa pelo resto do processo, que é exatamente o que a
+   * limpeza abaixo existe para evitar (ela só para o que estiver no ref).
+   * A `setCameraSelecionada` atrasada também podia desfazer a escolha nova.
+   */
+  const geracaoDaCamera = useRef(0);
+
   const abrirStream = useCallback(async (deviceId?: string) => {
+    const geracao = ++geracaoDaCamera.current;
+    const atual = () => geracaoDaCamera.current === geracao;
     setPermissao('pedindo');
     setErroDeCamera(null);
     try {
       streamRef.current?.getTracks().forEach((tk) => tk.stop());
+      streamRef.current = null;
       const stream = await navigator.mediaDevices.getUserMedia({
         video: deviceId ? { deviceId: { exact: deviceId } } : true,
       });
+      // Perdeu a corrida (ou o componente saiu): o stream é DESTE pedido, e
+      // ninguém mais vai usá-lo. Fechar aqui é o único lugar que ainda o tem.
+      if (!atual()) {
+        stream.getTracks().forEach((tk) => tk.stop());
+        return;
+      }
       streamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
       setPermissao('concedida');
 
       // Os labels só aparecem depois da permissão concedida.
       const lista = await listarCameras();
+      if (!atual()) return;
       setCameras(lista);
       const ativo =
         stream.getVideoTracks()[0]?.getSettings().deviceId ?? lista[0]?.deviceId ?? null;
       setCameraSelecionada(deviceId ?? ativo);
     } catch (e) {
+      if (!atual()) return;
       setPermissao('negada');
       setErroDeCamera(e instanceof Error ? e.message : String(e));
     }
@@ -109,7 +133,12 @@ export const SetupWizard: React.FC = () => {
   // preparo, e o usuário-alvo não tem como investigar por quê.
   useEffect(
     () => () => {
+      // Invalida qualquer abertura em voo ANTES de parar o que existe: sem
+      // isto, um `getUserMedia` que resolvesse depois do unmount escreveria no
+      // ref já limpo e deixaria a câmera ligada.
+      geracaoDaCamera.current++;
       streamRef.current?.getTracks().forEach((tk) => tk.stop());
+      streamRef.current = null;
     },
     []
   );
@@ -169,15 +198,25 @@ export const SetupWizard: React.FC = () => {
   useEffect(() => {
     if (passo !== 'posicionamento') return;
     let vivo = true;
+    // O id vive no escopo do EFEITO, não no do `.then`.
+    //
+    // Antes o `return () => clearInterval(id)` estava dentro do `.then`: era o
+    // valor de retorno DAQUELE callback, que ninguém chama — o React só
+    // enxerga o `return` do próprio efeito. O `if (!vivo) clearInterval(id)`
+    // cobria só o caso de o import resolver DEPOIS do unmount; no caso normal
+    // (import resolve antes) o intervalo de 500 ms ficava rodando para sempre,
+    // e a trilha do assistente permite voltar a este passo quantas vezes o
+    // cuidador quiser — um timer permanente por visita.
+    let id: ReturnType<typeof setInterval> | null = null;
     void import('@tracker/calibration').then((m) => {
-      const id = setInterval(() => {
-        if (vivo) setDistanciaCm(m.getCurrentCameraDistanceCm());
+      if (!vivo) return;
+      id = setInterval(() => {
+        setDistanciaCm(m.getCurrentCameraDistanceCm());
       }, INTERVALO_DE_AMOSTRA_MS);
-      if (!vivo) clearInterval(id);
-      return () => clearInterval(id);
     });
     return () => {
       vivo = false;
+      if (id !== null) clearInterval(id);
     };
   }, [passo]);
 
