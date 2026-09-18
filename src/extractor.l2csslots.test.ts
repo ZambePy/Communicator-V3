@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { l2csSlotsInSet, ACTIVE_FEATURE_SET } from './extractor';
+import { l2csSlotsInSet, ACTIVE_FEATURE_SET, activeFeatureDims } from './extractor';
 import { L2CS_BLOCK_DIM } from './l2cs/block';
 
 /**
@@ -31,10 +31,15 @@ describe('l2csSlotsInSet', () => {
     expect(slots.length).toBeLessThan(L2CS_BLOCK_DIM);
   });
 
-  it('o conjunto ATIVO carrega tan(yaw) e tan(pitch) do L2CS nas posições 4 e 5', () => {
+  it('o conjunto ATIVO carrega tan(yaw) e tan(pitch) nas DUAS últimas posições', () => {
     // Guarda inversa: o pipeline liga o L2CS de propósito. Se este teste
-    // voltar a exigir vazio, `ACTIVE_FEATURE_SET` foi revertido para
-    // `'irisCore'` sozinho — o que só deve acontecer com `l2cs: 'off'`.
-    expect(l2csSlotsInSet(ACTIVE_FEATURE_SET)).toEqual([4, 5]);
+    // voltar a exigir vazio, `ACTIVE_FEATURE_SET` foi revertido para um
+    // conjunto sem bloco angular — o que só deve acontecer com `l2cs: 'off'`.
+    //
+    // A posição é derivada de `activeFeatureDims()`, não literal: o bloco de
+    // íris já encolheu uma vez (4 dims → 2, em `dimsDaIris`) e o par angular
+    // andou junto. O contrato é "são as duas últimas", não "são 4 e 5".
+    const dims = activeFeatureDims() as number;
+    expect(l2csSlotsInSet(ACTIVE_FEATURE_SET)).toEqual([dims - 2, dims - 1]);
   });
 });

@@ -7,7 +7,12 @@ import { startRecording, stopRecording, clearRecording, getRecording, parseJSONL
 describe('FEATURE_VECTOR_ID', () => {
   it('descreve o conjunto ativo e a dimensão', () => {
     expect(FEATURE_VECTOR_ID).toBe(`${ACTIVE_FEATURE_SET}:${activeFeatureDims()}`);
-    expect(FEATURE_VECTOR_ID).toBe('irisCore+l2cs:6');
+    // Literal de propósito: este é o teste que torna uma mudança de conjunto
+    // ativo DELIBERADA e visível no diff, em vez de silenciosa. Mudou de
+    // `irisCore+l2cs:6` para `irisAbs+l2cs:4` quando `dimsDaIris` passou a
+    // 'absolutas' — e essa mudança invalida todo perfil salvo, que é
+    // exatamente o que o identificador existe para garantir.
+    expect(FEATURE_VECTOR_ID).toBe('irisAbs+l2cs:4');
   });
 
   it('`compact` não promete dimensão fixa', () => {

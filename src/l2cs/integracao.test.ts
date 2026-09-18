@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { extractCompactFeatures, projectFeatureSet, ACTIVE_FEATURE_SET } from '../extractor';
+import {
+  extractCompactFeatures,
+  projectFeatureSet,
+  ACTIVE_FEATURE_SET,
+  activeFeatureDims,
+  l2csSlotsInSet,
+} from '../extractor';
 import { extractFeatures } from '../featurePipeline';
 import { buildL2CSBlock, isGazePlausible } from './block';
 
@@ -49,19 +55,21 @@ describe('o bloco angular é construído e anexado', () => {
 
 describe('…e agora chega ao modelo (tan yaw, tan pitch)', () => {
   it('dois olhares diferentes produzem vetores projetados diferentes', () => {
-    // O oposto do estado histórico: com `ACTIVE_FEATURE_SET = 'irisCore+l2cs'`
-    // as duas últimas dims [4] e [5] carregam tan(yaw) e tan(pitch), então o
-    // vetor entregue ao Ridge responde ao gaze.
+    // O oposto do estado histórico: as DUAS ÚLTIMAS dims do conjunto ativo
+    // carregam tan(yaw) e tan(pitch), então o vetor entregue ao Ridge responde
+    // ao gaze. O conjunto em si não é fixado aqui — `dimsDaIris` muda o bloco
+    // de íris sem mexer no par angular, que é o que este teste mede.
     const lm = rosto();
     const a = projectFeatureSet(extractCompactFeatures(lm, undefined, GAZE_A).featuresLeft);
     const b = projectFeatureSet(extractCompactFeatures(lm, undefined, GAZE_B).featuresLeft);
-    expect(ACTIVE_FEATURE_SET).toBe('irisCore+l2cs');
-    expect(a).toHaveLength(6);
+    const dims = activeFeatureDims() as number;
+    expect(l2csSlotsInSet(ACTIVE_FEATURE_SET)).toEqual([dims - 2, dims - 1]);
+    expect(a).toHaveLength(dims);
     expect(a).not.toEqual(b);
-    // As 4 primeiras dims são o irisCore puro (dependem só dos landmarks),
-    // então são iguais entre os dois olhares — quem varia é o par angular.
-    expect(a.slice(0, 4)).toEqual(b.slice(0, 4));
-    expect(a.slice(4)).not.toEqual(b.slice(4));
+    // O prefixo de íris depende só dos landmarks, então é igual entre os dois
+    // olhares — quem varia é o par angular.
+    expect(a.slice(0, dims - 2)).toEqual(b.slice(0, dims - 2));
+    expect(a.slice(dims - 2)).not.toEqual(b.slice(dims - 2));
   });
 
   it('sem gaze, o pipeline LANÇA em vez de entregar 37 dims', () => {
@@ -70,22 +78,22 @@ describe('…e agora chega ao modelo (tan yaw, tan pitch)', () => {
     // ia inteiro para o Ridge — com pose [22..24] e as 12 interações [25..36]
     // que a análise do extractor exclui de propósito por memorização (322 px
     // medidos contra 140 px) — enquanto `FEATURE_VECTOR_ID` continuava
-    // gravando "irisCore+l2cs:6".
+    // gravando a dimensão do conjunto ativo.
     //
     // Em produção isto NÃO deveria ocorrer: `engine.ts` sempre passa um objeto
     // `L2CSGazeInput` enquanto o conjunto ativo carrega o bloco angular. A
     // barreira existe para o caso em que isso deixar de valer.
     const lm = rosto();
     const comGaze = extractFeatures(lm, undefined, GAZE_A, 1920, 1080).featuresLeft;
-    expect(comGaze).toHaveLength(6);
+    expect(comGaze).toHaveLength(activeFeatureDims() as number);
     expect(() => extractFeatures(lm, undefined, null, 1920, 1080)).toThrow(RangeError);
 
     // Cenário do engine live com worker aquecendo: `{valid:false}` faz o bloco
     // vir zerado, mas o vetor completo cresce para 44 dims e a projeção
     // funciona. Este é o caminho de degradação graciosa e continua válido.
     const stale = extractFeatures(lm, undefined, { yaw: 0, pitch: 0, valid: false }, 1920, 1080).featuresLeft;
-    expect(stale).toHaveLength(6);
-    expect(stale.slice(4)).toEqual([0, 0]); // tan(0)=0, tan(0)=0
+    expect(stale).toHaveLength(activeFeatureDims() as number);
+    expect(stale.slice((activeFeatureDims() as number) - 2)).toEqual([0, 0]); // tan(0)=0
     expect(comGaze).not.toEqual(stale);
   });
 });

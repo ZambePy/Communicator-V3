@@ -3,6 +3,7 @@ import {
   clearCalibration, startCalibrationMode, startCollectingPoint, feedRawData,
   consumeLastSampleDecision, getResumoDoPonto,
 } from './calibration';
+import { activeFeatureDims } from './extractor';
 
 /**
  * Contrato depois da remoção dos gates de amostra na calibração.
@@ -25,8 +26,19 @@ describe('calibração sem gates de amostra', () => {
   });
   afterEach(() => { vi.restoreAllMocks(); });
 
-  /** 6 dims (irisCore+l2cs); os slots [4] e [5] são o bloco angular. */
-  const comBloco = (angular: number) => [0.1, 0.2, 0.3, 0.4, angular, angular];
+  /**
+   * Vetor com a dimensão do conjunto ATIVO, com o bloco angular nas duas
+   * últimas posições. Derivado e não literal: o bloco de íris já encolheu uma
+   * vez (`dimsDaIris`), e um vetor de comprimento errado aqui não falha — ele
+   * é aceito e o diagnóstico passa a medir a coluna errada, em silêncio.
+   */
+  const comBloco = (angular: number) => {
+    const dims = activeFeatureDims() as number;
+    const v = Array.from({ length: dims }, (_, i) => 0.1 * (i + 1));
+    v[dims - 2] = angular;
+    v[dims - 1] = angular;
+    return v;
+  };
   const pose = { yaw: 0.1, pitch: -0.05, roll: 0.01 };
 
   function primeiraDecisao(features: number[]) {

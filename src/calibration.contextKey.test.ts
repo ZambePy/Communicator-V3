@@ -119,3 +119,44 @@ describe('nenhuma flag do vetor pode ser esquecida em silêncio', () => {
     expect(k).toContain('irisCore+l2cs:6');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Forma da expansão polinomial.
+//
+// `completa` e `parcial` produzem o MESMO `FEATURE_VECTOR_ID` — o corte
+// acontece depois da projeção — mas número e ordem de colunas diferentes (27
+// contra 16 no vetor de produção). Os coeficientes do Ridge são posicionais,
+// então sem esta guarda um perfil treinado numa forma carregaria na outra sem
+// erro nenhum e preveria deslocado. É a mesma classe de falha do
+// `l2csInputSize`.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('a forma da expansão entra na chave', () => {
+  it('parcial e completa não compartilham chave', () => {
+    const completa = buildContextKeyFrom({ ...BASE, expansaoParcial: false });
+    const parcial = buildContextKeyFrom({ ...BASE, expansaoParcial: true });
+    expect(completa).not.toBe(parcial);
+  });
+
+  it('ausente == completa: os perfis já salvos continuam válidos', () => {
+    // Nenhum perfil gravado antes desta flag existir carrega `expansaoParcial`.
+    // Se o default mudasse a chave, todos eles morriam no próximo boot.
+    expect(buildContextKeyFrom({ ...BASE })).toBe(
+      buildContextKeyFrom({ ...BASE, expansaoParcial: false }),
+    );
+  });
+
+  it('sem expansão nenhuma, a forma não importa', () => {
+    // `polynomialFeatures: false` não expande nada; distinguir a forma aí
+    // criaria duas chaves para um único modelo.
+    const semPoly = { ...BASE, polynomialFeatures: false } as const;
+    expect(buildContextKeyFrom({ ...semPoly, expansaoParcial: true })).toBe(
+      buildContextKeyFrom({ ...semPoly, expansaoParcial: false }),
+    );
+  });
+
+  it('o conjunto de íris enxuto já invalida pelo FEATURE_VECTOR_ID', () => {
+    expect(buildContextKeyFrom({ ...BASE })).not.toBe(
+      buildContextKeyFrom({ ...BASE, featureVectorId: 'irisRel+l2cs:4' }),
+    );
+  });
+});

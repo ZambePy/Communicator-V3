@@ -29,6 +29,52 @@ export interface ExperimentConfig {
   l2cs: 'auto' | 'webgpu' | 'wasm' | 'off';
   /** Expansão polinomial de grau 2 das features antes do StandardScaler. */
   polynomialFeatures: boolean;
+  /**
+   * FORMA da expansão polinomial.
+   *
+   *  - `parcial` (DEFAULT): o bloco angular (`tan yaw`/`tan pitch`, do L2CS ou
+   *    do ramo ocular) fica só no termo LINEAR. Ele já chega linearizado pela
+   *    tangente — `x_tela ≈ x_olho + d·tan(yaw)` —, então o quadrado e o
+   *    cruzado dessas dimensões capturam apenas curvatura residual.
+   *  - `completa` (histórico): todas as dimensões entram nos termos
+   *    quadráticos. Com o bloco de íris inteiro isso produzia 27 colunas para
+   *    9 alvos distintos determinarem — três colunas por alvo.
+   *
+   * Entra na chave do perfil: os coeficientes do Ridge são posicionais, e um
+   * perfil treinado numa forma prevê deslocado na outra.
+   */
+  formaDaExpansao: 'completa' | 'parcial';
+  /**
+   * Quais dimensões de íris entram no vetor.
+   *
+   * O vetor histórico leva as quatro: `offsetX`/`offsetY` (íris menos centro
+   * do olho, em unidades de imagem) e `relX`/`relY` (as mesmas divididas pela
+   * largura/altura do olho). As duas famílias diferem por um divisor que varia
+   * pouco entre quadros — medido em simulação com ±5 % de variação de largura,
+   * a correlação entre `offsetX` e `relX` é 0,9996. São duas dimensões
+   * carregando um sinal, e depois da expansão viram três colunas quase
+   * idênticas (`offsetX²`, `offsetX·relX`, `relX²`) que nenhum alvo separa.
+   *
+   *  - `absolutas` (DEFAULT): só `offsetX`/`offsetY`. Sem divisor nenhum.
+   *  - `normalizadas`: só `relX`/`relY`. Perfeitamente imunes à escala do
+   *    rosto no quadro, ao custo de herdar o ruído do divisor.
+   *  - `ambas` (histórico): as quatro.
+   *
+   * Por que `absolutas` e não `normalizadas`, já que as duas empataram no
+   * erro nominal: elas se separam nos dois modos de falha que importam aqui.
+   *
+   *  - PTOSE (pálpebra caída, comum em ELA) corrompe a ALTURA do olho, que é
+   *    o divisor de `relY`. Em simulação com a altura oscilando, `absolutas`
+   *    fica imune e `normalizadas` degrada. Nada no pipeline compensa isso.
+   *  - DISTÂNCIA diferente da calibração escala `offsetX`/`offsetY` e não
+   *    escala `relX`/`relY`. Aqui `normalizadas` fica perfeitamente plana e
+   *    `absolutas` degrada um pouco — mas a distância JÁ tem compensação
+   *    dedicada a jusante (`distanceCompensation.ts`), e a ptose não tem.
+   *
+   * Muda o `FEATURE_VECTOR_ID` e portanto invalida perfis salvos, por
+   * construção — a troca deste default obriga todo mundo a recalibrar uma vez.
+   */
+  dimsDaIris: 'ambas' | 'normalizadas' | 'absolutas';
   /** Compensação geométrica de pose (d·tan Δ) na saída e nos alvos de treino. */
   geometricPoseCompensation: boolean;
   /**
@@ -138,6 +184,8 @@ export const DEFAULTS: ExperimentConfig = {
   l2csInputSize: 448,
   l2cs: 'auto',
   polynomialFeatures: true,
+  formaDaExpansao: 'parcial',
+  dimsDaIris: 'absolutas',
   geometricPoseCompensation: true,
   lateralTranslationCompensation: true,
   referenciaLenta: true,
@@ -160,6 +208,8 @@ export const VALORES_ACEITOS = {
   l2cs: ['auto', 'webgpu', 'wasm', 'off'],
   eyeNet: ['off', 'onnx'],
   filterMode: ['oneEuro', 'kalman', 'kalmanEma'],
+  formaDaExpansao: ['completa', 'parcial'],
+  dimsDaIris: ['ambas', 'normalizadas', 'absolutas'],
 } as const;
 
 export const L2CS_INPUT_SIZES_ACEITOS = [224, 448] as const;
