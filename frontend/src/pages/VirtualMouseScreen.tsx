@@ -158,12 +158,12 @@ export const VirtualMouseScreen: React.FC = () => {
             </div>
 
             {bloqueio && !modo.ativo && (
-              <p role="status" style={{ margin: 0, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', padding: '0.9rem 1.1rem', borderRadius: '1rem', lineHeight: 1.5 }}>
+              <p role="status" style={{ margin: 0, color: 'var(--tint-warn-text)', background: 'var(--tint-warn-bg)', border: '1px solid #fde68a', padding: '0.9rem 1.1rem', borderRadius: '1rem', lineHeight: 1.5 }}>
                 {bloqueio}
               </p>
             )}
             {modo.erro && (
-              <p role="alert" style={{ margin: 0, color: '#991b1b', background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', padding: '0.9rem 1.1rem', borderRadius: '1rem', lineHeight: 1.5 }}>
+              <p role="alert" style={{ margin: 0, color: 'var(--tint-danger-text)', background: 'var(--tint-danger-bg)', border: '1px solid rgba(220,38,38,0.3)', padding: '0.9rem 1.1rem', borderRadius: '1rem', lineHeight: 1.5 }}>
                 {modo.erro}
               </p>
             )}

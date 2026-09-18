@@ -17,7 +17,14 @@ import {
 } from '../../services/camera/devices';
 import { gravarPreparo } from '../../services/local/setupProfile';
 import { PASSOS, indiceDoPasso, proximoPasso, passoAnterior, type PassoId } from './passos';
-import { acumular, estavel, inicial, msEstavel, type EstadoDeEstabilidade } from './estabilidade';
+import {
+  acumular,
+  inicial,
+  msEstavel,
+  podeSeguir,
+  liberadoPorEspera,
+  type EstadoDeEstabilidade,
+} from './estabilidade';
 import { PermissaoCamera, type EstadoDaPermissao } from './steps/PermissaoCamera';
 import { EscolhaDaCamera } from './steps/EscolhaDaCamera';
 import { Posicionamento } from './steps/Posicionamento';
@@ -182,7 +189,25 @@ export const SetupWizard: React.FC = () => {
    * por FPS baixo ou sala escura deixaria o paciente sem comunicação por uma
    * condição que talvez ele não consiga mudar.
    */
-  const podeAvancar = passo !== 'posicionamento' || estavel(estabilidade, agora);
+  // Instante em que a pessoa CHEGOU ao passo de posicionamento. É a base da
+  // válvula de escape: depois de 45 s tentando, a porta abre com aviso, em vez
+  // de deixar "Continuar" desabilitado para sempre.
+  const chegouNoPosicionamentoRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (passo === 'posicionamento') {
+      if (chegouNoPosicionamentoRef.current === null) {
+        chegouNoPosicionamentoRef.current = performance.now();
+      }
+    } else {
+      chegouNoPosicionamentoRef.current = null;
+    }
+  }, [passo]);
+
+  const desdeQuandoTenta = chegouNoPosicionamentoRef.current ?? agora;
+  const podeAvancar =
+    passo !== 'posicionamento' || podeSeguir(estabilidade, agora, desdeQuandoTenta);
+  const seguiuSemEstabilizar =
+    passo === 'posicionamento' && liberadoPorEspera(estabilidade, agora, desdeQuandoTenta);
 
   const concluir = () => {
     if (currentProfile) {
@@ -249,7 +274,7 @@ export const SetupWizard: React.FC = () => {
           >
             {t('setup.title')}
           </h1>
-          <Trilha atual={passo} />
+          <Trilha atual={passo} aoEscolher={setPasso} />
         </div>
 
         <div
@@ -308,6 +333,26 @@ export const SetupWizard: React.FC = () => {
           )}
         </div>
 
+        {seguiuSemEstabilizar && (
+          <p
+            role="status"
+            style={{
+              margin: 0,
+              padding: '0.9rem 1.1rem',
+              borderRadius: '1rem',
+              background: 'var(--tint-warn-bg)',
+              border: '1px solid var(--tint-warn-border)',
+              color: 'var(--tint-warn-text)',
+              lineHeight: 1.5,
+            }}
+          >
+            A posição não ficou estável por 3 segundos seguidos, mas você pode
+            continuar. A calibração tende a ficar menos precisa — se puder,
+            ajuste a cadeira, a luz ou o apoio de cabeça e tente de novo antes
+            de seguir.
+          </p>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
           <PrimaryButton
             type="button"
@@ -335,35 +380,79 @@ export const SetupWizard: React.FC = () => {
   );
 };
 
-const Trilha: React.FC<{ atual: PassoId }> = ({ atual }) => {
+/**
+ * Trilha de passos — navegável, como a do tutorial.
+ *
+ * Era `div` + `span`, sem `onClick`, sem `role` e fora do `DWELL_SELECTOR`:
+ * parecia um conjunto de abas e era inerte para mouse, teclado e olhar. Voltar
+ * a um passo anterior só era possível pelo botão "Voltar", um de cada vez.
+ *
+ * Aqui, ao contrário do tutorial, só se anda para TRÁS pela trilha: o
+ * posicionamento tem uma porta de verdade (a janela de estabilidade), e pular
+ * por cima dela pela trilha esvaziaria a porta. Avançar continua sendo pelo
+ * botão, que respeita a regra.
+ */
+const Trilha: React.FC<{ atual: PassoId; aoEscolher: (p: PassoId) => void }> = ({
+  atual,
+  aoEscolher,
+}) => {
   const { t } = useTranslation();
   const i = indiceDoPasso(atual);
   return (
     <div
+      role="tablist"
       style={{ display: 'flex', gap: '0.4rem' }}
       aria-label={t('setup.stepOf', { atual: i + 1, total: PASSOS.length })}
     >
-      {PASSOS.map((p, n) => (
-        <div key={p} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-          <div
+      {PASSOS.map((p, n) => {
+        const ehAtual = n === i;
+        const alcancavel = n <= i;
+        return (
+          <button
+            key={p}
+            type="button"
+            role="tab"
+            aria-selected={ehAtual}
+            aria-current={ehAtual ? 'step' : undefined}
+            disabled={!alcancavel}
+            onClick={() => alcancavel && aoEscolher(p)}
             style={{
-              height: 4,
-              borderRadius: 999,
-              background: n <= i ? 'var(--color-primary)' : 'var(--color-card-border)',
-            }}
-          />
-          <span
-            style={{
-              fontSize: '0.72rem',
-              fontWeight: n === i ? 800 : 600,
-              opacity: n === i ? 1 : 0.55,
-              color: 'var(--color-text-base)',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.3rem',
+              minHeight: 56,
+              padding: '0.35rem 0.25rem',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: '0.6rem',
+              cursor: alcancavel ? 'pointer' : 'default',
+              textAlign: 'center',
+              font: 'inherit',
             }}
           >
-            {t(`setup.steps.${p}`)}
-          </span>
-        </div>
-      ))}
+            <span
+              aria-hidden="true"
+              style={{
+                display: 'block',
+                height: 4,
+                borderRadius: 999,
+                background: n <= i ? 'var(--color-primary)' : 'var(--color-card-border)',
+              }}
+            />
+            <span
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: ehAtual ? 800 : 600,
+                opacity: ehAtual ? 1 : 0.55,
+                color: 'var(--color-text-base)',
+              }}
+            >
+              {t(`setup.steps.${p}`)}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 };

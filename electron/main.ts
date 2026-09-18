@@ -196,6 +196,17 @@ function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    // Sem isto o Chromium pinta BRANCO até o primeiro frame do renderer: um
+    // flash claro de tela cheia em toda abertura do app, antes de qualquer
+    // CSS existir. O valor acompanha `--color-bg-base` do tema escuro.
+    backgroundColor: '#0f172a',
+    // Piso de tamanho. Sem ele a janela podia ser arrastada até 400×300, onde
+    // a grade da Home fica com uma linha e meia visível e o alvo mínimo de 5°
+    // é aritmeticamente impossível. 1024×640 é o menor posto em que a Home
+    // ainda entrega 3×3 dentro do mínimo; abaixo disso a grade rola, o que é
+    // degradação honesta — mas travar aqui evita o layout absurdo.
+    minWidth: 1024,
+    minHeight: 640,
     // Ícone da janela e da barra de tarefas. No pacote quem manda é o ícone
     // embutido no executável pelo electron-builder; isto resolve o
     // desenvolvimento, onde a janela aparecia com o ícone padrão do Electron —

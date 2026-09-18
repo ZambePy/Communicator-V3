@@ -4,17 +4,23 @@
   "version": "0.0.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
+  "desktopName": "irisflow-communicator.desktop",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
     "dev": "npm --prefix frontend run dev",
+    "dev:limpo": "node scripts/limpo.mjs dev",
     "build": "npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview",
     "test": "vitest run",
     "electron:compile": "node electron/build.mjs",
     "electron:dev": "node electron/dev.mjs",
-    "electron:build": "npm run build && node electron/build.mjs && node electron/package-app.mjs"
+    "electron:dev:limpo": "node scripts/limpo.mjs electron:dev",
+    "electron:build": "npm run build && node electron/build.mjs && node electron/package-app.mjs",
+    "electron:build:win": "npm run build && node electron/build.mjs && node electron/package-app.mjs --win",
+    "electron:build:mac": "npm run build && node electron/build.mjs && node electron/package-app.mjs --mac",
+    "electron:build:linux": "npm run build && node electron/build.mjs && node electron/package-app.mjs --linux"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -36,6 +42,7 @@
     "appId": "com.irisflow.app",
     "productName": "IrisFlow Communicator",
     "directories": {
+      "app": ".",
       "output": "release"
     },
     "files": [
@@ -57,13 +64,97 @@
       "shortcutName": "IrisFlow Communicator"
     },
     "mac": {
-      "target": "dmg",
-      "icon": "build/icon.png"
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.medical",
+      "darkModeSupport": true,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "extendInfo": {
+        "NSCameraUsageDescription": "O IrisFlow usa a câmera para rastrear o olhar e permitir a comunicação.",
+        "NSMicrophoneUsageDescription": "O IrisFlow usa o microfone apenas para gravar a voz de referência da voz personalizada, a pedido do cuidador."
+      }
     },
     "linux": {
-      "target": "AppImage",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.png",
-      "category": "Utility"
+      "category": "Utility;Accessibility",
+      "maintainer": "IrisFlow <irisflowteam@gmail.com>",
+      "vendor": "IrisFlow",
+      "synopsis": "Comunicação por rastreamento ocular com webcam",
+      "description": "O IrisFlow Communicator permite que pessoas com ELA, AVC ou tetraplegia se comuniquem usando apenas o olhar e uma webcam comum.",
+      "syncDesktopName": true,
+      "desktop": {
+        "entry": {
+          "StartupWMClass": "irisflow-communicator",
+          "Keywords": "acessibilidade;ELA;comunicacao;olhar;eyetracking;"
+        }
+      }
+    },
+    "dmg": {
+      "title": "IrisFlow Communicator",
+      "contents": [
+        {
+          "x": 140,
+          "y": 200
+        },
+        {
+          "x": 400,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0"
+      ]
+    },
+    "appImage": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     }
   }
 }

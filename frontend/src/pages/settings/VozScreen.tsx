@@ -332,11 +332,27 @@ export const VozScreen: React.FC = () => {
                   <tbody>
                     {TABELA_DE_HARDWARE.map((faixa) => {
                       const atual = faixa.nivel === nivelDaMaquina;
+                      // A linha "este computador" tinha um azul-claro cravado e
+                      // não definia `color`: o texto herdava `--color-text-base`,
+                      // que no escuro é quase branco. Branco sobre azul-claro — a
+                      // única linha da tabela que existe para ser lida era a
+                      // única ilegível.
                       return (
-                        <tr key={faixa.nivel} style={atual ? { background: '#e0f2fe', fontWeight: 700 } : undefined}>
+                        <tr
+                          key={faixa.nivel}
+                          style={
+                            atual
+                              ? {
+                                  background: 'var(--tint-info-bg)',
+                                  color: 'var(--tint-info-text)',
+                                  fontWeight: 700,
+                                }
+                              : undefined
+                          }
+                        >
                           <td style={celulaDaTabela}>
                             {faixa.rotulo}
-                            {atual && <span style={{ color: '#0369a1' }}> ← este computador</span>}
+                            {atual && <span> ← este computador</span>}
                           </td>
                           <td style={celulaDaTabela}>{faixa.memoriaGb}</td>
                           <td style={celulaDaTabela}>{faixa.nucleos}</td>

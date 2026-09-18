@@ -780,6 +780,62 @@ símbolo oficial e apontados em `package.json` → `build.win.icon`,
 deixou de ser instalação silenciosa: `oneClick: false`, com escolha da pasta de
 instalação e atalho **IrisFlow Communicator**.
 
+### As três plataformas
+
+A ferramenta é o **electron-builder** (API programática, em
+`electron/package-app.mjs`). Não foi trocada nem acrescentada outra: o script
+existente ganhou seleção de plataforma.
+
+| comando | plataforma | formatos gerados |
+|---|---|---|
+| `npm run electron:build` | a do computador atual | conforme a tabela abaixo |
+| `npm run electron:build:win` | Windows | `NSIS` (.exe) |
+| `npm run electron:build:mac` | macOS | `dmg` + `zip`, em **x64 e arm64** |
+| `npm run electron:build:linux` | Linux | `AppImage` + `deb` + `rpm` (x64) |
+
+Os artefatos saem em subpastas por plataforma, dentro do diretório temporário
+do sistema (fora do OneDrive, pelo motivo documentado no topo do
+`package-app.mjs`):
+
+```
+%TEMP%\irisflow-release\win32\   → IrisFlow Setup 0.0.0.exe   + latest.yml
+/tmp/irisflow-release/mac/        → IrisFlow-0.0.0-arm64.dmg    + latest-mac.yml
+/tmp/irisflow-release/linux/      → IrisFlow Communicator-0.0.0-x86_64.AppImage
+                                     irisflow_0.0.0_amd64.deb
+                                     irisflow-0.0.0.x86_64.rpm  + latest-linux.yml
+```
+
+**Onde cada build pode ser feito.** Não é escolha de projeto, é limitação das
+ferramentas:
+
+| host | gera win | gera mac | gera linux |
+|---|---|---|---|
+| Windows | sim | **não** | só com Docker/WSL |
+| macOS | sim | **sim** | sim |
+| Linux | via wine | **não** | sim |
+
+Um `.dmg` **nunca** sai de Windows ou Linux: o electron-builder depende das
+ferramentas de assinatura da Apple, que só existem no macOS. O script recusa
+`--mac` fora do macOS com uma mensagem explícita, em vez de falhar no meio.
+
+Pré-requisitos do host Linux: o alvo `rpm` exige `rpmbuild` instalado
+(`sudo apt-get install rpm`). Sem ele o electron-builder aborta o build
+inteiro, não só o rpm.
+
+Para gerar as três num CI, use um job por sistema — `windows-latest`,
+`macos-latest` e `ubuntu-latest` — cada um rodando o script da sua plataforma.
+
+**Sobre o macOS e a assinatura.** O `.app` sai **sem assinatura** e sem
+notarização: `hardenedRuntime` está desligado de propósito, porque ligá-lo sem
+certificado faz o Gatekeeper *recusar* o app em vez de apenas avisar. Na
+primeira abertura o usuário precisará de botão direito → Abrir. Para distribuir
+de verdade é preciso uma conta Apple Developer (US$ 99/ano), e aí `mac.notarize`
+e `hardenedRuntime: true` entram juntos — um sem o outro não funciona.
+
+O alvo `zip` do macOS **não é redundância** com o `dmg`: o `electron-updater`
+só sabe atualizar macOS a partir de um `.zip`. Com apenas o `dmg`, a
+atualização automática ficaria silenciosamente sem efeito nessa plataforma.
+
 ### SmartScreen: o aviso do Windows, e as três saídas
 
 O instalador **não é assinado**. Consequência, dita sem rodeio: na primeira

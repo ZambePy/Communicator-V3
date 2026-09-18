@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
-import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { GazeButton } from '../../components/ui/GazeButton';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { limitarDwellMs } from '../../dwellMs';
@@ -135,7 +135,7 @@ export const TutorialWizard: React.FC = () => {
           </button>
         </div>
 
-        <Trilha atual={passo} />
+        <Trilha atual={passo} aoEscolher={setPasso} />
 
         <div
           className="glass-card"
@@ -155,59 +155,124 @@ export const TutorialWizard: React.FC = () => {
           {passo === 'concluido' && <Concluido />}
         </div>
 
+        {/*
+          Voltar e Continuar são `GazeButton`, não `PrimaryButton`.
+
+          O tutorial roda DEPOIS da calibração, com o dwell ativo: estes dois
+          são acionados pelo olhar. O `PrimaryButton` mede ~163×46 px — mais
+          fino que a pílula de 180×64 que o `BackButton` já teve de aposentar,
+          e pelo mesmo motivo registrado lá: "uma faixa fina é exatamente o
+          formato em que o dwell zera por um tremor vertical". Altura de 76 px
+          é a mesma dos outros alvos de olhar do app (modal de lembrete, FAB
+          de emergência).
+        */}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
-          <PrimaryButton
+          <GazeButton
             type="button"
-            variant="ghost"
+            height={76}
             disabled={anterior === null}
             onClick={() => anterior && setPasso(anterior)}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: '2px solid var(--color-card-border)',
+              color: 'var(--color-text-base)',
+              opacity: anterior === null ? 0.4 : 1,
+            }}
           >
-            <ArrowLeft size={17} aria-hidden="true" /> {t('tutorial.back')}
-          </PrimaryButton>
+            <ArrowLeft size={20} aria-hidden="true" /> {t('tutorial.back')}
+          </GazeButton>
 
-          <PrimaryButton type="button" onClick={avancar}>
+          <GazeButton type="button" height={76} onClick={avancar} style={{ flex: 1 }}>
             {ultimo ? (
               <>
-                {t('tutorial.concluido.ir')} <Check size={17} aria-hidden="true" />
+                {t('tutorial.concluido.ir')} <Check size={20} aria-hidden="true" />
               </>
             ) : (
               <>
-                {t('tutorial.next')} <ArrowRight size={17} aria-hidden="true" />
+                {t('tutorial.next')} <ArrowRight size={20} aria-hidden="true" />
               </>
             )}
-          </PrimaryButton>
+          </GazeButton>
         </div>
       </div>
     </main>
   );
 };
 
-const Trilha: React.FC<{ atual: PassoDoTutorial }> = ({ atual }) => {
+/**
+ * Trilha de passos — e ela NAVEGA.
+ *
+ * Era um `div` com um `span` por passo: parecia um conjunto de abas e não
+ * respondia a nada. Não tinha `onClick`, não tinha `role`, não tinha
+ * `tabIndex`, e não casava com o `DWELL_SELECTOR` do `GazeContext`
+ * (`button, a, [role="button"], [role="link"]`) — logo era inerte para o
+ * mouse, para o teclado E para o olhar, que é o único meio de entrada do
+ * paciente. Quem lia aquilo como aba e tentava ir para outro passo concluía,
+ * com razão, que o tutorial tinha travado.
+ *
+ * Por que navegação LIVRE e não "só até onde já cheguei": o cabeçalho deste
+ * arquivo diz que o tutorial não bloqueia nada e que quem não quiser fazer
+ * pula. Uma trilha que só anda para trás contradiria isso — e "Pular" já
+ * permite sair inteiro a qualquer momento.
+ */
+const Trilha: React.FC<{
+  atual: PassoDoTutorial;
+  aoEscolher: (p: PassoDoTutorial) => void;
+}> = ({ atual, aoEscolher }) => {
   const { t } = useTranslation();
   const i = indiceDoPassoDoTutorial(atual);
   return (
-    <div style={{ display: 'flex', gap: '0.4rem' }}>
-      {PASSOS_DO_TUTORIAL.map((p, n) => (
-        <div key={p} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-          <div
+    <div role="tablist" aria-label={t('tutorial.title')} style={{ display: 'flex', gap: '0.4rem' }}>
+      {PASSOS_DO_TUTORIAL.map((p, n) => {
+        const ehAtual = n === i;
+        return (
+          <button
+            key={p}
+            type="button"
+            role="tab"
+            aria-selected={ehAtual}
+            aria-current={ehAtual ? 'step' : undefined}
+            onClick={() => aoEscolher(p)}
             style={{
-              height: 4,
-              borderRadius: 999,
-              background: n <= i ? 'var(--color-primary)' : 'var(--color-card-border)',
-            }}
-          />
-          <span
-            style={{
-              fontSize: '0.72rem',
-              fontWeight: n === i ? 800 : 600,
-              opacity: n === i ? 1 : 0.55,
-              color: 'var(--color-text-base)',
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.3rem',
+              // Alto o bastante para o dwell não zerar com o jitter vertical:
+              // uma faixa fina é exatamente o formato em que o olhar escapa.
+              minHeight: 56,
+              padding: '0.35rem 0.25rem',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: '0.6rem',
+              cursor: 'pointer',
+              textAlign: 'center',
+              font: 'inherit',
             }}
           >
-            {t(`tutorial.steps.${p}`)}
-          </span>
-        </div>
-      ))}
+            <span
+              aria-hidden="true"
+              style={{
+                display: 'block',
+                height: 4,
+                borderRadius: 999,
+                background: n <= i ? 'var(--color-primary)' : 'var(--color-card-border)',
+              }}
+            />
+            <span
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: ehAtual ? 800 : 600,
+                opacity: ehAtual ? 1 : 0.55,
+                color: 'var(--color-text-base)',
+              }}
+            >
+              {t(`tutorial.steps.${p}`)}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 };

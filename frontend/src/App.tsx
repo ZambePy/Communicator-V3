@@ -134,8 +134,11 @@ const RouteFallback: React.FC = () => (
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(160deg, #f0f4ff 0%, #e8f0fb 50%, #f1f5f9 100%)',
-      color: '#1B54A8',
+      // Era um gradiente CLARO de tela cheia. Como todas as rotas são
+      // `lazy`, ele piscava a cada troca de tela — num app cujo argumento
+      // clínico é justamente não saturar a pupila.
+      background: 'var(--settings-bg)',
+      color: 'var(--color-primary)',
       fontSize: '1.1rem',
       fontWeight: 700,
     }}
