@@ -34,6 +34,7 @@ import { DetectorDeOlharForaDaTela } from '@tracker/interaction/olharForaDaTela'
 import { DetectorDeOlhosFechados } from '@tracker/interaction/olhosFechados';
 import { preflight, podeComecar } from '@tracker/diagnostics/preflight';
 import { cursorVisivelNoTeste } from '@tracker/accuracy';
+import { rotaMostraCursor } from '../rotasComCursor';
 import { stepBlinkClick, criarEstadoBlinkClick } from '@tracker/interaction/blinkClick';
 import { GazeStatusBanner } from '../components/GazeStatusBanner';
 import { ReancoragemOverlay, DURACAO_DO_REAJUSTE_MS } from '../components/ReancoragemOverlay';
@@ -1280,7 +1281,19 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // pessoa precisa fixar o alvo, e um ponto se mexendo ao lado é
         // justamente o que estraga a fixação que se está tentando coletar.
         const escondePeloTeste = !cursorVisivelNoTeste();
-        if (isInCalibration || !isCalibrated || escondePeloTeste) {
+
+        // E a ROTA. `isCalibrated()` não basta sozinho: um perfil salvo carrega
+        // a calibração dele, então já na tela de escolha de paciente a resposta
+        // é "sim" e o cursor aparecia — apontando com o modelo de quem usou o
+        // computador por último, antes de alguém dizer quem vai usar agora.
+        //
+        // Lido de `location.hash` porque o `GazeProvider` fica FORA do router
+        // (ver `App.tsx`: ele precisa envolver o `CloudProvider`, que é irmão
+        // das rotas), então não há `useLocation` aqui. Com `HashRouter` a rota
+        // mora no hash, e lê-la é uma leitura de string — nada de layout.
+        const escondePelaRota = !rotaMostraCursor(window.location.hash);
+
+        if (isInCalibration || !isCalibrated || escondePeloTeste || escondePelaRota) {
           // Hard-hide: move offscreen + opacity 0
           esconderCursor(cursorRef.current, ultimoEstiloDoCursorRef.current);
           esconderAnel();

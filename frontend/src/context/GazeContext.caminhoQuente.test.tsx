@@ -147,6 +147,10 @@ describe('GazeContext — o caminho quente a 30 Hz', () => {
 
   beforeEach(() => {
     emitir = () => {};
+    // O cursor só é desenhado em rota de paciente (ver `rotasComCursor.ts`);
+    // sem isto o jsdom começa com hash vazio, que é a abertura, e o caminho
+    // quente mediria um cursor legitimamente escondido.
+    window.location.hash = '#/menu';
     relogio = instalarRelogioDeQuadros();
     vi.clearAllMocks();
     Object.defineProperty(navigator, 'mediaDevices', {

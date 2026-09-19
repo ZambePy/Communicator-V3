@@ -170,6 +170,28 @@ export interface ExperimentConfig {
    * relatório, então a rodada fica marcada.
    */
   cursorNoTesteDePrecisao: boolean;
+  /**
+   * A calibração treinada é gravada no disco e recarregada na abertura?
+   *
+   * Ligada por default, e o default é o certo para o produto: um paciente com
+   * ELA não pode refazer nove alvos toda vez que o computador liga — a
+   * calibração é justamente o que custa caro para ele produzir.
+   *
+   * Desligar serve para DESENVOLVIMENTO. Testar o fluxo de calibração com um
+   * perfil salvo é testar outra coisa: o app pula a coleta, carrega o modelo
+   * de ontem e esconde qualquer regressão no caminho que se queria exercitar.
+   * Com a flag desligada cada abertura começa sem modelo, como uma instalação
+   * nova, e a única forma de ter cursor é calibrar.
+   *
+   * **Não apaga nada.** O que já está no disco continua lá e volta a valer
+   * assim que a flag for religada — desligar é deixar de ler e de escrever,
+   * não destruir. Um mecanismo de teste que apaga o perfil de um paciente por
+   * engano é exatamente o acidente que este projeto não pode ter.
+   *
+   * Console: `__irisflowExp.set('persistirCalibracao', false)` + recarregar.
+   * URL: `?calib=0` (uma rodada) ou `?calib=1` para religar.
+   */
+  persistirCalibracao: boolean;
   /** Piscada longa como clique. Desligado por default: piscar é involuntário. */
   blinkClick: boolean;
   /** Varredura automática após alguns segundos sem gaze. */
@@ -199,6 +221,7 @@ export const DEFAULTS: ExperimentConfig = {
   cursorSizePx: 48,
   dwellRingOnCursor: false,
   cursorNoTesteDePrecisao: false,
+  persistirCalibracao: true,
   blinkClick: false,
   scanningMode: false,
   gazeLostFallback: true,

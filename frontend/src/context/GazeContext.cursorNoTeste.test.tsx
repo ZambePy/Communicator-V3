@@ -103,6 +103,10 @@ describe('GazeContext — cursor durante o teste de precisão', () => {
     medindo = false;
     cursorLiberadoPelaRodada = false;
     emitir = () => {};
+    // O cursor também depende da ROTA (ver `rotasComCursor.ts`): numa tela de
+    // onboarding ele fica escondido mesmo com modelo carregado. Estes testes
+    // são sobre o teste de precisão, então a rota é uma de paciente.
+    window.location.hash = '#/menu';
     relogio = instalarRelogioDeQuadros();
     vi.clearAllMocks();
     Object.defineProperty(navigator, 'mediaDevices', {
@@ -164,6 +168,19 @@ describe('GazeContext — cursor durante o teste de precisão', () => {
     emitirEPintar();
     expect(cursor()!.style.opacity).not.toBe('0');
     expect(cursor()!.style.transform).not.toContain('-9999px');
+  });
+
+  it('não aparece na jornada anterior à calibração, mesmo com perfil calibrado', () => {
+    // O defeito relatado: na escolha de paciente o cursor aparecia. O perfil
+    // salvo já deixa `isCalibrated()` verdadeiro, mas o modelo carregado é o
+    // do último paciente — ninguém disse ainda quem vai usar agora.
+    window.location.hash = '#/profiles';
+    render(<GazeProvider><div /></GazeProvider>);
+
+    emitirEPintar();
+    expect(cursor()!.style.opacity).toBe('0');
+    relogio.quadros(4);
+    expect(cursor()!.style.opacity).toBe('0');
   });
 
   it('a liberação do teste NÃO revela o cursor durante a calibração', () => {
