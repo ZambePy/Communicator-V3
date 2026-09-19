@@ -119,6 +119,43 @@ export const EAR_CLOSED_ABSOLUTE = 0.18;
 const BOOTSTRAP_MAX_FRAMES = 60;
 
 /**
+ * Duração máxima de uma piscada, em ms. Além disto a pálpebra está BAIXA, não
+ * piscando — e a diferença decide se o cursor congela ou não.
+ *
+ * ## O travamento que este número conserta
+ *
+ * O limiar é adaptativo: `média(EAR de repouso) × 0,8`. E o histórico de
+ * repouso só recebe quadros classificados como NÃO-piscada:
+ *
+ *     if (!blink) this.nonBlinkHistory.push(ear);
+ *
+ * Isso é uma trava. Quando a pessoa olha para baixo — e no teclado ocular ela
+ * olha para baixo o tempo todo — a pálpebra desce, o EAR cai abaixo do limiar,
+ * e o quadro vira "piscada". Por ser piscada, ele NÃO entra no histórico. O
+ * histórico continua guardando só os EAR de quando ela olhava para a frente, a
+ * média não desce, o limiar não desce, e o "piscar" dura enquanto ela
+ * continuar olhando para baixo.
+ *
+ * Do lado de fora isso aparece como o cursor CONGELADO: o ramo de piscada do
+ * engine reemite `lastEmittedX/Y` bit a bit, o dwell pausa, e o cursor volta ao
+ * vermelho porque não há alvo sob ele. Medido numa gravação de 24 s no teclado:
+ * 30 % dos quadros parados, com episódios de 500 a 900 ms — um deles, em
+ * t ≈ 8,6 s, com a posição IDÊNTICA por 15 quadros seguidos.
+ *
+ * ## Por que 400 ms, e por que isto é seguro
+ *
+ * Uma piscada espontânea dura 100–400 ms. Passado esse teto, a leitura baixa
+ * deixa de ser tratada como evento e passa a alimentar o histórico: se for
+ * pálpebra baixa, a média desce, o limiar desce junto e o episódio acaba
+ * sozinho. Se o olho estiver mesmo fechado, o EAR fica perto de zero — abaixo
+ * de `EAR_THR_MIN` (0,12), que é o piso do limiar — e nada muda: continua
+ * sendo piscada, e o `BlinkHold` segue cuidando do teto de 2 s.
+ *
+ * Ou seja: o piso do limiar é o que separa os dois casos. Não há chute.
+ */
+export const PISCADA_MAX_MS = 400;
+
+/**
  * Detector de piscada com limiar adaptativo ao EAR de repouso da pessoa.
  * O histórico só recebe quadros sem piscada, senão o limiar realimenta a si
  * mesmo e olhos semi-fechados viram fixação válida.
@@ -133,6 +170,8 @@ export class BlinkDetector {
   /** Início de cada piscada (borda abriu→fechou), para a taxa por minuto. */
   private blinkStartTimestamps: number[] = [];
   private wasBlinking = false;
+  /** Quando o episódio corrente de EAR baixo começou. `null` fora dele. */
+  private earBaixoDesdeMs: number | null = null;
   private quadrosSemHistorico = 0;
   private avisouBootstrap = false;
   private static readonly TIMESTAMP_RETENTION_MS = 5 * 60 * 1000;
@@ -166,6 +205,25 @@ export class BlinkDetector {
     }
     let blink = ear < thr;
 
+    // Há quanto tempo o EAR está abaixo do limiar, de forma contínua.
+    if (blink) {
+      if (this.earBaixoDesdeMs === null) this.earBaixoDesdeMs = nowMs;
+    } else {
+      this.earBaixoDesdeMs = null;
+    }
+    const duracaoMs = this.earBaixoDesdeMs === null ? 0 : nowMs - this.earBaixoDesdeMs;
+
+    // PÁLPEBRA BAIXA, não piscada. Ver `PISCADA_MAX_MS`: passado o teto
+    // fisiológico, a leitura passa a alimentar o histórico de repouso para o
+    // limiar poder descer. Sem isto o detector se tranca — a leitura baixa é
+    // classificada como piscada, por ser piscada não entra no histórico, e o
+    // limiar nunca acompanha a pálpebra que desceu.
+    //
+    // Continua sendo piscada NESTE quadro: quem decide é o limiar já
+    // adaptado, no quadro seguinte. Se o olho estiver de fato fechado o EAR
+    // fica abaixo do piso (`EAR_THR_MIN`) e a adaptação não muda nada.
+    const palpebraBaixa = blink && duracaoMs > PISCADA_MAX_MS;
+
     // Ptose severa: olho aberto abaixo do limiar absoluto. Sem esta guarda o
     // bootstrap trava — todo quadro vira piscada e o histórico nunca enche.
     if (blink && this.nonBlinkHistory.length < this.minHistory) {
@@ -194,7 +252,7 @@ export class BlinkDetector {
     }
     this.wasBlinking = blink;
 
-    if (!blink) {
+    if (!blink || palpebraBaixa) {
       this.nonBlinkHistory.push(ear);
       if (this.nonBlinkHistory.length > this.histLen) this.nonBlinkHistory.shift();
     }
@@ -205,6 +263,7 @@ export class BlinkDetector {
     this.nonBlinkHistory.length = 0;
     this.blinkStartTimestamps.length = 0;
     this.wasBlinking = false;
+    this.earBaixoDesdeMs = null;
     this.quadrosSemHistorico = 0;
     this.avisouBootstrap = false;
   }

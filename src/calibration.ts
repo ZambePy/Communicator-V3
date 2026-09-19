@@ -1395,6 +1395,10 @@ function tryParseStoredProfiles(): StoredCalibrationProfile[] {
  * de rota não pode ter efeito colateral no modelo.
  */
 export function haCalibracaoNoDisco(): boolean {
+  // Com a persistência desligada o disco é invisível, e a resposta tem que ser
+  // a mesma que `loadProfile` vai dar — senão a tela de abertura manda para o
+  // menu quem "tem calibração" e o engine sobe sem modelo nenhum.
+  if (!EXPERIMENT.persistirCalibracao) return false;
   return tryParseStoredProfiles().some(
     p => p !== null && typeof p === 'object' && p.meta !== null && typeof p.meta === 'object',
   );
@@ -1404,6 +1408,14 @@ export function loadProfile(): boolean {
   // Tenta restaurar o perfil mais recente válido do localStorage.
   regressorLeft = null;
   regressorRight = null;
+
+  // Persistência desligada (desenvolvimento): começa sem modelo, como uma
+  // instalação nova. Sai ANTES de ler o disco, e sem apagar nada — o que está
+  // gravado volta a valer assim que a flag for religada.
+  if (!EXPERIMENT.persistirCalibracao) {
+    console.warn('[calib] persistirCalibracao=false — nenhum perfil foi carregado. Calibre para usar o olhar.');
+    return false;
+  }
 
   const profiles = tryParseStoredProfiles();
   if (profiles.length === 0) return false;
@@ -1489,6 +1501,13 @@ function saveProfile() {
   // Persiste todos os perfis do registry no localStorage.
   // Chamado após `persistActiveProfileToRegistry` em `completeCalibration`.
   if (typeof localStorage === 'undefined') return;
+  // Simétrico ao `loadProfile`: desligada a persistência, a calibração recém
+  // treinada vale para esta sessão e morre com ela. Não gravar é o ponto —
+  // é o que faz a próxima abertura exigir uma calibração nova.
+  if (!EXPERIMENT.persistirCalibracao) {
+    console.warn('[calib] persistirCalibracao=false — perfil NÃO gravado; vale só nesta sessão.');
+    return;
+  }
   try {
     const all = profileRegistry.list();
     // Cada perfil guarda a chave do contexto em que FOI treinado; recarimbar

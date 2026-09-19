@@ -98,10 +98,15 @@ export function aplicarSessaoDaUrl(
 
   // Flags do V2 que o plano de medição varia (docs/MEDICOES.md §4.6).
   // Booleanos aceitam 1/0; o ramo ocular aceita o nome do provedor.
-  const booleanas: Array<[string, 'normalizarRollNoCrop' | 'estabilizarFixacao' | 'correcaoPorDwell']> = [
+  const booleanas: Array<
+    [string, 'normalizarRollNoCrop' | 'estabilizarFixacao' | 'correcaoPorDwell' | 'persistirCalibracao']
+  > = [
     ['rollCrop', 'normalizarRollNoCrop'],
     ['estabilizar', 'estabilizarFixacao'],
     ['dwellCorrige', 'correcaoPorDwell'],
+    // `?calib=0` abre sem carregar (e sem gravar) calibração — cada abertura
+    // exige uma nova. Para desenvolvimento; ver `persistirCalibracao`.
+    ['calib', 'persistirCalibracao'],
   ];
   for (const [param, chave] of booleanas) {
     const v = p.get(param);
