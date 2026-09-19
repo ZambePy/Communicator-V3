@@ -71,7 +71,13 @@ Webcam (getUserMedia, até 1920×1080)
   ├─ Ajuste da câmera em malha fechada ─ zoom / brilho / contraste / exposição,
   │     guiado pelo tamanho do rosto no quadro. Roda uma vez, na abertura da
   │     câmera (até 14 iterações); ao convergir — e só com o brilho dentro da
-  │     faixa boa — trava exposição, balanço de branco e foco em manual
+  │     faixa boa — trava exposição, balanço de branco e foco em manual.
+  │     Ao subir a resolução, o `frameRate` é RE-DECLARADO: `applyConstraints`
+  │     substitui o conjunto inteiro de constraints, e sem isso o pedido de
+  │     30 fps do `getUserMedia` sumia — boa parte das webcams UVC entrega
+  │     15 fps a 1080p contra 30 a 720p. Se a cadência medida cair abaixo de
+  │     24 fps, a resolução é DESFEITA: para o olhar, cadência vale mais que
+  │     pixels, e o custo aparece como o cursor travando
   │
   ├─ MediaPipe FaceLandmarker ─ 478 landmarks 3D + matriz de pose da cabeça
   │
@@ -83,11 +89,15 @@ Webcam (getUserMedia, até 1920×1080)
   │     worker. Nos quadros sem leitura nova o último ângulo válido é
   │     REUSADO (até 600 ms) em vez de zerar o bloco — zerar produzia um
   │     degrau que o Ridge saltava e o One Euro tentava seguir, e o cursor
-  │     pulava. Passada a tolerância de idade (400 ms a 2,5 s, derivada da
-  │     latência medida) a leitura vira inválida e aí sim o bloco entra
-  │     zerado. O provider efetivo, a latência, a fração de leituras
-  │     obsoletas e o motivo de cada bloco zerado vão para os diagnósticos e
-  │     para o relatório
+  │     pulava. Passada a janela, o ângulo não some de uma vez: ele
+  │     DESVANECE por uma rampa de 200 ms até zero. O desvanecimento é no
+  │     ÂNGULO e não nos sete termos — escalar os termos produziria um vetor
+  │     que não corresponde a ângulo nenhum, enquanto escalar o ângulo mantém
+  │     o bloco válido para ALGUM olhar, e como todos os termos têm fator
+  │     `tan`, ângulo zero dá exatamente os mesmos sete zeros de antes. O
+  │     provider efetivo, a latência, a fração de leituras obsoletas, o motivo
+  │     de cada bloco zerado e o peso com que o ângulo entrou vão para os
+  │     diagnósticos e para o relatório
   │
   ├─ Escala métrica pela íris ─ o diâmetro horizontal visível da íris é
   │     notavelmente constante (11,7 mm, ±4 %, praticamente invariante com
@@ -135,6 +145,25 @@ Webcam (getUserMedia, até 1920×1080)
   ├─ Filtro temporal ─ One Euro (produção); Kalman e Kalman+EMA disponíveis
   │     para comparação (`filterMode`). Vem depois de tudo isso, no engine
   │
+  ├─ Estabilizador de fixação ─ durante uma fixação a melhor estimativa não é
+  │     a última amostra: é a média da janela de 200 ms. Na sacada a média é
+  │     veneno, porque mistura a partida com a chegada. A saída é
+  │     `x + w·(média − x)`, com `w` CONTÍNUO: sobe com o enchimento da janela
+  │     e cai com a dispersão I-DT (1 até 1,0°, 0 a partir de 1,5°). Os dois
+  │     extremos são o comportamento de sempre; o que sumiu foi o degrau entre
+  │     eles. Teto rígido de 0,5°: a média limpa ruído, não inventa posição
+  │
+  ├─ Seguidor de cursor ─ SEPARA A TAXA DE RENDER DA TAXA DE INFERÊNCIA. A
+  │     posição era escrita no DOM uma vez por quadro de câmera, o que é
+  │     zero-order hold puro: ~65 % dos quadros de display sem movimento
+  │     nenhum e os outros recebendo o passo inteiro. Agora um laço de rAF
+  │     distribui o mesmo passo pelos quadros de tela — mesmo caminho, mesmo
+  │     tempo, passos menores. Custo de ~24 ms de latência, deliberado e
+  │     abaixo do limiar em que a latência começa a custar acerto. NÃO
+  │     extrapola (errar no fim da sacada custa uma seleção errada) e NÃO
+  │     segura predição velha: passados 300 ms sem amostra ele congela e
+  │     avisa, e o cursor fica translúcido
+  │
   ├─ Interação ─ dwell, cursor, emergência, varredura opcional, fallback
   │     quando o olhar se perde
   │
@@ -145,6 +174,58 @@ Webcam (getUserMedia, até 1920×1080)
         IrisFlow — um botão de 20 px do Windows não é evidência de para onde
         a pessoa olhava
 ```
+
+### Nenhum estágio comuta: todos desvanecem
+
+Um princípio que atravessa o pipeline inteiro e vale registrar sozinho. Vários
+estágios têm um limiar — "acima disto é sacada", "acima disto a pose é
+implausível", "passado isto a leitura é velha". Toda vez que um limiar desses
+era um **portão binário**, o cruzamento dele somava, num único quadro, a
+diferença inteira entre os dois comportamentos. Medindo duas gravações de tela
+quadro a quadro, durante movimento real:
+
+| | build de 02/09 | build de 18/09 |
+|---|---|---|
+| taxa efetiva | 19,3 Hz | 21,2 Hz |
+| deslocamento mediano por quadro | 0,77 px | 1,63 px |
+| **quadros com salto > 30 px** | **0,9 %** | **11,8 %** |
+
+A taxa não tinha caído — tinha subido. O que se relatava como "travada" era o
+padrão **para-e-teleporta**: alguns quadros imóveis seguidos de um pulo. Foi o
+que redirecionou o trabalho: o problema não era suavizar pouco, era o tamanho
+do passo.
+Os portões encontrados e o tamanho do degrau de cada um, na geometria de
+referência (1920×1080, 23,6", 60 cm → 38,5 px/grau):
+
+| portão | degrau | hoje |
+|---|---|---|
+| soltura da EMA angular, limiar único em 40 °/s | ~68 px | rampa de 20 a 60 °/s |
+| compensação de pose, portão em ±30° | **1273 px** | rampa de ~10° em torno do limiar |
+| estabilizador, média ↔ amostra crua | até 19 px | peso contínuo |
+| fim do reuso do bloco L2CS | vetor cheio → 7 zeros | ângulo desvanece em 200 ms |
+
+Em todos, os **dois extremos são idênticos ao comportamento anterior** — a
+rejeição continua rejeitando, a sacada continua soltando — e a rampa é um
+Hermite (3t²−2t³), contínuo em valor e em derivada. A regra que ficou: um
+limiar no caminho do cursor é uma rampa, não uma chave. Os testes que protegem
+isso são de **refinamento**: varrem o parâmetro com passo grosso e fino e
+exigem que o maior salto encolha proporcionalmente — uma descontinuidade não
+encolhe, fica presa no tamanho do degrau.
+
+Outras duas não eram limiares, e sim afirmações falsas:
+
+- **Piscada sem Kalman.** O teto de 2 s que separa "piscada" de "olho fechado"
+  só rodava com a cadeia Kalman. Nos presets One Euro — que são o padrão — o
+  ramo emitia a última posição, bit a bit idêntica, com `hasFace: true` e sem
+  degradar, **sem teto nenhum**. É o congelamento de 967 ms medido na gravação
+  de 18/09. O hold agora roda nos dois modos, e passado o teto a amostra sai
+  marcada como degradada.
+- **`mapGaze` nulo com o modelo treinado.** Caía no fallback do NARIZ, que não
+  tem relação com o olhar e não tem teto: um único quadro de exceção
+  arremessava o cursor e o trazia de volta. O nariz continua sendo o ponteiro
+  de quem **ainda não calibrou** — ali ele é a medida, não um substituto para
+  uma que faltou. Calibrado, o cursor simplesmente não se move, e o timer de
+  degradação avisa.
 
 Quando a geometria sai do lugar — a pessoa sentou mais perto, escorregou na
 cadeira, apoiou a cabeça de outro jeito — a saída **não** é recalibrar. Um
@@ -189,7 +270,32 @@ acurácia (erro médio em px e em graus, viés por eixo), as três medidas de
 precisão que a literatura pede juntas (desvio-padrão por eixo, RMS
 amostra-a-amostra e BCEA de 68 %), perda de dados, taxa de acerto por raio de
 alvo, a distância medida durante o teste e o **tamanho mínimo de botão** que o
-erro daquela pessoa exige. O protocolo completo, o significado de cada
+erro daquela pessoa exige.
+
+Durante a medição **o cursor fica escondido**, e isso não é economia de tela: o
+cursor é um laço de realimentação. Vendo-o, a pessoa corrige o olhar até ele
+cair no alvo — a partir daí "olhar para o alvo" deixou de ser verdade, o erro
+medido vira o resíduo da perseguição, e ele tende a zero qualquer que seja a
+qualidade do modelo. A contaminação entra no COMPORTAMENTO, então nenhum
+pós-processamento a desfaz.
+
+Como a pergunta "consigo levar o cursor até o alvo?" também importa — e é ela
+que decide se o teclado é usável —, ela virou uma **segunda rodada, separada**:
+*Verificar com cursor*, em Configurações, ao lado de *Testar precisão*. Ali o
+cursor aparece de propósito, a malha é fechada, e as métricas são outras:
+quantos alvos foram alcançados, o tempo mediano até pousar em cada um e a
+fração do tempo dentro do raio. Elas vivem em `result.verificacao`, nunca são
+somadas às do protocolo, o JSON declara qual rodada foi (`protocolo.modo`) e a
+rodada de verificação **não** escreve a linha de base do vigia de recalibração
+— compará-la com uma medição seria comparar duas perguntas diferentes.
+
+Um limite conhecido, agora medido em vez de estimado: a grade de calibração
+cobre até **y = 0,8375 em qualquer tela** (o extent vertical satura, e o
+orçamento menor para baixo — a pálpebra, não o ângulo — é sempre o termo
+proporcional). Os 16 % de baixo da tela são previstos por **extrapolação**. O
+comentário que avisava disso no código trazia o número errado; hoje há um teste
+(`calibration.coberturaDaTela`) que fixa os valores medidos e falha se a grade
+deixar de cobrir o topo, onde fica o botão de emergência. O protocolo completo, o significado de cada
 métrica, o checklist de relato e as referências estão em [`docs/MEDICOES.md`](docs/MEDICOES.md).
 O acompanhamento **de campo** durante a beta — quinze minutos por casa por
 semana, seis perguntas e uma planilha — é outro documento, e de propósito:
@@ -218,8 +324,12 @@ src/                        núcleo do pipeline (TypeScript puro, testado com Vi
   l2cs/                     worker ONNX, recorte, decodificação, proveniência, roll
   olho/                     ramo ocular (V2): recorte 96×64, bloco de features, provedor
   camera/                   campo de visão por câmera
-  filters/                  One Euro, Kalman 2D, EMA adaptativa, hold na piscada
+  filters/                  One Euro, Kalman 2D, EMA adaptativa, hold na piscada,
+                            estabilizador de fixação (peso contínuo da média)
   interaction/              dwell, cursor, varredura, clique por piscada, fallback
+  interaction/seguidorDeCursor.ts
+                            render do cursor na taxa do DISPLAY, não na da
+                            câmera; puro, sem DOM, testado com relógio próprio
   poseCompensation.ts       compensação geométrica de pose
   distanceCompensation.ts   compensação de distância (aditiva, fator 0,6–1,6)
   translationCompensation.ts compensação de translação lateral do tronco
@@ -246,12 +356,18 @@ src/                        núcleo do pipeline (TypeScript puro, testado com Vi
 
 frontend/src/               interface (React 19, Tailwind v4, HashRouter)
   pages/onboarding/         boas-vindas, calibração e teste
-  pages/help/               tutorial passo a passo com prática de dwell
+  pages/tutorial/           a jornada de 10 passos; `passos.ts` é a ordem e a
+                            trava, `missao.ts` é a ponte com as telas reais
   pages/                    menu, teclado, frases, jogos, descanso, emergência...
   pages/settings/           configurações do cuidador, por seção
   pages/caregiver/          painel e guia do cuidador
   context/GazeContext.tsx   estado global de gaze, dwell e câmera
   components/ui/            GazeButton, GazeGrid, GazePageLayout e afins
+  components/FaixaDeMissao.tsx
+                            "você está no tutorial", mostrada NA tela real,
+                            com o caminho de volta
+  test/quadros.ts           relógio de quadros determinístico (rAF +
+                            `performance.now`) para os testes do cursor
   computador/               hook que liga o Modo Computador e manda o olhar ao main
   overlay/                  a SOBREPOSIÇÃO sobre o Windows (página própria,
                             `overlay.html`): cursor pequeno, barra de ações,
@@ -408,6 +524,7 @@ opções e avisa quando falta recarregar.
 | `cursorSizePx` | `48` | 24–128 |
 | `blinkClick`, `scanningMode`, `dwellRingOnCursor` | `false` | |
 | `gazeLostFallback` | `true` | |
+| `cursorNoTesteDePrecisao` | `false` | escotilha do operador — ver abaixo |
 
 Três dessas flags **invalidam perfis salvos** quando mudam, por construção:
 `dimsDaIris` e `blocoL2csCompleto` mudam o `FEATURE_VECTOR_ID`, e
@@ -415,6 +532,15 @@ Três dessas flags **invalidam perfis salvos** quando mudam, por construção:
 coeficientes são posicionais). A invalidação é proteção, não obstáculo: sem
 ela um perfil treinado num arranjo carregaria no outro sem erro nenhum e
 preveria deslocado. Ao alternar para medir, conte uma recalibração por troca.
+
+`cursorNoTesteDePrecisao` é escotilha de operador, não de paciente: revela o
+cursor numa rodada de **medição** para conferir ao vivo se ele acompanha o
+alvo — um erro de 3° e um mapeamento invertido produzem relatórios parecidos e
+telas completamente diferentes, e só a tela distingue os dois. O preço é que
+aquela rodada deixa de ser comparável, e por isso a flag entra no
+`pipeline.experiment` do relatório. Para o uso normal existe a rodada de
+*Verificação com cursor*, que já vem com as métricas certas e não suja a linha
+de base.
 
 Duas continuam desligadas de propósito. `normalizarRollNoCrop` só ajuda se a
 normalização for a MESMA do treino do checkpoint empacotado, e este projeto
@@ -463,9 +589,20 @@ pessoa não confirmar, o caminho de volta é uma flag.
    calibração; o cuidador acessa sua área por um botão discreto. Com a conta
    IrisFlow configurada, o primeiro passo é o **login** (`/login`) com o
    e-mail e a senha da assinatura feita no site.
-2. **Tutorial** (`/tutorial`): como funciona, posicionamento, o que é o
-   dwell, prática com três alvos, emergência, descanso e o que esperar da
-   calibração.
+2. **Tutorial** (`/tutorial`): dez passos, na ordem do aprendizado — o que é o
+   dwell, prática com três alvos, ajuste do tempo à luz do que acabou de ser
+   sentido, e então **o que se faz com isso**: falar uma frase pronta,
+   **escrever uma frase própria**, responder na conversa, abrir um jogo, o
+   resto do app no mapa mental, e a emergência por último (é dwell mais
+   longo). A segunda metade acontece **nas telas de verdade**: o passo manda a
+   pessoa ao teclado, a tela avisa quando ela escreveu, e o passo destrava.
+   Desenhar miniaturas dentro do tutorial ensinaria uma interface que não
+   existe. *Pular* está em todos os passos e a trilha navega livre; o único
+   passo que espera é o de escrever a frase — é a única coisa do tutorial que
+   ninguém aprende assistindo — e mesmo ele libera sozinho em 90 s, porque
+   trava sem saída em app assistivo é armadilha. **Configurações fica de fora
+   da jornada do paciente de propósito**: é lá que uma escolha errada quebra a
+   calibração que ele acabou de fazer.
 3. **Calibração** (`/calibration-check`): preparação com verificação de
    prontidão, coleta dos alvos, revisão (deriva de pose, alvos ignorados) e
    teste de precisão. O botão de emergência fica compacto e sai de cima dos
@@ -908,9 +1045,9 @@ mão, em *Actions → Release → Run workflow*), como artefato e como release d
 GitHub. O workflow já lê `CSC_LINK`/`CSC_KEY_PASSWORD` dos segredos do
 repositório: quando o certificado de assinatura existir, basta cadastrá-los.
 
-**Estado medido nesta versão:** o núcleo passa em **1402 testes (mais 1 pulado)
-distribuídos em 132 arquivos**, e a interface em **799 testes em 97 arquivos** —
-**2201 testes ao todo**. `tsc --noEmit` termina **sem nenhum erro** nos dois
+**Estado medido nesta versão:** o núcleo passa em **1817 testes (mais 1 pulado)
+distribuídos em 166 arquivos**, e a interface em **942 testes em 115 arquivos** —
+**2759 testes ao todo**. `tsc --noEmit` termina **sem nenhum erro** nos dois
 projetos, o do núcleo (`tsconfig.json`) e o do Electron
 (`electron/tsconfig.json`).
 
@@ -930,6 +1067,27 @@ fixação ocular também têm testes próprios, incluindo o do placar do Siga o 
 que antes subia sozinho. O harness sintético (`src/testUtils/`) roda o pipeline
 inteiro sobre trajetórias determinísticas e barra regressões contra um baseline
 versionado.
+
+Dois tipos de teste vale distinguir, porque eles provam coisas diferentes:
+
+- **Refinamento**, para continuidade. Varre o parâmetro com dois passos, um
+  grosso e um fino, e exige que o maior salto encolha na proporção do passo.
+  Um limiar afirmado por um valor absoluto passaria com o degrau ainda lá; num
+  degrau, o maior salto não encolhe. É como a soltura da EMA, a compensação de
+  pose, o peso do estabilizador e o desvanecimento do bloco L2CS são
+  verificados.
+- **Convenção**, para o que só existe dentro de um `subscribe` ou de um `rAF`
+  sob um provider que exige `getUserMedia`, MediaPipe e um Worker — nenhum dos
+  três existe em jsdom. Esses testes leem o TEXTO do arquivo
+  (`src/config/guardasDeInteracao.test.ts`, `src/accuracy.modoDeVerificacao.test.ts`).
+  Um teste de convenção que ancora a guarda é melhor que nenhum; o que ele não
+  faz é verificar comportamento, e isso está escrito no cabeçalho de cada um.
+
+Os testes do cursor usam um **relógio de quadros determinístico**
+(`frontend/src/test/quadros.ts`), que troca `requestAnimationFrame` e
+`performance.now` por uma fila controlada pelo teste. Sem ele, um teste que
+emite uma amostra e lê o DOM na linha seguinte lê o estado anterior — não
+porque o cursor parou, mas porque o quadro ainda não aconteceu.
 
 ---
 
