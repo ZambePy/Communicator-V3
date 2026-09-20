@@ -192,10 +192,34 @@ ipcMain.handle('irisflow:display-info', () => {
   };
 });
 
+/**
+ * Tela cheia em desenvolvimento.
+ *
+ * Não é conforto — é validade de medida. A grade de calibração é derivada de um
+ * ORÇAMENTO ANGULAR, e a conversão px→cm usa `document.documentElement.client*`
+ * (o VIEWPORT) contra a diagonal física digitada em Configurações. Numa janela
+ * de 1280×800 sobre um monitor de 23,6", o pipeline calcula como se aqueles
+ * 1280×800 ocupassem os 23,6" inteiros: a densidade sai errada, os alvos vão
+ * parar na fração errada da tela e o `meanErrorDeg` do relatório mente — o
+ * mesmo erro que o comentário de `DEFAULT_SCREEN_DIAGONAL_IN` documenta para
+ * diagonal mal configurada. Só em tela cheia o viewport coincide com o monitor
+ * que as configurações descrevem, e só aí a medida de desenvolvimento vale
+ * alguma coisa.
+ *
+ * Vale só para o desenvolvimento; o app empacotado mantém a janela que já
+ * tinha. `IRISFLOW_FULLSCREEN=0` volta para janela quando for preciso testar
+ * layout responsivo, o piso de `minWidth`/`minHeight`, ou deixar o DevTools
+ * destacado visível num monitor só. F11 alterna a qualquer momento.
+ */
+const TELA_CHEIA_NO_DEV = process.env.IRISFLOW_FULLSCREEN !== '0';
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
+    // Ver `TELA_CHEIA_NO_DEV`. Largura/altura acima continuam valendo como
+    // tamanho restaurado ao sair da tela cheia.
+    fullscreen: !app.isPackaged && TELA_CHEIA_NO_DEV,
     // Sem isto o Chromium pinta BRANCO até o primeiro frame do renderer: um
     // flash claro de tela cheia em toda abertura do app, antes de qualquer
     // CSS existir. O valor acompanha `--color-bg-base` do tema escuro.

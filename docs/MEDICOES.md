@@ -17,6 +17,16 @@ suporte*, que não é de medição e é fácil de confundir com este (§7.1), e 
 *modo apresentação* que não altera medida alguma mas impede a sessão de chegar
 aos relatórios do cuidador (§5.3).
 
+**Revisão de 2026-09-20 — novo baseline.** O protocolo continua o mesmo (13
+pontos, 2 000 ms, janela útil de 1 400 ms, ordem sorteada), mas o pipeline
+mudou e a referência de acurácia do projeto passa de **1,86° (M1)** para
+**1,40°**, o menor erro já medido aqui. O detalhamento está na §14.4 e o
+relatório bruto em `docs/medicoes/historico/accuracy-report-1789914216975.json`.
+As comparações M1 × M2 × M3 × M4 da §4 **não foram remedidas nem
+reinterpretadas**: continuam válidas no pipeline em que foram feitas, e o
+baseline novo não as substitui — ele é uma linha nova, contra a qual as
+próximas rodadas passam a ser julgadas.
+
 ---
 
 ## 1. O que é medido
@@ -245,8 +255,13 @@ http://127.0.0.1:4173/?preflight=1&debug=1&ep=webgpu&l2cs=448&filtro=oneEuro&dia
 | pipeline | WebGPU, 448², One Euro, sem fallback, stale 0,0 % |
 | geometria | 23,6″ manual, `assumed: false`, 36,75 px/cm |
 
-É a única rodada até aqui que passou em todos os critérios da §11. Todo número
+É a única rodada do plano que passou em todos os critérios da §11. Todo número
 das outras três medições é comparado contra esta linha.
+
+⚠️ **M1 não é mais o baseline do projeto.** Desde 2026-09-20 a referência de
+acurácia é a rodada da §14.4 (1,40°), feita num pipeline diferente. M1 segue
+sendo a régua **interna** desta seção — é contra ela, e só contra ela, que M2,
+M3 e M4 podem ser lidos, porque as quatro compartilham o mesmo pipeline.
 
 ### 4.2 M2 e M3 — os outros dois filtros
 
@@ -939,22 +954,25 @@ Erro angular médio, salvo indicação.
 | FAZE / deep learning em navegador | 2,4° (STD 0,47°, ~30 fps) | distância pelo método do ponto cego |
 | L2CS-Net (o modelo que usamos) | 3,92° em MPIIGaze; 10,41° em Gaze360 | erro do modelo isolado, em benchmark |
 | WebET 3.0, 255 participantes | 92 % abaixo de 5,5°; 70 % abaixo de 3,0° | distribuição, não média — o formato certo para webcam |
-| **IrisFlow, rodada válida de 2026-09-06** | **1,86°** | ver seção 14. Abaixo do L2CS-Net isolado em MPIIGaze |
+| **IrisFlow, baseline de 2026-09-20** | **1,40°** | ver §14.4. Abaixo do L2CS-Net isolado em MPIIGaze |
+| IrisFlow, rodada válida de 2026-09-06 (M1) | 1,86° | pipeline anterior; ver §4.1 |
 | Feit et al. (2017), IR remoto, 80 participantes a 65 cm | 0,47 cm X / 0,57 cm Y (≈ 0,41° / 0,50°) | percentis X/Y: 25 % 0,15/0,20 cm · 50 % 0,31/0,45 · 75 % 0,58/0,78 · 90 % 0,93/1,19 cm. Perda média 7,9 % |
 | Feit et al., 6 usuários com **ELA** | 90º percentil 1,32–1,67 cm | 3 a 10 recalibrações por dia |
 | Tobii Pro Nano, validações **aceitas** | 0,54–0,69° | *Vision* 9(2):29, 2025 |
 | EyeLink 1000Plus, validações **aceitas** | 0,75–0,86° | critério de boa validação: pior ponto ≤ 1,5° e erro médio ≤ 1,0° |
 
-**Faixa honesta:** webcam 2–4°, infravermelho de laboratório 0,5–1°. A rodada
-válida (1,86°) fica na borda boa da faixa de webcam e ainda uma ordem de
-grandeza acima do IR.
+**Faixa honesta:** webcam 2–4°, infravermelho de laboratório 0,5–1°. O
+baseline (1,40°) fica **abaixo** da faixa típica de webcam e ainda uma ordem de
+grandeza acima do IR. Ficar abaixo da faixa não é o mesmo que bater o IR: a
+faixa da literatura é medida sobre muitos participantes e muitos postos de uso,
+e este número é N = 1 num posto conhecido (§13, último parágrafo).
 
 O L2CS-Net sozinho erra 3,92° em MPIIGaze, e ficamos abaixo disso. Não é
 contradição nem motivo para comemorar demais: o benchmark mede o modelo em
 sujeitos e ambientes que ele nunca viu, enquanto aqui ele opera **calibrado
 para uma pessoa, uma câmera e uma tela**, com o Ridge por olho corrigindo o
 viés individual. É a comparação certa a fazer — desde que fique claro que
-1,86° descreve este usuário neste posto de uso, não a acurácia do IrisFlow
+1,40° descreve este usuário neste posto de uso, não a acurácia do IrisFlow
 para um usuário qualquer. Com N = 1, a distribuição por ponto (§8) diz mais que
 a média.
 
@@ -996,13 +1014,14 @@ trás — **não são reanalisáveis**.
 | 2026-09-07 00:36 | **M4, compensação lateral** | 115 px | 2,89° | 36,0 px | `accuracy-report-1788741409103.json` — compensação não melhora em posição fixa; 1 alvo pulado |
 | 2026-09-06 20:36 | deriva T+1 min | 87 px | 2,19° | 53,1 px | linha adiada (§4.5) |
 | 2026-09-06 20:45 | deriva T+10 min | 152 px | 3,87° | 30,7 px | linha adiada (§4.5) |
+| 2026-09-20 11:23 | **baseline, pipeline `irisAbs`** | **56 px** | **1,40°** | 38,1 px | 🏆 `accuracy-report-1789914216975.json` — menor erro medido; detalhe na §14.4 |
 
 ⚠️ As duas de 2026-09-05 são de um esquema anterior ao `/2` e de um protocolo
 anterior a este documento (janela útil ~800 ms, ordem fixa, sem BCEA, sem
 fração de amostras válidas). Valem como ordem de grandeza, não para comparação
 ponto a ponto.
 
-O detalhamento de M1 está na §4.1.
+O detalhamento de M1 está na §4.1; o do baseline de 2026-09-20, na §14.4.
 
 ### 14.2 Medição preliminar de deriva *(linha adiada)*
 
@@ -1028,7 +1047,8 @@ para este produto. M4 (§4.3) é o primeiro passo na direção certa.
 
 ### 14.3 Estado atual
 
-**As quatro medições do plano (§4) estão feitas.** Resultado consolidado:
+**As quatro medições do plano (§4) estão feitas**, num pipeline que desde então
+mudou (§14.4). Resultado consolidado **daquele** pipeline:
 
 | medição | condição | erro | métrica-chave | conclusão |
 |---|---|---|---|---|
@@ -1042,13 +1062,20 @@ para este produto. M4 (§4.3) é o primeiro passo na direção certa.
 1. **Acurácia de 1,86°**, reproduzida em 1,93° numa segunda calibração
    independente — dentro da faixa de webcam da literatura (2–4°) e abaixo do
    erro do L2CS-Net isolado em MPIIGaze (3,92°). Ver a ressalva de N = 1 em
-   §13.
+   §13. **Superado:** o baseline atual é 1,40° (§14.4).
 2. **One Euro é o filtro correto**, por medição e não por premissa: as duas
-   alternativas pioram o tremor do cursor por fatores de 3 a 6.
+   alternativas pioram o tremor do cursor por fatores de 3 a 6. Continua
+   valendo — o baseline de §14.4 é One Euro.
 3. **A compensação de translação lateral fica desligada**, por medição: não
-   melhora a acurácia em posição fixa.
+   melhora a acurácia em posição fixa. **Contraditado em parte, e não por
+   medição limpa:** o baseline de §14.4 roda com a flag **ligada** e erra
+   menos, mas ele mudou várias coisas de uma vez (§14.4), então nada ali
+   atribui o ganho à compensação. A conclusão de M4 segue sendo a única
+   evidência isolada sobre essa flag, e ela diz o contrário. Isolar isso é
+   medição pendente.
 4. **Reprodutibilidade entre sessões limpas: ~0,1°.** É a régua para julgar
-   qualquer diferença futura.
+   qualquer diferença futura. Ela foi estabelecida no pipeline antigo; o
+   baseline novo ainda **não tem réplica** (§14.4).
 
 **Três coisas que ficaram por medir, e é honesto listá-las:**
 
@@ -1066,7 +1093,101 @@ os gates de amostra removidos (§6), um alvo só fica de fora se não coletar
 quadro nenhum — é perda de rosto quando o olhar desce, não rejeição de
 amostra. Continua sendo o problema mais barato de atacar: cada alvo recuperado
 tira uma extrapolação do modelo, e as quatro medições acima foram feitas com
-esse déficit presente em três delas.
+esse déficit presente em três delas. **No baseline de 2026-09-20 o déficit não
+apareceu:** 10/10 alvos treinados, `targetsSkipped` vazio. Uma rodada não fecha
+um padrão de sete — mas é a primeira vez que a linha inferior entrou inteira.
+
+### 14.4 Baseline atual — 2026-09-20 *(menor erro medido)*
+
+`accuracy-report-1789914216975.json`, 2026-09-20 11:23 (14:23 UTC). Protocolo
+inalterado: 13 pontos, 2 000 ms por ponto, 600 ms de acomodação, janela útil de
+1 400 ms, ordem sorteada (semente `683705667`), modo `medicao`, cursor
+invisível, 1 min entre calibração e teste.
+
+| | |
+|---|---|
+| erro | **55,6 px / 1,40°** (`score` Bom) · mediana 45,6 px · p90 92,3 px |
+| erro por amostra | média 76,8 px · mediana 64,5 px · p90 137,6 px — é o que o dwell sente |
+| centro / periferia | 55,6 px / 103,6 px (razão 1,86) |
+| viés | X −20,8 px · Y −35,3 px (predição acima e à esquerda do alvo) |
+| precisão | `jitterRMS` 38,1 px · `sdX/sdY` 23,5 / 26,0 · `precisionS2S` 24,6 px · `bceaDeg2` 1,976 |
+| razão do filtro | 38,0 / 38,1 = **1,00** — One Euro não amplifica o tremor |
+| perda de dados | nenhuma: 13/13 pontos, `fracaoValidas` 1,000, `pontosComPoucaAmostra` vazio, 29,2 Hz |
+| acerto | 46,5 % em 60 px · 76,3 % em 100 px · 93,0 % em 150 px · 98,7 % em 200 px |
+| alvo mínimo | **215 px / 5,60°** |
+| ajuste | **10/10 alvos treinados**, nenhum pulado · `train` 20,6 px · `loo` 31,4 px · pior alvo LOO 74,4 px · 1 ponto instável · `l2csValidFraction` 1,000 |
+| grade | `gridDiagnosis: ok` — centro 24,5 px, periferia 28,6 px, razão 1,16 |
+| mapa afim | ganho 1,023 / 1,033 · offset −79,4 / −98,4 px · resíduo 33,9 px · `explainedFraction` 0,39 |
+| pose calib→teste | yaw +0,57° · pitch −1,57° · roll +0,33°; deriva dentro do teste < 0,01 rad |
+| distância | digitada 60 cm; medida (olho→câmera) 63,5 cm (61,7–64,2) · `distanceRange: ok`, Δ −0,19 cm |
+| pipeline | `irisAbs+l2cs+ridge` · WebGPU, 448², latência L2CS 40,2 ms, `stale` 0,0 %, sem fallback · One Euro, preset `balanceado-v2` · 29,4 fps de render |
+| geometria | 23,6″, 36,749 px/cm, viewport 1920×1080 = tela 1920×1080 · ⚠️ `assumed: true`, procedência `default` |
+
+**O que mudou no pipeline em relação a M1 (§4.1).** Não foi uma flag: foram
+sete de uma vez.
+
+| flag | M1 | baseline |
+|---|---|---|
+| `featureSet` | `irisCore+l2cs` | **`irisAbs+l2cs`** (dims absolutas da íris) |
+| `lateralTranslationCompensation` | off | **on** |
+| `referenciaLenta` | — | **on** |
+| `suavizarL2csNaFixacao` | — | **on** |
+| `estabilizarFixacao` | — | **on** |
+| `correcaoPorDwell` | — | **on** |
+| `filterPreset` | (padrão) | **`balanceado-v2`** |
+
+O filtro (One Euro), o regressor (Ridge por olho com features polinomiais), a
+compensação geométrica de pose, o recorte 448² e a cadência de 100 ms são os
+mesmos.
+
+**Resultado, termo a termo:**
+
+| | M1 (2026-09-06) | baseline (2026-09-20) | |
+|---|---|---|---|
+| erro interior | 73,7 px / 1,86° | **55,6 px / 1,40°** | −25 % |
+| erro na periferia | 180,0 px | **103,6 px** | −42 % |
+| acerto em 100 px | 64,2 % | **76,3 %** | +12 pp |
+| acerto em 200 px | 84,7 % | **98,7 %** | +14 pp |
+| `loo` da calibração | 67,8 px | **31,4 px** | −54 % |
+| alvos treinados | 9/9 | **10/10** | linha inferior inteira |
+| `jitterRMS` | **21,8 px** | 38,1 px | **+75 %** |
+| `precisionS2S` | **9,7 px** | 24,6 px | **+155 %** |
+| `bceaDeg2` | **0,535** | 1,976 | **3,7×** |
+| alvo mínimo | **209 px** | 215 px | +3 % |
+
+**A leitura honesta: acurácia melhorou, precisão piorou.** O erro caiu um
+quarto e a periferia quase pela metade, mas o olhar ficou visivelmente mais
+trêmulo por todas as três medidas de precisão da §1.1 — e como o alvo mínimo
+combina as duas (§9), ele **subiu**, de 209 para 215 px, apesar do erro menor.
+Para o dwell isso é ambíguo: acertar o botão ficou mais fácil (o acerto subiu
+em todos os quatro raios), segurar o olhar parado dentro dele, não. Só uma
+medição do dwell sobre o sinal filtrado resolve — e ela continua não existindo
+(§4.2).
+
+O tremor a mais tem candidato: `suavizarL2csNaFixacao`, `estabilizarFixacao` e
+`correcaoPorDwell` mexem no sinal justamente durante a fixação, que é quando a
+precisão é medida. É hipótese, não conclusão — nada aqui a testa.
+
+**Ressalvas desta linha, todas na cara:**
+
+1. **Não é uma medição controlada.** Sete flags mudaram juntas: a rodada
+   estabelece **onde o sistema está**, não **por que**. Nenhum ganho acima pode
+   ser atribuído a nenhuma flag isolada, e em particular ela não reabilita a
+   compensação lateral, que M4 mediu sozinha e reprovou (§14.3, item 3).
+2. **Sem réplica.** Uma única calibração, um único bloco. A régua de ~0,1° de
+   reprodutibilidade veio do pipeline antigo (M1 × M3) e não foi reconquistada
+   aqui. Até a segunda rodada limpa, qualquer diferença futura menor que ~0,5°
+   não é interpretável.
+3. **`geometry.assumed: true`.** A geometria veio do `default` e não de uma
+   diagonal digitada, e pela §8 isso desqualifica `meanErrorDeg` para
+   comparação entre sessões. O atenuante é aritmético: o `default` é o mesmo
+   monitor da bancada e `pxPorCm` saiu **36,749**, idêntico ao de M1, medido
+   com procedência `manual`. Os graus batem — mas a procedência não foi
+   registrada, e numa bancada diferente esse mesmo `default` mentiria. Rode com
+   `&diagonal=23.6` na próxima.
+4. **N = 1**, como em toda linha deste documento (§3.5 e §13).
+5. **`explainedFraction` 0,39.** O resto do erro não é um mapa afim coerente;
+   recalibrar não deve levar muito além disso.
 
 ---
 
