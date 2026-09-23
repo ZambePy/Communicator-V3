@@ -3,9 +3,9 @@
  *
  * Os nomes são os das tabelas/colunas do Supabase (snake_case) para que um
  * `select('*')` caia direto nestes tipos. Fonte da verdade:
- *   irisflow-cuidador/supabase/migrations/20260904_caregiver_app.sql
- *   SITE IRISFLOW V1/supabase/migrations/20260908_integracao_ecossistema.sql
- * e, no app do cuidador, `src/data/types.ts` — os enums são os mesmos.
+ *   supabase/migrations/20260923022425_caregiver_app.sql
+ *   supabase/migrations/20260923022507_integracao_ecossistema.sql
+ * e, no app do cuidador, `app/src/data/types.ts` — os enums são os mesmos.
  */
 
 export type MessageSender = 'paciente' | 'cuidador';
@@ -40,17 +40,51 @@ export interface EmergencyContact {
   phone: string;
 }
 
-/** Ajuste remoto feito pelo cuidador no app (tabela `patient_settings`). */
+/**
+ * Ajuste remoto feito pelo cuidador no app (tabela `patient_settings`).
+ *
+ * Os campos de rastreamento são `| null`: ausente/nulo = "o cuidador não
+ * definiu", e o desktop mantém o valor local. Hoje o banco ainda preenche
+ * defaults NOT NULL nessas colunas; a migração proposta (relatório) os
+ * torna nulos por padrão. O provider já aplica só o que vier preenchido.
+ */
 export interface PatientSettings {
   beneficiary_id: string;
-  dwell_ms: DwellMsRemoto;
-  filter_preset: FilterPresetRemoto;
-  keyboard_layout: 'frequencia' | 'alfabetico' | 'qwerty';
-  sensitivity: number;
+  dwell_ms: DwellMsRemoto | null;
+  filter_preset: FilterPresetRemoto | null;
+  keyboard_layout: 'frequencia' | 'alfabetico' | 'qwerty' | null;
+  sensitivity: number | null;
   voice: string;
   emergency_timeout_s: number;
   emergency_contacts: EmergencyContact[];
   updated_at: string;
+}
+
+/** Linha de `help_requests` como chega pelo realtime (o desktop só LÊ). */
+export interface HelpRequestRemoto {
+  id: string;
+  beneficiary_id: string;
+  session_id: string | null;
+  kind: HelpKind;
+  message: string;
+  created_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  escalated_at: string | null;
+  resolved_at: string | null;
+}
+
+/**
+ * Confirmação do cuidador que chegou ao computador do paciente (UPDATE em
+ * `help_requests` com `acknowledged_at`). A tela de emergência mostra e fala
+ * "Seu cuidador viu o pedido às HH:MM".
+ */
+export interface ReconhecimentoDoCuidador {
+  id: string;
+  kind: HelpKind;
+  created_at: string;
+  acknowledged_at: string;
+  resolved_at: string | null;
 }
 
 /** Resposta de `desktop_license()` — a regra única de acesso, no banco. */
@@ -87,7 +121,7 @@ export interface VinculoLocal {
 
 /**
  * Resumo do teste de precisão gravado em `sessions.accuracy_report`.
- * Espelhado em irisflow-cuidador/src/data/types.ts (`AccuracySummary`).
+ * Espelhado em app/src/data/types.ts (`AccuracySummary`).
  */
 export interface ResumoDePrecisao {
   meanErrorPx: number | null;
@@ -130,4 +164,12 @@ export interface SessaoRemota {
   modules_used?: string[];
   capture_conditions?: Record<string, unknown>;
   app_version?: string;
+  /**
+   * Piscadas por minuto ao longo da sessão. Aceito pela Edge Function
+   * (SESSION_FIELDS), mas o desktop NÃO envia hoje: `getDiagnostics()` do
+   * engine expõe só `features.blink` (piscando AGORA, booleano), não uma
+   * taxa. Fica tipado para quando o engine expuser a contagem.
+   */
+  blink_rate_bpm?: number | null;
+  posture_drift_px?: number | null;
 }

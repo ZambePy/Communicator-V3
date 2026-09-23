@@ -1,39 +1,43 @@
 name: CI
 
+# Portão de verificação — o mesmo de `npm run verificar` (scripts/verificar-tudo.mjs):
+# desktop (tipos, testes do núcleo e da interface, build do frontend, compile
+# do Electron), site e app do cuidador. Mais um empacotamento Linux só da
+# pasta (`--dir`), que pega erro de configuração do electron-builder em todo
+# push e confere que o pacote sai sem código-fonte e com os fuses certos.
+# Não usa segredo nenhum: roda igual num repositório público recém-criado e em
+# pull requests de forks.
+#
+# `workflow_call`: o release.yml chama ESTE arquivo como primeiro passo, para
+# que nenhum instalador saia de um commit que não passa aqui.
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 # Uma execução por branch: um push novo cancela a anterior em vez de
 # enfileirar builds que já nasceram obsoletos.
 concurrency:
-  group: ci-${{ github.ref }}
+  # `github.workflow` separa a execução própria da chamada pelo release.yml
+  # (nome do workflow chamador), para uma não cancelar a outra.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   verify:
     name: Tipos, testes e build
-    # windows-latest, e NÃO ubuntu-latest. Duas razões independentes:
-    #
-    #   1. É a plataforma que o produto entrega. O app é Electron para Windows
-    #      e `electron/main.ts` lê o EDID do monitor via PowerShell/WMI —
-    #      código que só existe e só roda aqui. Um CI em Linux nunca exercitaria
-    #      esse caminho.
-    #
-    #   2. `npm ci` em Linux falha com este lockfile, e não é algo que dê para
-    #      consertar do lado do desenvolvedor. O arquivo foi gerado no Windows,
-    #      onde a árvore ideal do npm não inclui `@emnapi/core@1.11.3` nem
-    #      `@emnapi/runtime@1.11.3` — dependências que só aparecem na resolução
-    #      de Linux. `npm install --package-lock-only` rodado no Windows produz
-    #      diff ZERO, porque o npm monta a árvore da plataforma corrente. O
-    #      resultado seria `EUSAGE — Missing: @emnapi/core from lock file` em
-    #      todo push. Lockfiles do npm não são totalmente neutros de plataforma
-    #      quando há dependências opcionais aninhadas.
-    #
-    # Custo aceito: o runner do Windows é mais lento que o do Linux, e o
-    # caminho Linux deixa de ser verificado — mas nós não o distribuímos.
+    # windows-latest: é a plataforma principal do produto (a maioria dos
+    # usuários da beta). O CI não abre o Electron; o que ele exercita do
+    # caminho Windows (leitura do EDID pelo registro/WMI, entrada do Modo
+    # Computador) são as partes puras e testadas em `src/`. O Linux entra pelo
+    # job `empacotamento-linux` abaixo, e macOS/Linux completos pelo release.yml.
     runs-on: windows-latest
     timeout-minutes: 20
 
@@ -57,7 +61,7 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             frontend/package-lock.json
-        
+
       - name: Verificar versões do ambiente
         run: |
           node --version
@@ -104,3 +108,109 @@ jobs:
       # `frontend/scripts/*.mjs` (console e imports não usados em ferramentas de
       # desenvolvimento). Adicionar um portão que já nasce vermelho tornaria o
       # badge inútil — o certo é limpar os warnings e então incluir a etapa.
+
+  # -------------------------------------------------------------------------
+  # Empacotamento Linux, só a pasta desempacotada (`--dir`, ~1 min: sem
+  # AppImage/deb/rpm). Pega em todo push o que antes só aparecia no release:
+  # `files`/asar/fuses do electron-builder, ícones, entry point. E confere o
+  # pacote pronto (scripts/conferir-pacote.mjs): nada de src/, .ts ou source
+  # map no app.asar, bundles minificados, fuses gravados no binário.
+  # Quando o release.yml chama este arquivo, `github.workflow` é "Release" e o
+  # job não roda: lá as três plataformas são empacotadas por inteiro e passam
+  # pela mesma conferência.
+  # -------------------------------------------------------------------------
+  empacotamento-linux:
+    name: Empacotamento Linux (--dir) e conferência do pacote
+    if: github.workflow == 'CI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # O electron-builder baixa o Electron da plataforma-alvo por conta
+      # própria; o binário do postinstall do pacote `electron` não é usado.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      IRISFLOW_RELEASE_DIR: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - name: Instalar dependências (raiz)
+        run: npm ci --no-audit --no-fund
+      - name: Instalar dependências (frontend)
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Build do frontend e do processo Electron
+        run: |
+          npm run build
+          npm run electron:compile
+      - name: Empacotar (release/linux-unpacked)
+        run: node electron/package-app.mjs --linux --dir
+      - name: Conferir o pacote (sem código-fonte, sem source map, fuses)
+        run: node scripts/conferir-pacote.mjs release
+
+  # -------------------------------------------------------------------------
+  # site/ — SPA estática (Vite + React 18 + Vitest). Independe do desktop:
+  # lockfile próprio, Node próprio, roda em Linux e sem segredo nenhum — o
+  # cliente trata a ausência dos VITE_SUPABASE_*.
+  # `tsc --noEmit -p tsconfig.app.json` e não `npm run typecheck`: o
+  # tsconfig.json raiz do site tem `files: []` (só referências), então um
+  # `tsc --noEmit` nele não verifica arquivo nenhum.
+  # -------------------------------------------------------------------------
+  site:
+    name: Site (tipos, testes e build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - name: Verificação de tipos
+        run: npx tsc --noEmit -p tsconfig.app.json
+      - name: Testes
+        run: npm test
+      # `npm run build` = tsc -b && vite build. O dist/ sobe como artefato
+      # para inspeção (é o mesmo conteúdo que vai para o Cloudflare Pages).
+      - name: Build de produção
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-dist-${{ github.sha }}
+          path: site/dist
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # app/ — app do cuidador (Expo SDK 57, jest-expo). Só verificação estática
+  # e testes unitários: o build nativo é do EAS (README, "Hospedagem e
+  # publicação" → "App do cuidador"). O tsconfig
+  # do app estende `expo/tsconfig.base`, que só existe depois do `npm ci`.
+  # -------------------------------------------------------------------------
+  app:
+    name: App do cuidador (tsc e jest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.11.1
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - name: Verificação de tipos
+        run: npx tsc --noEmit
+      - name: Testes
+        run: npx jest --ci

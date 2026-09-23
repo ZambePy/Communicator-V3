@@ -1,8 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import i18n from '../i18n';
 import { GamesMenu } from './GamesMenu';
+
+beforeAll(async () => {
+  await i18n.changeLanguage('pt-BR');
+});
 
 vi.mock('../context/GazeContext', () => ({
   useGaze: () => ({ subscribe: vi.fn(() => vi.fn()) }),
@@ -26,18 +31,25 @@ const renderizarCom = (destino: string) =>
   );
 
 describe('GamesMenu — Lazer e bem-estar', () => {
-  it('lista Notícias e Meditação junto com os jogos', () => {
+  it('lista Leituras, Meditação e Descanso junto com os jogos', () => {
     renderizarCom('/news');
-    expect(screen.getByText('Lazer e bem-estar')).toBeInTheDocument();
-    expect(screen.getByText('Notícias')).toBeInTheDocument();
+    expect(screen.getByText('Bem-estar')).toBeInTheDocument();
+    expect(screen.getByText('Leituras')).toBeInTheDocument();
     expect(screen.getByText('Meditação')).toBeInTheDocument();
+    expect(screen.getByText('Descanso')).toBeInTheDocument();
     expect(screen.getByText('Estoura Bolhas')).toBeInTheDocument();
     expect(screen.getByText('Siga o Alvo')).toBeInTheDocument();
   });
 
-  it('navega para Notícias', () => {
+  it('navega para Leituras', () => {
     renderizarCom('/news');
-    fireEvent.click(screen.getByLabelText(/^Abrir Notícias/));
+    fireEvent.click(screen.getByLabelText(/^Abrir Leituras/));
+    expect(screen.getByText('CHEGOU')).toBeInTheDocument();
+  });
+
+  it('navega para o Descanso', () => {
+    renderizarCom('/rest');
+    fireEvent.click(screen.getByLabelText(/^Abrir Descanso/));
     expect(screen.getByText('CHEGOU')).toBeInTheDocument();
   });
 

@@ -34,9 +34,9 @@ export const TERMO_DE_CONSENTIMENTO = [
 const AMOSTRA = 'Olá! Esta é a minha voz. Obrigado por estar aqui comigo.';
 
 const QUALIDADE = {
-  boa: { rotulo: 'Boa', cor: '#15803d' },
-  aceitavel: { rotulo: 'Aceitável', cor: '#b45309' },
-  fraca: { rotulo: 'Fraca', cor: '#b91c1c' },
+  boa: { rotulo: 'Boa', cor: 'var(--tint-ok-text)' },
+  aceitavel: { rotulo: 'Aceitável', cor: 'var(--tint-warn-text)' },
+  fraca: { rotulo: 'Fraca', cor: 'var(--tint-danger-text)' },
 } as const;
 
 const celulaDaTabela: React.CSSProperties = {
@@ -65,9 +65,9 @@ const Linha: React.FC<{ rotulo: string; children: React.ReactNode }> = ({ rotulo
 
 const Aviso: React.FC<{ tipo: 'alerta' | 'erro' | 'ok'; children: React.ReactNode }> = ({ tipo, children }) => {
   const cores = {
-    alerta: { fundo: '#fffbeb', borda: '#fde68a', texto: '#92400e' },
-    erro: { fundo: 'rgba(220,38,38,0.08)', borda: 'rgba(220,38,38,0.3)', texto: '#991b1b' },
-    ok: { fundo: 'rgba(22,163,74,0.08)', borda: 'rgba(22,163,74,0.3)', texto: '#166534' },
+    alerta: { fundo: 'var(--tint-warn-bg)', borda: 'var(--tint-warn-border)', texto: 'var(--tint-warn-text)' },
+    erro: { fundo: 'var(--tint-danger-bg)', borda: 'var(--tint-danger-border)', texto: 'var(--tint-danger-text)' },
+    ok: { fundo: 'var(--tint-ok-bg)', borda: 'var(--tint-ok-border)', texto: 'var(--tint-ok-text)' },
   }[tipo];
   return (
     <p role={tipo === 'erro' ? 'alert' : 'status'} style={{ margin: 0, padding: '0.9rem 1.1rem', borderRadius: '1rem', background: cores.fundo, border: `1px solid ${cores.borda}`, color: cores.texto, lineHeight: 1.5 }}>
@@ -225,11 +225,11 @@ export const VozScreen: React.FC = () => {
   };
 
   return (
-    <main role="main" style={{ minHeight: '100vh', background: 'var(--color-bg-base)', padding: '2rem 2.5rem' }}>
+    <main role="main" style={{ minHeight: '100vh', background: 'var(--page-bg)', padding: '2rem 2.5rem', color: 'var(--color-text-base)' }}>
       <PageHeader
         title="Voz personalizada"
         subtitle="A voz do paciente, recriada a partir de uma gravação e usada em tudo que ele diz pelo IrisFlow. Tudo fica neste computador."
-        icon={<Mic color="#1B54A8" size={28} aria-hidden="true" />}
+        icon={<Mic size={26} aria-hidden="true" />}
       />
 
       <div style={{ maxWidth: 820, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -237,14 +237,14 @@ export const VozScreen: React.FC = () => {
             chega aqui precisa saber o que está aceitando ANTES de baixar 1,5 GB
             de modelo. "Experimental" aqui é um compromisso concreto, não um
             aviso jurídico — a lista diz o que pode dar errado. */}
-        <section aria-labelledby="voz-experimental" style={{ ...caixa, borderColor: '#fbbf24', background: '#fffbeb' }}>
+        <section aria-labelledby="voz-experimental" style={{ ...caixa, borderColor: 'var(--tint-warn-border)', background: 'var(--tint-warn-bg)' }}>
           <h2
             id="voz-experimental"
-            style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#92400e' }}
+            style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.6rem', color: 'var(--tint-warn-text)' }}
           >
             <AlertTriangle size={20} aria-hidden="true" /> Recurso experimental
           </h2>
-          <p style={{ margin: 0, color: '#92400e', lineHeight: 1.6 }}>
+          <p style={{ margin: 0, color: 'var(--tint-warn-text)', lineHeight: 1.6 }}>
             A voz clonada já funciona, mas ainda não passou pela validação com pacientes. Neste estágio, espere:
             a primeira frase de cada texto novo demora (o modelo roda no processador deste computador); a
             semelhança com a voz original depende muito da gravação enviada; e frases longas podem sair com
@@ -284,7 +284,7 @@ export const VozScreen: React.FC = () => {
               </Linha>
               {estado.modelo.baixando && (
                 <div aria-hidden="true" style={{ height: 10, borderRadius: 5, background: 'var(--color-card-border)', overflow: 'hidden' }}>
-                  <div style={{ width: `${estado.modelo.progresso ?? 0}%`, height: '100%', background: '#1B54A8', transition: 'width .3s' }} />
+                  <div style={{ width: `${estado.modelo.progresso ?? 0}%`, height: '100%', background: 'var(--color-primary)', transition: 'width .3s' }} />
                 </div>
               )}
               <Linha rotulo="Cache de frases">{estado.cache.itens} frases · {estado.cache.mb} MB</Linha>
@@ -375,7 +375,7 @@ export const VozScreen: React.FC = () => {
           {estado?.voz.importada ? (
             <>
               <Linha rotulo="Situação">
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#15803d' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: 'var(--tint-ok-text)' }}>
                   <CheckCircle2 size={18} aria-hidden="true" /> Importada
                 </span>
               </Linha>
@@ -435,7 +435,7 @@ export const VozScreen: React.FC = () => {
 
         {/* Termo */}
         {termoAberto && (
-          <section aria-labelledby="voz-termo" style={{ ...caixa, border: '2px solid #1B54A8' }}>
+          <section aria-labelledby="voz-termo" style={{ ...caixa, border: '2px solid var(--color-primary)' }}>
             <h2 id="voz-termo" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <ShieldCheck size={22} aria-hidden="true" /> Termo de consentimento
             </h2>
@@ -459,7 +459,7 @@ export const VozScreen: React.FC = () => {
         )}
 
         <section style={{ ...caixa, gap: '0.5rem' }}>
-          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#1B54A8' }}>Como funciona e o que esperar</h3>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-primary)' }}>Como funciona e o que esperar</h3>
           <p style={{ margin: 0, lineHeight: 1.6, opacity: 0.9, fontSize: '0.95rem' }}>
             A voz é gerada por um modelo aberto (Chatterbox multilíngue, licença MIT) rodando neste computador. Em CPU, uma
             frase nova leva alguns segundos para sair; frases já ditas ficam no cache e saem na hora. Com placa de vídeo NVIDIA

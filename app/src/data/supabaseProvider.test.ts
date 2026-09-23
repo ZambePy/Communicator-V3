@@ -4,6 +4,7 @@
  * o contrato do app com ele: quais chamadas saem, com que carga, e o que sobe
  * quando alguma delas falha.
  */
+import { SITE_URL } from '@/lib/config';
 import { mapDevice, mapSession, SupabaseProvider } from './supabaseProvider';
 
 // Definidos antes de qualquer `new SupabaseProvider()` (que chama `getSupabase()`
@@ -11,10 +12,17 @@ import { mapDevice, mapSession, SupabaseProvider } from './supabaseProvider';
 // nomes abaixo já existem quando são lidos. Prefixo `mock` exigido pelo Jest.
 const mockFrom = jest.fn();
 const mockResetPasswordForEmail = jest.fn();
+type SessaoFalsa = { data: { session: { user: { id: string; email: string } } | null } };
+const mockGetSession = jest.fn<Promise<SessaoFalsa>, []>(async () => ({ data: { session: null } }));
+const mockSignOut = jest.fn(async () => ({ error: null }));
 jest.mock('@/lib/supabase', () => ({
   getSupabase: () => ({
     from: (...args: unknown[]) => mockFrom(...args),
-    auth: { resetPasswordForEmail: (...args: unknown[]) => mockResetPasswordForEmail(...args) },
+    auth: {
+      resetPasswordForEmail: (...args: unknown[]) => mockResetPasswordForEmail(...args),
+      getSession: () => mockGetSession(),
+      signOut: () => mockSignOut(),
+    },
   }),
 }));
 
@@ -40,6 +48,9 @@ function consulta(resultado: Resultado) {
 beforeEach(() => {
   mockFrom.mockReset();
   mockResetPasswordForEmail.mockReset();
+  mockGetSession.mockReset();
+  mockGetSession.mockResolvedValue({ data: { session: null } });
+  mockSignOut.mockClear();
 });
 
 // ---------- mapeadores ----------
@@ -156,47 +167,120 @@ describe('resolveHelpRequest', () => {
   });
 });
 
-// ---------- ensureSettings ----------
-describe('ensureSettings', () => {
+// ---------- ajustes remotos ----------
+describe('getSettings / updateSettings', () => {
   const linha = { beneficiary_id: 'b1', dwell_ms: 800, filter_preset: 'estavel', keyboard_layout: 'qwerty', sensitivity: 7, voice: 'Francisca', emergency_timeout_s: 60, emergency_contacts: [], updated_at: '2026-09-01T00:00:00Z' };
 
-  it('devolve a linha existente sem fazer upsert', async () => {
-    const leitura = consulta({ data: linha, error: null });
+  it('getSettings devolve null quando não há linha — sem inventar padrões', async () => {
+    const leitura = consulta({ data: null, error: null });
+    mockFrom.mockReturnValueOnce(leitura);
+    await expect(new SupabaseProvider().getSettings('b1')).resolves.toBeNull();
+    expect(leitura.upsert).not.toHaveBeenCalled();
+    expect(leitura.insert).not.toHaveBeenCalled();
+  });
+
+  it('getSettings devolve a linha quando ela existe', async () => {
+    mockFrom.mockReturnValueOnce(consulta({ data: linha, error: null }));
+    await expect(new SupabaseProvider().getSettings('b1')).resolves.toEqual(linha);
+  });
+
+  it('updateSettings faz upsert PARCIAL: só o campo alterado + chave, sem ler antes', async () => {
+    const escrita = consulta({ data: { ...linha, emergency_timeout_s: 90 }, error: null });
+    mockFrom.mockReturnValueOnce(escrita);
+
+    const r = await new SupabaseProvider().updateSettings('b1', { emergency_timeout_s: 90 });
+
+    // Uma única chamada (a escrita): o SELECT prévio que montava a linha inteira sumiu.
+    expect(mockFrom).toHaveBeenCalledTimes(1);
+    expect(mockFrom).toHaveBeenCalledWith('patient_settings');
+    const [payload, opts] = escrita.upsert.mock.calls[0];
+    expect(payload).toEqual({ beneficiary_id: 'b1', emergency_timeout_s: 90, updated_at: expect.any(String) });
+    // Nada de dwell_ms/filter_preset no payload: o desktop não pode receber 1500/balanceado sem o cuidador ter pedido.
+    expect(payload).not.toHaveProperty('dwell_ms');
+    expect(payload).not.toHaveProperty('filter_preset');
+    expect(opts).toEqual({ onConflict: 'beneficiary_id' });
+    expect(r.emergency_timeout_s).toBe(90);
+  });
+
+  it('updateSettings ignora beneficiary_id/updated_at vindos no patch e propaga erro', async () => {
+    const escrita = consulta({ data: null, error: { message: 'permission denied' } });
+    mockFrom.mockReturnValueOnce(escrita);
+    await expect(new SupabaseProvider().updateSettings('b1', { dwell_ms: 800, beneficiary_id: 'outro', updated_at: 'x' })).rejects.toMatchObject({ message: 'permission denied' });
+    expect(escrita.upsert.mock.calls[0][0]).toMatchObject({ beneficiary_id: 'b1', dwell_ms: 800 });
+    expect(escrita.upsert.mock.calls[0][0].updated_at).not.toBe('x');
+  });
+});
+
+// ---------- conversa ----------
+describe('listMessages', () => {
+  it('pede as 200 mais RECENTES (desc + limit) e devolve em ordem cronológica', async () => {
+    const doBanco = [
+      { id: 'm3', created_at: '2026-09-10T12:02:00Z' },
+      { id: 'm2', created_at: '2026-09-10T12:01:00Z' },
+      { id: 'm1', created_at: '2026-09-10T12:00:00Z' },
+    ];
+    const leitura = consulta({ data: doBanco, error: null });
     mockFrom.mockReturnValueOnce(leitura);
 
-    const r = await new SupabaseProvider().ensureSettings('b1', { dwell_ms: 2500 });
+    const r = await new SupabaseProvider().listMessages('b1');
 
-    expect(r).toEqual(linha); // o que está no banco vence o que a tela mostra
-    expect(mockFrom).toHaveBeenCalledTimes(1);
-    expect(leitura.select).toHaveBeenCalled();
-    expect(leitura.upsert).not.toHaveBeenCalled();
+    expect(leitura.order).toHaveBeenCalledWith('created_at', { ascending: false });
+    expect(leitura.limit).toHaveBeenCalledWith(200);
+    expect(r.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+  });
+});
+
+// ---------- reconhecimento ----------
+describe('acknowledgeHelpRequest', () => {
+  it('grava acknowledged_by com o usuário logado', async () => {
+    mockGetSession.mockResolvedValueOnce({ data: { session: { user: { id: 'user-1', email: 'a@b.c' } } } });
+    const escrita = consulta({ error: null });
+    mockFrom.mockReturnValueOnce(escrita);
+
+    await new SupabaseProvider().acknowledgeHelpRequest('hr-1');
+
+    expect(escrita.update).toHaveBeenCalledWith({ acknowledged_at: expect.any(String), acknowledged_by: 'user-1' });
+    expect(escrita.eq).toHaveBeenCalledWith('id', 'hr-1');
+    expect(escrita.is).toHaveBeenCalledWith('acknowledged_at', null);
+  });
+});
+
+// ---------- push ----------
+describe('registerPushToken / signOut', () => {
+  it('rejeita quando o banco recusa o token (antes o erro era engolido)', async () => {
+    mockGetSession.mockResolvedValueOnce({ data: { session: { user: { id: 'user-1', email: 'a@b.c' } } } });
+    mockFrom.mockReturnValueOnce(consulta({ error: { message: 'new row violates row-level security policy' } }));
+    await expect(new SupabaseProvider().registerPushToken('ExponentPushToken[x]')).rejects.toThrow(/recusou o registro/);
   });
 
-  it('faz upsert com padrões + valores da tela quando não há linha', async () => {
-    const leitura = consulta({ data: null, error: null });
-    const escrita = consulta({ data: { ...linha, dwell_ms: 2500 }, error: null });
-    mockFrom.mockReturnValueOnce(leitura).mockReturnValueOnce(escrita);
-
-    const r = await new SupabaseProvider().ensureSettings('b1', { dwell_ms: 2500 });
-
-    expect(mockFrom).toHaveBeenCalledTimes(2);
-    expect(mockFrom).toHaveBeenNthCalledWith(2, 'patient_settings');
-    expect(escrita.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        beneficiary_id: 'b1',
-        dwell_ms: 2500, // veio da tela
-        emergency_timeout_s: 45, // padrão
-        filter_preset: 'balanceado',
-        updated_at: expect.any(String),
-      }),
-    );
-    expect(r.dwell_ms).toBe(2500);
+  it('rejeita sem sessão, sem tentar escrever', async () => {
+    mockGetSession.mockResolvedValueOnce({ data: { session: null } });
+    await expect(new SupabaseProvider().registerPushToken('t')).rejects.toThrow(/Sem sessão/);
+    expect(mockFrom).not.toHaveBeenCalled();
   });
 
-  it('propaga o erro da leitura sem tentar escrever', async () => {
-    mockFrom.mockReturnValueOnce(consulta({ data: null, error: { message: 'JWT expired' } }));
-    await expect(new SupabaseProvider().ensureSettings('b1')).rejects.toMatchObject({ message: 'JWT expired' });
-    expect(mockFrom).toHaveBeenCalledTimes(1);
+  it('signOut apaga o token registrado nesta execução ANTES de derrubar a sessão', async () => {
+    mockGetSession.mockResolvedValueOnce({ data: { session: { user: { id: 'user-1', email: 'a@b.c' } } } });
+    const registro = consulta({ error: null });
+    const remocao = consulta({ error: null });
+    mockFrom.mockReturnValueOnce(registro).mockReturnValueOnce(remocao);
+
+    const p = new SupabaseProvider();
+    await p.registerPushToken('ExponentPushToken[x]');
+    expect(registro.upsert).toHaveBeenCalledWith({ profile_id: 'user-1', token: 'ExponentPushToken[x]', platform: 'expo' }, { onConflict: 'token' });
+
+    await p.signOut();
+    expect(mockFrom).toHaveBeenNthCalledWith(2, 'push_tokens');
+    expect(remocao.delete).toHaveBeenCalled();
+    expect(remocao.eq).toHaveBeenCalledWith('token', 'ExponentPushToken[x]');
+    // ordem: o DELETE (que depende de auth.uid()) vem antes do signOut do Auth
+    expect(remocao.delete.mock.invocationCallOrder[0]).toBeLessThan(mockSignOut.mock.invocationCallOrder[0]);
+  });
+
+  it('signOut sem token registrado só derruba a sessão', async () => {
+    await new SupabaseProvider().signOut();
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockSignOut).toHaveBeenCalled();
   });
 });
 
@@ -240,10 +324,11 @@ describe('getSubscription e getBetaRegistration (beta)', () => {
 });
 
 describe('requestPasswordReset', () => {
-  it('normaliza o e-mail e não passa redirectTo (a URL fica no painel do Supabase)', async () => {
+  it('normaliza o e-mail e manda o link para o /nova-senha do site configurado', async () => {
     mockResetPasswordForEmail.mockResolvedValueOnce({ data: {}, error: null });
     await new SupabaseProvider().requestPasswordReset('  Maria@Exemplo.com ');
-    expect(mockResetPasswordForEmail).toHaveBeenCalledWith('maria@exemplo.com');
+    expect(mockResetPasswordForEmail).toHaveBeenCalledWith('maria@exemplo.com', { redirectTo: `${SITE_URL}/nova-senha` });
+    expect(SITE_URL).toMatch(/^https:\/\/[^/]+$/);
   });
 
   it('resolve em silêncio se o servidor disser que o usuário não existe (não revelar contas)', async () => {

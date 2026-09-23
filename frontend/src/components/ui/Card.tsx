@@ -9,11 +9,14 @@ interface CardProps {
   disabled?: boolean;
 }
 
+/**
+ * Cartão de ação do cuidador (mouse). Para alvos de olhar use `GazeButton`.
+ */
 export const Card: React.FC<CardProps> = ({
   icon,
   label,
   sublabel,
-  color = '#1B54A8',
+  color = 'var(--color-primary)',
   onClick,
   disabled,
 }) => (
@@ -25,60 +28,45 @@ export const Card: React.FC<CardProps> = ({
     style={{
       background: 'var(--color-card-bg)',
       border: '1px solid var(--color-card-border)',
-      borderRadius: '1.5rem',
-      padding: '2rem 1.5rem',
+      borderRadius: 'var(--radius-lg)',
+      padding: 'var(--space-6) var(--space-5)',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      gap: '1rem',
+      gap: 'var(--space-4)',
       cursor: disabled ? 'not-allowed' : 'pointer',
-      opacity: disabled ? 0.5 : 1,
+      opacity: disabled ? 'var(--state-disabled-opacity)' : 1,
       width: '100%',
       position: 'relative',
+      color: 'var(--color-text-base)',
+      boxShadow: 'var(--shadow-1)',
     }}
   >
     <div
+      aria-hidden="true"
       style={{
-        width: 60,
-        height: 60,
-        borderRadius: '1.25rem',
-        background: `linear-gradient(135deg, ${color}15 0%, ${color}08 100%)`,
-        border: `1px solid ${color}25`,
+        width: 64,
+        height: 64,
+        borderRadius: 'var(--radius-md)',
+        background: 'color-mix(in oklab, ' + color + ' 12%, transparent)',
+        border: '1px solid color-mix(in oklab, ' + color + ' 28%, transparent)',
+        color,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        boxShadow: `0 8px 16px -4px ${color}20`,
       }}
     >
       {icon}
     </div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'center' }}>
-      <span
-        style={{
-          fontSize: '1.1rem',
-          fontWeight: 800,
-          color: 'var(--color-text-base)',
-          textAlign: 'center',
-          lineHeight: 1.3,
-        }}
-      >
+      <span className="t-h3" style={{ textAlign: 'center' }}>
         {label}
       </span>
       {sublabel && (
-        <span
-          style={{
-            fontSize: '0.85rem',
-            color: 'var(--color-text-base)',
-            opacity: 0.8,
-            fontWeight: 500,
-            textAlign: 'center',
-            lineHeight: 1.4,
-          }}
-        >
+        <span className="t-caption" style={{ textAlign: 'center' }}>
           {sublabel}
         </span>
       )}
     </div>
   </button>
 );
-

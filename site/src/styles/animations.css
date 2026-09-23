@@ -346,6 +346,54 @@
   animation: page-enter 520ms var(--ease-out) both;
 }
 
+/* ---------- transição de rota com a View Transitions API ----------
+   A classe .vt é posta no <html> pelo NavigationEnhancer quando o
+   navegador tem document.startViewTransition: o fade do .anim-page sai
+   de cena e o navegador cruza as duas páginas. O cabeçalho fixo fica de
+   fora da transição, para não "descer" junto com o conteúdo. */
+html.vt .anim-page {
+  animation: none;
+}
+
+.header {
+  view-transition-name: site-header;
+}
+
+::view-transition-old(root) {
+  animation: vt-out 200ms var(--ease-in-out) both;
+}
+
+::view-transition-new(root) {
+  animation: vt-in 320ms var(--ease-out) both;
+}
+
+::view-transition-old(site-header),
+::view-transition-new(site-header) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+@keyframes vt-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
 .anim-float {
   animation: float-slow 9s var(--ease-in-out) infinite;
 }

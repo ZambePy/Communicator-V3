@@ -1,18 +1,31 @@
-import React, { useCallback, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Linking, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Card, DemoBanner, GradientHeader, IrisLogo, ListRow, MetricTile, PressableScale, ProgressRing, Screen, SectionTitle, Shimmer, StatusPill, Text } from '@/components';
-import { isBetaPlan } from '@/data/types';
+import { Avatar, Button, Card, IrisLogo, ListRow, PressableScale, ProgressRing, Screen, SectionTitle, Shimmer, StatusPill, Text } from '@/components';
+import { hasFatigueData, hasPostureData, isBetaPlan, MessageKind } from '@/data/types';
+import { siteRoute } from '@/lib/config';
 import { useApp } from '@/store/AppProvider';
-import { radius, spacing, useTheme } from '@/theme';
-import { driftLabel, durationMin, fatigueLabel, firstName, formatDate, formatDuration, greeting, helpKindLabel, initials, presetLabel, timeAgo } from '@/utils/format';
+import { motion, radius, shadows, sizes, spacing, useTheme } from '@/theme';
+import { driftLabel, durationMin, fatigueLabel, firstName, formatDate, formatDuration, greeting, helpKindLabel, timeAgo } from '@/utils/format';
+
+/** Respostas de um toque. Sim/Não vão como `simnao` (a tela do paciente destaca). */
+const RAPIDAS: { texto: string; kind: MessageKind; icon?: keyof typeof Ionicons.glyphMap }[] = [
+  { texto: 'Sim', kind: 'simnao', icon: 'checkmark' },
+  { texto: 'Não', kind: 'simnao', icon: 'close' },
+  { texto: 'Já estou indo', kind: 'frase' },
+  { texto: 'Um minuto', kind: 'frase' },
+];
+
+type EnvioRapido = { texto: string; estado: 'enviando' | 'ok' | 'falha' } | null;
 
 export default function Home() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { profile, patient, devices, session, helpRequests, messages, unreadCount, loading, refresh, isDemo, plan, subscription, sendMessage } = useApp();
+  const { profile, patient, devices, session, helpRequests, messages, unreadCount, refresh, plan, subscription, sendMessage, patientLoaded, error } = useApp();
   const [refreshing, setRefreshing] = useState(false);
+  const [envio, setEnvio] = useState<EnvioRapido>(null);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -20,211 +33,389 @@ export default function Home() {
     setRefreshing(false);
   }, [refresh]);
 
-  const device = devices[0];
-  const online = device?.online ?? false;
+  // A confirmação "Enviado" some sozinha; a falha fica até o próximo toque.
+  useEffect(() => {
+    if (envio?.estado !== 'ok') return;
+    const t = setTimeout(() => setEnvio(null), 2500);
+    return () => clearTimeout(t);
+  }, [envio]);
+
+  const nome = patient ? firstName(patient.user_name) : 'o paciente';
+  const ativos = devices.filter((d) => !d.revoked_at);
+  const device = ativos[0];
   const lastPatientMsg = [...messages].reverse().find((m) => m.sender === 'paciente');
   const openAlerts = helpRequests.filter((h) => !h.resolved_at);
 
-  const fatigueTone = session?.fatigue === 'alta' ? 'danger' : session?.fatigue === 'atencao' ? 'warning' : 'accent';
-  const driftTone = session?.drift_kind === 'erratico' ? 'danger' : session?.drift_kind === 'lento' ? 'warning' : 'accent';
+  const responder = async (texto: string, kind: MessageKind) => {
+    if (envio?.estado === 'enviando') return;
+    setEnvio({ texto, estado: 'enviando' });
+    try {
+      await sendMessage(texto, kind);
+      setEnvio({ texto, estado: 'ok' });
+    } catch {
+      setEnvio({ texto, estado: 'falha' });
+    }
+  };
 
   return (
-    <Screen padded={false} refreshing={refreshing} onRefresh={onRefresh}>
-      <GradientHeader overlap={70}>
-        <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <Text variant="bodySmall" style={{ color: 'rgba(255,255,255,0.72)' }}>
-              {greeting()},
+    <Screen refreshing={refreshing} onRefresh={onRefresh}>
+      {/* Saudação */}
+      <View style={styles.header}>
+        <View style={styles.flex}>
+          <Text variant="body" tone="muted">
+            {greeting()},
+          </Text>
+          {profile ? (
+            <Text variant="h1" accessibilityRole="header">
+              {firstName(profile.buyer_name)}
             </Text>
-            <Text variant="display" tone="onPrimary" style={{ marginTop: 2 }}>
-              {profile ? firstName(profile.buyer_name) : '…'}
-            </Text>
-          </View>
-          <IrisLogo size={64} onDark spinning={online} breathing={online} halo={online} refraction={Boolean(session)} />
+          ) : (
+            <Shimmer height={sizes.icon.lg + spacing.xs} width="45%" style={styles.nameShimmer} />
+          )}
         </View>
+        <IrisLogo size={sizes.logo.sm} spinning={Boolean(device?.online)} breathing={Boolean(session)} />
+      </View>
 
-        <PressableScale onPress={() => router.push('/paciente')} style={styles.patientChip} scaleTo={0.98}>
-          <View style={[styles.avatar, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-            <Text variant="bodySmall" tone="onPrimary" weight="bold">
-              {patient ? initials(patient.user_name) : '·'}
-            </Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text variant="body" tone="onPrimary" weight="semibold">
-              {patient?.user_name ?? 'Selecione o paciente'}
-            </Text>
-            <Text variant="caption" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              {device ? `${device.name} · v${device.app_version}` : 'Nenhum computador pareado'}
-            </Text>
-          </View>
-          <StatusPill label={online ? (session ? 'Em sessão' : 'Online') : 'Offline'} live={online && Boolean(session)} onDark />
-        </PressableScale>
-      </GradientHeader>
+      {/* Estado do computador / sessão */}
+      {!patientLoaded ? (
+        <Card style={styles.heroSkeleton}>
+          <Shimmer height={sizes.avatar.sm} width="60%" />
+          <Shimmer height={sizes.button.lg} style={styles.gapTop} />
+        </Card>
+      ) : (
+        <Hero
+          nome={nome}
+          patientName={patient?.user_name ?? null}
+          onOpen={() => (session ? router.push({ pathname: '/sessao/[id]', params: { id: session.id } }) : router.push('/paciente'))}
+        />
+      )}
 
-      <View style={{ paddingHorizontal: spacing.xl, marginTop: -58 }}>
-        {isDemo && <DemoBanner text="Modo demonstração — dados simulados. Aguarde para ver mensagens e um pedido de socorro chegarem." style={{ marginBottom: spacing.md }} />}
-
-        {/* Sessão ao vivo */}
-        {loading && !session ? (
-          <Card>
-            <Shimmer height={22} style={{ width: '50%' }} />
-            <Shimmer height={80} style={{ marginTop: spacing.md }} />
-          </Card>
-        ) : session ? (
-          <Card glow="primary" animated>
-            <View style={styles.rowBetween}>
-              <View style={{ flex: 1 }}>
-                <Text variant="caption" tone="muted">
-                  Sessão em andamento
+      {/* Conversa */}
+      <SectionTitle title="Conversa" />
+      <Card>
+        {lastPatientMsg ? (
+          <PressableScale onPress={() => router.push('/(tabs)/conversa')} accessibilityRole="button" accessibilityLabel={`Última mensagem de ${nome}, ${timeAgo(lastPatientMsg.created_at)}: ${lastPatientMsg.text}`} scaleTo={motion.pressScaleCard} style={styles.lastMsg}>
+            <View style={[styles.eye, { backgroundColor: colors.primaryTint }]}>
+              <Ionicons name="eye" size={sizes.icon.sm} color={colors.primary} />
+            </View>
+            <View style={styles.flex}>
+              <View style={styles.rowBetween}>
+                <Text variant="caption" tone="muted" style={styles.flex}>
+                  {nome} · {timeAgo(lastPatientMsg.created_at)}
                 </Text>
-                <Text variant="display" tone="primary" style={styles.heroNumber}>
-                  {formatDuration(durationMin(session))}
-                </Text>
-                <Text variant="caption" tone="muted">
-                  {session.modules_used.join(' · ')}
-                </Text>
+                {unreadCount > 0 && <StatusPill label={unreadCount === 1 ? '1 nova' : `${unreadCount} novas`} tone="primary" />}
               </View>
-              <ProgressRing value={session.hit_rate_150px ?? 0} label={`${Math.round((session.hit_rate_150px ?? 0) * 100)}%`} caption="acerto" />
+              <Text variant="body" weight={unreadCount ? 'semibold' : 'regular'} numberOfLines={3}>
+                {lastPatientMsg.text}
+              </Text>
             </View>
-            <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            <View style={styles.rowBetween}>
-              <Indicator icon="body-outline" label="Postura" value={driftLabel[session.drift_kind]} tone={driftTone} />
-              <Indicator icon="eye-outline" label="Fadiga" value={fatigueLabel[session.fatigue]} tone={fatigueTone} />
-              <Indicator icon="timer-outline" label="Fixação" value={`${session.dwell_ms} ms`} tone="primary" />
-            </View>
-          </Card>
+          </PressableScale>
         ) : (
-          <Card animated>
-            <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'center' }}>
-              <View style={[styles.idleIcon, { backgroundColor: colors.surfaceAlt }]}>
-                <Ionicons name="moon-outline" size={22} color={colors.textMuted} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text variant="body" weight="semibold">
-                  Nenhuma sessão ativa
-                </Text>
-                <Text variant="caption" tone="muted">
-                  {device ? `Última atividade ${timeAgo(device.last_seen_at)}` : 'Pareie o computador do paciente nos Ajustes.'}
-                </Text>
-              </View>
+          <View style={styles.emptyMsg}>
+            <Ionicons name={error ? 'cloud-offline-outline' : 'chatbubble-ellipses-outline'} size={sizes.icon.lg} color={error ? colors.warningText : colors.primary} />
+            <View style={styles.flex}>
+              <Text variant="body" weight="semibold">
+                {error ? 'Não deu para carregar a conversa' : 'Ainda sem mensagens'}
+              </Text>
+              <Text variant="bodySmall" tone="muted">
+                {error ? 'Assim que a conexão voltar, as mensagens aparecem aqui.' : `Quando ${nome} escrever com os olhos, aparece aqui.`}
+              </Text>
             </View>
-          </Card>
+          </View>
         )}
 
-        {/* Última mensagem do paciente */}
-        <SectionTitle title="Conversa" action="Abrir" onAction={() => router.push('/(tabs)/conversa')} />
-        <PressableScale onPress={() => router.push('/(tabs)/conversa')} scaleTo={0.985}>
-          <Card tone={unreadCount ? 'primary' : 'surface'}>
-            <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' }}>
-              <View style={[styles.idleIcon, { backgroundColor: unreadCount ? colors.primary : colors.primaryTint }]}>
-                <Ionicons name="chatbubble-ellipses" size={20} color={unreadCount ? '#FFF' : colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <View style={styles.rowBetween}>
-                  <Text variant="caption" tone="muted">
-                    {lastPatientMsg ? `${firstName(patient?.user_name ?? '')} · ${timeAgo(lastPatientMsg.created_at)}` : 'Sem mensagens ainda'}
+        {/* Respostas de um toque só quando há o que responder. */}
+        {lastPatientMsg ? (
+          <View style={styles.quickRow}>
+            {RAPIDAS.map((r) => {
+              const esta = envio?.texto === r.texto;
+              const cor = r.texto === 'Sim' ? colors.accentText : r.texto === 'Não' ? colors.dangerText : colors.primary;
+              const bg = r.texto === 'Sim' ? colors.accentTint : r.texto === 'Não' ? colors.dangerTint : colors.primaryTint;
+              return (
+                <PressableScale
+                  key={r.texto}
+                  onPress={() => void responder(r.texto, r.kind)}
+                  disabled={envio?.estado === 'enviando'}
+                  haptic="medium"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Responder “${r.texto}” para ${nome}`}
+                  style={[styles.quick, { backgroundColor: bg }]}
+                >
+                  {r.icon ? <Ionicons name={esta && envio?.estado === 'ok' ? 'checkmark-done' : r.icon} size={sizes.icon.sm} color={cor} /> : null}
+                  <Text variant="bodySmall" weight="semibold" style={{ color: cor }}>
+                    {r.texto}
                   </Text>
-                  {unreadCount > 0 && <StatusPill label={`${unreadCount} nova${unreadCount > 1 ? 's' : ''}`} tone="primary" />}
-                </View>
-                <Text variant="body" weight={unreadCount ? 'semibold' : 'regular'} style={{ marginTop: 4 }} numberOfLines={2}>
-                  {lastPatientMsg?.text ?? 'Quando o paciente escrever com os olhos, a frase aparece aqui.'}
-                </Text>
-              </View>
-            </View>
-          </Card>
-        </PressableScale>
+                </PressableScale>
+              );
+            })}
+          </View>
+        ) : null}
+        {envio && envio.estado !== 'enviando' ? (
+          <View style={styles.envio} accessibilityLiveRegion="polite">
+            <Ionicons name={envio.estado === 'ok' ? 'checkmark-circle' : 'alert-circle'} size={sizes.icon.sm} color={envio.estado === 'ok' ? colors.accentText : colors.dangerText} />
+            <Text variant="caption" tone={envio.estado === 'ok' ? 'accent' : 'danger'} style={styles.flex}>
+              {envio.estado === 'ok' ? `“${envio.texto}” enviado para ${nome}.` : `“${envio.texto}” não foi enviado. Confira a internet e toque de novo.`}
+            </Text>
+          </View>
+        ) : null}
 
-        {/* Respostas rápidas */}
-        <View style={styles.quickRow}>
-          {['Já estou indo', 'Sim', 'Não', 'Um minuto'].map((t, i) => (
-            <PressableScale key={t} onPress={() => sendMessage(t, i === 1 || i === 2 ? 'simnao' : 'frase')} style={[styles.quick, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text variant="bodySmall" weight="semibold" tone="primary">
-                {t}
-              </Text>
-            </PressableScale>
-          ))}
-        </View>
+        <Button
+          title={unreadCount ? 'Responder' : `Escrever para ${nome}`}
+          variant={unreadCount ? 'primary' : 'secondary'}
+          icon="chatbubble-outline"
+          onPress={() => router.push('/(tabs)/conversa')}
+          style={styles.gapTop}
+        />
+      </Card>
 
-        {/* Métricas */}
-        <SectionTitle title="Hoje" />
-        <View style={styles.tiles}>
-          <MetricTile icon="volume-high-outline" label="frases vocalizadas" value={String(session?.utterances ?? 0)} tone="primary" />
-          <MetricTile icon="text-outline" label="caracteres escritos" value={String(session?.chars_typed ?? 0)} tone="accent" />
-        </View>
-        <View style={styles.tiles}>
-          <MetricTile icon="locate-outline" label="erro de calibração" value={session?.calibration_error_px ? `${session.calibration_error_px} px` : '—'} hint={session?.calibration_error_deg ? `${session.calibration_error_deg}°` : undefined} tone="primary" />
-          <MetricTile icon="options-outline" label="suavização" value={session ? presetLabel[session.filter_preset] : '—'} tone="accent" />
-        </View>
-
-        {/* Alertas abertos */}
-        <SectionTitle title="Alertas" action="Ver todos" onAction={() => router.push('/(tabs)/alertas')} />
-        <Card padding={spacing.sm}>
-          {openAlerts.length === 0 ? (
-            <ListRow icon="shield-checkmark" title="Tudo tranquilo" subtitle="Nenhum alerta pendente" tone="accent" last />
-          ) : (
-            openAlerts.slice(0, 3).map((h, i) => (
+      {/* Alertas */}
+      <SectionTitle title="Alertas" action="Ver todos" onAction={() => router.push('/(tabs)/alertas')} />
+      <Card padding={0}>
+        {/* Sem carga, "tudo tranquilo" seria uma afirmação sem base: numa
+            falha, dizer que não deu para verificar e oferecer tentar de novo. */}
+        {openAlerts.length === 0 && error ? (
+          <ListRow icon="cloud-offline-outline" title="Não deu para verificar os alertas" subtitle="Toque para tentar de novo." tone="warning" onPress={() => void refresh()} last />
+        ) : openAlerts.length === 0 ? (
+          <ListRow icon="shield-checkmark" title="Tudo tranquilo" subtitle="Nenhum alerta pendente." tone="accent" last />
+        ) : (
+          openAlerts.slice(0, 3).map((h, i) => {
+            const urgente = h.kind === 'emergencia' || h.kind === 'ajuda';
+            return (
               <ListRow
                 key={h.id}
-                icon={h.kind === 'emergencia' || h.kind === 'ajuda' ? 'hand-left' : h.kind === 'postura' ? 'body' : h.kind === 'fadiga' ? 'moon' : 'refresh'}
+                icon={urgente ? 'hand-left' : h.kind === 'postura' ? 'body' : h.kind === 'fadiga' ? 'moon' : h.kind === 'dispositivo' ? 'desktop' : 'refresh'}
                 title={helpKindLabel[h.kind]}
-                subtitle={`${timeAgo(h.created_at)} · ${h.acknowledged_at ? 'reconhecido' : 'aguardando'}`}
-                tone={h.kind === 'emergencia' || h.kind === 'ajuda' ? 'danger' : 'warning'}
+                subtitle={`${timeAgo(h.created_at)} · ${h.acknowledged_at ? 'você já viu' : 'aguardando'}`}
+                tone={urgente ? 'danger' : 'warning'}
                 onPress={() => router.push('/(tabs)/alertas')}
                 last={i === Math.min(openAlerts.length, 3) - 1}
               />
-            ))
-          )}
-        </Card>
-
-        {/* Dispositivo */}
-        <SectionTitle title="Computador do paciente" />
-        <Card padding={spacing.sm}>
-          <ListRow icon="desktop-outline" title={device?.name ?? 'Nenhum dispositivo'} subtitle={device ? `${online ? 'Conectado' : 'Visto ' + timeAgo(device.last_seen_at)} · IrisFlow Communicator ${device.app_version}` : 'Pareie nos Ajustes'} tone={online ? 'accent' : 'muted'} right={<Check ok={online} />} />
-          <ListRow icon="videocam-outline" title="Câmera" subtitle={device?.camera_ok ? '1280×720 a 30 fps' : 'Não detectada'} tone={device?.camera_ok ? 'accent' : 'muted'} right={<Check ok={Boolean(device?.camera_ok)} />} />
-          <ListRow icon="eye-outline" title="Rastreamento" subtitle={device?.tracker_ok ? 'Motor ativo' : 'Parado'} tone={device?.tracker_ok ? 'accent' : 'muted'} right={<Check ok={Boolean(device?.tracker_ok)} />} />
-          <ListRow icon="locate-outline" title="Calibração" subtitle={device?.calibrated ? `Válida · ${session?.calibration_seconds ?? '—'} s` : 'Necessária'} tone={device?.calibrated ? 'accent' : 'warning'} right={<Check ok={Boolean(device?.calibrated)} />} last />
-        </Card>
-
-        {plan && (
-          <Text variant="caption" tone="muted" center style={{ marginTop: spacing.xl }}>
-            {isBetaPlan(plan, subscription) && subscription ? `Programa beta · acesso completo até ${formatDate(subscription.next_charge_at)}` : `Plano ${plan.name} · Comunicação, Emergência e Cuidador incluídos`}
-          </Text>
+            );
+          })
         )}
-      </View>
+      </Card>
+
+      {/* Computador */}
+      {device ? (
+        <>
+          <SectionTitle title="Computador" action="Detalhes" onAction={() => router.push('/paciente')} />
+          <Card>
+            <Text variant="bodySmall" tone="muted" numberOfLines={1}>
+              {device.name}
+              {device.app_version ? ` · versão ${device.app_version}` : ''}
+            </Text>
+            <View style={styles.checks}>
+              <Check ok={device.online} label={device.online ? 'Conectado' : 'Desconectado'} />
+              <Check ok={device.camera_ok} label="Câmera" />
+              <Check ok={device.tracker_ok} label="Rastreamento" />
+              <Check ok={device.calibrated} label={device.calibrated ? 'Calibrado' : 'Calibrar'} warn={!device.calibrated} />
+            </View>
+          </Card>
+        </>
+      ) : null}
+
+      {plan ? (
+        <PressableScale onPress={() => router.push('/assinatura')} accessibilityRole="button" style={styles.plan}>
+          <Ionicons name={isBetaPlan(plan, subscription) ? 'sparkles-outline' : 'card-outline'} size={sizes.icon.sm} color={colors.textMuted} />
+          <Text variant="caption" tone="muted" center style={styles.flexShrink}>
+            {isBetaPlan(plan, subscription) && subscription ? `Beta · acesso completo até ${formatDate(subscription.next_charge_at)}` : `Plano ${plan.name}`}
+          </Text>
+        </PressableScale>
+      ) : null}
     </Screen>
   );
 }
 
-function Indicator({ icon, label, value, tone }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; tone: 'accent' | 'warning' | 'danger' | 'primary' }) {
+/**
+ * O cartão principal: responde, num relance, "como está o computador de
+ * {nome} agora?". Estados: sem computador, desligado, ligado, em sessão — e
+ * "sem atualização", quando a carga falhou e não dá para afirmar nada.
+ */
+function Hero({ nome, patientName, onOpen }: { nome: string; patientName: string | null; onOpen: () => void }) {
   const { colors } = useTheme();
-  const color = tone === 'accent' ? colors.accent : tone === 'warning' ? colors.warning : tone === 'danger' ? colors.danger : colors.primary;
+  const { devices, session, error, refresh } = useApp();
+  const device = devices.find((d) => !d.revoked_at);
+  const online = device?.online ?? false;
+
+  const estado = !device ? (error ? 'indisponivel' : 'semComputador') : session ? 'emSessao' : online ? 'ligado' : 'desligado';
+  const pill = estado === 'emSessao' ? { label: 'Ao vivo', live: true, tone: 'accent' as const } : estado === 'ligado' ? { label: 'Ligado', live: false, tone: 'accent' as const } : estado === 'desligado' ? { label: 'Desligado', live: false, tone: 'muted' as const } : null;
+  const posturaMedida = session ? hasPostureData(session) : false;
+  const fadigaMedida = session ? hasFatigueData(session) : false;
+  const acerto = session?.hit_rate_150px ?? null;
+
+  const rotulo =
+    estado === 'emSessao'
+      ? `Sessão em andamento há ${formatDuration(durationMin(session!))}. Toque para ver o relatório.`
+      : estado === 'ligado'
+        ? `Computador de ${nome} ligado.`
+        : estado === 'desligado'
+          ? `Computador de ${nome} desligado, visto ${timeAgo(device!.last_seen_at)}.`
+          : estado === 'indisponivel'
+            ? 'Sem atualização agora. Toque para tentar de novo.'
+            : `Nenhum computador conectado a ${nome}.`;
+  const icone: keyof typeof Ionicons.glyphMap = estado === 'ligado' ? 'desktop-outline' : estado === 'indisponivel' ? 'cloud-offline-outline' : 'moon-outline';
+  const titulo = estado === 'ligado' ? 'Computador ligado' : estado === 'indisponivel' ? 'Sem atualização agora' : 'Computador desligado';
+  const detalhe =
+    estado === 'ligado'
+      ? `Pronto para quando ${nome} quiser conversar.`
+      : estado === 'indisponivel'
+        ? 'Quando a conexão voltar, o estado do computador aparece aqui.'
+        : device
+          ? `Visto ${timeAgo(device.last_seen_at)}. As mensagens esperam na fila.`
+          : '';
+
+  const conteudo = (
+    <LinearGradient colors={colors.gradientHero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+      <View style={styles.heroTop}>
+        <Avatar name={patientName} onDark />
+        <Text variant="h3" tone="onDark" style={styles.flex} numberOfLines={1}>
+          {patientName ?? 'Paciente'}
+        </Text>
+        {pill ? <StatusPill label={pill.label} live={pill.live} tone={pill.tone} onDark /> : null}
+      </View>
+
+      {estado === 'emSessao' && session ? (
+        <>
+          <View style={styles.heroMain}>
+            <View style={styles.flex}>
+              <Text variant="caption" tone="onDarkMuted">
+                Sessão em andamento
+              </Text>
+              <Text variant="display" tone="onDark">
+                {formatDuration(durationMin(session))}
+              </Text>
+              {session.modules_used.length ? (
+                <Text variant="caption" tone="onDarkMuted">
+                  {session.modules_used.join(' · ')}
+                </Text>
+              ) : null}
+            </View>
+            {acerto != null ? <ProgressRing value={acerto} label={`${Math.round(acerto * 100)}%`} caption="acerto" onDark accessibilityLabel={`Acerto de ${Math.round(acerto * 100)} por cento`} /> : null}
+          </View>
+          <View style={[styles.heroStats, { borderTopColor: colors.onDarkBorder }]}>
+            <Stat valor={String(session.utterances)} rotulo="frases" />
+            <Stat valor={String(session.chars_typed)} rotulo="letras" />
+            <Stat valor={`${session.dwell_ms} ms`} rotulo="fixação" />
+          </View>
+          {posturaMedida || fadigaMedida ? (
+            <View style={styles.pills}>
+              {posturaMedida ? <StatusPill label={`Postura: ${driftLabel[session.drift_kind].toLowerCase()}`} onDark tone={session.drift_kind === 'nenhum' ? 'accent' : 'warning'} /> : null}
+              {fadigaMedida ? <StatusPill label={fatigueLabel[session.fatigue]} onDark tone={session.fatigue === 'ok' ? 'accent' : 'warning'} /> : null}
+            </View>
+          ) : null}
+        </>
+      ) : estado === 'semComputador' ? (
+        <>
+          <Text variant="h2" tone="onDark" style={styles.heroTitle}>
+            Vamos conectar o computador
+          </Text>
+          <View style={styles.steps}>
+            <Passo n={1} texto={`Instale o IrisFlow no computador de ${nome}.`} />
+            <Passo n={2} texto="Entre lá com esta mesma conta. Pronto: o vínculo é automático." />
+          </View>
+          <Button title="Baixar para o computador" variant="light" icon="download-outline" onPress={() => void Linking.openURL(siteRoute('/beta')).catch(() => undefined)} style={styles.heroCta} />
+        </>
+      ) : (
+        <View style={styles.heroIdle}>
+          <View style={[styles.idleIcon, { backgroundColor: colors.onDarkFill }]}>
+            <Ionicons name={icone} size={sizes.icon.md} color={colors.onDark} />
+          </View>
+          <View style={styles.flex}>
+            <Text variant="h2" tone="onDark">
+              {titulo}
+            </Text>
+            <Text variant="bodySmall" tone="onDarkMuted">
+              {detalhe}
+            </Text>
+          </View>
+        </View>
+      )}
+    </LinearGradient>
+  );
+
+  // Sem computador, a ação é o botão de download: o cartão não é tocável (um
+  // botão dentro de outro ficaria inalcançável para o leitor de tela).
+  if (estado === 'semComputador') return <View style={[styles.heroWrap, shadows.glow(colors.primaryStrong)]}>{conteudo}</View>;
   return (
-    <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
-      <Ionicons name={icon} size={20} color={color} />
-      <Text variant="caption" tone="muted">
-        {label}
+    <PressableScale onPress={estado === 'indisponivel' ? () => void refresh() : onOpen} scaleTo={motion.pressScaleCard} accessibilityRole="button" accessibilityLabel={rotulo} style={[styles.heroWrap, shadows.glow(colors.primaryStrong)]}>
+      {conteudo}
+    </PressableScale>
+  );
+}
+
+function Stat({ valor, rotulo }: { valor: string; rotulo: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text variant="h3" tone="onDark">
+        {valor}
       </Text>
-      <Text variant="bodySmall" weight="semibold" style={{ color }}>
-        {value}
+      <Text variant="caption" tone="onDarkMuted">
+        {rotulo}
       </Text>
     </View>
   );
 }
 
-function Check({ ok }: { ok: boolean }) {
+function Passo({ n, texto }: { n: number; texto: string }) {
   const { colors } = useTheme();
-  return <Ionicons name={ok ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={ok ? colors.accent : colors.textMuted} />;
+  return (
+    <View style={styles.passo}>
+      <View style={[styles.passoN, { backgroundColor: colors.onDarkFill, borderColor: colors.onDarkBorder }]}>
+        <Text variant="caption" tone="onDark" weight="bold" maxFontSizeMultiplier={1.2}>
+          {n}
+        </Text>
+      </View>
+      <Text variant="bodySmall" tone="onDarkMuted" style={styles.flex}>
+        {texto}
+      </Text>
+    </View>
+  );
+}
+
+function Check({ ok, label, warn }: { ok: boolean; label: string; warn?: boolean }) {
+  const { colors } = useTheme();
+  const icon: keyof typeof Ionicons.glyphMap = ok ? 'checkmark-circle' : warn ? 'alert-circle' : 'ellipse-outline';
+  const cor = ok ? colors.accentText : warn ? colors.warningText : colors.textMuted;
+  return (
+    <View style={styles.check} accessible accessibilityLabel={`${label}: ${ok ? 'ok' : warn ? 'precisa de atenção' : 'não'}`}>
+      <Ionicons name={icon} size={sizes.icon.md} color={cor} />
+      <Text variant="bodySmall" weight="medium" style={styles.flexShrink}>
+        {label}
+      </Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  patientChip: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: radius.md, padding: spacing.md, marginTop: spacing.xl, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
-  avatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.lg },
-  idleIcon: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
-  quick: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 2, borderRadius: radius.pill, borderWidth: 1 },
-  tiles: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
-  heroNumber: { fontSize: 38, lineHeight: 44, letterSpacing: -1, marginTop: 2, marginBottom: 2 },
+  flex: { flex: 1 },
+  flexShrink: { flexShrink: 1 },
+  gapTop: { marginTop: spacing.lg },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xl },
+  nameShimmer: { marginTop: spacing.xs },
+  heroSkeleton: { gap: spacing.md },
+  heroWrap: { borderRadius: radius.xl },
+  hero: { borderRadius: radius.xl, padding: spacing.xl, overflow: 'hidden' },
+  heroTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  heroMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.xl },
+  heroStats: { flexDirection: 'row', marginTop: spacing.xl, paddingTop: spacing.lg, borderTopWidth: sizes.hairline },
+  stat: { flex: 1, gap: spacing.xxs },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
+  heroTitle: { marginTop: spacing.xl },
+  steps: { marginTop: spacing.md, gap: spacing.md },
+  passo: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  passoN: { width: sizes.icon.lg, height: sizes.icon.lg, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', borderWidth: sizes.border },
+  heroCta: { marginTop: spacing.xl },
+  heroIdle: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.xl },
+  idleIcon: { width: sizes.tile.md, height: sizes.tile.md, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.xxs },
+  lastMsg: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
+  eye: { width: sizes.tile.md, height: sizes.tile.md, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  emptyMsg: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
+  // Grade 2 × 2: Sim/Não em cima, respostas curtas embaixo — alvos grandes e alinhados.
+  quick: { minHeight: sizes.touch, flexBasis: '46%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.pill },
+  envio: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
+  checks: { flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.md, marginTop: spacing.md },
+  check: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexBasis: '50%', flexGrow: 1, minHeight: sizes.touch - spacing.md },
+  plan: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: sizes.touch, marginTop: spacing.xxl, paddingHorizontal: spacing.lg },
 });

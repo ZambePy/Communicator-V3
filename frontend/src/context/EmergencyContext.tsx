@@ -3,6 +3,7 @@ import { definirEmergenciaAtiva } from '../services/estadoDeEmergencia';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertOctagon } from 'lucide-react';
 import { GazeButton } from '../components/ui/GazeButton';
+import { Z_DO_REAJUSTE } from '../components/ReancoragemOverlay';
 import { useGaze } from './GazeContext';
 import { playTickSound, playCancelSound } from '../utils/emergencyAudio';
 
@@ -23,6 +24,21 @@ interface EmergencyContextValue {
   ensaioDisparado: boolean;
 }
 
+/**
+ * Pegada do botão no topo. Têm de bater com `--emergencia-largura` e
+ * `--emergencia-altura` em index.css — o teste `reservaDaEmergencia` confere.
+ */
+export const EMERGENCIA_LARGURA_PX = 200;
+export const EMERGENCIA_ALTURA_PX = 64;
+
+/** Camada normal do botão flutuante. */
+export const Z_EMERGENCIA = 99990;
+/**
+ * Camada do botão durante o reajuste rápido: logo ACIMA do overlay preto do
+ * reajuste, que cobre todo o resto. A Emergência nunca some.
+ */
+export const Z_EMERGENCIA_NO_REAJUSTE = Z_DO_REAJUSTE + 1;
+
 const EmergencyContext = createContext<EmergencyContextValue | null>(null);
 
 export const useEmergency = () => {
@@ -34,7 +50,7 @@ export const useEmergency = () => {
 export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isDegraded, state } = useGaze();
+  const { isDegraded, state, reancorando, cancelarReancoragem } = useGaze();
 
   // Durante a calibração e o teste de precisão o botão desce para o canto
   // inferior direito e some se ainda assim cobrir um alvo. Um botão sobre o
@@ -71,8 +87,18 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // emergência sumia pelo resto da sessão — o canal que avisa o cuidador,
   // falhando exatamente num dia de acionamentos frequentes.
 
+  /**
+   * Emergência escolhida durante o reajuste rápido: o reajuste é cancelado
+   * (as amostras são descartadas — quem olhou para o botão não estava olhando
+   * o centro) e o overlay sai na hora, para a confirmação aparecer limpa.
+   */
+  const interromperReajuste = () => {
+    if (reancorando) cancelarReancoragem();
+  };
+
   const startEmergencyCountdown = () => {
     if (isConfirming) return;
+    interromperReajuste();
     setIsConfirming(true);
     setCountdown(5);
     playTickSound();
@@ -107,6 +133,7 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const triggerEmergencyImmediately = () => {
+    interromperReajuste();
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = null;
@@ -115,7 +142,7 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     // O ENSAIO PARA AQUI. O envio não mora neste contexto — a navegação para
     // `/emergency?autoTrigger=other` é o que faz o `EmergencyEscalation`
-    // chamar `api.sendHelpAlert`. Não navegar é não enviar.
+    // emitir o pedido de ajuda (`emitirPedidoDeAjuda`). Não navegar é não enviar.
     if (modoEnsaioRef.current) {
       setEnsaioDisparado(true);
       return;
@@ -181,7 +208,10 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     []
   );
 
-  const showEmergencyButton = isPatientScreen() && location.pathname !== '/emergency';
+  // Durante o reajuste rápido o botão aparece em QUALQUER tela (menos a própria
+  // emergência): o overlay preto do reajuste cobre todo o resto, e a Emergência
+  // tem de continuar ao alcance — do olhar, do mouse e do teclado.
+  const showEmergencyButton = (isPatientScreen() || reancorando === true) && location.pathname !== '/emergency';
 
   useEffect(() => {
     if (!showEmergencyButton) {
@@ -224,6 +254,37 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const id = setInterval(verificar, 300);
     return () => clearInterval(id);
   }, [medindo, showEmergencyButton]);
+  // Teclado durante o reajuste rápido: com o overlay preto por cima de tudo, a
+  // Emergência é o único controle visível — Tab e Shift+Tab vão para ela (e não
+  // para botões escondidos debaixo do overlay). Sem foco automático: um Enter
+  // segurado desde o "Reajustar" dispararia o alarme sozinho.
+  useEffect(() => {
+    if (!reancorando) return;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      const botao = fabRef.current?.querySelector<HTMLButtonElement>('button[data-emergency="true"]');
+      if (!botao) return;
+      e.preventDefault();
+      botao.focus();
+    };
+    window.addEventListener('keydown', aoTeclar, true);
+    return () => window.removeEventListener('keydown', aoTeclar, true);
+  }, [reancorando]);
+
+  // Publica ONDE o botão está, para o CSS reservar o espaço dele (ver
+  // `.reserva-emergencia` em index.css). Atributo no <html>, e não contexto
+  // React, porque quem precisa ler são folhas de estilo de telas que nem
+  // sabem que o provider existe — e porque a reserva tem de valer no primeiro
+  // quadro, sem um render a mais de cada tela.
+  const posicaoDoBotao: 'topo' | 'canto' | null =
+    showEmergencyButton && !isConfirming ? (medindo ? 'canto' : 'topo') : null;
+  useEffect(() => {
+    const html = document.documentElement;
+    if (posicaoDoBotao) html.setAttribute('data-emergencia', posicaoDoBotao);
+    else html.removeAttribute('data-emergencia');
+  }, [posicaoDoBotao]);
+  useEffect(() => () => document.documentElement.removeAttribute('data-emergencia'), []);
+
   const showDegradedBanner =
     isPatientScreen() &&
     location.pathname !== '/calibration-check' &&
@@ -296,9 +357,18 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           ref={fabRef}
           style={{
             position: 'fixed',
-            ...(medindo ? { bottom: '1.5rem', right: '1.5rem' } : { top: '2rem', right: '3rem' }),
-            zIndex: 99990,
-            visibility: fabOculto ? 'hidden' : undefined,
+            // No topo, a posição vem das MESMAS variáveis que os cabeçalhos
+            // usam para reservar o espaço (index.css). Eram `2rem`/`3rem`
+            // cravados aqui enquanto o cabeçalho usava `clamp(…2.5vw…)`: a
+            // 1366 px os dois discordavam em 14 px e o chip de sessão entrava
+            // por baixo do botão.
+            ...(medindo
+              ? { bottom: '1.5rem', right: '1.5rem' }
+              : { top: 'var(--emergencia-topo)', right: 'var(--emergencia-direita)' }),
+            // No reajuste rápido, acima do overlay preto (e nunca escondido):
+            // o alvo do reajuste fica no centro, longe deste canto.
+            zIndex: reancorando ? Z_EMERGENCIA_NO_REAJUSTE : Z_EMERGENCIA,
+            visibility: fabOculto && !reancorando ? 'hidden' : undefined,
           }}
         >
           <GazeButton
@@ -309,8 +379,8 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                fora da área de acerto do dwell, que segue a caixa do
                botão. 176 px cabe sem mudar a tipografia; quando ainda
                assim cobrir um alvo, o `fabOculto` esconde o botão. */
-            width={medindo ? 176 : 200}
-            height={medindo ? 52 : 64}
+            width={medindo ? 176 : EMERGENCIA_LARGURA_PX}
+            height={medindo ? 52 : EMERGENCIA_ALTURA_PX}
             onClick={startEmergencyCountdown}
             data-dwell-ms={isDegraded ? 3600 : 2000}
             aria-label="Disparar Emergência Médica"

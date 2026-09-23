@@ -10,7 +10,7 @@
 // Uma função só, usada pelos dois caminhos, para não voltar a divergir.
 import type { RuntimeInfo } from '@tracker/accuracy';
 import type { FichaDoModelo } from '@tracker/l2cs/proveniencia';
-import { EXPERIMENT } from '@tracker/config/experiment';
+import { getL2csInputSizeEfetivo } from '@tracker/calibration';
 
 /** O que `getDiagnostics()` do GazeContext devolve, na parte que interessa. */
 export interface DiagnosticosDeRuntime {
@@ -18,6 +18,8 @@ export interface DiagnosticosDeRuntime {
     executionProvider?: string | null;
     fallback?: boolean;
     latencyMs?: number;
+    /** Lado do recorte EM VIGOR (a política por provider pode diferir da flag). */
+    inputSize?: number;
     stalePct?: number;
     modelo?: FichaDoModelo | null;
   } | null;
@@ -36,10 +38,11 @@ export function buildRuntimeInfo(
     modelo: d.l2cs?.modelo ?? null,
     l2csLatencyMs: d.l2cs?.latencyMs,
     l2csStalePct: d.l2cs?.stalePct,
-    // O campo existia no tipo e nunca era preenchido, enquanto a §5 do
-    // MEDICOES.md afirma que `runtime` traz o tamanho do recorte. Vem da flag
-    // ativa, que é a mesma que o engine usa para montar o crop.
-    l2csInputSize: EXPERIMENT.l2csInputSize,
+    // O lado EFETIVO do recorte, não a flag: o engine refaz o canvas com a
+    // política do provider (WASM → 224²) e a flag continua dizendo 448. Toda
+    // medição feita em WASM estava anotada com o crop errado. A fonte é a
+    // mesma que entra na chave do perfil de calibração.
+    l2csInputSize: d.l2cs?.inputSize ?? getL2csInputSizeEfetivo(),
     filterEffective: d.filtro?.efetivo,
     filterPreset: d.filtro?.preset ?? null,
     fpsRender: d.fpsRender,

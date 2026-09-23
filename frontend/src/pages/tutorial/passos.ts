@@ -65,6 +65,18 @@ export const MISSAO_DO_PASSO: Partial<Record<PassoDoTutorial, Missao>> = {
 };
 
 /**
+ * O passo que pede uma missão — o inverso de `MISSAO_DO_PASSO`.
+ *
+ * É por ele que a tela real sabe se a pessoa está no meio do tutorial NESTE
+ * passo: a missão ativa some assim que é cumprida, mas o passo guardado fica
+ * até a pessoa sair do tutorial, e é isso que mantém a faixa de volta visível.
+ */
+export function passoDaMissao(m: Missao): PassoDoTutorial | null {
+  for (const p of PASSOS_DO_TUTORIAL) if (MISSAO_DO_PASSO[p] === m) return p;
+  return null;
+}
+
+/**
  * O ÚNICO passo que trava o avanço até a ação ser feita pelo olhar.
  *
  * Por que só este: escrever a primeira frase é o que transforma "o app

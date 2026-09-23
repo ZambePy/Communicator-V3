@@ -1,0 +1,56 @@
+# Cabeçalhos HTTP para o Cloudflare Pages (formato _headers).
+#
+# CSP: só o que o site realmente carrega.
+# - script: o próprio bundle + o beacon do Cloudflare Web Analytics
+#   (carregado só com VITE_CF_ANALYTICS_TOKEN e sem recusa do visitante);
+# - connect: Supabase (API REST, Auth e Realtime do projeto em *.supabase.co),
+#   a API pública do GitHub (qual é o último release do desktop, para os
+#   botões de download) e o endpoint de estatísticas do Cloudflare;
+# - style/font/img: tudo servido daqui (a fonte Sora é self-hosted);
+# - nenhum iframe, nenhum plugin, e o site não pode ser emoldurado
+#   (frame-ancestors 'none' + X-Frame-Options para navegadores antigos).
+# Os downloads apontam para github.com, mas são navegações comuns, fora da CSP.
+# Permissions-Policy: o site não usa câmera nem microfone (a verificação de
+# compatibilidade só pergunta se o navegador tem acesso à webcam, sem ligá-la).
+# Sem "interest-cohort" (o FLoC foi abandonado) e sem "bluetooth": o Chrome
+# registra "Error with Permissions-Policy header" no console de toda página
+# para recurso que não reconhece.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.github.com https://cloudflareinsights.com; manifest-src 'self'; worker-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()
+  Cross-Origin-Opener-Policy: same-origin
+
+# Arquivos com hash no nome (gerados pelo Vite): cache de um ano, imutável.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Fontes self-hosted: o nome não muda, mas o conteúdo também não.
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Fotos da equipe e marca: um dia, revalidando depois.
+/team/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/brand/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+# HTML e rotas da SPA: sem regra aqui, de propósito. O Pages serve o index.html
+# em "/" e em toda rota profunda (e redireciona /index.html para /), e as regras
+# deste arquivo casam com o caminho PEDIDO — uma regra "/index.html" nunca se
+# aplicava. O padrão do Pages para resposta sem Cache-Control próprio já é
+# "public, max-age=0, must-revalidate" com ETag: todo deploy novo vale na hora.
+# Uma regra "/*" com Cache-Control não serviria: o Pages junta com vírgula os
+# valores de regras que casam juntas, e /assets/* ficaria com dois
+# Cache-Control contraditórios.
+
+# Arquivos de SEO: uma hora.
+/sitemap.xml
+  Cache-Control: public, max-age=3600
+
+/robots.txt
+  Cache-Control: public, max-age=3600

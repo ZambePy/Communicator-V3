@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { GazeProvider } from './context/GazeContext';
 import { AuthProvider } from './context/AuthContext';
 import { LicenseProvider } from './context/LicenseContext';
@@ -77,7 +77,7 @@ const VoiceControlScreen = lazyNamed(
   'VoiceControlScreen'
 );
 const AccessibilityScreen = lazyNamed(
-  () => import('./pages/core/EmBreveScreen'),
+  () => import('./pages/acessibilidade/AcessibilidadeScreen'),
   'AccessibilityScreen'
 );
 const HistoricoDeSessoes = lazyNamed(
@@ -470,22 +470,6 @@ function App() {
                               }
                             />
                             <Route
-                              path="/camera"
-                              element={
-                                <ProtectedRoute>
-                                  <PhotoCaptureScreen />
-                                </ProtectedRoute>
-                              }
-                            />
-                            <Route
-                              path="/games/photo"
-                              element={
-                                <ProtectedRoute>
-                                  <PhotoCaptureScreen />
-                                </ProtectedRoute>
-                              }
-                            />
-                            <Route
                               path="/news"
                               element={
                                 <ProtectedRoute>
@@ -519,6 +503,12 @@ function App() {
                                 </ProtectedRoute>
                               }
                             />
+
+                            {/* Rota desconhecida → menu. Antes era tela vazia:
+                                um hash errado (link velho, `/camera` e
+                                `/games/photo` que saíram) deixava o paciente
+                                numa tela em branco sem alvo nenhum. */}
+                            <Route path="*" element={<Navigate to="/menu" replace />} />
                           </Routes>
                         </TransicaoDeRota>
                       </Suspense>

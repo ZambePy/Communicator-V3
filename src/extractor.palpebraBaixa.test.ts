@@ -41,9 +41,36 @@ describe('olhar para baixo não pode virar piscada permanente', () => {
     expect(estados.at(-1)).toBe(false);
     const parou = estados.indexOf(false);
     expect(parou).toBeGreaterThan(0);
-    // Em menos de 2 s — o teto do `BlinkHold`, que é quando o cursor passaria
-    // a ser reportado como degradado.
-    expect(parou * DT).toBeLessThan(2000);
+    // No teto FISIOLÓGICO, não quando o limiar terminar de adaptar. A versão
+    // anterior levava ~1,1 s aqui (e 1,7 s com EAR 0,15), que é o
+    // congelamento de 0,7–1,1 s medido na gravação de 22/09 com óculos.
+    expect(parou * DT).toBeLessThanOrEqual(PISCADA_MAX_MS + DT);
+    // E não volta a congelar enquanto a pálpebra fica baixa.
+    expect(estados.slice(parou).every((b) => b === false)).toBe(true);
+  });
+
+  it('a pálpebra muito baixa (mas aberta) também solta no teto fisiológico', () => {
+    for (const baixo of [0.2, 0.18, 0.15, EAR_THR_MIN]) {
+      const d = new BlinkDetector();
+      let t = assentar(d, 0.31);
+      let congelado = 0;
+      for (let i = 0; i < 90; i++) {
+        if (!d.update(baixo, t)) break;
+        congelado++;
+        t += DT;
+      }
+      expect(congelado * DT, `EAR ${baixo}`).toBeLessThanOrEqual(PISCADA_MAX_MS + DT);
+    }
+  });
+
+  it('uma piscada real DURANTE a pálpebra baixa ainda é detectada', () => {
+    const d = new BlinkDetector();
+    let t = assentar(d, 0.31);
+    for (let i = 0; i < 60; i++) { d.update(0.22, t); t += DT; }   // olhando para baixo, já solto
+    expect(d.update(0.22, t)).toBe(false);
+    t += DT;
+    // Fechar o olho leva o EAR abaixo do piso: é piscada, sem esperar nada.
+    expect(d.update(0.06, t)).toBe(true);
   });
 
   it('uma piscada de verdade continua sendo piscada do começo ao fim', () => {

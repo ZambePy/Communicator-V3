@@ -82,3 +82,52 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.beta__summary {
+  margin-bottom: var(--sp-5);
+}
+
+.beta__summary .summary {
+  margin-bottom: 0;
+}
+
+.beta__ok {
+  color: var(--ok);
+}
+
+.beta__steps {
+  margin-top: var(--sp-7);
+}
+
+/* --- e-mail a confirmar ("Confirm email" ligado) --- */
+.beta__pendente-privacidade {
+  margin: 0 0 var(--sp-5);
+  font-size: 0.93rem;
+  color: var(--text-dim);
+}
+
+.beta__pendente-acoes {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* "Sair" no rodapé do modo "concluir": botão com cara de link */
+.beta__sair {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .beta__pendente-acoes {
+    flex-direction: column-reverse;
+    width: 100%;
+  }
+  .beta__pendente-acoes .btn {
+    width: 100%;
+  }
+}

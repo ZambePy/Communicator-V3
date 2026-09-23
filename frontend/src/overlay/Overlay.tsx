@@ -21,6 +21,8 @@ import {
 import { createDwellState, stepDwell, DEFAULT_DWELL_CONFIG, type DwellState, type DwellTarget } from '@tracker/interaction/dwell';
 import { estiloDoCursor } from '@tracker/interaction/cursorStyle';
 import { geometriaDoAnel } from '@tracker/interaction/dwellRing';
+import { SeguidorDeCursor } from '@tracker/interaction/seguidorDeCursor';
+import { ALVO_MINIMO_OVERLAY_PX } from '@tracker/interaction/correcaoPorDwell';
 import type { AmostraDeOlhar, ConfiguracaoDoModo, AcaoDoSistema } from '@tracker/computador/protocolo';
 import type { Ponto } from '@tracker/computador/geometria';
 import {
@@ -124,6 +126,12 @@ export const Overlay: React.FC = () => {
   const dwellRef = useRef<DwellState>(createDwellState());
   const fixacaoRef = useRef<Fixacao | null>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
+  /** Ver o laço de pintura no efeito do olhar: separa render de inferência. */
+  const seguidorRef = useRef(new SeguidorDeCursor());
+  const pinturaRef = useRef<{
+    offsetPx: number; escala: number; opacidade: string; fundo: string; sombra: string; borda: string;
+    anel: { tamanhoPx: number; pct: number } | null;
+  } | null>(null);
   const anelRef = useRef<SVGCircleElement>(null);
   const realceRef = useRef<HTMLElement | null>(null);
   const foraDaLupaDesdeRef = useRef<number | null>(null);
@@ -278,6 +286,23 @@ export const Overlay: React.FC = () => {
       if (saida.effect.type === 'click') {
         pct = 0;
         fixacaoRef.current = null;
+        // Rótulo para a correção por dwell da janela do app: um dwell CONCLUÍDO
+        // num alvo desenhado por nós diz para onde a pessoa olhava. Só de
+        // amostra sã — degradada ou sem calibração não diz nada — e só de alvo
+        // grande o bastante para o centro valer como verdade (a política do
+        // tamanho é do módulo de correção; aqui só se evita o IPC inútil).
+        if ((tipo === 'botao' || tipo === 'tecla') && el && !a.degraded && !a.uncalibrated) {
+          const r = el.getBoundingClientRect();
+          const tamanhoPx = Math.min(r.width, r.height);
+          if (tamanhoPx >= ALVO_MINIMO_OVERLAY_PX) {
+            void ponte.acao({
+              tipo: 'selecao',
+              centro: { x: r.left + r.width / 2, y: r.top + r.height / 2 },
+              tamanhoPx,
+              olhar: { x: a.x, y: a.y },
+            });
+          }
+        }
         if (tipo === 'botao' && el) despachar({ tipo: 'botao', id: el.dataset.alvo!.slice('botao:'.length) as IdDeBotao });
         else if (tipo === 'tecla' && el) despachar({ tipo: 'tecla', id: el.dataset.alvo!.slice('tecla:'.length) });
         else if (tipo === 'lupa' && el) {
@@ -302,33 +327,67 @@ export const Overlay: React.FC = () => {
         foraDaLupaDesdeRef.current = null;
       }
 
-      // Cursor e anel, escrita direta no DOM (30–60 Hz).
-      const cursor = cursorRef.current;
-      if (!cursor) return;
+      // A POSIÇÃO vai para o seguidor; o ESTILO fica num buffer. Quem escreve
+      // no DOM é o laço de pintura abaixo, na taxa do display — o mesmo
+      // desacoplamento da janela do app. Antes a sobreposição escrevia aqui,
+      // uma vez por amostra: era o "para-e-teleporta" que o app já não tinha.
+      //
+      // O carimbo de tempo é o DESTA janela, não o `a.t` do emissor: cada
+      // janela tem o próprio `performance.timeOrigin`, e o seguidor compara
+      // a idade da amostra com o relógio do rAF daqui.
+      seguidorRef.current.aoReceberAmostra({ x: a.x, y: a.y, tMs: performance.now() });
       const est = estiloDoCursor({
         tamanhoPx: c.tamanhoCursorPx,
         estado: target ? 'sobreAlvo' : a.degraded ? 'degradado' : 'normal',
         dwellPct: pct,
       });
-      cursor.style.transform = `translate3d(${a.x - est.offsetPx}px, ${a.y - est.offsetPx}px, 0) scale(${est.escala})`;
-      cursor.style.opacity = a.hasFace ? '1' : '0.3';
-      cursor.style.background = est.preenchimento;
-      cursor.style.boxShadow = est.anel;
-      cursor.style.border = est.tracejado ? '2px dashed rgba(234,179,8,0.9)' : '';
+      pinturaRef.current = {
+        offsetPx: est.offsetPx,
+        escala: est.escala,
+        opacidade: a.hasFace ? '1' : '0.3',
+        fundo: est.preenchimento,
+        sombra: est.anel,
+        borda: est.tracejado ? '2px dashed rgba(234,179,8,0.9)' : '',
+        anel: target && pct > 0 ? { tamanhoPx: est.tamanhoPx, pct } : null,
+      };
+    });
+
+    // LAÇO DE PINTURA — taxa do display, não da câmera. Lê o seguidor e o
+    // buffer de estilo; nenhuma leitura de layout, nenhum hit-test (esse
+    // continua no callback, por amostra). Fonte seca (> 300 ms sem amostra):
+    // o cursor congela E fica translúcido, em vez de parecer saudável.
+    let raf = 0;
+    const pintar = (agoraMs: number): void => {
+      raf = requestAnimationFrame(pintar);
+      const cursor = cursorRef.current;
+      const p = pinturaRef.current;
+      if (!cursor || !p) return;
+      const pos = seguidorRef.current.render(agoraMs);
+      if (!pos) return;
+      cursor.style.transform = `translate3d(${pos.x - p.offsetPx}px, ${pos.y - p.offsetPx}px, 0) scale(${p.escala})`;
+      cursor.style.opacity = pos.parado ? '0.35' : p.opacidade;
+      cursor.style.background = p.fundo;
+      cursor.style.boxShadow = p.sombra;
+      cursor.style.border = p.borda;
       const anel = anelRef.current;
       if (anel) {
         const svg = anel.ownerSVGElement!;
-        if (target && pct > 0) {
-          const g = geometriaDoAnel(est.tamanhoPx, pct);
+        if (p.anel) {
+          const g = geometriaDoAnel(p.anel.tamanhoPx, p.anel.pct);
           anel.setAttribute('stroke-dashoffset', String(g.offset));
-          svg.style.transform = `translate3d(${a.x - g.centro}px, ${a.y - g.centro}px, 0)`;
+          svg.style.transform = `translate3d(${pos.x - g.centro}px, ${pos.y - g.centro}px, 0)`;
           svg.style.opacity = '1';
         } else {
           svg.style.opacity = '0';
         }
       }
-    });
-    return off;
+    };
+    raf = requestAnimationFrame(pintar);
+    return () => {
+      off();
+      cancelAnimationFrame(raf);
+      seguidorRef.current.reiniciar();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ponte, despachar]);
 

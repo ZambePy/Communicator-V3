@@ -1,4 +1,6 @@
 import React from 'react';
+import type { MotivoDeRecalibracao } from '@tracker/vigiaDeRecalibracao';
+import { detalheDoMotivo } from '@tracker/vigiaDeRecalibracao.aviso';
 
 /**
  * Falhas que bloqueiam o controle por olhar precisam ser VISÍVEIS.
@@ -55,6 +57,15 @@ interface Props {
    * tela dizendo o motivo.
    */
   avisoDeBorda?: string | null;
+  /**
+   * O vigia de recalibração acusou (BCEA ou viés além da última medição, por
+   * duas consultas seguidas). `null` = nada. Abaixo de distância e postura na
+   * precedência: aquelas se resolvem em 2 s; esta pede os nove pontos, e só
+   * faz sentido pedir quando as duas primeiras não são a causa.
+   */
+  avisoDeRecalibracao?: MotivoDeRecalibracao;
+  onRecalibrar?: (() => void) | null;
+  onDispensarRecalibracao?: (() => void) | null;
   /**
    * Olhos fechados (ou pálpebra cobrindo a íris) por mais tempo que uma
    * piscada. O cursor congela com o rosto presente — o mesmo sintoma visual do
@@ -129,6 +140,9 @@ export const GazeStatusBanner: React.FC<Props> = ({
   onReancorar = null,
   reancorando = false,
   avisoDePostura = false,
+  avisoDeRecalibracao = null,
+  onRecalibrar = null,
+  onDispensarRecalibracao = null,
 }) => {
   // `state` continua no contrato e e IGNORADO: era a entrada do unico aviso que
   // saiu ("Ainda nao ha calibracao"). Fica no tipo porque o `GazeProvider`
@@ -140,6 +154,8 @@ export const GazeStatusBanner: React.FC<Props> = ({
   let detalhe = '';
   /** O reajuste de 2 s resolve ESTE aviso? */
   let reajustavel = false;
+  /** ESTE aviso pede os nove pontos (vigia de recalibração)? */
+  let recalibravel = false;
 
   if (cameraError) {
     tom = 'erro';
@@ -195,6 +211,14 @@ export const GazeStatusBanner: React.FC<Props> = ({
       'Você está há um tempo numa posição diferente da que calibrou. O cursor ' +
       'continua funcionando; um reajuste de 2 segundos deixa a mira no lugar.';
     reajustavel = true;
+  } else if (avisoDeRecalibracao) {
+    // Depois de distância e postura (que o reajuste de 2 s resolve) e antes
+    // do aviso de câmera: é o vigia dizendo que o modelo deixou de descrever
+    // a pessoa. 'aviso', não 'erro' — o cursor continua funcionando, só pior.
+    tom = 'aviso';
+    titulo = 'A mira piorou desde a última medição';
+    detalhe = detalheDoMotivo(avisoDeRecalibracao);
+    recalibravel = true;
   } else if (avisoDeCamera) {
     // Por último: é a situação mais benigna e a única que se resolve em
     // Configurações, não na cadeira. Só aparece quando a câmera mudou.
@@ -212,9 +236,15 @@ export const GazeStatusBanner: React.FC<Props> = ({
 
   return (
     <div style={WRAP} role="status" aria-live="polite" data-testid="gaze-status-banner">
+      {/* `coluna-livre-da-emergencia`: a 1024 px o cartão de 760 px,
+          centralizado, alcançava a Emergência (fixa, canto superior direito)
+          e a cobria — o z-index dele é maior. A classe estreita o cartão pelos
+          dois lados só quando falta espaço, e ele continua centralizado. */}
       <div
+        className="coluna-livre-da-emergencia"
         style={{
           ...CARD,
+          '--coluna-largura': '760px',
           background: cores.bg,
           border: `2px solid ${cores.border}`,
           color: cores.fg,
@@ -232,6 +262,39 @@ export const GazeStatusBanner: React.FC<Props> = ({
           </strong>
           {detalhe}
         </span>
+        {recalibravel && onRecalibrar && (
+          <>
+            <button
+              type="button"
+              onClick={onRecalibrar}
+              data-testid="recalibrar-agora"
+              // Dwellável de propósito, como o "Reajustar": quem precisa está
+              // usando o olhar. Isolado do "Agora não" por espaço, não só por cor.
+              style={{
+                flexShrink: 0, minWidth: 200, minHeight: 72, padding: '0.6rem 1.1rem', borderRadius: '0.7rem',
+                border: `2px solid ${cores.fg}`, background: cores.fg, color: cores.bg,
+                fontSize: '1.05rem', fontWeight: 800, cursor: 'pointer',
+              }}
+            >
+              Calibrar de novo
+            </button>
+            {onDispensarRecalibracao && (
+              <button
+                type="button"
+                onClick={onDispensarRecalibracao}
+                data-testid="recalibrar-depois"
+                data-dwell-ms="2000"
+                style={{
+                  flexShrink: 0, minWidth: 160, minHeight: 72, marginLeft: '1rem', padding: '0.6rem 1rem',
+                  borderRadius: '0.7rem', border: `2px solid ${cores.fg}`, background: 'transparent',
+                  color: cores.fg, fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                Agora não
+              </button>
+            )}
+          </>
+        )}
         {reajustavel && onReancorar && (
           <button
             type="button"

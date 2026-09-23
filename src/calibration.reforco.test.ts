@@ -123,4 +123,18 @@ describe('alvosDeReforco (sprint S4)', () => {
     // 1,3× a mediana está dentro do ruído de uma calibração; o corte é 1,5×.
     expect(alvosDeReforco(loo({ 6: 78 }), geometria)).toEqual([]);
   });
+
+  it('os cantos da tela não pedem reforço: o LOO deles é extrapolação por construção', () => {
+    // Calibração de 13 pontos: a grade uniforme + os 4 cantos com erro
+    // leave-one-target-out enorme (cada canto é imprevisível a partir dos
+    // outros). Isso não é região cega do miolo — não pode gastar tempo do
+    // paciente com reforço.
+    const cantos = [
+      { x: 0.05, y: 0.05 }, { x: 0.95, y: 0.05 },
+      { x: 0.05, y: 0.95 }, { x: 0.95, y: 0.95 },
+    ].map((c) => ({ ...c, errorPx: 400 }));
+    expect(alvosDeReforco([...loo(), ...cantos], geometria)).toEqual([]);
+    // Um alvo da grade realmente ruim continua sendo reforçado.
+    expect(alvosDeReforco([...loo({ 6: 300 }), ...cantos], geometria).length).toBeGreaterThan(0);
+  });
 });

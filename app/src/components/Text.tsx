@@ -1,50 +1,57 @@
 import React from 'react';
 import { Text as RNText, TextProps as RNTextProps, StyleSheet } from 'react-native';
-import { fonts, typeScale, useTheme } from '@/theme';
+import { fonts, fontScaleCap, typeScale, TypeVariant, useTheme } from '@/theme';
 
-type Variant = 'display' | 'h1' | 'h2' | 'h3' | 'body' | 'bodySmall' | 'caption' | 'label';
-type Tone = 'default' | 'muted' | 'primary' | 'accent' | 'danger' | 'onPrimary' | 'warning';
+export type TextTone = 'default' | 'muted' | 'primary' | 'accent' | 'danger' | 'warning' | 'onPrimary' | 'onDark' | 'onDarkMuted';
+export type TextWeight = 'regular' | 'medium' | 'semibold' | 'bold' | 'display';
 
 export interface TextProps extends RNTextProps {
-  variant?: Variant;
-  tone?: Tone;
-  weight?: 'regular' | 'medium' | 'semibold' | 'bold';
+  variant?: TypeVariant;
+  tone?: TextTone;
+  weight?: TextWeight;
   center?: boolean;
 }
 
 /**
- * Tipografia da IrisFlow: fonte do sistema em peso forte nos títulos de destaque (display/h1),
- * Inter no restante. Corpo mínimo de 15 px e contraste alto, conforme a regra tipográfica do plano.
+ * Tipografia da IrisFlow (Inter). Tamanho, altura de linha e tracking vêm de
+ * `typeScale`; o limite de ampliação pela fonte do sistema, de `fontScaleCap`
+ * (o corpo acompanha até 2×). `tone` escolhe só cores que passam em AA.
  */
-export function Text({ variant = 'body', tone = 'default', weight, center, style, ...rest }: TextProps) {
+export function Text({ variant = 'body', tone = 'default', weight, center, style, maxFontSizeMultiplier, ...rest }: TextProps) {
   const { colors } = useTheme();
-  const color =
-    tone === 'muted'
-      ? colors.textMuted
-      : tone === 'primary'
-        ? colors.primary
-        : tone === 'accent'
-          ? colors.accent
-          : tone === 'danger'
-            ? colors.danger
-            : tone === 'warning'
-              ? colors.warning
-              : tone === 'onPrimary'
-                ? colors.textOnPrimary
-                : colors.text;
+  const color: Record<TextTone, string> = {
+    default: colors.text,
+    muted: colors.textMuted,
+    primary: colors.primary,
+    accent: colors.accentText,
+    danger: colors.dangerText,
+    warning: colors.warningText,
+    onPrimary: colors.onPrimary,
+    onDark: colors.onDark,
+    onDarkMuted: colors.onDarkMuted,
+  };
+  const family = fonts[weight ?? defaultWeight(variant)];
 
-  const isDisplay = variant === 'display' || variant === 'h1';
-  const family = isDisplay ? fonts.display : fonts[weight ?? defaultWeight(variant)];
-
-  return <RNText {...rest} style={[styles.base, styles[variant], { color, fontFamily: family }, center && styles.center, style]} />;
+  return (
+    <RNText
+      maxFontSizeMultiplier={maxFontSizeMultiplier ?? fontScaleCap[variant]}
+      {...rest}
+      style={[styles.base, typeScale[variant], variant === 'label' && styles.label, { color: color[tone], fontFamily: family }, center && styles.center, style]}
+    />
+  );
 }
 
-function defaultWeight(v: Variant): 'regular' | 'medium' | 'semibold' | 'bold' {
+function defaultWeight(v: TypeVariant): TextWeight {
   switch (v) {
+    case 'display':
+      return 'display';
+    case 'h1':
     case 'h2':
-    case 'h3':
       return 'bold';
+    case 'h3':
     case 'label':
+    case 'tab':
+    case 'badge':
       return 'semibold';
     case 'caption':
       return 'medium';
@@ -56,13 +63,5 @@ function defaultWeight(v: Variant): 'regular' | 'medium' | 'semibold' | 'bold' {
 const styles = StyleSheet.create({
   base: { includeFontPadding: false },
   center: { textAlign: 'center' },
-  // display/h1 usam a fonte do sistema: o peso vem de fontWeight, não do nome da família.
-  display: { fontSize: typeScale.display, lineHeight: typeScale.display * 1.35, letterSpacing: -0.5, fontWeight: '700' },
-  h1: { fontSize: typeScale.h1, lineHeight: typeScale.h1 * 1.35, fontWeight: '700' },
-  h2: { fontSize: typeScale.h2, lineHeight: typeScale.h2 * 1.3 },
-  h3: { fontSize: typeScale.h3, lineHeight: typeScale.h3 * 1.35 },
-  body: { fontSize: typeScale.body, lineHeight: typeScale.body * 1.5 },
-  bodySmall: { fontSize: typeScale.bodySmall, lineHeight: typeScale.bodySmall * 1.45 },
-  caption: { fontSize: typeScale.caption, lineHeight: typeScale.caption * 1.4, letterSpacing: 0.2 },
-  label: { fontSize: 13, lineHeight: 18, letterSpacing: 0.8, textTransform: 'uppercase' },
+  label: { textTransform: 'uppercase' },
 });

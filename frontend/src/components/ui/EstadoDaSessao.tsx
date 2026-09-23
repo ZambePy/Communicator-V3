@@ -46,12 +46,16 @@ export const EstadoDaSessao: React.FC = () => {
         justifyContent: 'center',
         flexWrap: 'wrap',
         gap: '0.75rem',
-        marginBottom: '1.5rem',
+        // 0,5rem (era 1,5rem): a altura que o botão abaixo ganhou sai daqui,
+        // e a faixa inteira continua com os mesmos ~60 px — a grade da Home
+        // não perde espaço (ver `responsividade.test`).
+        marginBottom: '0.5rem',
         fontSize: '0.9rem',
-        color: 'var(--color-text-base)',
+        fontWeight: 600,
+        color: 'var(--color-text-muted)',
       }}
     >
-      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', opacity: 0.75 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
         <Crosshair size={15} color="var(--color-primary)" aria-hidden="true" />
         {temCalibracao
           ? t('sessao.calibracao', { idade: idadeEmTexto(carimbo) })
@@ -68,17 +72,21 @@ export const EstadoDaSessao: React.FC = () => {
           display: 'inline-flex',
           alignItems: 'center',
           gap: '0.4rem',
-          padding: '0.35rem 0.9rem',
-          borderRadius: '999px',
-          border: '1px solid var(--color-card-border)',
-          background: 'transparent',
+          // 52 px, o piso de alvo de olhar do app. Era 36 px (2,25rem): o único
+          // caminho para recalibrar a partir da Home era um alvo que o
+          // tremor vertical do olhar tirava do lugar antes de o dwell fechar.
+          minHeight: 52,
+          padding: '0.35rem 1.25rem',
+          borderRadius: 'var(--radius-pill)',
+          border: '1px solid var(--state-hover-border)',
+          background: 'var(--state-active-bg)',
           color: 'var(--color-primary)',
-          fontSize: '0.85rem',
+          fontSize: '0.95rem',
           fontWeight: 700,
           cursor: 'pointer',
         }}
       >
-        <RefreshCw size={14} aria-hidden="true" />
+        <RefreshCw size={16} aria-hidden="true" />
         {temCalibracao ? t('sessao.recalibrar') : t('sessao.calibrar')}
       </button>
 

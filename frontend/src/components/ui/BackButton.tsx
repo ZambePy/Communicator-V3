@@ -32,7 +32,6 @@ export const BackButton: React.FC<BackButtonProps> = ({ to }) => {
       style={{
         borderRadius: BACK_BUTTON_RADIUS_PX,
         padding: '0.75rem',
-        boxShadow: '0 4px 16px var(--color-card-shadow)',
         flexShrink: 0,
       }}
       aria-label={t('common.backAria')}
@@ -42,12 +41,14 @@ export const BackButton: React.FC<BackButtonProps> = ({ to }) => {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '0.35rem',
-          fontSize: '1rem',
+          gap: '0.4rem',
+          fontSize: '0.95rem',
+          fontWeight: 700,
+          letterSpacing: '0.02em',
           lineHeight: 1,
         }}
       >
-        <ArrowLeft size={30} aria-hidden="true" />
+        <ArrowLeft size={32} strokeWidth={2.5} aria-hidden="true" />
         {t('common.back')}
       </span>
     </GazeButton>

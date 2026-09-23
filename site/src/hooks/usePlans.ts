@@ -49,10 +49,13 @@ export type PlansState = {
   cheapest: Plan
   /** Verdadeiro quando `plans` já é o que veio do banco, e não a reserva. */
   fromDatabase: boolean
+  /** Verdadeiro enquanto a primeira consulta ao banco não voltou. */
+  loading: boolean
 }
 
 export function usePlans(): PlansState {
   const [plans, setPlans] = useState<Plan[]>(() => cache ?? PLANS)
+  const [loading, setLoading] = useState<boolean>(() => cache === null)
 
   useEffect(() => {
     let vivo = true
@@ -64,6 +67,9 @@ export function usePlans(): PlansState {
       .catch(() => {
         /* fetchPlans nunca rejeita; se rejeitar, a reserva fica */
       })
+      .finally(() => {
+        if (vivo) setLoading(false)
+      })
 
     return () => {
       vivo = false
@@ -73,5 +79,5 @@ export function usePlans(): PlansState {
   const getPlan = useCallback((id: string | null | undefined) => getPlanIn(id, plans), [plans])
   const cheapest = useMemo(() => cheapestPlan(plans), [plans])
 
-  return { plans, getPlan, cheapest, fromDatabase: plans !== PLANS }
+  return { plans, getPlan, cheapest, fromDatabase: plans !== PLANS, loading }
 }

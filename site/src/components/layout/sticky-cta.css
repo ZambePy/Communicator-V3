@@ -1,0 +1,62 @@
+.sticky-cta {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .sticky-cta {
+    display: block;
+    position: fixed;
+    z-index: 110;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(6, 18, 35, 0), rgba(6, 18, 35, 0.94) 38%);
+    transform: translateY(110%);
+    visibility: hidden;
+    transition:
+      transform var(--dur) var(--ease-out),
+      visibility 0s linear var(--dur);
+  }
+
+  .sticky-cta.is-visible {
+    transform: none;
+    visibility: visible;
+    transition:
+      transform var(--dur) var(--ease-out),
+      visibility 0s;
+  }
+
+  /* O aviso de cookies ocupa a base da tela: a barra espera. */
+  html[data-cookie-notice='open'] .sticky-cta {
+    display: none;
+  }
+
+  .sticky-cta__inner {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+
+  .sticky-cta__btn {
+    flex: 1;
+    min-height: 50px;
+  }
+
+  .sticky-cta__close {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 1px solid var(--line-strong);
+    background: var(--surface-2);
+    color: var(--text-soft);
+    cursor: pointer;
+  }
+
+  .sticky-cta__close:hover {
+    color: var(--text);
+  }
+}

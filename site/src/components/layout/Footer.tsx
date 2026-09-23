@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Logo } from './Logo'
-import { BETA, BETA_CTA, BRAND } from '@/data/content'
+import { BETA, BETA_CTA, BRAND, CONDITIONS_SHORT } from '@/data/content'
+import { resetConsent } from '@/lib/consent'
 import './footer.css'
 
 const COLUMNS = [
@@ -34,15 +35,15 @@ const COLUMNS = [
 
 export function Footer() {
   return (
-    <footer className="footer on-dark">
+    <footer className="footer on-dark" data-sticky-hide>
       <div className="container footer__inner">
         <div className="footer__brand">
           <Logo variant="full" tone="negativo" size="md" />
           <p className="footer__tagline">{BRAND.tagline}</p>
           <p className="footer__note">
-            Tecnologia assistiva que transforma o movimento dos olhos em comunicação e em
-            controle do computador, usando a webcam que já está em casa. Feita por três pessoas,
-            no Brasil, para famílias brasileiras.
+            Comunicação e controle do computador pelo olhar para pessoas com{' '}
+            {CONDITIONS_SHORT}, usando a webcam que já está em casa. Nenhuma imagem sai do
+            computador. Feita por três pessoas, no Brasil, para famílias brasileiras.
           </p>
           <div className="footer__social">
             <a href={BRAND.instagram} target="_blank" rel="noreferrer noopener">
@@ -66,6 +67,13 @@ export function Footer() {
                   </Link>
                 </li>
               ))}
+              {col.title === 'Legal' && (
+                <li>
+                  <button type="button" className="footer__linkbtn underline-grow" onClick={resetConsent}>
+                    Preferências de cookies
+                  </button>
+                </li>
+              )}
             </ul>
           </nav>
         ))}

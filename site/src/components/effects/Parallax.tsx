@@ -20,6 +20,8 @@ export function Parallax({ children, speed = -0.12, className = '' }: Props) {
     if (!el) return
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    // Em telas estreitas (toque) o parallax só desalinha o conteúdo.
+    if (window.innerWidth < 1024) return
 
     let raf = 0
     const update = () => {

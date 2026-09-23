@@ -6,7 +6,7 @@ import { Stepper } from '@/components/ui/Stepper'
 import { Field, SelectField, CheckField } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
 import { Card, CardIcon } from '@/components/ui/Card'
-import { DownloadButton } from '@/components/ui/DownloadButton'
+import { DownloadPanel } from '@/components/ui/DownloadPanel'
 import { SessionLoading } from '@/components/ui/Skeleton'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { CompatCheck } from '@/components/sections/CompatCheck'
@@ -14,13 +14,21 @@ import { useAccount, type Account, type BetaProfile } from '@/context/AccountCon
 import {
   APP_CUIDADOR_URL,
   BETA_PROGRAM_RESERVA,
+  ConfirmacaoDeEmailPendente,
   fetchBetaProgram,
+  fetchPerfilBasico,
   markBetaDownload,
+  reenviarConfirmacao,
   type BetaProgram,
 } from '@/services/api'
+import { formatDate, isCPF, isEmail, isPhone, maskCPF, maskPhone, osLabel } from '@/utils/format'
+import { SENHA_MINIMA, validar } from '@/utils/validation'
+import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
 import { useDownloads } from '@/hooks/useDownloads'
-import { formatDate, isCPF, isEmail, isPhone, maskCPF, maskPhone } from '@/utils/format'
-import { BRAND } from '@/data/content'
+import { PasswordStrength } from '@/components/ui/PasswordStrength'
+import { BRAND, PLATFORMS, PRIVACY_LINE } from '@/data/content'
+import { osOptionLabel } from '@/lib/releases'
+import { lerRascunhoBeta, salvarRascunhoBeta } from '@/lib/rascunhoBeta'
 import './checkout.css'
 import './sucesso.css'
 import './beta.css'
@@ -28,9 +36,17 @@ import './beta.css'
 /* ============================================================
    Página /beta — a porta de entrada durante o programa beta.
 
-   Três estados, decididos pela sessão (docs/BETA.md §1):
+   Estados, decididos pela sessão (README da raiz, seção "Site (site/)"):
    - sem conta: cabeçalho explicando a beta + formulário em 3 etapas
-     (mesmo desenho do /cadastro, com CPF opcional e sem plano a escolher);
+     (mesmo desenho do /cadastro, com CPF e telefone opcionais e sem plano
+     a escolher);
+   - "Confirm email" ligado no Supabase: depois de enviar, o formulário dá
+     lugar ao aviso "confirme o e-mail" (com reenvio). O que não é sensível
+     fica num rascunho local (lib/rascunhoBeta.ts);
+   - sessão aberta sem inscrição (voltou pelo link do e-mail, ou abandonou
+     no meio): o mesmo formulário, em modo "concluir" — sem nome, e-mail e
+     senha, que já são da conta —, pré-preenchido com o perfil e o rascunho.
+     CPF e condição de saúde são sempre pedidos de novo;
    - com conta: painel de download (desktop + app do cuidador), com
      "acesso beta até <fim do programa>";
    - inscrições fechadas (`beta_program.open = false`): aviso e link para
@@ -61,17 +77,50 @@ const EMPTY: Form = {
   passwordConfirm: '',
 }
 
-/** Mesmo mínimo exigido pelo Supabase Auth por padrão. */
-const SENHA_MINIMA = 8
+/** Regras de cada campo (src/utils/validation.ts), avaliadas enquanto se digita. */
+const RULES_COMUNS: Rules<Form> = {
+  // Telefone e CPF opcionais na beta: só validam se a pessoa preencheu algo.
+  phone: validar.telefoneOpcional,
+  document: validar.cpfOpcional,
+  userName: (v) => (v.trim().length < 3 ? 'Informe o nome de quem vai usar (ao menos 3 letras).' : undefined),
+  relation: (v) => validar.escolha(v, 'Selecione a relação com o usuário.'),
+  condition: (v) => validar.escolha(v, 'Selecione a condição principal.'),
+  os: (v) => validar.escolha(v, 'Selecione o sistema operacional do computador.'),
+  terms: validar.aceite,
+}
 
-type Errors = Partial<Record<keyof Form, string>>
+/** Inscrição nova: cria a conta, então pede nome, e-mail e senha. */
+const RULES: Rules<Form> = {
+  ...RULES_COMUNS,
+  buyerName: validar.nomeCompleto,
+  email: validar.email,
+  password: validar.senha,
+  passwordConfirm: (v, all) => validar.confirmacao(v, all.password),
+}
+
+/** Concluir a inscrição de uma conta que já existe (sessão aberta): nome,
+    e-mail e senha são da conta e não passam pelo formulário. */
+const RULES_CONCLUIR: Rules<Form> = RULES_COMUNS
+
+/** Campos de cada etapa: o "Continuar" só habilita quando os da etapa passam. */
+const STEP_FIELDS: (keyof Form)[][] = [
+  ['buyerName', 'email', 'phone', 'document', 'password', 'passwordConfirm'],
+  ['userName', 'relation', 'condition', 'os'],
+  ['terms'],
+]
+
+const STEP_FIELDS_CONCLUIR: (keyof Form)[][] = [
+  ['phone', 'document'],
+  ['userName', 'relation', 'condition', 'os'],
+  ['terms'],
+]
 
 /** O que a pessoa recebe e o que se espera dela, no cabeçalho da página. */
 const O_QUE_RECEBE: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'download',
     title: 'O aplicativo no computador',
-    text: `O ${BRAND.product} completo para Windows, macOS ou Linux, com todos os módulos liberados, sem limite de computadores.`,
+    text: `O ${BRAND.product} completo para ${PLATFORMS.long}, com todos os módulos liberados, sem limite de computadores.`,
   },
   {
     icon: 'pessoas',
@@ -106,19 +155,13 @@ const PROXIMOS_PASSOS: { icon: IconName; title: string; text: string }[] = [
 /* ---------------- painel de download (com conta) ---------------- */
 
 function PainelDownload({ account, program }: { account: Account; program: BetaProgram }) {
-  const downloads = useDownloads()
-  const [ready, setReady] = useState(false)
-
-  // Pequena espera para que a animação de confirmação seja percebida.
-  useEffect(() => {
-    const t = window.setTimeout(() => setReady(true), 450)
-    return () => window.clearTimeout(t)
-  }, [])
-
   // A data de fim mora na assinatura (next_charge_at = fim do programa na
   // inscrição). Uma conta antiga, de plano pago, mostra a data que tiver.
   const acessoAte = formatDate(account.nextChargeAt)
   const naBeta = account.planId === 'beta'
+  // A frase de sistemas acompanha o que o painel logo abaixo oferece (último
+  // release do GitHub), e não só a configuração do build.
+  const { platformsText } = useDownloads()
 
   return (
     <div className="flow">
@@ -165,8 +208,8 @@ function PainelDownload({ account, program }: { account: Account; program: BetaP
         </div>
 
         <Reveal anim="zoom" delay={380}>
-          <div className="flow__card panel" style={{ marginBottom: 'var(--sp-5)' }}>
-            <dl className="summary" style={{ marginBottom: 0 }}>
+          <div className="flow__card panel beta__summary">
+            <dl className="summary">
               <div>
                 <dt>Conta</dt>
                 <dd>{account.profile.email}</dd>
@@ -177,7 +220,7 @@ function PainelDownload({ account, program }: { account: Account; program: BetaP
               </div>
               <div>
                 <dt>Situação</dt>
-                <dd style={{ color: 'var(--ok)' }}>
+                <dd className="beta__ok">
                   {naBeta ? `Acesso beta até ${acessoAte}` : 'Conta ativa'}
                 </dd>
               </div>
@@ -193,35 +236,10 @@ function PainelDownload({ account, program }: { account: Account; program: BetaP
           <div className="download">
             <h2 className="download__title">Baixe o {BRAND.product}</h2>
             <p className="download__note">
-              Versão {program.currentVersion}. Se o botão do seu sistema estiver desabilitado, a
-              versão ainda não foi publicada para ele — avisamos por e-mail assim que sair.
+              Versão {program.currentVersion}, para {platformsText.long}. Entre no aplicativo com
+              o mesmo e-mail e senha desta conta.
             </p>
-            <div className="download__buttons">
-              <DownloadButton
-                href={downloads.windows}
-                variant="teal"
-                ready={ready}
-                onDownload={() => void markBetaDownload('windows')}
-              >
-                Windows
-              </DownloadButton>
-              <DownloadButton
-                href={downloads.macos}
-                variant="secondary"
-                ready={ready}
-                onDownload={() => void markBetaDownload('macos')}
-              >
-                macOS
-              </DownloadButton>
-              <DownloadButton
-                href={downloads.linux}
-                variant="secondary"
-                ready={ready}
-                onDownload={() => void markBetaDownload('linux')}
-              >
-                Linux
-              </DownloadButton>
-            </div>
+            <DownloadPanel onDownload={(os) => void markBetaDownload(os)} />
           </div>
         </Reveal>
 
@@ -245,7 +263,7 @@ function PainelDownload({ account, program }: { account: Account; program: BetaP
 
         <CompatCheck delay={540} />
 
-        <div className="grid grid--3" style={{ marginTop: 'var(--sp-7)' }}>
+        <div className="grid grid--3 beta__steps">
           {PROXIMOS_PASSOS.map((s, i) => (
             <Reveal key={s.title} anim="up" delay={580 + i * 100}>
               <Card as="div">
@@ -261,7 +279,7 @@ function PainelDownload({ account, program }: { account: Account; program: BetaP
 
         <Reveal anim="fade" delay={900}>
           <p className="flow__foot">
-            <Link to="/conta" className="underline-grow" style={{ color: 'var(--ok)' }}>
+            <Link to="/conta" className="underline-grow link-ok">
               Ir para o painel da conta
             </Link>{' '}
             · Dúvidas na instalação?{' '}
@@ -307,6 +325,99 @@ function InscricoesFechadas({ program }: { program: BetaProgram }) {
   )
 }
 
+/* ---------------- confirmação de e-mail pendente ----------------
+   Só aparece com "Confirm email" ligado no Supabase: o signUp criou o
+   usuário, mas sem sessão, e a inscrição só termina depois do clique no
+   link (que abre /entrar já autenticado e, de lá, volta para cá).
+   ---------------------------------------------------------------- */
+
+function ConfirmeOEmail({ email, onCorrigir }: { email: string; onCorrigir: () => void }) {
+  const [enviando, setEnviando] = useState(false)
+  const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null)
+  const tituloRef = useRef<HTMLHeadingElement>(null)
+
+  // O formulário some: o foco vai para o título novo, para o leitor de tela
+  // anunciar a troca, e a página volta ao topo.
+  useEffect(() => {
+    window.scrollTo?.({ top: 0 })
+    tituloRef.current?.focus()
+  }, [])
+
+  const reenviar = async () => {
+    setEnviando(true)
+    setAviso(null)
+    try {
+      await reenviarConfirmacao(email)
+      setAviso({ ok: true, texto: `Enviamos de novo para ${email}. Vale o link mais recente.` })
+    } catch (e) {
+      setAviso({ ok: false, texto: e instanceof Error ? e.message : 'Não foi possível reenviar agora.' })
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="flow">
+      <AmbientBackground particles={12} scan={false} light />
+      <div className="container container--narrow flow__inner">
+        <Reveal anim="fade">
+          <span className="eyebrow">Programa beta</span>
+        </Reveal>
+        <h1 className="flow__title" ref={tituloRef} tabIndex={-1}>
+          Falta confirmar o seu e-mail.
+        </h1>
+        <p className="lead flow__lead">
+          Enviamos um link para <strong>{email}</strong>. Abra-o neste ou em outro aparelho: ele
+          confirma o endereço e leva você de volta para concluir a inscrição, com o que já foi
+          preenchido.
+        </p>
+
+        <div className="flow__card panel">
+          <div className="notice" role="status">
+            <span className="notice__icon">
+              <Icon name="email" size={20} />
+            </span>
+            <p>
+              Não chegou em alguns minutos? Confira o spam e as abas de promoções. Se este e-mail
+              já tinha uma conta, nenhum link novo é enviado: é só{' '}
+              <Link to="/entrar" className="link-ok">
+                entrar com a senha
+              </Link>
+              .
+            </p>
+          </div>
+
+          <p className="beta__pendente-privacidade">
+            Por segurança, a condição de saúde e o CPF não ficam guardados neste navegador: eles
+            são pedidos de novo na hora de concluir.
+          </p>
+
+          {aviso && (
+            <div className={`notice${aviso.ok ? '' : ' notice--warn'}`} role={aviso.ok ? 'status' : 'alert'}>
+              <span className="notice__icon">
+                <Icon name={aviso.ok ? 'check' : 'alerta'} size={20} />
+              </span>
+              <p>{aviso.texto}</p>
+            </div>
+          )}
+
+          <div className="flow__actions">
+            <Button type="button" variant="ghost" onClick={onCorrigir}>
+              Corrigir o e-mail
+            </Button>
+            <div className="beta__pendente-acoes">
+              <Button type="button" variant="secondary" loading={enviando} onClick={() => void reenviar()}>
+                {enviando ? 'Reenviando…' : 'Reenviar o link'}
+              </Button>
+              <Button to="/entrar">Já confirmei, entrar</Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ---------------- formulário (sem conta) ---------------- */
 
 function FormularioBeta({
@@ -319,59 +430,91 @@ function FormularioBeta({
 }) {
   const [step, setStep] = useState(0)
   const [form, setForm] = useState<Form>(EMPTY)
+  // Modo "concluir": a conta já existe, então nome, e-mail e senha saem do
+  // formulário (a RPC não os altera, e a senha seria ignorada).
+  const concluir = contaPelaMetade
+  const rules = concluir ? RULES_CONCLUIR : RULES
+  const stepFields = concluir ? STEP_FIELDS_CONCLUIR : STEP_FIELDS
+  // E-mail à espera de confirmação ("Confirm email" ligado no Supabase).
+  const [pendente, setPendente] = useState<string | null>(null)
+  // O formulário foi pré-preenchido com o rascunho guardado neste navegador.
+  const [restaurado, setRestaurado] = useState(false)
   // Ao trocar de etapa, a página rola até o cartão do formulário, não até o topo:
   // antes, cada 'Continuar' jogava a pessoa de volta ao cabeçalho da página.
   const cardRef = useRef<HTMLDivElement>(null)
   const rolarParaOFormulario = () =>
     cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-  const [errors, setErrors] = useState<Errors>({})
+  const v = useFormValidation(form, rules)
+
+  // A confirmação aconteceu em outra aba (o supabase-js avisa esta): sai do
+  // aviso e segue para concluir, com o que já está preenchido aqui.
+  useEffect(() => {
+    if (concluir) setPendente(null)
+  }, [concluir])
+
+  // Conta já criada: traz nome, e-mail e telefone do perfil e, se houver, o
+  // rascunho deste navegador. Nada disso sobrescreve o que já foi digitado.
+  useEffect(() => {
+    if (!concluir) return
+    let vivo = true
+    void fetchPerfilBasico().then((perfil) => {
+      if (!vivo || !perfil) return
+      const rascunho = lerRascunhoBeta(perfil.email)
+      setForm((f) => {
+        // Formulário em branco (chegou agora pelo link do e-mail): o rascunho
+        // entra inteiro. Com dados em memória (mesma aba), eles valem mais.
+        const emBranco = !f.userName && !f.relation && !f.os
+        return {
+          ...f,
+          ...(rascunho && emBranco ? rascunho : {}),
+          buyerName: perfil.buyerName || f.buyerName,
+          email: perfil.email || f.email,
+          phone: f.phone || (perfil.phone ? maskPhone(perfil.phone) : ''),
+          newsletter: emBranco ? perfil.newsletter : f.newsletter,
+        }
+      })
+      if (rascunho && Object.keys(rascunho).length > 0) setRestaurado(true)
+    })
+    return () => {
+      vivo = false
+    }
+  }, [concluir])
+
+  const errors = {
+    buyerName: v.errorOf('buyerName'),
+    email: v.errorOf('email'),
+    phone: v.errorOf('phone'),
+    document: v.errorOf('document'),
+    password: v.errorOf('password'),
+    passwordConfirm: v.errorOf('passwordConfirm'),
+    userName: v.errorOf('userName'),
+    relation: v.errorOf('relation'),
+    condition: v.errorOf('condition'),
+    os: v.errorOf('os'),
+    terms: v.errorOf('terms'),
+  }
+  const blur = (key: keyof Form) => () => v.touch(key)
+  const stepValid = v.isValid(stepFields[step])
   const [saving, setSaving] = useState(false)
   const [falha, setFalha] = useState<string | null>(null)
-  const { registerBeta } = useAccount()
+  const { registerBeta, signOut } = useAccount()
 
   const set =
     (key: keyof Form, mask?: (v: string) => string) =>
     (e: { target: { value: string } }) => {
       const value = mask ? mask(e.target.value) : e.target.value
       setForm((f) => ({ ...f, [key]: value }))
-      setErrors((prev) => ({ ...prev, [key]: undefined }))
     }
 
   const toggle = (key: keyof Form) => (e: { target: { checked: boolean } }) => {
     setForm((f) => ({ ...f, [key]: e.target.checked }))
-    setErrors((prev) => ({ ...prev, [key]: undefined }))
+    // Caixa de seleção não tem "digitação": a escolha já conta como tocada.
+    v.touch(key)
   }
 
   const validateStep = (s: number) => {
-    const next: Errors = {}
-
-    if (s === 0) {
-      if (form.buyerName.trim().split(' ').length < 2)
-        next.buyerName = 'Informe nome e sobrenome.'
-      if (!isEmail(form.email)) next.email = 'Informe um e-mail válido.'
-      if (!isPhone(form.phone)) next.phone = 'Informe um telefone com DDD.'
-      // CPF opcional na beta: só valida se a pessoa preencheu algo.
-      if (form.document.trim() && !isCPF(form.document))
-        next.document = 'CPF inválido. Confira os dígitos ou deixe em branco.'
-      if (form.password.length < SENHA_MINIMA)
-        next.password = `A senha precisa ter ao menos ${SENHA_MINIMA} caracteres.`
-      if (form.passwordConfirm !== form.password)
-        next.passwordConfirm = 'As duas senhas precisam ser iguais.'
-    }
-
-    if (s === 1) {
-      if (form.userName.trim().length < 3) next.userName = 'Informe o nome de quem vai usar.'
-      if (!form.relation) next.relation = 'Selecione a relação com o usuário.'
-      if (!form.condition) next.condition = 'Selecione a condição principal.'
-      if (!form.os) next.os = 'Selecione o sistema operacional do computador.'
-    }
-
-    if (s === 2) {
-      if (!form.terms) next.terms = 'É preciso aceitar os termos para continuar.'
-    }
-
-    setErrors(next)
-    return Object.keys(next).length === 0
+    v.touch(...stepFields[s])
+    return v.isValid(stepFields[s])
   }
 
   const next = () => {
@@ -400,15 +543,65 @@ function FormularioBeta({
 
     try {
       // Com a conta carregada no contexto, esta mesma página passa a
-      // mostrar o painel de download — não há navegação.
-      await registerBeta(profile, password)
+      // mostrar o painel de download — não há navegação. Concluindo uma
+      // conta que já existe, a sessão está aberta e a senha não é usada.
+      await registerBeta(profile, concluir ? '' : password)
       rolarParaOFormulario()
     } catch (e) {
+      if (e instanceof ConfirmacaoDeEmailPendente) {
+        // Conta criada, e-mail a confirmar. Fica no navegador só o que não é
+        // sensível (lib/rascunhoBeta.ts filtra: sem CPF, condição e senha).
+        salvarRascunhoBeta(e.email, profile)
+        setPendente(e.email)
+        return
+      }
       setFalha(e instanceof Error ? e.message : 'Não foi possível concluir a inscrição.')
       rolarParaOFormulario()
     } finally {
       setSaving(false)
     }
+  }
+
+  const campoTelefone = (
+    <Field
+      label="Telefone (opcional)"
+      type="tel"
+      value={form.phone}
+      onChange={set('phone', maskPhone)}
+      onBlur={blur('phone')}
+      error={errors.phone}
+      valid={isPhone(form.phone)}
+      autoComplete="tel"
+      placeholder="(11) 90000-0000"
+      inputMode="numeric"
+      hint="Com DDD. Pode deixar em branco: falamos com você por e-mail."
+    />
+  )
+
+  const campoCpf = (
+    <Field
+      label="CPF"
+      value={form.document}
+      onChange={set('document', maskCPF)}
+      onBlur={blur('document')}
+      error={errors.document}
+      valid={isCPF(form.document)}
+      placeholder="000.000.000-00"
+      inputMode="numeric"
+      hint="Opcional na beta. Se preencher, precisa ser um CPF válido."
+    />
+  )
+
+  if (pendente) {
+    return (
+      <ConfirmeOEmail
+        email={pendente}
+        onCorrigir={() => {
+          setPendente(null)
+          setStep(0)
+        }}
+      />
+    )
   }
 
   return (
@@ -430,7 +623,7 @@ function FormularioBeta({
           <p className="lead flow__lead">
             A beta é fechada e gratuita: quem se inscreve recebe o aplicativo completo até{' '}
             <strong>{formatDate(program.endsAt)}</strong>, sem cartão, sem cobrança e sem
-            fidelidade. Em troca, pedimos retorno sobre o uso real.
+            fidelidade. Em troca, pedimos retorno sobre o uso real. {PRIVACY_LINE}
           </p>
         </Reveal>
 
@@ -449,8 +642,8 @@ function FormularioBeta({
               <strong>{program.currentVersion}</strong>
             </li>
             <li>
-              <span>Sistemas</span>
-              <strong>Windows · macOS · Linux</strong>
+              <span>Sistema</span>
+              <strong>{PLATFORMS.short}</strong>
             </li>
           </ul>
         </Reveal>
@@ -480,14 +673,17 @@ function FormularioBeta({
               </div>
             )}
 
-            {contaPelaMetade && !falha && (
+            {concluir && !falha && (
               <div className="notice" role="status">
                 <span className="notice__icon">
                   <Icon name="info" size={20} />
                 </span>
                 <p>
-                  Sua conta já foi criada, mas a inscrição na beta ficou pela metade. Preencha
-                  os dados abaixo com o mesmo e-mail para concluir.
+                  Sua conta já existe, mas a inscrição na beta ficou pela metade. Confira os dados
+                  abaixo para concluir.
+                  {restaurado && ' Recuperamos o que ficou salvo neste navegador.'}
+                  {!form.condition &&
+                    ' Por segurança, a condição de saúde e o CPF nunca ficam guardados: informe de novo se já tinha preenchido.'}
                 </p>
               </div>
             )}
@@ -500,74 +696,93 @@ function FormularioBeta({
                   <legend className="flow__legend">
                     Dados de quem responde pela inscrição
                     <span>
-                      Normalmente o familiar responsável ou o cuidador principal. É com este
-                      e-mail e senha que o aplicativo e o app do cuidador são abertos.
+                      {concluir
+                        ? 'Nome e e-mail vêm da conta já criada. O aplicativo e o app do cuidador abrem com esse mesmo e-mail e a senha que você escolheu.'
+                        : 'Normalmente o familiar responsável ou o cuidador principal. É com este e-mail e senha que o aplicativo e o app do cuidador são abertos.'}
                     </span>
                   </legend>
 
-                  <Field
-                    label="Nome completo"
-                    value={form.buyerName}
-                    onChange={set('buyerName')}
-                    error={errors.buyerName}
-                    autoComplete="name"
-                    placeholder="Maria Aparecida Souza"
-                  />
+                  {concluir ? (
+                    <>
+                      <dl className="summary">
+                        <div>
+                          <dt>Responsável</dt>
+                          <dd>{form.buyerName || '…'}</dd>
+                        </div>
+                        <div>
+                          <dt>E-mail da conta</dt>
+                          <dd>{form.email || '…'}</dd>
+                        </div>
+                      </dl>
+                      <div className="flow__row">
+                        {campoTelefone}
+                        {campoCpf}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Field
+                        label="Nome completo"
+                        value={form.buyerName}
+                        onChange={set('buyerName')}
+                        onBlur={blur('buyerName')}
+                        error={errors.buyerName}
+                        valid={form.buyerName.trim().split(' ').length >= 2}
+                        autoComplete="name"
+                        placeholder="Maria Aparecida Souza"
+                        hint="Nome e sobrenome."
+                      />
 
-                  <div className="flow__row">
-                    <Field
-                      label="E-mail"
-                      type="email"
-                      value={form.email}
-                      onChange={set('email')}
-                      error={errors.email}
-                      autoComplete="email"
-                      placeholder="voce@exemplo.com.br"
-                      hint="Usado para acessar a conta e receber os links de download."
-                    />
-                    <Field
-                      label="Telefone"
-                      type="tel"
-                      value={form.phone}
-                      onChange={set('phone', maskPhone)}
-                      error={errors.phone}
-                      autoComplete="tel"
-                      placeholder="(11) 90000-0000"
-                      inputMode="numeric"
-                    />
-                  </div>
+                      <div className="flow__row">
+                        <Field
+                          label="E-mail"
+                          type="email"
+                          value={form.email}
+                          onChange={set('email')}
+                          onBlur={blur('email')}
+                          error={errors.email}
+                          valid={isEmail(form.email)}
+                          autoComplete="email"
+                          placeholder="voce@exemplo.com.br"
+                          hint="Usado para acessar a conta e receber os links de download."
+                        />
+                        {campoTelefone}
+                      </div>
 
-                  <Field
-                    label="CPF"
-                    value={form.document}
-                    onChange={set('document', maskCPF)}
-                    error={errors.document}
-                    placeholder="000.000.000-00"
-                    inputMode="numeric"
-                    hint="Opcional na beta. Se preencher, precisa ser um CPF válido."
-                  />
+                      {campoCpf}
 
-                  <div className="flow__row">
-                    <Field
-                      label="Senha"
-                      type="password"
-                      value={form.password}
-                      onChange={set('password')}
-                      error={errors.password}
-                      autoComplete="new-password"
-                      placeholder="••••••••"
-                      hint={`Ao menos ${SENHA_MINIMA} caracteres. É com ela que vocês entram depois.`}
-                    />
-                    <Field
-                      label="Confirmar senha"
-                      type="password"
-                      value={form.passwordConfirm}
-                      onChange={set('passwordConfirm')}
-                      error={errors.passwordConfirm}
-                      autoComplete="new-password"
-                      placeholder="••••••••"
-                    />
-                  </div>
+                      <div className="flow__row">
+                        <Field
+                          label="Senha"
+                          type="password"
+                          value={form.password}
+                          onChange={set('password')}
+                          onBlur={blur('password')}
+                          error={errors.password}
+                          valid={form.password.length >= SENHA_MINIMA}
+                          autoComplete="new-password"
+                          hint={`Ao menos ${SENHA_MINIMA} caracteres. É com ela que vocês entram depois.`}
+                          describedById="beta-senha-forca"
+                          required
+                        />
+                        <Field
+                          label="Confirmar senha"
+                          type="password"
+                          value={form.passwordConfirm}
+                          onChange={set('passwordConfirm')}
+                          onBlur={blur('passwordConfirm')}
+                          error={errors.passwordConfirm}
+                          valid={
+                            form.passwordConfirm.length > 0 && form.passwordConfirm === form.password
+                          }
+                          autoComplete="new-password"
+                          hint="Repita a mesma senha."
+                          required
+                        />
+                      </div>
+                      <PasswordStrength value={form.password} id="beta-senha-forca" />
+                    </>
+                  )}
                 </fieldset>
               )}
 
@@ -585,6 +800,7 @@ function FormularioBeta({
                     label="Nome da pessoa que vai usar"
                     value={form.userName}
                     onChange={set('userName')}
+                    onBlur={blur('userName')}
                     error={errors.userName}
                     placeholder="Como ela gosta de ser chamada"
                   />
@@ -594,6 +810,7 @@ function FormularioBeta({
                       label="Sua relação com ela"
                       value={form.relation}
                       onChange={set('relation')}
+                    onBlur={blur('relation')}
                       error={errors.relation}
                     >
                       <option value="">Selecione…</option>
@@ -610,6 +827,7 @@ function FormularioBeta({
                       label="Condição principal"
                       value={form.condition}
                       onChange={set('condition')}
+                    onBlur={blur('condition')}
                       error={errors.condition}
                     >
                       <option value="">Selecione…</option>
@@ -618,7 +836,9 @@ function FormularioBeta({
                       <option value="pc">Paralisia cerebral severa</option>
                       <option value="avc">Sequela grave de AVC</option>
                       <option value="distrofia">Distrofia muscular avançada</option>
-                      <option value="outra">Outra</option>
+                      {/* O enum condition_t do banco não tem valor próprio para
+                          esclerose múltipla: entra em "outra" até a migração. */}
+                      <option value="outra">Outra (esclerose múltipla, encarceramento…)</option>
                       <option value="prefiro-nao">Prefiro não informar</option>
                     </SelectField>
                   </div>
@@ -627,13 +847,14 @@ function FormularioBeta({
                     label="Sistema do computador onde a IrisFlow será instalada"
                     value={form.os}
                     onChange={set('os')}
+                    onBlur={blur('os')}
                     error={errors.os}
                     hint="Uma webcam comum já basta. Não é preciso comprar câmera."
                   >
                     <option value="">Selecione…</option>
-                    <option value="windows">Windows</option>
-                    <option value="macos">macOS</option>
-                    <option value="linux">Linux</option>
+                    <option value="windows">{osOptionLabel('windows')}</option>
+                    <option value="macos">{osOptionLabel('macos')}</option>
+                    <option value="linux">{osOptionLabel('linux')}</option>
                     <option value="nao-sei">Não sei dizer</option>
                   </SelectField>
 
@@ -677,7 +898,7 @@ function FormularioBeta({
                     </div>
                     <div>
                       <dt>Telefone</dt>
-                      <dd>{form.phone}</dd>
+                      <dd>{form.phone.trim() || 'Não informado'}</dd>
                     </div>
                     <div>
                       <dt>Quem vai usar</dt>
@@ -685,7 +906,7 @@ function FormularioBeta({
                     </div>
                     <div>
                       <dt>Sistema</dt>
-                      <dd style={{ textTransform: 'capitalize' }}>{form.os}</dd>
+                      <dd>{osLabel(form.os)}</dd>
                     </div>
                     <div>
                       <dt>Acesso</dt>
@@ -710,18 +931,18 @@ function FormularioBeta({
                     value={form.howFound ?? ''}
                     onChange={set('howFound')}
                     placeholder="Indicação de um profissional, associação, redes sociais…"
-                    hint="Opcional."
+                    hint="Opcional. Indicação de profissional, associação, redes sociais…"
                   />
 
                   <CheckField
                     label={
                       <>
                         Li e aceito os{' '}
-                        <Link to="/termos" style={{ color: 'var(--ok)', fontWeight: 600 }}>
+                        <Link to="/termos" className="link-ok">
                           termos de uso
                         </Link>{' '}
                         e a{' '}
-                        <Link to="/privacidade" style={{ color: 'var(--ok)', fontWeight: 600 }}>
+                        <Link to="/privacidade" className="link-ok">
                           política de privacidade
                         </Link>
                         .
@@ -757,26 +978,42 @@ function FormularioBeta({
                 )}
 
                 {step < STEPS.length - 1 ? (
-                  <Button type="button" onClick={next}>
+                  <Button type="button" onClick={next} disabled={!stepValid}>
                     Continuar
                   </Button>
                 ) : (
-                  <Button type="submit" loading={saving}>
+                  <Button type="submit" loading={saving} disabled={!stepValid || saving}>
                     {saving ? 'Inscrevendo…' : 'Entrar na beta'}
                   </Button>
                 )}
               </div>
+              {!stepValid && (
+                <p className="form-hint" aria-live="polite">
+                  {step === 2
+                    ? 'Marque o aceite dos termos e da política de privacidade para entrar.'
+                    : 'Preencha os campos obrigatórios desta etapa para continuar.'}
+                </p>
+              )}
             </form>
           </div>
         </Reveal>
 
         <Reveal anim="fade" delay={420}>
-          <p className="flow__foot">
-            Já tem conta?{' '}
-            <Link to="/entrar" className="underline-grow" style={{ color: 'var(--ok)' }}>
-              Entrar
-            </Link>
-          </p>
+          {concluir ? (
+            <p className="flow__foot">
+              Não é a sua conta?{' '}
+              <button type="button" className="underline-grow link-ok beta__sair" onClick={() => void signOut()}>
+                Sair
+              </button>
+            </p>
+          ) : (
+            <p className="flow__foot">
+              Já tem conta?{' '}
+              <Link to="/entrar" className="underline-grow link-ok">
+                Entrar
+              </Link>
+            </p>
+          )}
         </Reveal>
       </div>
     </div>
@@ -786,7 +1023,7 @@ function FormularioBeta({
 /* ---------------- a página ---------------- */
 
 export default function Beta() {
-  const { account, authenticated, loading } = useAccount()
+  const { account, authenticated, loading, sessionError, refresh } = useAccount()
   const [program, setProgram] = useState<BetaProgram>(BETA_PROGRAM_RESERVA)
 
   // A leitura é pública (sem login) e nunca rejeita: em falha, fica a reserva.
@@ -802,6 +1039,28 @@ export default function Beta() {
 
   if (loading) return <SessionLoading />
   if (account) return <PainelDownload account={account} program={program} />
+
+  // Sessão aberta, mas a leitura da conta falhou por rede: não dá para
+  // afirmar que a inscrição "ficou pela metade" (mesma regra do /conta).
+  if (authenticated && sessionError) {
+    return (
+      <div className="flow">
+        <div className="container container--narrow flow__inner">
+          <div className="notice notice--warn" role="alert">
+            <span className="notice__icon">
+              <Icon name="alerta" size={20} />
+            </span>
+            <p>
+              Não foi possível carregar os dados da sua conta ({sessionError}). Você continua
+              conectado — isto é uma falha de conexão com o servidor, não um problema na inscrição.
+            </p>
+          </div>
+          <Button onClick={() => void refresh()}>Tentar de novo</Button>
+        </div>
+      </div>
+    )
+  }
+
   if (!program.open) return <InscricoesFechadas program={program} />
   return <FormularioBeta program={program} contaPelaMetade={authenticated} />
 }

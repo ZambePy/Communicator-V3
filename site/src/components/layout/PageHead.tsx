@@ -17,14 +17,21 @@ type Props = {
  * que o cabeçalho fixo tenha sempre o mesmo comportamento no topo de
  * qualquer rota, e para que a marca apareça em negativo ali.
  */
-export function PageHead({ eyebrow, title, highlight = [], lead, children }: Props) {
+export function PageHead({
+  eyebrow,
+  title,
+  highlight = [],
+  lead,
+  children,
+}: Props) {
+  // Título da aba e meta description vêm de src/seo/pages.ts (RouteMeta).
   return (
     <header className="page-head on-dark">
-      <AmbientBackground particles={14} scan={false} />
+      <AmbientBackground particles={10} scan={false} />
       <div className="container">
         <div className="page-head__inner">
           <Reveal anim="fade">
-            <Logo variant="symbol" tone="negativo" size="sm" link={false} />
+            <Logo variant="symbol" tone="negativo" size="sm" link={false} decorative />
           </Reveal>
           <Reveal anim="fade" delay={100}>
             <span className="eyebrow">{eyebrow}</span>

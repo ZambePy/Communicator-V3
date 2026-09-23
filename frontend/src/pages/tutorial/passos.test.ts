@@ -139,3 +139,12 @@ describe('ehPassoDoTutorial', () => {
     expect(ehPassoDoTutorial(3)).toBe(false);
   });
 });
+
+describe('passoDaMissao', () => {
+  it('é o inverso de MISSAO_DO_PASSO — é por ele que a tela real acha o passo', async () => {
+    const { passoDaMissao, MISSAO_DO_PASSO } = await import('./passos');
+    for (const [passo, missao] of Object.entries(MISSAO_DO_PASSO)) {
+      expect(passoDaMissao(missao!)).toBe(passo);
+    }
+  });
+});

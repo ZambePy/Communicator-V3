@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell, Image, Music, Newspaper, Settings, Users } from 'lucide-react';
+import { Bell, Image, Moon, Newspaper, Settings, Users } from 'lucide-react';
 
 /**
  * O resto do app, em uma tela.
@@ -22,7 +22,10 @@ export const MaisRecursos: React.FC = () => {
   const itens: { icone: React.ReactNode; chave: string }[] = [
     { icone: <Bell size={22} aria-hidden="true" />, chave: 'lembretes' },
     { icone: <Image size={22} aria-hidden="true" />, chave: 'fotos' },
-    { icone: <Music size={22} aria-hidden="true" />, chave: 'descanso' },
+    // Lua, não nota musical: o app não tem música, e o ícone de Descanso no
+    // menu principal é a lua — o tutorial mostra o mesmo símbolo que a pessoa
+    // vai procurar.
+    { icone: <Moon size={22} aria-hidden="true" />, chave: 'descanso' },
     { icone: <Newspaper size={22} aria-hidden="true" />, chave: 'noticias' },
     { icone: <Users size={22} aria-hidden="true" />, chave: 'cuidador' },
   ];

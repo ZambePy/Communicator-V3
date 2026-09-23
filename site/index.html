@@ -2,45 +2,65 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/png" href="/brand/irisflow-symbol.png" />
-    <meta name="theme-color" content="#1b54a8" />
-    <!-- Tema aplicado antes da pintura, para evitar o lampejo de tema claro
-         quando o usuário já escolheu (ou o sistema pede) o modo escuro.
-         A escolha manual em localStorage manda; senão, segue o sistema. -->
-    <script>
-      ;(function () {
-        try {
-          var saved = localStorage.getItem('irisflow:theme')
-          var dark = saved
-            ? saved === 'dark'
-            : matchMedia('(prefers-color-scheme: dark)').matches
-          var theme = dark ? 'dark' : 'light'
-          document.documentElement.dataset.theme = theme
-          var meta = document.querySelector('meta[name="theme-color"]')
-          if (meta) meta.setAttribute('content', dark ? '#061223' : '#1b54a8')
-        } catch (e) {
-          document.documentElement.dataset.theme = 'light'
-        }
-      })()
-    </script>
-    <title>IrisFlow Communicator — seu olhar tem voz</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Tema único (azul-marinho). Não há modo claro nem alternador. -->
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#061223" />
+
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Fonte de display (Sora, OFL) self-hosted em /fonts, só para títulos;
+         o corpo usa a pilha do sistema. Nenhuma requisição a terceiros:
+         num site de tecnologia assistiva, privacidade começa no CSS. -->
+    <link
+      rel="preload"
+      href="/fonts/sora-latin-700-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
+    <!-- Padrões para quem lê o HTML sem executar JavaScript (redes sociais,
+         WhatsApp). Cada rota sobrescreve no navegador via RouteMeta, a
+         partir de src/seo/pages.ts. O marcador de origem (SITE_URL entre sublinhados duplos) é trocado no build pela
+         origem de VITE_SITE_URL (vite.config.ts). -->
+    <title>Comunicador por olhar para ELA, AVC e tetraplegia | IrisFlow</title>
     <meta
       name="description"
-      content="O IrisFlow Communicator transforma o movimento dos olhos em comunicação e em controle do computador usando apenas a webcam que você já tem. Tecnologia assistiva por rastreamento ocular, sem hardware proprietário."
+      content="O IrisFlow Communicator transforma o movimento dos olhos em fala e em controle do computador, com a webcam comum e processamento 100 % local. Beta gratuita."
     />
-    <meta property="og:title" content="IrisFlow Communicator — seu olhar tem voz" />
+    <link rel="canonical" href="__SITE_URL__/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="IrisFlow" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:title" content="Comunicador por olhar para ELA, AVC e tetraplegia | IrisFlow" />
     <meta
       property="og:description"
-      content="Comunicação e controle do computador pelo olhar, com a webcam que você já tem. Período de avaliação gratuito, sem fidelidade."
+      content="Comunicação pelo olhar para quem tem ELA, AVC, esclerose múltipla ou lesão medular, com a webcam que já está em casa. Nenhuma imagem sai do computador. Beta gratuita."
     />
-    <meta property="og:type" content="website" />
-    <meta property="og:locale" content="pt_BR" />
-    <meta property="og:image" content="/brand/og-image.png" />
-    <meta property="og:image:alt" content="IrisFlow Communicator — seu olhar tem voz" />
+    <meta property="og:url" content="__SITE_URL__/" />
+    <meta property="og:image" content="__SITE_URL__/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="IrisFlow — comunicação pelo olhar com a webcam comum" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Comunicador por olhar para ELA, AVC e tetraplegia | IrisFlow" />
+    <meta
+      name="twitter:description"
+      content="Comunicação pelo olhar com a webcam que já está em casa. Nenhuma imagem sai do computador. Beta gratuita."
+    />
+    <meta name="twitter:image" content="__SITE_URL__/og-image.png" />
   </head>
   <body>
+    <noscript>
+      <p class="noscript">
+        O site da IrisFlow precisa de JavaScript. Escreva para irisflowteam@gmail.com se preferir
+        receber as informações por e-mail.
+      </p>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

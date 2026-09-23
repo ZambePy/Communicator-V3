@@ -1,8 +1,16 @@
-import React from 'react';
-import { Smartphone, ShieldCheck, CloudOff } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Smartphone, ShieldAlert, ShieldCheck, CloudOff } from 'lucide-react';
 import { useCloud } from './CloudContext';
-import { cofre } from './armazenamento';
+import { cofre, type ProtecaoDoCofre } from './armazenamento';
 import { licenseBackend } from '../services/license';
+
+/** O que a tela diz sobre onde as credenciais da nuvem ficam, por estado real do cofre. */
+export const TEXTO_DA_PROTECAO: Record<ProtecaoDoCofre, string> = {
+  cifrado: 'credenciais da nuvem guardadas cifradas pelo sistema (safeStorage)',
+  'sem-cifra': 'credenciais da nuvem guardadas SEM cifra: este sistema não ofereceu um cofre de senhas (no Linux, um chaveiro como o GNOME Keyring ou o KWallet)',
+  navegador: 'credenciais da nuvem guardadas no navegador (modo de desenvolvimento)',
+  desconhecida: 'não foi possível confirmar se as credenciais da nuvem estão cifradas',
+};
 
 /**
  * Linhas da página **Conta e assinatura** sobre a ligação com o celular do
@@ -15,6 +23,14 @@ import { licenseBackend } from '../services/license';
  */
 export const CloudStatusLines: React.FC<{ Linha: React.FC<{ icone: React.ReactNode; children: React.ReactNode }> }> = ({ Linha }) => {
   const cloud = useCloud();
+  // Perguntado ao processo principal (assíncrono); até a resposta, a linha
+  // não afirma nada sobre cifra.
+  const [protecao, setProtecao] = useState<ProtecaoDoCofre | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    void cofre.protecao().then((p) => { if (vivo) setProtecao(p); });
+    return () => { vivo = false; };
+  }, []);
   if (!cloud.configurada || licenseBackend !== 'supabase') return null;
 
   const celular = !cloud.vinculo
@@ -32,11 +48,9 @@ export const CloudStatusLines: React.FC<{ Linha: React.FC<{ icone: React.ReactNo
         {cloud.filaPendente > 0 ? ` · ${cloud.filaPendente} envio(s) aguardando` : ''}
         {cloud.naoFaladas > 0 ? ` · ${cloud.naoFaladas} mensagem(ns) não falada(s)` : ''}
       </Linha>
-      <Linha icone={<ShieldCheck size={17} aria-hidden="true" />}>
-        {cofre.cifrado()
-          ? 'credenciais da nuvem guardadas cifradas pelo sistema (safeStorage)'
-          : 'credenciais da nuvem guardadas no navegador (modo de desenvolvimento)'}
-        {' — sai deste computador só o texto que o paciente escolheu falar, alertas e o resumo numérico da calibração'}
+      <Linha icone={protecao === 'cifrado' ? <ShieldCheck size={17} aria-hidden="true" /> : <ShieldAlert size={17} aria-hidden="true" />}>
+        {protecao ? `${TEXTO_DA_PROTECAO[protecao]} — ` : ''}
+        {'sai deste computador só o texto que o paciente escolheu falar, alertas e o resumo numérico da calibração'}
       </Linha>
     </>
   );

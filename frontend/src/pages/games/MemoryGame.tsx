@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
 import { GazeButton } from '../../components/ui/GazeButton';
 
@@ -49,6 +50,7 @@ function novoBaralho(): Carta[] {
 
 export const MemoryGame: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [cartas, setCartas] = useState<Carta[]>(novoBaralho);
   /** Ids das cartas viradas e ainda não resolvidas (0, 1 ou 2). */
   const [viradas, setViradas] = useState<number[]>([]);
@@ -129,8 +131,12 @@ export const MemoryGame: React.FC = () => {
       role="main"
       aria-labelledby="memory-title"
       style={{
-        minHeight: '100vh',
-        width: '100vw',
+        // Altura fixa: as linhas da grade são `minmax(0, 1fr)` e encolhem.
+        // Com `minHeight` a página crescia além da janela e o documento
+        // rolava por baixo da Emergência.
+        height: '100dvh',
+        overflow: 'hidden',
+        width: '100%',
         boxSizing: 'border-box',
         background:
           'radial-gradient(circle at 15% 10%, rgba(34,197,94,0.16), transparent 55%), var(--color-bg-base)',
@@ -142,7 +148,10 @@ export const MemoryGame: React.FC = () => {
         fontFamily: "'Inter', system-ui, sans-serif",
       }}
     >
-      <header style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+      <header
+        className="reserva-emergencia"
+        style={{ '--reserva-margem': '3rem', display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap', flexShrink: 0 }}
+      >
         <GazeButton
           onClick={() => navigate('/games')}
           width={200}
@@ -154,7 +163,7 @@ export const MemoryGame: React.FC = () => {
             border: '2px solid var(--color-card-border)',
             boxShadow: '0 6px 20px var(--color-card-shadow)',
           }}
-          aria-label="Voltar para Ajuda e Lazer"
+          aria-label={t('lazer.voltarAria')}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', fontSize: '1.3rem', fontWeight: 800 }}>
             <ArrowLeft size={28} /> Voltar
@@ -314,7 +323,7 @@ export const MemoryGame: React.FC = () => {
                   border: '2px solid var(--color-primary)',
                   color: 'var(--color-primary)',
                 }}
-                aria-label="Voltar para Ajuda e Lazer"
+                aria-label={t('lazer.voltarAria')}
               >
                 <span style={{ fontSize: '1.3rem', fontWeight: 800 }}>Voltar ao menu</span>
               </GazeButton>

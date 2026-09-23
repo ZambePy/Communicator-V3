@@ -17,6 +17,7 @@ import {
   getRecusaDeCalibracao,
   completeCalibration,
   INSET_COMPUTADOR,
+  INSET_CANTOS_PADRAO,
   JOELHO_HIPOMETRIA_DEG,
   type CalibrationGeometry,
 } from './calibration';
@@ -52,11 +53,20 @@ describe('alvosDeCalibracao — perfil computador', () => {
       && (a.y === INSET_COMPUTADOR || a.y === 1 - INSET_COMPUTADOR))).toBe(true);
   });
 
-  it('perfil padrão (ou ausente) é a grade de sempre, dentro do orçamento', () => {
-    expect(alvosDeCalibracao(G)).toEqual(computeCalibrationTargets(G, false));
+  it('perfil padrão (ou ausente): a grade de sempre, dentro do orçamento, + os 4 cantos da tela', () => {
+    const lo = INSET_CANTOS_PADRAO;
+    const hi = 1 - INSET_CANTOS_PADRAO;
+    expect(alvosDeCalibracao(G)).toEqual([
+      ...computeCalibrationTargets(G, false),
+      { x: lo, y: lo }, { x: hi, y: lo },
+      { x: lo, y: hi }, { x: hi, y: hi },
+    ]);
+    // O modo rápido continua sendo só os 4 cantos DA GRADE.
     expect(alvosDeCalibracao(G, { perfil: 'padrao', quick: true })).toEqual(computeCalibrationTargets(G, true));
-    // No padrão os alvos horizontais ficam bem longe da borda (≈17 %/83 %).
-    expect(Math.min(...alvosDeCalibracao(G).map((a) => a.x))).toBeGreaterThan(0.1);
+    // A grade interna continua dentro do orçamento: os alvos horizontais dela
+    // ficam bem longe da borda (≈17 %/83 %); só os cantos vão a 5 %/95 %.
+    expect(Math.min(...computeCalibrationTargets(G, false).map((a) => a.x))).toBeGreaterThan(0.1);
+    expect(alvosDeCalibracao(G)).toHaveLength(13);
   });
 });
 
@@ -119,7 +129,7 @@ describe('sessão de calibração com perfil', () => {
     expect(getCalibrationTargets()).toHaveLength(13);
     abortCalibration();
     expect(startCalibrationMode({ perfil: 'padrao' })).toBe(true);
-    expect(getCalibrationTargets()).toHaveLength(9);
+    expect(getCalibrationTargets()).toHaveLength(13);
   });
 
   it('setPerfilDeCalibracao troca o perfil e procura o modelo daquele perfil', () => {

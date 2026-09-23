@@ -56,7 +56,7 @@
   border-radius: var(--r-pill);
   background: linear-gradient(135deg, var(--ok), var(--teal));
   color: #fff;
-  font-size: 0.72rem;
+  font-size: var(--fs-min);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -102,6 +102,12 @@
   font-size: clamp(2.4rem, 4.4vw, 3.4rem);
   line-height: 1;
   color: var(--text);
+}
+
+.plan__amount-skeleton {
+  display: inline-block;
+  font-size: clamp(2.4rem, 4.4vw, 3.4rem);
+  align-self: center;
 }
 
 .plan__period {
@@ -260,33 +266,114 @@
   margin-top: 2px;
 }
 
-/* --- aviso da beta: a contratação está pausada --- */
-.pricing__beta {
-  display: flex;
+/* --- plano Beta em destaque (disponível agora) --- */
+.plan--beta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: var(--sp-7);
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  flex-wrap: wrap;
-  margin-bottom: var(--sp-6);
-  padding: var(--sp-5);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--ok-line);
-  background: var(--ok-soft);
+  margin-bottom: var(--sp-7);
+  border-color: var(--ok-line);
+  box-shadow: 0 0 0 1px var(--ok-line), 0 24px 60px -24px rgba(0, 166, 147, 0.45);
+  background:
+    radial-gradient(520px 260px at 0% 0%, rgba(63, 214, 194, 0.14), transparent 70%),
+    var(--surface);
 }
 
-.pricing__beta strong {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--text);
+.plan--beta:hover {
+  transform: none;
 }
 
-.pricing__beta p {
+.plan-beta__main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.plan--beta .plan__tagline {
+  min-height: 0;
+  margin-bottom: var(--sp-5);
+}
+
+.plan--beta .plan__list {
   margin: 0;
-  font-size: 0.94rem;
-  max-width: 60ch;
 }
 
-/* Card sem compra: o botão desabilitado não deve parecer clicável. */
-.plan .btn[disabled] {
-  cursor: not-allowed;
+.plan__fine--left {
+  text-align: left;
+}
+
+/* Selo de situação: "Disponível agora" (teal) e "Em breve" (amarelo). */
+.plan__status {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--sp-3);
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-min);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.plan__status--now {
+  background: var(--teal-300);
+  color: #04231f;
+}
+
+.plan__status--now::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #04231f;
+  animation: pulse-dot 2s var(--ease-in-out) infinite;
+}
+
+.plan__status--soon {
+  border: 1px solid var(--warn-line);
+  color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.pricing__future-title {
+  font-family: var(--font-body);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 var(--sp-4);
+}
+
+/* Planos futuros: mesma grade, sem cara de "compre agora". */
+.plan--soon .plan__amount {
+  color: var(--text-soft);
+}
+
+.plan__forecast {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+@media (max-width: 900px) {
+  .plan--beta {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-5);
+  }
+}
+
+@media (max-width: 480px) {
+  .plan {
+    padding: var(--sp-5);
+  }
+  .plan--beta .btn {
+    width: 100%;
+  }
 }

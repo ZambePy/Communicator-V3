@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Card } from './Card';
 import { Text } from './Text';
-import { radius, spacing, useTheme } from '@/theme';
+import { radius, sizes, spacing, useTheme } from '@/theme';
 
 interface Props {
   icon: keyof typeof Ionicons.glyphMap;
@@ -14,31 +14,38 @@ interface Props {
   index?: number;
 }
 
-export function MetricTile({ icon, label, value, hint, tone = 'primary', index = 0 }: Props) {
+/** Número de destaque com rótulo curto. Dois por linha; quebram para uma coluna com fonte grande. */
+export function MetricTile({ icon, label, value, hint, tone = 'primary', index }: Props) {
   const { colors } = useTheme();
-  const color = tone === 'accent' ? colors.accent : tone === 'warning' ? colors.warning : tone === 'danger' ? colors.danger : colors.primary;
-  const bg = tone === 'accent' ? colors.accentTint : tone === 'warning' ? colors.warningTint : tone === 'danger' ? colors.dangerTint : colors.primaryTint;
+  const cor = {
+    primary: { fg: colors.primary, bg: colors.primaryTint, text: colors.primary },
+    accent: { fg: colors.accentText, bg: colors.accentTint, text: colors.accentText },
+    warning: { fg: colors.warningText, bg: colors.warningTint, text: colors.warningText },
+    danger: { fg: colors.dangerText, bg: colors.dangerTint, text: colors.dangerText },
+  }[tone];
   return (
-    <Card index={index} style={styles.tile} padding={spacing.md}>
-      <View style={[styles.icon, { backgroundColor: bg }]}>
-        <Ionicons name={icon} size={18} color={color} />
+    <Card index={index} style={styles.tile} padding={spacing.lg} accessibilityLabel={[value, label, hint].filter(Boolean).join(', ')}>
+      <View style={[styles.icon, { backgroundColor: cor.bg }]}>
+        <Ionicons name={icon} size={sizes.icon.sm} color={cor.fg} />
       </View>
-      <Text variant="h2" weight="bold" style={{ marginTop: spacing.sm }}>
+      <Text variant="h2" style={styles.value}>
         {value}
       </Text>
       <Text variant="caption" tone="muted">
         {label}
       </Text>
-      {hint && (
-        <Text variant="caption" style={{ color, marginTop: 2 }}>
+      {hint ? (
+        <Text variant="caption" style={[styles.hint, { color: cor.text }]}>
           {hint}
         </Text>
-      )}
+      ) : null}
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  tile: { flex: 1, minWidth: 140 },
-  icon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  tile: { flexGrow: 1, flexBasis: '40%' },
+  icon: { width: sizes.tile.sm, height: sizes.tile.sm, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  value: { marginTop: spacing.md },
+  hint: { marginTop: spacing.xxs },
 });

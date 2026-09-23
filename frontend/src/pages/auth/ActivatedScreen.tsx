@@ -3,6 +3,7 @@ import { useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, Monitor, ArrowRightLeft, AlertTriangle } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { ProgressoDoOnboarding } from '../../components/ui/ProgressoDoOnboarding';
 import { useLicense } from '../../context/LicenseContext';
 import { getDeviceName } from '../../services/license';
 import type { LoginFailure } from '../../services/license';
@@ -56,7 +57,7 @@ export const ActivatedScreen: React.FC = () => {
     return (
       <Moldura
         titulo={t('license.transfer.title')}
-        icone={<ArrowRightLeft size={44} color="#b45309" />}
+        icone={<ArrowRightLeft size={44} color="var(--color-warn)" />}
       >
         <p style={{ margin: 0, textAlign: 'center', lineHeight: 1.6, opacity: 0.85 }}>
           {t('license.transfer.explain', { limit: limite })}
@@ -75,7 +76,7 @@ export const ActivatedScreen: React.FC = () => {
               border: '1px solid var(--tint-warn-border)',
             }}
           >
-            <Monitor size={22} color="#b45309" aria-hidden="true" style={{ flexShrink: 0 }} />
+            <Monitor size={22} color="var(--tint-warn-text)" aria-hidden="true" style={{ flexShrink: 0 }} />
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <strong style={{ fontWeight: 800 }}>{d.deviceName}</strong>
               <span style={{ fontSize: '0.86rem', opacity: 0.75 }}>
@@ -87,7 +88,7 @@ export const ActivatedScreen: React.FC = () => {
 
         {erro && (
           <div role="alert" style={alertaStyle}>
-            <AlertTriangle size={18} color="#dc2626" aria-hidden="true" style={{ flexShrink: 0 }} />
+            <AlertTriangle size={18} color="var(--color-danger)" aria-hidden="true" style={{ flexShrink: 0 }} />
             <span>{erro}</span>
           </div>
         )}
@@ -124,7 +125,7 @@ export const ActivatedScreen: React.FC = () => {
   return (
     <Moldura
       titulo={t('license.activated.title')}
-      icone={<CheckCircle2 size={48} color="#15803d" />}
+      icone={<CheckCircle2 size={48} color="var(--color-ok)" />}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
         <Linha rotulo={t('license.activated.plan')} valor={plan.name} />
@@ -162,7 +163,7 @@ export const ActivatedScreen: React.FC = () => {
           width: '100%',
         }}
       >
-        <Monitor size={20} color="#15803d" aria-hidden="true" style={{ flexShrink: 0 }} />
+        <Monitor size={20} color="var(--tint-ok-text)" aria-hidden="true" style={{ flexShrink: 0 }} />
         <span
           style={{
             fontSize: '0.95rem',
@@ -219,19 +220,21 @@ const Moldura: React.FC<{ titulo: string; icone: React.ReactNode; children: Reac
     style={{
       minHeight: '100vh',
       background: 'var(--settings-bg)',
+      backgroundImage: 'var(--page-bg)',
       display: 'flex',
+      flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
+      gap: '1.5rem',
       padding: '2rem',
     }}
   >
+    <ProgressoDoOnboarding atual="conta" style={{ maxWidth: 490 }} />
     <div
-      className="glass-card animate-scale-in"
+      className="surface surface--elevated animate-scale-in"
       style={{
-        background: 'var(--color-card-bg)',
         padding: '2.75rem 2.5rem',
-        borderRadius: '2rem',
-        boxShadow: '0 20px 40px -10px rgba(27,84,168,0.12)',
+        borderRadius: 'var(--radius-xl)',
         width: '100%',
         maxWidth: 490,
         display: 'flex',
@@ -243,13 +246,8 @@ const Moldura: React.FC<{ titulo: string; icone: React.ReactNode; children: Reac
       {icone}
       <h1
         id="activated-title"
-        style={{
-          fontSize: '1.75rem',
-          fontWeight: 800,
-          margin: 0,
-          textAlign: 'center',
-          color: 'var(--color-text-base)',
-        }}
+        className="t-h1"
+        style={{ margin: 0, textAlign: 'center', color: 'var(--color-text-base)' }}
       >
         {titulo}
       </h1>

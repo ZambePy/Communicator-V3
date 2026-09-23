@@ -95,6 +95,7 @@
 
 .demo__speak {
   flex: none;
+  min-height: 44px;
   padding: 0.7rem 1.4rem;
   border-radius: var(--r-pill);
   border: 1px solid rgba(0, 166, 147, 0.4);
@@ -246,7 +247,8 @@
 }
 
 .demo__opt {
-  padding: 7px 15px;
+  min-height: 44px;
+  padding: 7px 16px;
   border-radius: var(--r-pill);
   border: 1px solid var(--line);
   background: transparent;

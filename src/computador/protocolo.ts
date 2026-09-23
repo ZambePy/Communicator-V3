@@ -69,7 +69,29 @@ export type AcaoDoSistema =
    * "IrisFlow"/"Socorro" com o mouse de verdade.
    */
   | { tipo: 'capturarMouse'; ligado: boolean }
+  /**
+   * Um dwell foi CONCLUÍDO num alvo desenhado pela própria sobreposição (botão
+   * da barra ou tecla do teclado flutuante). Não é um pedido ao sistema: é o
+   * rótulo de graça que alimenta a correção por dwell (`correcaoPorDwell.ts`)
+   * na janela do app — a pessoa estava olhando para `centro` quando `olhar`
+   * foi medido. `tamanhoPx` é o lado menor do alvo; alvo pequeno não vira
+   * rótulo (a política é do módulo, não daqui).
+   */
+  | { tipo: 'selecao'; centro: Ponto; tamanhoPx: number; olhar: Ponto }
   | { tipo: 'sair'; motivo: MotivoDeSaida };
+
+/**
+ * O que a janela do app recebe quando a sobreposição conclui um dwell num
+ * alvo dela: `centro` e `olhar` já em px CSS da JANELA DO APP (o processo
+ * principal desfaz a conversão que fez no olhar), `tamanhoPx` como veio.
+ */
+export interface SelecaoDaSobreposicao {
+  centro: Ponto;
+  olhar: Ponto;
+  tamanhoPx: number;
+  /** `performance.now()` da sobreposição; só serve para ordenar. */
+  t: number;
+}
 
 export type RespostaDaAcao =
   | { ok: true }
@@ -98,6 +120,8 @@ export const CANAIS = {
   sobreposicaoOlhar: 'irisflow:overlay-gaze',
   sobreposicaoConfig: 'irisflow:overlay-config',
   sobreposicaoAcao: 'irisflow:overlay-action',
+  /** main → app: dwell concluído num alvo da sobreposição (ver `SelecaoDaSobreposicao`). */
+  selecao: 'irisflow:desktop-selection',
 } as const;
 
 const NUMERO = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -146,6 +170,8 @@ export function acaoValida(v: unknown): v is AcaoDoSistema {
       return true;
     case 'capturarMouse':
       return typeof a.ligado === 'boolean';
+    case 'selecao':
+      return PONTO(a.centro) && PONTO(a.olhar) && NUMERO(a.tamanhoPx) && a.tamanhoPx > 0 && a.tamanhoPx <= 4096;
     case 'sair':
       return MOTIVOS.has(String(a.motivo));
     default:

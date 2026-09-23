@@ -118,8 +118,19 @@ export function criarEstado(): EstadoDaCorrecao {
  */
 export type OrigemDaSelecao = 'app' | 'overlay' | 'externo';
 
-/** Menor alvo da sobreposição que vale como rótulo, em px (lado menor). */
-export const ALVO_MINIMO_OVERLAY_PX = 96;
+/**
+ * Menor alvo da sobreposição que vale como rótulo, em px (lado menor).
+ *
+ * 52 é o menor lado que a barra do Modo Computador desenha (`Overlay.tsx`:
+ * `ladoDoBotao` vai de 52 a 72 conforme a altura do monitor). Era 96 — e com
+ * 96 NENHUM alvo da sobreposição passava, o que deixava a correção sem
+ * aprender nada no Modo Computador, exatamente onde o cursor mais importa.
+ * Um botão de 52 px com um dwell de 1 s é ~30 amostras cuja média está a no
+ * máximo ±26 px do centro; como o rótulo entra num integrador de ganho 0,05
+ * com teto de 8 % da tela, esse erro por rótulo se dilui. O que continua
+ * fora é o que sempre esteve: ícone de 32 px do Windows (`externo`).
+ */
+export const ALVO_MINIMO_OVERLAY_PX = 52;
 
 /** Condições de sistema sob as quais um dwell concluído vale como rótulo. */
 export interface ContextoDaSelecao {
@@ -127,7 +138,7 @@ export interface ContextoDaSelecao {
   alvoIsolado: boolean;
   /** Ausente = `app`. */
   origem?: OrigemDaSelecao;
-  /** Lado menor do alvo, em px. Exigido (≥ 96) quando `origem = 'overlay'`. */
+  /** Lado menor do alvo, em px. Exigido (≥ `ALVO_MINIMO_OVERLAY_PX`) quando `origem = 'overlay'`. */
   tamanhoDoAlvoPx?: number;
   /** O rastreamento está degradado: a posição não vale como rótulo. */
   degradado: boolean;
@@ -345,6 +356,37 @@ export function sessaoDoComputador(): boolean {
   return sessaoDoComputadorAtiva;
 }
 
+/**
+ * Correção de deriva pelo CENTRO — o reajuste rápido de 2 s.
+ *
+ * Com a pessoa olhando o centro da tela, a diferença entre o centro e a
+ * mediana da predição (ANTES desta correção) é o viés corrente do sistema,
+ * medido de uma vez e com ~60 quadros — muito mais evidência que uma seleção.
+ * Por isso SUBSTITUI o deslocamento em vez de somar uma fração dele: é a
+ * "drift correction" dos rastreadores de laboratório e o ponto único de
+ * Krowicki et al. (2026, 3,15° → 0,91° com o ajuste contínuo por dwell
+ * mantendo depois). As referências geométricas da calibração NÃO mudam: a
+ * compensação de pose e distância continua medindo contra elas, que é o que
+ * a física pede (ver `referenciaLenta` em `config/experiment.ts`).
+ *
+ * Acima do teto não aplica nada e devolve `false`: um viés desse tamanho não é
+ * deriva — é calibração quebrada ou posição muito diferente, e a resposta
+ * certa é calibrar de novo, não escorregar a tela inteira.
+ */
+export function corrigirDerivaPeloCentro(residuo: Ponto, agoraMs: number): boolean {
+  if (!ligado) return false;
+  if (!Number.isFinite(residuo.x) || !Number.isFinite(residuo.y) || !Number.isFinite(agoraMs)) return false;
+  if (norma(residuo) > TETO_NORMALIZADO) return false;
+  estadoGlobal = {
+    ...estadoGlobal,
+    offset: { x: residuo.x, y: residuo.y },
+    ultimaSelecaoMs: agoraMs,
+    ultimoDecaimentoMs: agoraMs,
+    selecoes: estadoGlobal.selecoes + 1,
+  };
+  return true;
+}
+
 /** Chamado pelo dispatcher quando um dwell elegível conclui. */
 export function aprenderComSelecao(entrada: {
   centroDoAlvo: Ponto;
@@ -359,7 +401,9 @@ export function aprenderComSelecao(entrada: {
   const origem = entrada.origem ?? 'app';
   if (!origemAceita(origem, entrada.tamanhoDoAlvoPx)) return false;
   // No Modo Computador só a sobreposição ensina: a janela do app está oculta
-  // e qualquer seleção "do app" ali é acidente.
+  // e qualquer seleção "do app" ali é acidente. O caminho existe de verdade
+  // desde 22/09: `Overlay.tsx` manda `selecao` ao main, que a devolve à
+  // janela do app em coordenadas dela, e `useModoComputador` chama aqui.
   if (sessaoDoComputadorAtiva && origem !== 'overlay') return false;
   const r = registrarSelecao(estadoGlobal, entrada);
   estadoGlobal = r.estado;

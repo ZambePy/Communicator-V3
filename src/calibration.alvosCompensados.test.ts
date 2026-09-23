@@ -28,7 +28,7 @@ function vetor(x: number, y: number, rnd: () => number) {
 }
 
 describe('treino com alvos compensados por pose', () => {
-  it('agrupa por alvo nominal: 9 grupos e treino rápido, com a cabeça se mexendo', () => {
+  it('agrupa por alvo nominal: um grupo por alvo e treino rápido, com a cabeça se mexendo', () => {
     vi.spyOn(performance, 'now').mockImplementation(() => relogio);
     clearCalibration();
     let semente = 3;
@@ -59,9 +59,12 @@ describe('treino com alvos compensados por pose', () => {
 
     const fit = getCalibrationFitDiagnostics();
     expect(fit).not.toBeNull();
-    // Um grupo por ALVO, não por amostra.
-    expect(fit!.samplesPerTarget).toHaveLength(9);
-    expect(fit!.looByTarget).toHaveLength(9);
+    // Um grupo por ALVO, não por amostra (13 no perfil padrão: a grade 3×3 e
+    // os quatro cantos da tela).
+    const nAlvos = getCalibrationTargets().length;
+    expect(nAlvos).toBe(13);
+    expect(fit!.samplesPerTarget).toHaveLength(nAlvos);
+    expect(fit!.looByTarget).toHaveLength(nAlvos);
     for (const n of fit!.samplesPerTarget) expect(n).toBeGreaterThan(10);
 
     // Teto generoso: o certo roda em ~1 s; o defeito levava ~50 s POR OLHO.

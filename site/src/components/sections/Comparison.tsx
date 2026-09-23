@@ -1,6 +1,38 @@
+import { useEffect, useRef, useState } from 'react'
 import { Reveal } from '@/components/effects/Reveal'
 import { COMPARISON } from '@/data/content'
 import './comparison.css'
+
+/**
+ * Sombras nas bordas da tabela indicando que há mais colunas à direita
+ * (ou à esquerda). Sem elas, no celular a terceira coluna some sem aviso.
+ */
+function useScrollShadows() {
+  const ref = useRef<HTMLDivElement>(null)
+  const [state, setState] = useState({ left: false, right: false })
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const update = () => {
+      const left = el.scrollLeft > 4
+      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+      setState((s) => (s.left === left && s.right === right ? s : { left, right }))
+    }
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null
+    ro?.observe(el)
+    window.addEventListener('resize', update)
+    return () => {
+      el.removeEventListener('scroll', update)
+      ro?.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
+  return { ref, ...state }
+}
 
 const cellClass = (v: string) =>
   v === 'sim' ? 'is-yes' : v === 'não' ? 'is-no' : v === 'parcial' ? 'is-partial' : ''
@@ -41,6 +73,7 @@ function Cell({ value }: { value: string }) {
 }
 
 export function Comparison() {
+  const shadows = useScrollShadows()
   return (
     <section className="section comparison" id="comparativo">
       <div className="container">
@@ -55,7 +88,13 @@ export function Comparison() {
         </Reveal>
 
         <Reveal anim="zoom" delay={160}>
-          <div className="cmp__wrap">
+          <div
+            className={`cmp__wrap${shadows.left ? ' can-left' : ''}${shadows.right ? ' can-right' : ''}`}
+            ref={shadows.ref}
+            tabIndex={0}
+            role="region"
+            aria-label="Tabela comparativa (rola na horizontal)"
+          >
             <table className="cmp">
               <caption className="sr-only">
                 Comparação entre a IrisFlow, sistemas de rastreamento ocular dedicados e aplicativos

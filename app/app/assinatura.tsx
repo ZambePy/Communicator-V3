@@ -1,47 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Button, Card, GradientHeader, PressableScale, Screen, SectionTitle, StatusPill, Text } from '@/components';
+import { Ionicons } from '@expo/vector-icons';
+import { Button, Card, PressableScale, Screen, ScreenHeader, SectionTitle, StatusPill, Text } from '@/components';
 import { useData } from '@/data/DataContext';
 import { BetaRegistration, isBetaPlan } from '@/data/types';
 import { siteRoute } from '@/lib/config';
 import { useApp } from '@/store/AppProvider';
-import { brand, radius, spacing, useTheme } from '@/theme';
+import { radius, shadows, sizes, spacing, useTheme } from '@/theme';
 import { brl, formatDate } from '@/utils/format';
 
 /**
  * Quadro 9 do plano de negócios — planos de assinatura da IrisFlow.
- * Durante a beta fechada (../docs/BETA.md) ficam só como referência: não há
+ * Durante a beta fechada (README da raiz, seção "Conta IrisFlow e nuvem") ficam só como referência: não há
  * gateway de pagamento e `plans.purchasable` é false em todos.
  */
 const PLANS = [
-  { id: 'essencial', name: 'Essencial', price: 249, devices: '1 dispositivo', features: ['Comunicação, Computador, Emergência e Cuidador', 'Calibração guiada e ajustes de fixação', 'Suporte por e-mail e tutoriais'] },
-  { id: 'completo', name: 'Completo', price: 399, devices: 'Até 3 dispositivos', recommended: true, features: ['Tudo do Essencial', 'Assistente de conversação com IA', 'Lazer e Bem-estar (jogos, galeria, notícias, meditação)', 'Relatórios de sessão e histórico para a família', 'Suporte prioritário por mensagem'] },
+  { id: 'essencial', name: 'Essencial', price: 249, devices: '1 computador', features: ['Comunicação, Computador, Emergência e Cuidador', 'Calibração guiada e ajustes de fixação', 'Suporte por e-mail e tutoriais'] },
+  { id: 'completo', name: 'Completo', price: 399, devices: 'Até 3 computadores', recommended: true, features: ['Tudo do Essencial', 'Assistente de conversação com IA', 'Lazer e Bem-estar', 'Relatórios e histórico para a família', 'Suporte prioritário'] },
   {
     id: 'voz',
     name: 'Voz',
     price: 649,
-    devices: 'Até 5 dispositivos',
-    features: [
-      'Tudo do Completo',
-      'Clonagem de voz em fase experimental, a partir de gravações antigas',
-      'O modelo é treinado e executado no computador do paciente — o áudio não sai de lá',
-      'Exige autorização expressa de quem cede a voz, registrada antes do treino',
-      'Perfis múltiplos e backup em nuvem',
-      'Suporte dedicado em até 4 h úteis',
-    ],
-    note: 'Módulo em validação com famílias e profissionais. A contratação abre quando a validação terminar.',
+    devices: 'Até 5 computadores',
+    features: ['Tudo do Completo', 'Clonagem de voz experimental, a partir de gravações antigas', 'Treinada e executada no computador do paciente — o áudio não sai de lá', 'Só com autorização expressa de quem cede a voz', 'Perfis múltiplos e backup em nuvem', 'Suporte dedicado em até 4 h úteis'],
+    note: 'Em validação com famílias e profissionais. A contratação abre quando a validação terminar.',
   },
 ];
 
 /** O que a beta libera (rank 3 em `license_for_profile()`); a voz depende do módulo chegar ao desktop. */
-const BETA_FEATURES: { label: string; pending?: boolean }[] = [
-  { label: 'Comunicação, Computador, Emergência e Cuidador' },
-  { label: 'Relatórios de sessão e histórico para a família' },
-  { label: 'Assistente de conversação' },
-  { label: 'Clonagem de voz', pending: true },
+const BETA_FEATURES: { label: string; icon: keyof typeof Ionicons.glyphMap; pending?: boolean }[] = [
+  { label: 'Comunicação, Emergência e Cuidador', icon: 'chatbubbles-outline' },
+  { label: 'Relatórios e histórico para a família', icon: 'stats-chart-outline' },
+  { label: 'Assistente de conversação', icon: 'sparkles-outline' },
+  { label: 'Clonagem de voz · quando disponível', icon: 'mic-outline', pending: true },
 ];
 
 const INDISPONIVEL = 'Indisponível durante a beta';
@@ -54,7 +47,7 @@ export default function Assinatura() {
   const beta = isBetaPlan(plan, subscription);
   const [registration, setRegistration] = useState<BetaRegistration | null>(null);
 
-  // "Inscrito em <data>" é um detalhe: se a leitura falhar, o card fica sem a linha.
+  // "Inscrito em <data>" é um detalhe: se a leitura falhar, o cartão fica sem a linha.
   useEffect(() => {
     if (!beta) return;
     let mounted = true;
@@ -74,148 +67,141 @@ export default function Assinatura() {
   };
 
   return (
-    <Screen padded={false}>
-      <GradientHeader overlap={50}>
-        <PressableScale onPress={() => router.back()} hitSlop={12} style={{ alignSelf: 'flex-start', marginBottom: spacing.md }}>
-          <Ionicons name="close" size={26} color="#FFF" />
-        </PressableScale>
-        <Text variant="h1" tone="onPrimary">
-          {beta ? 'Programa beta' : 'Assinatura'}
-        </Text>
-        <Text variant="bodySmall" style={{ color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>
-          {beta ? 'Acesso completo, sem cobrança, enquanto a beta durar.' : 'Sem fidelidade, sem hardware. Planos pagos indisponíveis durante a beta.'}
-        </Text>
-      </GradientHeader>
+    <Screen modal>
+      <ScreenHeader onClose={() => router.back()} title={beta ? 'Programa beta' : 'Assinatura'} subtitle={beta ? 'Acesso completo, sem cobrança, enquanto a beta durar.' : 'Sem fidelidade e sem hardware.'} />
 
-      <View style={{ paddingHorizontal: spacing.xl, marginTop: -36, gap: spacing.md }}>
-        {beta && subscription && (
-          <Card index={0} glow="accent">
-            <View style={styles.rowBetween}>
-              <View style={{ flex: 1 }}>
-                <Text variant="h2">Acesso beta ativo</Text>
-                <Text variant="body" tone="muted" style={{ marginTop: 2 }}>
-                  até {formatDate(subscription.next_charge_at)}
-                </Text>
+      {beta && subscription ? (
+        <>
+          <View style={[styles.heroWrap, shadows.glow(colors.accentStrong)]}>
+            <LinearGradient colors={colors.gradientHero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+              <View style={styles.rowBetween}>
+                <Ionicons name="sparkles" size={sizes.icon.lg} color={colors.onDark} />
+                <StatusPill label="Sem cobrança" tone="accent" onDark />
               </View>
-              <StatusPill label="Sem cobrança" tone="accent" />
-            </View>
-            <Text variant="bodySmall" tone="muted" style={{ marginTop: spacing.sm }}>
-              Sem cobrança durante a beta — nada é contratado sem um novo aceite seu.
-            </Text>
-            {registration && (
-              <Text variant="caption" tone="muted" style={{ marginTop: spacing.xs }}>
-                Inscrito em {formatDate(registration.registered_at)}
+              <Text variant="caption" tone="onDarkMuted" style={styles.gapTop}>
+                Acesso beta ativo até
               </Text>
-            )}
+              <Text variant="h1" tone="onDark">
+                {formatDate(subscription.next_charge_at)}
+              </Text>
+              {registration ? (
+                <Text variant="caption" tone="onDarkMuted">
+                  Inscrição em {formatDate(registration.registered_at)}
+                </Text>
+              ) : null}
+              <View style={styles.features}>
+                {BETA_FEATURES.map((f) => (
+                  <View key={f.label} style={styles.featureRow}>
+                    <Ionicons name={f.pending ? 'time-outline' : 'checkmark-circle'} size={sizes.icon.sm} color={f.pending ? colors.onDarkMuted : colors.accent} />
+                    <Text variant="bodySmall" tone={f.pending ? 'onDarkMuted' : 'onDark'} style={styles.flex}>
+                      {f.label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              <Button title="Baixar no computador" variant="light" icon="download-outline" onPress={() => abrir(siteRoute('/beta'))} style={styles.gapTopLg} />
+              <Button title="Minha conta no site" variant="glass" icon="person-circle-outline" onPress={() => abrir(siteRoute('/conta'))} style={styles.gapTopSm} />
+            </LinearGradient>
+          </View>
 
-            <Text variant="label" tone="muted" style={{ marginTop: spacing.lg }}>
-              Liberado na beta
-            </Text>
-            <View style={{ marginTop: spacing.sm, gap: 6 }}>
-              {BETA_FEATURES.map((f) => (
-                <View key={f.label} style={styles.featureRow}>
-                  <Ionicons name={f.pending ? 'time-outline' : 'checkmark-circle'} size={18} color={f.pending ? colors.textMuted : colors.accent} style={{ marginTop: 2 }} />
-                  <Text variant="bodySmall" tone={f.pending ? 'muted' : undefined} style={{ flex: 1 }}>
-                    {f.label}
-                    {f.pending ? ' · quando disponível' : ''}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            <Button title="Baixar o aplicativo no computador" variant="accent" icon="desktop-outline" onPress={() => abrir(siteRoute('/beta'))} style={{ marginTop: spacing.lg }} />
-            <Button title="Minha conta no site" variant="outline" icon="person-circle-outline" onPress={() => abrir(siteRoute('/conta'))} style={{ marginTop: spacing.sm }} />
-
-            <Text variant="caption" tone="muted" style={{ marginTop: spacing.lg }}>
-              Sua opinião guia o que entra antes do lançamento. Encontrou algo estranho ou sentiu falta de alguma coisa?{' '}
-              <Text variant="caption" tone="primary" weight="semibold" onPress={() => abrir(siteRoute('/contato'))}>
+          <PressableScale onPress={() => abrir(siteRoute('/contato'))} accessibilityRole="link" style={[styles.feedback, { backgroundColor: colors.primaryTint }]}>
+            <Ionicons name="chatbubble-ellipses-outline" size={sizes.icon.md} color={colors.primary} />
+            <View style={styles.flex}>
+              <Text variant="bodySmall" weight="semibold" tone="primary">
                 Fale com a gente
               </Text>
-              .
-            </Text>
-          </Card>
-        )}
+              <Text variant="caption" tone="muted">
+                Sua opinião guia o que entra antes do lançamento.
+              </Text>
+            </View>
+            <Ionicons name="open-outline" size={sizes.icon.sm} color={colors.primary} />
+          </PressableScale>
 
-        {beta && <SectionTitle title="Planos após a beta" />}
+          <SectionTitle title="Planos depois da beta" />
+        </>
+      ) : null}
 
+      <View style={styles.plans}>
         {PLANS.map((p, i) => {
           const current = !beta && plan?.id === p.id;
           return (
-            <Card key={p.id} index={i + 1} padding={0} style={current && { borderColor: colors.accent, borderWidth: 2 }}>
-              {p.recommended && (
-                <LinearGradient colors={[brand.teal, brand.tealSoft]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.ribbon}>
-                  <Text variant="caption" weight="bold" style={{ color: '#FFF' }}>
-                    RECOMENDADO
-                  </Text>
-                </LinearGradient>
-              )}
-              <View style={{ padding: spacing.lg }}>
-                <View style={styles.rowBetween}>
-                  <View>
+            <Card key={p.id} index={i} padding={spacing.xl} style={current ? { borderColor: colors.accent, borderWidth: sizes.borderThick } : undefined}>
+              <View style={styles.rowBetween}>
+                <View style={styles.flex}>
+                  <View style={styles.planTitle}>
                     <Text variant="h2">{p.name}</Text>
-                    <Text variant="caption" tone="muted">
-                      {p.devices}
-                    </Text>
+                    {p.recommended ? <StatusPill label="Recomendado" tone="accent" /> : null}
                   </View>
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text variant="h2" tone="primary">
-                      {brl(p.price)}
-                    </Text>
-                    <Text variant="caption" tone="muted">
-                      por mês
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ marginTop: spacing.md, gap: 6 }}>
-                  {p.features.map((f) => (
-                    <View key={f} style={styles.featureRow}>
-                      <Ionicons name="checkmark-circle" size={18} color={colors.accent} style={{ marginTop: 2 }} />
-                      <Text variant="bodySmall" style={{ flex: 1 }}>
-                        {f}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-                {current ? (
-                  <View style={[styles.current, { backgroundColor: colors.accentTint }]}>
-                    <Ionicons name="checkmark" size={16} color={colors.accentDeep} />
-                    <Text variant="bodySmall" weight="semibold" style={{ color: colors.accentDeep }}>
-                      Seu plano atual{subscription?.status === 'avaliacao' ? ' · em avaliação' : ''}
-                    </Text>
-                  </View>
-                ) : beta ? (
-                  // Na beta a grade é só referência: selo, sem botão e sem link de contratação.
-                  <View style={[styles.current, { backgroundColor: colors.surfaceAlt }]}>
-                    <Ionicons name="lock-closed-outline" size={16} color={colors.textMuted} />
-                    <Text variant="bodySmall" weight="semibold" tone="muted">
-                      {INDISPONIVEL}
-                    </Text>
-                  </View>
-                ) : (
-                  // Conta antiga com plano pago: sem gateway, a troca fica desabilitada.
-                  <Button title={p.id === 'voz' ? 'Em validação' : INDISPONIVEL} variant={p.recommended ? 'accent' : 'outline'} disabled style={{ marginTop: spacing.lg }} />
-                )}
-                {p.note && (
-                  <Text variant="caption" tone="muted" style={{ marginTop: spacing.md }}>
-                    {p.note}
+                  <Text variant="caption" tone="muted">
+                    {p.devices}
                   </Text>
-                )}
+                </View>
+                <View style={styles.price}>
+                  <Text variant="h2" tone="primary">
+                    {brl(p.price)}
+                  </Text>
+                  <Text variant="caption" tone="muted">
+                    por mês
+                  </Text>
+                </View>
               </View>
+              <View style={styles.planFeatures}>
+                {p.features.map((f) => (
+                  <View key={f} style={styles.featureRow}>
+                    <Ionicons name="checkmark" size={sizes.icon.sm} color={colors.accentText} />
+                    <Text variant="bodySmall" style={styles.flex}>
+                      {f}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              {current ? (
+                <View style={[styles.tag, { backgroundColor: colors.accentTint }]}>
+                  <Ionicons name="checkmark-circle" size={sizes.icon.sm} color={colors.accentText} />
+                  <Text variant="bodySmall" weight="semibold" tone="accent">
+                    Seu plano atual{subscription?.status === 'avaliacao' ? ' · em avaliação' : ''}
+                  </Text>
+                </View>
+              ) : (
+                // Na beta a grade é só referência: selo, sem botão de contratação.
+                <View style={[styles.tag, { backgroundColor: colors.surfaceAlt }]}>
+                  <Ionicons name="lock-closed-outline" size={sizes.icon.sm} color={colors.textMuted} />
+                  <Text variant="bodySmall" weight="semibold" tone="muted">
+                    {p.id === 'voz' ? 'Em validação' : INDISPONIVEL}
+                  </Text>
+                </View>
+              )}
+              {p.note ? (
+                <Text variant="caption" tone="muted" style={styles.gapTop}>
+                  {p.note}
+                </Text>
+              ) : null}
             </Card>
           );
         })}
-        <Text variant="caption" tone="muted" center style={{ marginTop: spacing.sm }}>
-          A clonagem de voz é experimental: o modelo roda no IrisFlow Communicator, no computador do paciente, e só é treinado com autorização expressa de quem cede a voz. O plano Voz entra em comercialização ao fim dessa validação.
-          {beta ? ' Os planos acima passam a valer só depois da beta, e nada é contratado sem um novo aceite seu.' : ' Durante a beta não há contratação nem troca de plano; sua conta segue como está.'}
-        </Text>
       </View>
+      <Text variant="caption" tone="muted" center style={styles.footnote}>
+        {beta ? 'Os planos passam a valer só depois da beta, e nada é contratado sem um novo aceite seu.' : 'Durante a beta não há contratação nem troca de plano; sua conta segue como está.'}
+      </Text>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  gapTop: { marginTop: spacing.md },
+  gapTopSm: { marginTop: spacing.sm },
+  gapTopLg: { marginTop: spacing.xl },
+  heroWrap: { borderRadius: radius.xl },
+  hero: { borderRadius: radius.xl, padding: spacing.xl, overflow: 'hidden' },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.md },
+  features: { marginTop: spacing.lg, gap: spacing.sm },
   featureRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
-  ribbon: { alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: 4, borderTopLeftRadius: radius.lg, borderBottomRightRadius: radius.md },
-  current: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: spacing.md, borderRadius: radius.md, marginTop: spacing.lg },
+  feedback: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: radius.lg, marginTop: spacing.md, minHeight: sizes.touch },
+  plans: { gap: spacing.md },
+  planTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  price: { alignItems: 'flex-end' },
+  planFeatures: { marginTop: spacing.lg, gap: spacing.sm },
+  tag: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: sizes.touch, borderRadius: radius.md, marginTop: spacing.lg },
+  footnote: { marginTop: spacing.lg },
 });

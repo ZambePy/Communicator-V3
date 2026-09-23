@@ -1,42 +1,42 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { PageHead } from '@/components/layout/PageHead'
 import { Reveal } from '@/components/effects/Reveal'
-import { Field, SelectField } from '@/components/ui/Field'
+import { Field, SelectField, TextareaField } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
 import { Card, CardIcon } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
 import { isEmail } from '@/utils/format'
+import { validar } from '@/utils/validation'
+import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
 import { sendContactMessage } from '@/services/api'
-import { BRAND } from '@/data/content'
+import { BRAND, CONDITIONS_SHORT } from '@/data/content'
+import './contato.css'
 
 type Form = { name: string; email: string; role: string; message: string }
-type Errors = Partial<Record<keyof Form, string>>
+
+const RULES: Rules<Form> = {
+  name: (v) => validar.nome(v, 3),
+  email: validar.email,
+  role: (v) => validar.escolha(v, 'Escolha a opção que melhor descreve você.'),
+  message: (v) => validar.mensagem(v, 15),
+}
 
 export default function Contato() {
   const [form, setForm] = useState<Form>({ name: '', email: '', role: '', message: '' })
-  const [errors, setErrors] = useState<Errors>({})
+  const v = useFormValidation(form, RULES)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [falha, setFalha] = useState<string | null>(null)
 
   const set = (key: keyof Form) => (e: { target: { value: string } }) => {
     setForm((f) => ({ ...f, [key]: e.target.value }))
-    setErrors((prev) => ({ ...prev, [key]: undefined }))
-  }
-
-  const validate = () => {
-    const next: Errors = {}
-    if (form.name.trim().length < 3) next.name = 'Informe seu nome completo.'
-    if (!isEmail(form.email)) next.email = 'Informe um e-mail válido.'
-    if (!form.role) next.role = 'Escolha a opção que melhor descreve você.'
-    if (form.message.trim().length < 15) next.message = 'Conte um pouco mais: pelo menos 15 caracteres.'
-    setErrors(next)
-    return Object.keys(next).length === 0
   }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!validate()) return
+    v.touch('name', 'email', 'role', 'message')
+    if (!v.isValid()) return
     setSending(true)
     setFalha(null)
     try {
@@ -55,36 +55,17 @@ export default function Contato() {
         eyebrow="Contato"
         title="Fale com quem construiu a IrisFlow."
         highlight={['construiu']}
-        lead="Somos três pessoas e respondemos nós mesmos, normalmente em até dois dias úteis. Escreva se você é familiar ou cuidador de alguém com ELA, tetraplegia, sequela de AVC ou paralisia cerebral e quer saber se a pessoa conseguiria usar o IrisFlow; se é fisioterapeuta, terapeuta ocupacional, fonoaudiólogo ou neurologista e quer avaliar o produto para indicar; ou se representa uma clínica ou associação interessada no programa de validação."
+        lead={`Somos três pessoas e respondemos nós mesmos, normalmente em até dois dias úteis. Escreva se você é familiar ou cuidador de alguém com ${CONDITIONS_SHORT} e quer saber se a pessoa conseguiria usar o IrisFlow; se é fisioterapeuta, terapeuta ocupacional, fonoaudiólogo ou neurologista e quer avaliar o produto para indicar; ou se representa uma clínica ou associação interessada no programa de validação.`}
       />
 
       <section className="section">
         <div className="container">
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 0.95fr)',
-              gap: 'var(--sp-7)',
-              alignItems: 'start',
-            }}
-          >
+          <div className="contact__split">
             <Reveal anim="right">
-              <div className="panel" style={{ padding: 'var(--sp-6)' }}>
+              <div className="panel contact__panel">
                 {sent ? (
-                  <div style={{ textAlign: 'center', padding: 'var(--sp-5) 0' }}>
-                    <span
-                      style={{
-                        display: 'grid',
-                        placeItems: 'center',
-                        width: 68,
-                        height: 68,
-                        borderRadius: '50%',
-                        margin: '0 auto var(--sp-4)',
-                        background: 'var(--ok-soft)',
-                        color: 'var(--ok)',
-                        animation: 'pop-check 480ms var(--ease-spring) both',
-                      }}
-                    >
+                  <div className="contact__sent" role="status">
+                    <span className="contact__sent-badge" aria-hidden="true">
                       <svg viewBox="0 0 24 24" width="30" height="30">
                         <path
                           d="M4 12.5 9.5 18 20 6.5"
@@ -96,8 +77,8 @@ export default function Contato() {
                         />
                       </svg>
                     </span>
-                    <h2 style={{ fontSize: '1.5rem' }}>Mensagem recebida</h2>
-                    <p style={{ maxWidth: '46ch', marginInline: 'auto' }}>
+                    <h2 className="contact__h">Mensagem recebida</h2>
+                    <p className="contact__sent-text">
                       Obrigado por escrever. A equipe responde pelo próprio {BRAND.email},
                       normalmente em até dois dias úteis.
                     </p>
@@ -105,6 +86,7 @@ export default function Contato() {
                       variant="secondary"
                       onClick={() => {
                         setForm({ name: '', email: '', role: '', message: '' })
+                        v.reset()
                         setSent(false)
                       }}
                     >
@@ -112,16 +94,16 @@ export default function Contato() {
                     </Button>
                   </div>
                 ) : (
-                  <form onSubmit={submit} noValidate>
-                    <h2 style={{ fontSize: '1.5rem', marginBottom: 'var(--sp-5)' }}>
-                      Envie uma mensagem
-                    </h2>
+                  <form onSubmit={submit} noValidate data-sticky-hide>
+                    <h2 className="contact__h contact__h--form">Envie uma mensagem</h2>
 
                     <Field
                       label="Nome completo"
                       value={form.name}
                       onChange={set('name')}
-                      error={errors.name}
+                      {...v.bind('name')}
+                      required
+                      valid={form.name.trim().length >= 3}
                       autoComplete="name"
                       placeholder="Como devemos chamar você"
                     />
@@ -131,16 +113,22 @@ export default function Contato() {
                       type="email"
                       value={form.email}
                       onChange={set('email')}
-                      error={errors.email}
+                      {...v.bind('email')}
+                      inputMode="email"
+                      required
+                      valid={isEmail(form.email)}
                       autoComplete="email"
                       placeholder="voce@exemplo.com.br"
+                      hint="Respondemos por este endereço."
                     />
 
                     <SelectField
                       label="Você é"
                       value={form.role}
                       onChange={set('role')}
-                      error={errors.role}
+                      {...v.bind('role')}
+                      valid={!!form.role}
+                      required
                     >
                       <option value="">Selecione…</option>
                       <option value="familiar">Familiar ou cuidador</option>
@@ -151,41 +139,49 @@ export default function Contato() {
                       <option value="outro">Outro</option>
                     </SelectField>
 
-                    <div className="field">
-                      <label className="field__label" htmlFor="msg">
-                        Mensagem
-                      </label>
-                      <textarea
-                        id="msg"
-                        className="field__input"
-                        rows={5}
-                        value={form.message}
-                        onChange={set('message')}
-                        placeholder="Quem vai usar, qual é a condição e há quanto tempo, se a pessoa ainda controla bem os olhos, que computador e webcam vocês têm, e o que já tentaram."
-                        style={{ resize: 'vertical', fontFamily: 'inherit' }}
-                      />
-                      {errors.message && (
-                        <p className="field__error" role="alert">
-                          {errors.message}
-                        </p>
-                      )}
-                    </div>
+                    <TextareaField
+                      label="Mensagem"
+                      rows={5}
+                      value={form.message}
+                      onChange={set('message')}
+                      {...v.bind('message')}
+                      required
+                      valid={form.message.trim().length >= 15}
+                      hint="Ajuda contar: quem vai usar, qual é a condição e há quanto tempo, se a pessoa ainda controla bem os olhos, que computador e webcam vocês têm, e o que já tentaram."
+                    />
 
                     {falha && (
-                      <p className="field__error" role="alert" style={{ marginBottom: 'var(--sp-4)' }}>
+                      <p className="field__error contact__fail" role="alert">
                         {falha}
                       </p>
                     )}
 
-                    <Button type="submit" full size="lg" loading={sending}>
+                    <p className="contact__consent">
+                      Usamos estes dados só para responder você. Veja a{' '}
+                      <Link to="/privacidade" className="link-ok">
+                        política de privacidade
+                      </Link>
+                      .
+                    </p>
+
+                    <Button
+                      type="submit"
+                      full
+                      size="lg"
+                      loading={sending}
+                      disabled={!v.isValid() || sending}
+                    >
                       {sending ? 'Enviando…' : 'Enviar mensagem'}
                     </Button>
+                    {!v.isValid() && (
+                      <p className="form-hint">Preencha os quatro campos para enviar.</p>
+                    )}
                   </form>
                 )}
               </div>
             </Reveal>
 
-            <div style={{ display: 'grid', gap: 'var(--sp-4)' }}>
+            <div className="stack">
               {/* O rodapé e a seção de planos linkam /contato#validacao. O id
                   fica no invólucro, e não no <h3>, para que a âncora pare no
                   começo do cartão inteiro. O recuo sob o cabeçalho fixo vem da
@@ -226,17 +222,17 @@ export default function Contato() {
                   <h3>Canais diretos</h3>
                   <p>
                     E-mail:{' '}
-                    <a href={`mailto:${BRAND.email}`} style={{ color: 'var(--ok)' }}>
+                    <a href={`mailto:${BRAND.email}`} className="link-ok">
                       {BRAND.email}
                     </a>
                   </p>
                   <p>
                     Redes:{' '}
-                    <a href={BRAND.instagram} target="_blank" rel="noreferrer noopener" style={{ color: 'var(--ok)' }}>
+                    <a href={BRAND.instagram} target="_blank" rel="noreferrer noopener" className="link-ok">
                       Instagram
                     </a>{' '}
                     ·{' '}
-                    <a href={BRAND.linkedin} target="_blank" rel="noreferrer noopener" style={{ color: 'var(--ok)' }}>
+                    <a href={BRAND.linkedin} target="_blank" rel="noreferrer noopener" className="link-ok">
                       LinkedIn
                     </a>
                   </p>

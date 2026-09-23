@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
+  "homepage": "https://irisflow.pages.dev",
   "desktopName": "irisflow-communicator.desktop",
   "engines": {
     "node": ">=22.12.0"
@@ -20,7 +21,8 @@
     "electron:build": "npm run build && node electron/build.mjs && node electron/package-app.mjs",
     "electron:build:win": "npm run build && node electron/build.mjs && node electron/package-app.mjs --win",
     "electron:build:mac": "npm run build && node electron/build.mjs && node electron/package-app.mjs --mac",
-    "electron:build:linux": "npm run build && node electron/build.mjs && node electron/package-app.mjs --linux"
+    "electron:build:linux": "npm run build && node electron/build.mjs && node electron/package-app.mjs --linux",
+    "verificar": "node scripts/verificar-tudo.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -41,23 +43,51 @@
   "build": {
     "appId": "com.irisflow.app",
     "productName": "IrisFlow Communicator",
+    "copyright": "Copyright © IrisFlow",
     "directories": {
       "app": ".",
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "frontend/dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "!frontend/dist/**/*.ai",
+      "!frontend/dist/l2cs_capture.html",
+      "!frontend/dist/ort/ort.mjs",
+      "!frontend/dist/ort/ort.{all,jspi,wasm,webgpu,webgl}.mjs",
+      "!frontend/dist/ort/ort.{webgl,node}.min.mjs",
+      "!node_modules/@mediapipe/**",
+      "!node_modules/koffi/{src,vendor,doc}/**",
+      "!node_modules/**/*.{md,markdown,map,ts,flow}",
+      "!**/*.map"
     ],
+    "asar": true,
     "asarUnpack": [
       "frontend/dist/mediapipe/**",
       "node_modules/koffi/**"
+    ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "onlyLoadAppFromAsar": true
+    },
+    "detectUpdateChannel": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ZambePy",
+        "repo": "Blinkv1",
+        "releaseType": "release"
+      }
     ],
     "win": {
       "target": "nsis",
       "icon": "build/icon.ico"
     },
     "nsis": {
+      "artifactName": "IrisFlow-Setup.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
@@ -80,15 +110,34 @@
           ]
         }
       ],
+      "artifactName": "IrisFlow-mac-${arch}.${ext}",
       "icon": "build/icon.png",
       "category": "public.app-category.medical",
       "darkModeSupport": true,
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
         "NSCameraUsageDescription": "O IrisFlow usa a câmera para rastrear o olhar e permitir a comunicação.",
         "NSMicrophoneUsageDescription": "O IrisFlow usa o microfone apenas para gravar a voz de referência da voz personalizada, a pedido do cuidador."
       }
+    },
+    "dmg": {
+      "artifactName": "IrisFlow-mac-${arch}.${ext}",
+      "title": "IrisFlow Communicator",
+      "contents": [
+        {
+          "x": 140,
+          "y": 200
+        },
+        {
+          "x": 400,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "linux": {
       "target": [
@@ -125,22 +174,11 @@
         }
       }
     },
-    "dmg": {
-      "title": "IrisFlow Communicator",
-      "contents": [
-        {
-          "x": 140,
-          "y": 200
-        },
-        {
-          "x": 400,
-          "y": 200,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ]
+    "appImage": {
+      "artifactName": "IrisFlow-linux-x86_64.${ext}"
     },
     "deb": {
+      "artifactName": "IrisFlow-linux-amd64.${ext}",
       "depends": [
         "libgtk-3-0",
         "libnotify4",
@@ -151,10 +189,13 @@
         "libatspi2.0-0",
         "libuuid1",
         "libsecret-1-0"
+      ],
+      "recommends": [
+        "xdotool"
       ]
     },
-    "appImage": {
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    "rpm": {
+      "artifactName": "IrisFlow-linux-x86_64.${ext}"
     }
   }
 }

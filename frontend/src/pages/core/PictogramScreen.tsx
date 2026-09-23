@@ -37,7 +37,12 @@ export const PictogramScreen: React.FC = () => {
   const totalPages = Math.ceil(PICTOGRAMS.length / itemsPerPage);
 
   return (
-    <GazePageLayout showBack={true} backRoute="/menu">
+    <GazePageLayout
+      showBack={true}
+      backRoute="/menu"
+      titulo="Pictogramas"
+      subtitulo={`Página ${currentPage + 1} de ${totalPages} · Olhe para selecionar e falar`}
+    >
       <div
         style={{
           display: 'flex',
@@ -45,52 +50,53 @@ export const PictogramScreen: React.FC = () => {
           height: '100%',
           width: '100%',
           boxSizing: 'border-box',
-          gap: '1.5rem',
+          gap: 'var(--space-4)',
         }}
       >
         <DicaContextual id="pictogramas" />
-        <div style={{ textAlign: 'center' }}>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--color-text-base)', margin: '0 0 0.5rem 0' }}>
-            Pictogramas (CAA)
-          </h1>
-          <p style={{ fontSize: '1.2rem', color: 'var(--color-text-base)', opacity: 0.7, margin: 0, fontWeight: 500 }}>
-            Página {currentPage + 1} de {totalPages} — Olhe para selecionar e falar
-          </p>
-        </div>
 
-        {/* Caixa de status do texto selecionado */}
+        {/* Última fala: o que acabou de ser dito, com "Falar de novo". */}
         <div
+          className="surface"
+          data-no-dwell="true"
           style={{
-            background: 'var(--color-card-bg)',
-            borderRadius: '1.5rem',
-            padding: '1.25rem 2rem',
-            fontSize: '2rem',
-            fontWeight: 700,
-            color: '#1B54A8',
-            border: '2px solid var(--color-card-border)',
-            minHeight: '80px',
-            boxSizing: 'border-box',
+            padding: '0.75rem 0.75rem 0.75rem 1.5rem',
+            minHeight: 96,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            gap: 'var(--space-4)',
           }}
         >
-          <span>{selectedText || 'Selecione um pictograma...'}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', minWidth: 0 }}>
+            <span className="t-overline">{selectedText ? 'Última fala' : 'Nada dito ainda'}</span>
+            <span
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '1.6rem',
+                fontWeight: 800,
+                letterSpacing: '-0.015em',
+                color: selectedText ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {selectedText || 'Selecione um pictograma...'}
+            </span>
+          </div>
           {selectedText && (
             <GazeButton
               onClick={() => handleSpeak(selectedText)}
-              style={{
-                padding: '0.5rem 1.5rem',
-                height: '56px',
-                borderRadius: '1rem',
-                background: '#1B54A8',
-                color: 'white',
-                border: 'none',
-              }}
+              variante="primaria"
+              width={230}
+              height={96}
+              noWarn
+              style={{ borderRadius: 'var(--radius-md)' }}
+              aria-label={`Falar de novo: ${selectedText}`}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem', fontWeight: 700 }}>
-                <Play size={20} fill="white" /> Falar
-              </div>
+              <Play size={22} fill="currentColor" aria-hidden="true" />
+              <span style={{ fontSize: '1.2rem', fontWeight: 800 }}>Falar de novo</span>
             </GazeButton>
           )}
         </div>
@@ -104,9 +110,8 @@ export const PictogramScreen: React.FC = () => {
                 onClick={() => handleSpeak(pic.label)}
                 style={{
                   height: '100%',
-                  borderRadius: '2rem',
-                  background: 'var(--color-card-bg)',
-                  border: `3px solid ${pic.color}40`,
+                  borderRadius: 'var(--radius-xl)',
+                  border: `2px solid ${pic.color}55`,
                 }}
               >
                 <div 
@@ -132,9 +137,18 @@ export const PictogramScreen: React.FC = () => {
                       justifyContent: 'center',
                     }}
                   >
-                    <pic.Icon size={64} />
+                    <pic.Icon size={60} aria-hidden="true" />
                   </div>
-                  <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--color-text-base)' }}>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 'clamp(1.25rem, 2vh, 1.55rem)',
+                      fontWeight: 800,
+                      letterSpacing: '-0.015em',
+                      lineHeight: 1.2,
+                      color: 'var(--color-text-base)',
+                    }}
+                  >
                     {pic.label}
                   </span>
                 </div>
@@ -147,17 +161,19 @@ export const PictogramScreen: React.FC = () => {
                 onClick={() => setCurrentPage(1)}
                 style={{
                   height: '100%',
-                  borderRadius: '2rem',
-                  border: '2px solid rgba(27, 84, 168, 0.3)',
-                  background: 'rgba(27, 84, 168, 0.05)',
+                  borderRadius: 'var(--radius-xl)',
+                  border: '2px dashed var(--state-hover-border)',
+                  background: 'var(--state-active-bg)',
+                  color: 'var(--color-primary)',
                 }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%' }}>
-                  <div style={{ color: '#1B54A8', marginBottom: '0.75rem' }}>
-                    <ChevronRight size={56} />
-                  </div>
-                  <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#1B54A8' }}>
-                    Mais Opções
+                  <ChevronRight size={56} aria-hidden="true" style={{ marginBottom: '0.5rem' }} />
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.015em' }}>
+                    Mais opções
+                  </span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 600, opacity: 0.8, marginTop: '0.25rem' }}>
+                    página 2 de {totalPages}
                   </span>
                 </div>
               </GazeButton>
@@ -166,31 +182,29 @@ export const PictogramScreen: React.FC = () => {
                 onClick={() => setCurrentPage(0)}
                 style={{
                   height: '100%',
-                  borderRadius: '2rem',
-                  border: '2px solid rgba(27, 84, 168, 0.3)',
-                  background: 'rgba(27, 84, 168, 0.05)',
+                  borderRadius: 'var(--radius-xl)',
+                  border: '2px dashed var(--state-hover-border)',
+                  background: 'var(--state-active-bg)',
+                  color: 'var(--color-primary)',
                 }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%' }}>
-                  <div style={{ color: '#1B54A8', marginBottom: '0.75rem' }}>
-                    <ChevronLeft size={56} />
-                  </div>
-                  <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#1B54A8' }}>
-                    Voltar Página
+                  <ChevronLeft size={56} aria-hidden="true" style={{ marginBottom: '0.5rem' }} />
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.015em' }}>
+                    Primeira página
+                  </span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 600, opacity: 0.8, marginTop: '0.25rem' }}>
+                    página 1 de {totalPages}
                   </span>
                 </div>
               </GazeButton>
             )}
 
-            {/* Placeholders desabilitados na página 1 */}
+            {/* Células vazias na última página: ocupam a grade sem oferecer alvo. */}
             {currentPage === 1 && (
               <>
-                <GazeButton disabled style={{ height: '100%', borderRadius: '2rem', opacity: 0.2 }}>
-                  <span style={{ color: 'rgba(255,255,255,0.1)' }}>-</span>
-                </GazeButton>
-                <GazeButton disabled style={{ height: '100%', borderRadius: '2rem', opacity: 0.2 }}>
-                  <span style={{ color: 'rgba(255,255,255,0.1)' }}>-</span>
-                </GazeButton>
+                <div aria-hidden="true" style={{ borderRadius: 'var(--radius-xl)', border: '2px dashed var(--color-card-border)', opacity: 0.5 }} />
+                <div aria-hidden="true" style={{ borderRadius: 'var(--radius-xl)', border: '2px dashed var(--color-card-border)', opacity: 0.5 }} />
               </>
             )}
           </GazeGrid>

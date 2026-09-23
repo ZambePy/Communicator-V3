@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import type { AcaoDoSistema, AmostraDeOlhar, ConfiguracaoDoModo, RespostaDaAcao } from '@tracker/computador/protocolo';
 import { Overlay } from './Overlay';
+import { instalarRelogioDeQuadros, type RelogioDeQuadros } from '../test/quadros';
 
 /**
  * Sobreposição de ponta a ponta com uma ponte falsa: config → barra; dwell
@@ -113,5 +114,75 @@ describe('Overlay', () => {
       act(() => onOlhar?.({ x: 1880, y: 900, t, hasFace: true, eyeState: 'open', degraded: true, uncalibrated: false }));
     }
     expect(acoes.at(-1)).toEqual({ tipo: 'sair', motivo: 'emergencia' });
+  });
+});
+
+describe('Overlay — rótulo da correção por dwell e laço de pintura', () => {
+  let relogio: RelogioDeQuadros;
+  let sob: Element | null = null;
+  beforeEach(() => {
+    acoes.length = 0;
+    sob = null;
+    document.elementFromPoint = () => sob;
+    relogio = instalarRelogioDeQuadros();
+  });
+  afterEach(() => {
+    relogio.restaurar();
+  });
+
+  /** O jsdom não faz layout: diz qual é o retângulo do botão. */
+  function comRetangulo(el: Element, x: number, y: number, lado: number): void {
+    (el as HTMLElement).getBoundingClientRect = () =>
+      ({ left: x, top: y, right: x + lado, bottom: y + lado, width: lado, height: lado, x, y, toJSON: () => ({}) }) as DOMRect;
+  }
+
+  it('um dwell concluído num botão da barra manda `selecao` com o centro e o olhar', () => {
+    render(<Overlay />);
+    act(() => onConfig?.(CONFIG));
+    const botao = document.querySelector('[data-alvo="botao:clique"]')!;
+    comRetangulo(botao, 1840, 200, 72);
+    sob = botao;
+    let t = relogio.agoraMs();
+    for (let i = 0; i < 12; i++) {
+      t += 100;
+      act(() => onOlhar?.({ x: 1876, y: 236, t, hasFace: true, eyeState: 'open', degraded: false, uncalibrated: false }));
+    }
+    const sel = acoes.find((a) => a.tipo === 'selecao');
+    expect(sel).toMatchObject({ tipo: 'selecao', centro: { x: 1876, y: 236 }, tamanhoPx: 72, olhar: { x: 1876, y: 236 } });
+  });
+
+  it('amostra degradada conclui o dwell de emergência mas NÃO vira rótulo', () => {
+    render(<Overlay />);
+    act(() => onConfig?.(CONFIG));
+    const socorro = document.querySelector('[data-alvo="botao:emergencia"]')!;
+    comRetangulo(socorro, 1840, 900, 72);
+    sob = socorro;
+    let t = relogio.agoraMs();
+    for (let i = 0; i < 24; i++) {
+      t += 100;
+      act(() => onOlhar?.({ x: 1876, y: 936, t, hasFace: true, eyeState: 'open', degraded: true, uncalibrated: false }));
+    }
+    expect(acoes.at(-1)).toEqual({ tipo: 'sair', motivo: 'emergencia' });
+    expect(acoes.some((a) => a.tipo === 'selecao')).toBe(false);
+  });
+
+  it('a posição do cursor é escrita pelo laço de pintura, e a fonte seca deixa o cursor translúcido', () => {
+    render(<Overlay />);
+    act(() => onConfig?.(CONFIG));
+    const cursor = document.querySelector<HTMLElement>('[data-testid="cursor-da-sobreposicao"], .overlay-cursor');
+    // O elemento do cursor é o primeiro div absoluto com o tamanho do cursor.
+    const alvo = cursor ?? Array.from(document.querySelectorAll<HTMLElement>('div')).find((d) => d.style.width === `${CONFIG.tamanhoCursorPx}px`)!;
+    expect(alvo).toBeTruthy();
+
+    act(() => onOlhar?.({ x: 500, y: 300, t: 1, hasFace: true, eyeState: 'open', degraded: false, uncalibrated: false }));
+    // Sem quadro de display, nada foi escrito ainda.
+    expect(alvo.style.transform).not.toContain('500');
+    relogio.quadros(3);
+    expect(alvo.style.transform).toContain('translate3d(');
+    expect(alvo.style.opacity).toBe('1');
+
+    // 400 ms sem amostra nova: congela E fica translúcido.
+    relogio.quadros(26);
+    expect(alvo.style.opacity).toBe('0.35');
   });
 });

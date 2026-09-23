@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
+import i18n from '../../i18n';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
@@ -28,6 +29,11 @@ function perdidosNoPlacar(): number {
   const m = /perdidos: (\d+)\./.exec(status.getAttribute('aria-label') ?? '');
   return m ? Number(m[1]) : NaN;
 }
+
+// Os rótulos vêm do i18n: sem idioma carregado, `t()` devolveria a chave.
+beforeAll(async () => {
+  await i18n.changeLanguage('pt-BR');
+});
 
 describe('FollowTarget — Siga o Alvo', () => {
   beforeEach(() => {
@@ -104,11 +110,11 @@ describe('FollowTarget — Siga o Alvo', () => {
     expect(screen.getByText('1.0 s')).toBeInTheDocument();
     expect(screen.getByLabelText('Jogar novamente')).toBeInTheDocument();
     // Saída para o menu continua disponível na tela de fim.
-    expect(screen.getAllByLabelText('Voltar para Ajuda e Lazer').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Voltar para Lazer e bem-estar').length).toBeGreaterThan(0);
   });
 
   it('mantém uma saída para o menu visível durante o jogo', () => {
     renderizar();
-    expect(screen.getByLabelText('Voltar para Ajuda e Lazer')).toBeInTheDocument();
+    expect(screen.getByLabelText('Voltar para Lazer e bem-estar')).toBeInTheDocument();
   });
 });

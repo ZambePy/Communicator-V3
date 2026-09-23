@@ -1,4 +1,19 @@
-# SPA com BrowserRouter: qualquer rota profunda (/planos, /contato, /conta…)
-# precisa devolver o index.html com status 200, senão o host responde 404
-# antes do JavaScript entrar. Arquivos existentes em dist/ têm precedência.
-/*  /index.html  200
+# Cloudflare Pages — redirecionamentos: nenhum, de propósito.
+#
+# O site é uma SPA (BrowserRouter): uma rota profunda (/planos, /contato,
+# /conta…) precisa devolver o index.html com status 200, senão o host responde
+# 404 antes do JavaScript entrar. No Cloudflare Pages isso NÃO vem deste
+# arquivo: sem um 404.html na raiz do build, o Pages trata o projeto como SPA e
+# serve o index.html para todo caminho que não é arquivo (documentação do
+# Pages, "Serving Pages" → single-page application). Arquivos que existem em
+# dist/ (assets, sitemap.xml, robots.txt, og-image.png…) têm precedência, e o
+# que não existe cai na rota coringa do React (a página 404 do site).
+#
+# A regra `/* /index.html 200` que ficava aqui não fazia nada no Pages: o
+# deploy a descartava com o aviso "Infinite loop detected in this rule and has
+# been ignored". E no Workers com static assets ela faz o deploy FALHAR — lá o
+# equivalente é `not_found_handling: "single-page-application"` no wrangler.
+# (Outro host, como o Netlify, exigiria a regra de volta.)
+#
+# Para o comportamento continuar: NÃO crie public/404.html. O build atual
+# (`npm run build` em site/) não gera nenhum.

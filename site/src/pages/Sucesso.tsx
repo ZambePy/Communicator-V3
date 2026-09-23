@@ -1,15 +1,13 @@
-import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Card, CardIcon } from '@/components/ui/Card'
-import { DownloadButton } from '@/components/ui/DownloadButton'
+import { DownloadPanel } from '@/components/ui/DownloadPanel'
 import { SessionLoading } from '@/components/ui/Skeleton'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { CompatCheck } from '@/components/sections/CompatCheck'
 import { useAccount } from '@/context/AccountContext'
 import { brl, daysUntil, formatDate } from '@/utils/format'
-import { useDownloads } from '@/hooks/useDownloads'
 import { BRAND, TRIAL_DAYS } from '@/data/content'
 import './checkout.css'
 import './sucesso.css'
@@ -33,21 +31,12 @@ export const NEXT_STEPS: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'alvo',
     title: 'Calibre e experimente',
-    text: 'Nove pontos, menos de trinta segundos. Depois disso, comece pelo teclado e pelas frases rápidas, que são os módulos mais usados no primeiro dia.',
+    text: 'Cerca de meio minuto olhando para alguns pontos na tela. Depois disso, comece pelo teclado e pelas frases rápidas, que são os módulos mais usados no primeiro dia.',
   },
 ]
 
 export default function Sucesso() {
   const { account, authenticated, loading } = useAccount()
-  const downloads = useDownloads()
-  const [ready, setReady] = useState(false)
-
-  // Pequena espera para que a animação de confirmação seja percebida.
-  useEffect(() => {
-    const t = window.setTimeout(() => setReady(true), 450)
-    return () => window.clearTimeout(t)
-  }, [])
-
   if (loading) return <SessionLoading />
   if (!account) return <Navigate to={authenticated ? '/cadastro' : '/entrar'} replace />
 
@@ -122,21 +111,7 @@ export default function Sucesso() {
         <Reveal anim="up" delay={460}>
           <div className="download">
             <h2 className="download__title">Baixe o {BRAND.product}</h2>
-            <p className="download__note">
-              Os links vêm da tabela <code>app_releases</code>. Enquanto não houver uma versão
-              publicada lá, os botões ficam desabilitados.
-            </p>
-            <div className="download__buttons">
-              <DownloadButton href={downloads.windows} variant="teal" ready={ready}>
-                Windows
-              </DownloadButton>
-              <DownloadButton href={downloads.macos} variant="secondary" ready={ready}>
-                macOS
-              </DownloadButton>
-              <DownloadButton href={downloads.linux} variant="secondary" ready={ready}>
-                Linux
-              </DownloadButton>
-            </div>
+            <DownloadPanel />
           </div>
         </Reveal>
 

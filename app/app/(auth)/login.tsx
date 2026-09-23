@@ -1,28 +1,36 @@
-import React, { useState } from 'react';
-import { KeyboardAvoidingView, Linking, Platform, StyleSheet, TextInput, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { KeyboardAvoidingView, Linking, StyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Button, Card, GradientHeader, IrisLogo, PressableScale, Screen, Text } from '@/components';
-import { siteRoute } from '@/lib/config';
+import { Button, IconButton, IrisLogo, Notice, PressableScale, Screen, Text, TextField } from '@/components';
+import { CONTA_DE_TESTE, legalLinks, siteRoute } from '@/lib/config';
+import { haptics } from '@/lib/haptics';
 import { useApp } from '@/store/AppProvider';
-import { fonts, radius, spacing, useTheme } from '@/theme';
+import { sizes, spacing, useTheme } from '@/theme';
+import { mensagemDeErro } from '@/utils/errors';
+
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Login() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { signIn, requestPasswordReset, isDemo, error: appError } = useApp();
-  const [email, setEmail] = useState(isDemo ? 'mariana@exemplo.com' : '');
-  const [password, setPassword] = useState(isDemo ? 'demo' : '');
+  const { signIn, requestPasswordReset, error: appError } = useApp();
+  // Em desenvolvimento (Expo Go / dev client) os campos já vêm com a conta de
+  // teste real da beta; em build de produção, vazios. Sem aviso nem botão extra.
+  const [email, setEmail] = useState<string>(__DEV__ ? CONTA_DE_TESTE.email : '');
+  const [password, setPassword] = useState<string>(__DEV__ ? CONTA_DE_TESTE.senha : '');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Fluxo "Esqueci minha senha": `enviando` bloqueia o toque duplo; `enviado` mostra a mensagem neutra. */
   const [reset, setReset] = useState<'ocioso' | 'enviando' | 'enviado'>('ocioso');
+  const senhaRef = useRef<TextInput>(null);
 
   const submit = async () => {
-    if (!email || !password) {
-      setError('Informe e-mail e senha.');
+    if (loading) return;
+    if (!email.trim() || !password) {
+      haptics.aviso();
+      setError('Preencha o e-mail e a senha para entrar.');
       return;
     }
     setLoading(true);
@@ -30,7 +38,8 @@ export default function Login() {
     try {
       await signIn(email, password);
     } catch (e) {
-      setError((e as Error).message);
+      haptics.erro();
+      setError(mensagemDeErro(e, 'Não foi possível entrar agora. Tente de novo em instantes.'));
     } finally {
       setLoading(false);
     }
@@ -45,123 +54,111 @@ export default function Login() {
   const esqueci = async () => {
     if (reset === 'enviando') return;
     const alvo = email.trim();
-    if (!alvo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alvo)) {
-      setError('Digite seu e-mail no campo acima para receber o link de redefinição.');
+    if (!alvo || !EMAIL_VALIDO.test(alvo)) {
+      haptics.aviso();
+      setError('Digite seu e-mail acima para receber o link de nova senha.');
       return;
     }
     setError(null);
     setReset('enviando');
     try {
       await requestPasswordReset(alvo);
+      haptics.sucesso();
       setReset('enviado');
     } catch (e) {
       setReset('ocioso');
-      setError((e as Error).message);
+      setError(mensagemDeErro(e, 'Não foi possível enviar o link agora. Tente de novo em instantes.'));
     }
   };
 
-  const input = [styles.input, { backgroundColor: colors.surfaceAlt, color: colors.text, borderColor: colors.border }];
-
   // O erro local (desta tentativa de login) tem prioridade; na falta dele
   // mostramos o que o AppProvider guardou — por exemplo a falha ao ler a
-  // sessão do SecureStore, que é o motivo de o app ter caído aqui.
-  const aviso = error ?? appError;
+  // sessão guardada, que é o motivo de o app ter caído aqui.
+  const aviso = error ?? (appError ? mensagemDeErro(appError, 'Entre de novo para continuar.') : null);
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen padded={false} keyboardShouldPersistTaps="handled">
-        <GradientHeader overlap={60}>
-          <PressableScale onPress={() => router.back()} hitSlop={12} style={{ alignSelf: 'flex-start' }}>
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </PressableScale>
-          <View style={{ alignItems: 'center', marginTop: spacing.lg }}>
-            <IrisLogo size={80} onDark />
-            <Text variant="h1" tone="onPrimary" style={{ marginTop: spacing.md }}>
-              Bem-vindo de volta
+    <KeyboardAvoidingView style={styles.flex} behavior="padding">
+      <Screen>
+        <View style={styles.nav}>
+          <IconButton icon="arrow-back" accessibilityLabel="Voltar" onPress={() => router.back()} variant="tinted" />
+        </View>
+
+        <View style={styles.hero}>
+          <IrisLogo size={sizes.logo.md} spinning={false} />
+          <Text variant="h1" accessibilityRole="header" style={styles.title}>
+            Que bom ter você aqui
+          </Text>
+          <Text variant="body" tone="muted">
+            Entre com a sua conta IrisFlow.
+          </Text>
+        </View>
+
+        <View style={styles.form}>
+          <TextField
+            label="E-mail"
+            icon="mail-outline"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="seu@email.com"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            autoComplete="email"
+            textContentType="emailAddress"
+            returnKeyType="next"
+            onSubmitEditing={() => senhaRef.current?.focus()}
+            submitBehavior="submit"
+          />
+          <TextField
+            ref={senhaRef}
+            label="Senha"
+            icon="lock-closed-outline"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Sua senha"
+            secureTextEntry={!show}
+            autoComplete="password"
+            textContentType="password"
+            returnKeyType="go"
+            onSubmitEditing={() => void submit()}
+            right={<IconButton icon={show ? 'eye-off-outline' : 'eye-outline'} accessibilityLabel={show ? 'Ocultar senha' : 'Mostrar senha'} onPress={() => setShow((s) => !s)} />}
+          />
+
+          {aviso ? <Notice tone="danger" text={aviso} testID="login-erro" /> : null}
+          {reset === 'enviado' ? (
+            <Notice tone="success" icon="mail-unread-outline" title="Link enviado" text="Se houver uma conta com este e-mail, o link chega em instantes. Ele abre no navegador: crie a nova senha lá e volte para entrar." />
+          ) : null}
+
+          <Button title="Entrar" size="lg" loading={loading} onPress={() => void submit()} style={styles.cta} />
+          <Button
+            title={reset === 'enviando' ? 'Enviando o link…' : reset === 'enviado' ? 'Enviar o link de novo' : 'Esqueci minha senha'}
+            variant="ghost"
+            disabled={reset === 'enviando'}
+            onPress={() => void esqueci()}
+          />
+        </View>
+
+        <View style={styles.footer}>
+          <PressableScale onPress={() => void Linking.openURL(siteRoute('/beta')).catch(() => undefined)} accessibilityRole="link" style={styles.link}>
+            <Text variant="bodySmall" tone="muted" center>
+              Ainda não tem conta?{' '}
+              <Text variant="bodySmall" tone="primary" weight="semibold">
+                Inscreva-se na beta
+              </Text>
             </Text>
-            <Text variant="bodySmall" style={{ color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>
-              Entre com a conta criada no site da IrisFlow (a mesma da beta)
+          </PressableScale>
+          <View style={styles.privacy}>
+            <Ionicons name="shield-checkmark-outline" size={sizes.icon.sm} color={colors.accentText} />
+            <Text variant="caption" tone="muted" style={styles.flexShrink}>
+              Imagens da câmera nunca saem do computador do paciente.
             </Text>
           </View>
-        </GradientHeader>
-
-        <View style={{ paddingHorizontal: spacing.xl, marginTop: -50 }}>
-          <Card index={0} padding={spacing.xl}>
-            <Text variant="label" tone="muted">
-              E-mail
+          {/* Política acessível ANTES do login também (as lojas conferem). */}
+          <PressableScale onPress={() => void Linking.openURL(legalLinks.privacy).catch(() => undefined)} accessibilityRole="link" style={styles.link}>
+            <Text variant="caption" tone="primary" weight="semibold" center>
+              Política de privacidade
             </Text>
-            <TextInput
-              style={input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="voce@exemplo.com"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoComplete="email"
-              textContentType="emailAddress"
-            />
-            <Text variant="label" tone="muted" style={{ marginTop: spacing.lg }}>
-              Senha
-            </Text>
-            <View>
-              <TextInput style={[input, { paddingRight: 48 }]} value={password} onChangeText={setPassword} placeholder="••••••••" placeholderTextColor={colors.textMuted} secureTextEntry={!show} autoComplete="password" textContentType="password" onSubmitEditing={submit} />
-              <PressableScale onPress={() => setShow((s) => !s)} style={styles.eye} hitSlop={10}>
-                <Ionicons name={show ? 'eye-off-outline' : 'eye-outline'} size={22} color={colors.textMuted} />
-              </PressableScale>
-            </View>
-
-            {aviso && (
-              <Animated.View entering={FadeInDown.duration(300)} style={[styles.error, { backgroundColor: colors.dangerTint }]}>
-                <Ionicons name="alert-circle" size={18} color={colors.danger} />
-                <Text variant="bodySmall" tone="danger" style={{ flex: 1 }}>
-                  {aviso}
-                </Text>
-              </Animated.View>
-            )}
-
-            {reset === 'enviado' && (
-              <Animated.View entering={FadeInDown.duration(300)} style={[styles.error, { backgroundColor: colors.accentTint }]}>
-                <Ionicons name="mail-unread-outline" size={18} color={colors.accentDeep} />
-                <Text variant="bodySmall" style={{ flex: 1, color: colors.accentDeep }}>
-                  Se existir uma conta com este e-mail, enviamos o link para redefinir a senha. Ele abre no navegador, no site da IrisFlow; defina a senha nova lá e volte aqui para entrar.
-                </Text>
-              </Animated.View>
-            )}
-
-            <Button title="Entrar" size="lg" loading={loading} onPress={submit} style={{ marginTop: spacing.xl }} icon="arrow-forward" />
-            <PressableScale onPress={() => void esqueci()} disabled={reset === 'enviando'} style={{ alignSelf: 'center', marginTop: spacing.lg, opacity: reset === 'enviando' ? 0.6 : 1 }} hitSlop={10} accessibilityRole="button">
-              <Text variant="bodySmall" tone="primary" weight="semibold">
-                {reset === 'enviando' ? 'Enviando link…' : reset === 'enviado' ? 'Enviar o link de novo' : 'Esqueci minha senha'}
-              </Text>
-            </PressableScale>
-            {/* A conta nasce no site (página Beta); o app não cadastra ninguém. */}
-            <PressableScale onPress={() => void Linking.openURL(siteRoute('/beta')).catch(() => undefined)} style={{ alignSelf: 'center', marginTop: spacing.md }} hitSlop={10} accessibilityRole="link">
-              <Text variant="caption" tone="muted" center>
-                Ainda não tem conta? <Text variant="caption" tone="primary" weight="semibold">Inscreva-se na beta no site</Text>
-              </Text>
-            </PressableScale>
-          </Card>
-
-          {isDemo && (
-            <Card index={1} tone="accent" style={{ marginTop: spacing.lg }}>
-              <View style={{ flexDirection: 'row', gap: spacing.md, alignItems: 'center' }}>
-                <Ionicons name="flask-outline" size={22} color={colors.accentDeep} />
-                <View style={{ flex: 1 }}>
-                  <Text variant="bodySmall" weight="semibold">
-                    Modo demonstração
-                  </Text>
-                  <Text variant="caption" tone="muted">
-                    Sem Supabase configurado. Toque em Entrar com qualquer senha para explorar o app com um paciente simulado.
-                  </Text>
-                </View>
-              </View>
-            </Card>
-          )}
-
-          <Text variant="caption" tone="muted" center style={{ marginTop: spacing.xxl, paddingHorizontal: spacing.lg }}>
-            Nenhuma imagem da câmera ou dado de calibração sai do computador do paciente. Este app recebe apenas mensagens, alertas e métricas agregadas.
-          </Text>
+          </PressableScale>
         </View>
       </Screen>
     </KeyboardAvoidingView>
@@ -169,7 +166,14 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  input: { height: 54, borderRadius: radius.md, paddingHorizontal: spacing.lg, fontSize: 16, fontFamily: fonts.regular, borderWidth: 1, marginTop: spacing.sm },
-  eye: { position: 'absolute', right: spacing.md, top: spacing.sm + 15 },
-  error: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', padding: spacing.md, borderRadius: radius.sm, marginTop: spacing.lg },
+  flex: { flex: 1 },
+  flexShrink: { flexShrink: 1 },
+  nav: { flexDirection: 'row' },
+  hero: { marginTop: spacing.xl, gap: spacing.xs },
+  title: { marginTop: spacing.lg },
+  form: { marginTop: spacing.xxxl, gap: spacing.lg },
+  cta: { marginTop: spacing.xs },
+  footer: { marginTop: spacing.xxxl, alignItems: 'center', gap: spacing.xs },
+  link: { minHeight: sizes.touch, justifyContent: 'center', paddingHorizontal: spacing.md },
+  privacy: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, paddingHorizontal: spacing.md },
 });

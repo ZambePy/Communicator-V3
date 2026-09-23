@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ArrowRight, Check, Lock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Crosshair, Lock } from 'lucide-react';
 import { GazeButton } from '../../components/ui/GazeButton';
 import { useAuth } from '../../context/AuthContext';
+import { useGaze } from '../../context/GazeContext';
 import { useSettings } from '../../context/SettingsContext';
 import { limitarDwellMs } from '../../dwellMs';
 import { gravarTutorial, tutorialConcluido } from '../../services/local/tutorialProfile';
@@ -19,6 +20,8 @@ import {
   type PassoDoTutorial,
 } from './passos';
 import {
+  ensaioGuardado,
+  guardarEnsaio,
   guardarPasso,
   limparMissoes,
   missaoCumprida,
@@ -39,8 +42,8 @@ import { MaisRecursos } from './steps/MaisRecursos';
  * olhar funcionando. Antes da calibração o dwell fica desligado, e a prática
  * seria feita com o mouse — que não ensina nada sobre olhar.
  *
- * **Quase não bloqueia nada.** "Pular o tutorial" está em todos os passos, e a
- * trilha navega livre. A única exceção é o passo de escrever uma frase, e ela
+ * **Quase não bloqueia nada.** "Pular o tutorial" está em todos os passos, e
+ * Voltar nunca tem condição. A única exceção é o passo de escrever uma frase, e ela
  * é deliberada — ver `PASSO_COM_TRAVA` em `passos.ts`, inclusive a escapatória
  * por tempo. Travar o acesso à comunicação por um tutorial contradiz a
  * premissa do projeto; travar UM passo até a pessoa escrever a primeira frase
@@ -57,13 +60,20 @@ export const TutorialWizard: React.FC = () => {
   const navigate = useNavigate();
   const { currentProfile } = useAuth();
   const { settings, updateSettings } = useSettings();
+  const { calibration } = useGaze();
+  // Lido a cada render de propósito: muda quando um perfil é carregado ou a
+  // calibração é feita. Sem calibração o dwell fica DESLIGADO — a prática
+  // "não responde" e nada na tela explicava por quê.
+  const calibrado = calibration.isCalibrated();
 
   // Retoma de onde parou: ou de uma missão na tela real, ou de um F5.
   const [passo, setPassoState] = useState<PassoDoTutorial>(() => {
     const salvo = passoGuardado();
     return ehPassoDoTutorial(salvo) ? salvo : 'oQueEDwell';
   });
-  const [ensaiou, setEnsaiou] = useState(false);
+  // Espelhado no sessionStorage como o passo: o passo de emergência vem depois
+  // das missões que saem desta rota, e remontar zerava o ensaio já feito.
+  const [ensaiou, setEnsaiou] = useState(() => ensaioGuardado());
   const [missaoFeita, setMissaoFeita] = useState(false);
   const [esperaEsgotada, setEsperaEsgotada] = useState(false);
 
@@ -79,8 +89,9 @@ export const TutorialWizard: React.FC = () => {
     [updateSettings]
   );
 
-  const registrarEnsaio = useCallback((fez: boolean) => {
-    if (fez) setEnsaiou(true);
+  const registrarEnsaio = useCallback(() => {
+    setEnsaiou(true);
+    guardarEnsaio();
   }, []);
 
   // Estado da missão do passo corrente, relido a cada troca de passo: a pessoa
@@ -146,17 +157,24 @@ export const TutorialWizard: React.FC = () => {
       role="main"
       aria-labelledby="tutorial-title"
       style={{
-        minHeight: '100vh',
+        // A rolagem fica nesta caixa, não no documento: a Emergência é fixa,
+        // e um documento que rola leva o conteúdo para baixo dela.
+        height: '100dvh',
+        overflowY: 'auto',
         background: 'var(--settings-bg)',
         display: 'flex',
         justifyContent: 'center',
         padding: '2rem 1.5rem',
       }}
     >
+      {/* `coluna-livre-da-emergencia`: a 1024 px a coluna de 640 px chegava
+          até embaixo da Emergência (o "Pular o tutorial" ficava sob ela). */}
       <div
+        className="coluna-livre-da-emergencia"
         style={{
           width: '100%',
           maxWidth: 640,
+          height: 'fit-content',
           display: 'flex',
           flexDirection: 'column',
           gap: '1.5rem',
@@ -184,24 +202,68 @@ export const TutorialWizard: React.FC = () => {
           </h1>
           {/* Pular está sempre disponível, em todos os passos — inclusive no
               passo travado. A trava é para quem CONSEGUE e ainda não tentou,
-              nunca para prender quem não consegue. */}
-          <button
+              nunca para prender quem não consegue.
+
+              É a escapatória oficial da trava, então precisa ser alcançável
+              pelo olhar: era um `<button>` de texto com ~130×20 px, menor que
+              qualquer alvo de dwell — a saída existia só para o mouse. */}
+          <GazeButton
             type="button"
+            width={220}
+            height={76}
+            isolado
             onClick={() => sair(false)}
             style={{
               background: 'transparent',
-              border: 'none',
+              border: '2px solid var(--color-card-border)',
               color: 'var(--color-primary)',
-              fontSize: '0.9rem',
+              fontSize: '1rem',
               fontWeight: 700,
-              cursor: 'pointer',
+              borderRadius: '1rem',
+              flexShrink: 0,
             }}
           >
             {t('tutorial.skip')}
-          </button>
+          </GazeButton>
         </div>
 
-        <Trilha atual={passo} aoEscolher={setPasso} />
+        <Trilha atual={passo} />
+
+        {/* Sem calibração o dwell não liga: a prática "não responde" e o
+            paciente não tem como saber que o problema não é ele. Diz em
+            palavras e dá o caminho. */}
+        {!calibrado && (
+          <div
+            role="alert"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+              padding: '1rem 1.25rem',
+              borderRadius: '1rem',
+              background: 'var(--tint-warn-bg)',
+              border: '1px solid var(--tint-warn-border)',
+              color: 'var(--color-text-base)',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, fontSize: '1rem', lineHeight: 1.5, fontWeight: 600 }}>
+              <Crosshair size={22} aria-hidden="true" style={{ flexShrink: 0 }} />
+              {t('tutorial.semCalibracao.texto')}
+            </span>
+            <GazeButton
+              type="button"
+              width={260}
+              height={76}
+              isolado
+              onClick={() => navigate('/calibration-check')}
+              style={{ borderRadius: '1rem', fontWeight: 800, flexShrink: 0 }}
+            >
+              {t('tutorial.semCalibracao.ir')}
+            </GazeButton>
+          </div>
+        )}
 
         <div
           className="glass-card"
@@ -266,7 +328,9 @@ export const TutorialWizard: React.FC = () => {
             />
           )}
           {passo === 'recursos' && <MaisRecursos />}
-          {passo === 'emergencia' && <BotaoDeEmergencia aoEnsaiar={registrarEnsaio} />}
+          {passo === 'emergencia' && (
+            <BotaoDeEmergencia aoEnsaiar={registrarEnsaio} aoPular={avancar} />
+          )}
           {passo === 'concluido' && <Concluido />}
         </div>
 
@@ -344,42 +408,25 @@ export const TutorialWizard: React.FC = () => {
 };
 
 /**
- * Trilha de passos — e ela NAVEGA.
+ * Trilha de passos — INDICADOR, não navegação.
  *
- * Era um `div` com um `span` por passo: parecia um conjunto de abas e não
- * respondia a nada. Não tinha `onClick`, não tinha `role`, não tinha
- * `tabIndex`, e não casava com o `DWELL_SELECTOR` do `GazeContext`
- * (`button, a, [role="button"], [role="link"]`) — logo era inerte para o
- * mouse, para o teclado E para o olhar, que é o único meio de entrada do
- * paciente. Quem lia aquilo como aba e tentava ir para outro passo concluía,
- * com razão, que o tutorial tinha travado.
+ * Já foi um `div` inerte que parecia abas; depois virou dez `<button>` de
+ * ~60×56 px. Nenhuma das duas serve a quem usa o olhar: um alvo de 60 px de
+ * largura fica abaixo do mínimo de 5° desta interface (~198 px), e dez deles
+ * lado a lado num cartão de 640 px não têm como crescer — nem em duas linhas
+ * de cinco caberiam. Um alvo que o dwell não consegue segurar não é alvo, é
+ * enfeite que ainda por cima rouba o olhar de passagem.
  *
- * Por que navegação LIVRE e não "só até onde já cheguei": o cabeçalho deste
- * arquivo diz que o tutorial quase não bloqueia nada e que quem não quiser
- * fazer pula. Uma trilha que só anda para trás contradiria isso — e "Pular"
- * já permite sair inteiro a qualquer momento.
- *
- * ## Por que os rótulos sumiram
- *
- * Com cinco passos cabiam cinco rótulos. Com dez, cada um ficaria com ~58 px
- * de largura: o texto quebra, ou trunca, e — pior para quem usa o olhar — cada
- * aba fica MAIS ESTREITA QUE O ALVO MÍNIMO desta interface. Um alvo de 58 px
- * de largura não é alvo, é enfeite que o dwell não consegue segurar.
- *
- * Então a trilha passa a ser: "Passo N de M — <nome do passo atual>" em texto,
- * e as marcas viram alvos SEM rótulo, altos o bastante (56 px) e com
- * `aria-label` próprio. Quem lê com leitor de tela continua ouvindo o nome de
- * cada passo; quem navega pelo olhar ganha um alvo utilizável em vez de dez
- * inutilizáveis.
+ * Então a trilha mostra "Passo N de M — <nome>" e as marcas de progresso, sem
+ * `role="button"`, sem `onClick` e fora do `DWELL_SELECTOR` do GazeContext.
+ * A navegação fica onde os alvos têm tamanho: Voltar e Continuar (76 px) e
+ * Pular. Voltar nunca tem condição, então a jornada continua livre.
  */
-const Trilha: React.FC<{
-  atual: PassoDoTutorial;
-  aoEscolher: (p: PassoDoTutorial) => void;
-}> = ({ atual, aoEscolher }) => {
+const Trilha: React.FC<{ atual: PassoDoTutorial }> = ({ atual }) => {
   const { t } = useTranslation();
   const i = indiceDoPassoDoTutorial(atual);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }} data-no-dwell="true">
       <span
         style={{
           fontSize: '0.85rem',
@@ -391,35 +438,18 @@ const Trilha: React.FC<{
         {t('tutorial.passoDe', { n: i + 1, total: PASSOS_DO_TUTORIAL.length })} ·{' '}
         {t(`tutorial.steps.${atual}`)}
       </span>
-      <div
-        role="tablist"
+      <ol
         aria-label={t('tutorial.title')}
-        style={{ display: 'flex', gap: '0.3rem' }}
+        style={{ display: 'flex', gap: '0.3rem', listStyle: 'none', margin: 0, padding: 0 }}
       >
         {PASSOS_DO_TUTORIAL.map((p, n) => {
           const ehAtual = n === i;
           return (
-            <button
+            <li
               key={p}
-              type="button"
-              role="tab"
-              aria-selected={ehAtual}
               aria-current={ehAtual ? 'step' : undefined}
               aria-label={t(`tutorial.steps.${p}`)}
-              onClick={() => aoEscolher(p)}
-              style={{
-                flex: 1,
-                // Alto o bastante para o dwell não zerar com o jitter vertical:
-                // uma faixa fina é exatamente o formato em que o olhar escapa.
-                minHeight: 56,
-                display: 'flex',
-                alignItems: 'center',
-                padding: '0 0.1rem',
-                background: 'transparent',
-                border: 'none',
-                borderRadius: '0.6rem',
-                cursor: 'pointer',
-              }}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', minHeight: 12 }}
             >
               <span
                 aria-hidden="true"
@@ -431,10 +461,10 @@ const Trilha: React.FC<{
                   background: n <= i ? 'var(--color-primary)' : 'var(--color-card-border)',
                 }}
               />
-            </button>
+            </li>
           );
         })}
-      </div>
+      </ol>
     </div>
   );
 };

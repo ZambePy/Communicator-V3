@@ -1,4 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { PasswordStrength } from '@/components/ui/PasswordStrength'
+import { validar } from '@/utils/validation'
+import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
 import { Link, useNavigate } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
@@ -8,26 +11,22 @@ import { Icon } from '@/components/ui/Icon'
 import { SessionLoading } from '@/components/ui/Skeleton'
 import { useAccount } from '@/context/AccountContext'
 import { updatePassword } from '@/services/api'
+import { motivoDoLinkNaUrl } from '@/utils/linkDeEmail'
 import './checkout.css'
 
-/** Mesmo mínimo do cadastro. */
-const SENHA_MINIMA = 8
+type Form = { password: string; confirm: string }
+
+const RULES: Rules<Form> = {
+  password: validar.senha,
+  confirm: (v, all) => validar.confirmacao(v, all.password),
+}
 
 /**
  * Quando o link do e-mail já expirou ou foi usado, o Supabase não abre
- * sessão e volta para cá com o motivo no fragmento da URL
- * (#error=access_denied&error_code=otp_expired&error_description=...).
- * Lido uma vez, só para a tela dizer o que houve em vez de um genérico.
+ * sessão e volta para cá com o motivo na URL (utils/linkDeEmail.ts). Lido
+ * uma vez, só para a tela dizer o que houve em vez de um genérico.
  */
-function motivoNaUrl(): string | null {
-  const hash = window.location.hash.replace(/^#/, '')
-  if (!hash) return null
-  const params = new URLSearchParams(hash)
-  if (!params.get('error')) return null
-  const codigo = params.get('error_code')
-  if (codigo === 'otp_expired') return 'O link expirou.'
-  return params.get('error_description')?.replace(/\+/g, ' ') ?? 'O link não é válido.'
-}
+const motivoNaUrl = () => motivoDoLinkNaUrl()
 
 export default function NovaSenha() {
   const [password, setPassword] = useState('')
@@ -37,19 +36,14 @@ export default function NovaSenha() {
   const { authenticated, loading: carregandoSessao } = useAccount()
   const navigate = useNavigate()
   const motivo = useMemo(motivoNaUrl, [])
+  const values = useMemo(() => ({ password, confirm }), [password, confirm])
+  const v = useFormValidation(values, RULES)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
-
-    if (password.length < SENHA_MINIMA) {
-      setError(`A senha precisa ter ao menos ${SENHA_MINIMA} caracteres.`)
-      return
-    }
-    if (confirm !== password) {
-      setError('As duas senhas precisam ser iguais.')
-      return
-    }
+    v.touch('password', 'confirm')
+    if (!v.isValid()) return
 
     setLoading(true)
     try {
@@ -90,8 +84,11 @@ export default function NovaSenha() {
                     <Icon name="alerta" size={20} />
                   </span>
                   <p>
+                    {/* O cliente usa o fluxo implícito (tokens no endereço): o link
+                        vale em qualquer navegador, inclusive quando o pedido saiu do
+                        app do cuidador. */}
                     {motivo ?? 'Este link não é mais válido ou já foi usado.'} Peça um novo
-                    link e abra-o no mesmo navegador em que fez o pedido.
+                    link, pelo site ou pelo app do cuidador.
                   </p>
                 </div>
                 <Button to="/recuperar-senha" full size="lg">
@@ -105,22 +102,42 @@ export default function NovaSenha() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  {...v.bind('password')}
+                  valid={!v.errors.password}
                   autoComplete="new-password"
-                  placeholder="••••••••"
-                  hint={`Ao menos ${SENHA_MINIMA} caracteres.`}
+                  hint="Ao menos 8 caracteres. Uma frase curta é fácil de lembrar e difícil de adivinhar."
+                  describedById="nova-senha-forca"
+                  required
                 />
+                <PasswordStrength value={password} id="nova-senha-forca" />
 
                 <Field
                   label="Confirmar nova senha"
                   type="password"
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
+                  {...v.bind('confirm')}
+                  valid={confirm.length > 0 && !v.errors.confirm}
                   autoComplete="new-password"
-                  placeholder="••••••••"
-                  error={error ?? undefined}
+                  required
                 />
 
-                <Button type="submit" full size="lg" loading={loading}>
+                {error && (
+                  <div className="notice notice--warn" role="alert">
+                    <span className="notice__icon">
+                      <Icon name="alerta" size={20} />
+                    </span>
+                    <p>{error}</p>
+                  </div>
+                )}
+
+                <Button
+                  type="submit"
+                  full
+                  size="lg"
+                  loading={loading}
+                  disabled={!v.isValid() || loading}
+                >
                   {loading ? 'Salvando…' : 'Salvar nova senha'}
                 </Button>
               </form>

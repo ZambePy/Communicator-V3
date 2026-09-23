@@ -6,9 +6,11 @@ import { CallToAction } from '@/components/sections/CallToAction'
 import { Reveal } from '@/components/effects/Reveal'
 import { Card, CardIcon } from '@/components/ui/Card'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { DownloadPanel } from '@/components/ui/DownloadPanel'
+import { BETA, BETA_CTA, BRAND } from '@/data/content'
 import { Button } from '@/components/ui/Button'
 import { useDownloads } from '@/hooks/useDownloads'
-import { BRAND } from '@/data/content'
+import './solucao.css'
 
 const LIMITS = [
   {
@@ -57,7 +59,8 @@ const ADOPTION: { icon: IconName; title: string; text: string }[] = [
 ]
 
 export default function Solucao() {
-  const downloads = useDownloads()
+  // Sistemas com instalador: os mesmos do painel de download desta página.
+  const { platformsText } = useDownloads()
 
   return (
     <>
@@ -65,7 +68,7 @@ export default function Solucao() {
         eyebrow="O produto"
         title={`${BRAND.product}: uma plataforma de comunicação, não um rastreador.`}
         highlight={['comunicação,']}
-        lead="Aplicação instalável para Windows 10/11 (macOS e Linux em preparação), construída sobre Electron, que roda integralmente no dispositivo do usuário. O rastreamento ocular é a camada de entrada; sobre ela foram construídos ambientes completos de comunicação, controle, lazer, cuidado e emergência."
+        lead={`Aplicação instalável para ${platformsText.long}, que roda integralmente no dispositivo do usuário. O rastreamento ocular é a camada de entrada; sobre ela foram construídos ambientes completos de comunicação, controle, lazer, cuidado e emergência.`}
       />
 
       <section className="section section--tight">
@@ -78,11 +81,9 @@ export default function Solucao() {
                     <Icon name={block.tone === 'ok' ? 'check' : 'alerta'} size={26} />
                   </CardIcon>
                   <h3>{block.title}</h3>
-                  <ul style={{ paddingLeft: '1.1rem', margin: 0 }}>
+                  <ul className="limits__list">
                     {block.items.map((it) => (
-                      <li key={it} style={{ fontSize: '0.96rem' }}>
-                        {it}
-                      </li>
+                      <li key={it}>{it}</li>
                     ))}
                   </ul>
                 </Card>
@@ -91,16 +92,7 @@ export default function Solucao() {
           </div>
 
           <Reveal anim="fade" delay={280}>
-            <p
-              style={{
-                marginTop: 'var(--sp-6)',
-                maxWidth: '88ch',
-                fontSize: '0.96rem',
-                color: 'var(--text-dim)',
-                paddingLeft: 'var(--sp-5)',
-                borderLeft: '2px solid var(--line)',
-              }}
-            >
+            <p className="aside-note">
               Preferimos declarar o limite a prometer o que a física do sensor não permite. É a
               mesma razão pela qual publicamos os indicadores de precisão junto com as condições
               em que foram medidos.
@@ -120,12 +112,10 @@ export default function Solucao() {
             <span className="eyebrow">O que vai junto</span>
           </Reveal>
           <Reveal anim="up">
-            <h2 style={{ maxWidth: '26ch', marginBottom: 'var(--sp-4)' }}>
-              A entrega não é o arquivo de instalação.
-            </h2>
+            <h2 className="section-title">A entrega não é o arquivo de instalação.</h2>
           </Reveal>
           <Reveal anim="up" delay={120}>
-            <p className="lead" style={{ maxWidth: '70ch', marginBottom: 'var(--sp-6)' }}>
+            <p className="lead section-lead section-lead--tight">
               A principal causa de abandono de tecnologia assistiva não é falha do produto: é falta
               de apoio na hora de adotar. Um software que funciona mas que a família não consegue
               instalar, calibrar ou ajustar termina na gaveta. Por isso o acompanhamento do
@@ -152,35 +142,29 @@ export default function Solucao() {
       <Differentiators />
       <Comparison />
 
-      <section className="section section--tight">
+      <section className="section section--tight download-strip" id="download">
         <div className="container center">
           <Reveal anim="up">
-            <h2>Disponível para os três sistemas</h2>
-            <p className="lead" style={{ maxWidth: '58ch', marginInline: 'auto' }}>
-              Uma base de código única gera o instalador para Windows; os de macOS e Linux estão em preparação e saem da mesma base. O download
-              fica liberado assim que a conta é criada.
+            <h2 className="section-title section-title--center">
+              Instalador para {platformsText.short}
+            </h2>
+            <p className="lead section-lead section-lead--center">
+              Uma base de código única gera os instaladores de todos os sistemas.{' '}
+              {BETA.ativo
+                ? 'Para usar, inscreva-se na beta gratuita: o login no aplicativo é o mesmo e-mail e senha da conta.'
+                : 'Para usar, crie a conta: o login no aplicativo é o mesmo e-mail e senha.'}
             </p>
           </Reveal>
           <Reveal anim="up" delay={160}>
-            <div
-              style={{
-                display: 'flex',
-                gap: 'var(--sp-3)',
-                justifyContent: 'center',
-                flexWrap: 'wrap',
-                marginTop: 'var(--sp-5)',
-              }}
-            >
-              <Button href={downloads.windows} variant="secondary">
-                Windows
-              </Button>
-              <Button href={downloads.macos} variant="secondary">
-                macOS
-              </Button>
-              <Button href={downloads.linux} variant="secondary">
-                Linux
-              </Button>
-            </div>
+            <DownloadPanel />
+            {BETA.ativo && (
+              <p className="download-strip__fine">
+                Ainda sem conta?{' '}
+                <Button to={BETA_CTA.to} variant="ghost">
+                  {BETA_CTA.label}
+                </Button>
+              </p>
+            )}
           </Reveal>
         </div>
       </section>

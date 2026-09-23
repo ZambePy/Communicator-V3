@@ -9,8 +9,9 @@ import {
   Image as ImageIcon,
   Palette,
   Heart,
-  Newspaper,
+  BookOpen,
   Wind,
+  Moon,
 } from 'lucide-react';
 import { GazeButton } from '../components/ui/GazeButton';
 import { DicaContextual } from '../components/ui/DicaContextual';
@@ -19,17 +20,17 @@ import { cumprirMissao } from './tutorial/missao';
 
 interface ActivityCard {
   route: string;
-  title: string;
-  subtitle: string;
+  /** Chave em `lazer.itens.*` do i18n (title, subtitle e, se houver, badge). */
+  chave: string;
   icon: React.ReactNode;
   gradient: string;
   shadow: string;
-  badge?: string;
+  badge?: boolean;
 }
 
 interface Secao {
-  id: string;
-  titulo: string;
+  /** Também é a chave em `lazer.secoes.*`. */
+  id: 'fotos' | 'jogos' | 'bemEstar';
   itens: ActivityCard[];
 }
 
@@ -44,21 +45,18 @@ interface Secao {
 const SECOES: Secao[] = [
   {
     id: 'fotos',
-    titulo: 'Fotos e memórias',
     itens: [
       {
         route: '/photo',
-        title: 'Tirar Foto',
-        subtitle: 'Câmera divertida e memórias',
+        chave: 'foto',
         icon: <Camera size={64} color="white" aria-hidden="true" />,
         gradient: 'linear-gradient(135deg, rgba(14, 165, 233, 0.9), rgba(37, 99, 235, 0.9))',
         shadow: 'rgba(14, 165, 233, 0.45)',
-        badge: 'Novo ✨',
+        badge: true,
       },
       {
         route: '/gallery',
-        title: 'Galeria de Fotos',
-        subtitle: 'Álbum e recordações salvas',
+        chave: 'galeria',
         icon: <ImageIcon size={64} color="white" aria-hidden="true" />,
         gradient: 'linear-gradient(135deg, rgba(147, 51, 234, 0.9), rgba(109, 40, 217, 0.9))',
         shadow: 'rgba(147, 51, 234, 0.45)',
@@ -67,20 +65,17 @@ const SECOES: Secao[] = [
   },
   {
     id: 'jogos',
-    titulo: 'Jogos com o olhar',
     itens: [
       {
         route: '/games/bubble',
-        title: 'Estoura Bolhas',
-        subtitle: 'Treino de fixação ocular',
+        chave: 'bolhas',
         icon: <Sparkles size={64} color="white" aria-hidden="true" />,
         gradient: 'linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(79, 70, 229, 0.9))',
         shadow: 'rgba(99, 102, 241, 0.45)',
       },
       {
         route: '/games/memory',
-        title: 'Jogo da Memória',
-        subtitle: 'Treino cognitivo e atenção',
+        chave: 'memoria',
         icon: (
           <span style={{ fontSize: '3.5rem' }} aria-hidden="true">
             🧠
@@ -91,16 +86,14 @@ const SECOES: Secao[] = [
       },
       {
         route: '/games/follow',
-        title: 'Siga o Alvo',
-        subtitle: 'Precisão e tempo de fixação',
+        chave: 'alvo',
         icon: <Target size={64} color="white" aria-hidden="true" />,
         gradient: 'linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(185, 28, 28, 0.9))',
         shadow: 'rgba(239, 68, 68, 0.45)',
       },
       {
         route: '/drawing',
-        title: 'Desenho com Olhar',
-        subtitle: 'Expressão artística livre',
+        chave: 'desenho',
         icon: <Palette size={64} color="white" aria-hidden="true" />,
         gradient: 'linear-gradient(135deg, rgba(245, 158, 11, 0.9), rgba(217, 119, 6, 0.9))',
         shadow: 'rgba(245, 158, 11, 0.45)',
@@ -108,27 +101,32 @@ const SECOES: Secao[] = [
     ],
   },
   {
-    // Estas duas telas existiam e eram navegáveis, mas NENHUMA tela levava a
-    // elas: só se chegava digitando a rota. Na prática eram inalcançáveis para
-    // quem usa o app pelo olhar.
-    id: 'bem-estar',
-    titulo: 'Lazer e bem-estar',
+    // Estas telas existiam e eram navegáveis, mas NENHUMA tela levava a elas:
+    // só se chegava digitando a rota. Na prática eram inalcançáveis para quem
+    // usa o app pelo olhar. O Descanso também está no menu principal; aqui ele
+    // fica junto do resto do bem-estar, que é onde o tutorial diz que está.
+    id: 'bemEstar',
     itens: [
       {
         route: '/news',
-        title: 'Notícias',
-        subtitle: 'Leitura em voz alta (demonstração)',
-        icon: <Newspaper size={64} color="white" aria-hidden="true" />,
+        chave: 'leituras',
+        icon: <BookOpen size={64} color="white" aria-hidden="true" />,
         gradient: 'linear-gradient(135deg, rgba(71, 85, 105, 0.95), rgba(30, 41, 59, 0.95))',
         shadow: 'rgba(71, 85, 105, 0.45)',
       },
       {
         route: '/meditation',
-        title: 'Meditação',
-        subtitle: 'Respiração guiada e relaxamento',
+        chave: 'meditacao',
         icon: <Wind size={64} color="white" aria-hidden="true" />,
         gradient: 'linear-gradient(135deg, rgba(217, 70, 239, 0.9), rgba(162, 28, 175, 0.9))',
         shadow: 'rgba(217, 70, 239, 0.45)',
+      },
+      {
+        route: '/rest',
+        chave: 'descanso',
+        icon: <Moon size={64} color="white" aria-hidden="true" />,
+        gradient: 'linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(2, 6, 23, 0.95))',
+        shadow: 'rgba(30, 41, 59, 0.45)',
       },
     ],
   },
@@ -143,15 +141,19 @@ export const GamesMenu: React.FC = () => {
       role="main"
       aria-labelledby="games-title"
       style={{
-        minHeight: '100vh',
-        width: '100vw',
+        // Altura FIXA da janela, com a rolagem num contêiner interno (abaixo).
+        // Era `minHeight: 100vh`: a 1080 p a página tinha 1352 px e quem rolava
+        // era o documento — o cabeçalho, a faixa do tutorial e os cartões
+        // subiam e passavam por baixo do botão de Emergência, que é fixo.
+        height: '100dvh',
+        width: '100%',
         background: 'var(--color-bg-base)',
         display: 'flex',
         flexDirection: 'column',
         padding: '2rem 3rem',
         boxSizing: 'border-box',
         position: 'relative',
-        overflowX: 'hidden',
+        overflow: 'hidden',
         fontFamily: "'Inter', system-ui, sans-serif",
       }}
     >
@@ -182,8 +184,9 @@ export const GamesMenu: React.FC = () => {
 
       {/* Barra Superior / Header com Botão Voltar Ampliado */}
       <header
-        className="animate-fade-in"
+        className="animate-fade-in reserva-emergencia"
         style={{
+          '--reserva-margem': '3rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -203,11 +206,11 @@ export const GamesMenu: React.FC = () => {
               background: 'var(--color-card-bg)',
               boxShadow: '0 8px 24px var(--color-card-shadow)',
             }}
-            aria-label="Voltar ao menu principal"
+            aria-label={t('lazer.voltarMenuAria')}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', fontSize: '1.4rem', fontWeight: 800 }}>
               <ArrowLeft size={30} />
-              <span>Voltar</span>
+              <span>{t('lazer.voltar')}</span>
             </div>
           </GazeButton>
 
@@ -238,7 +241,7 @@ export const GamesMenu: React.FC = () => {
                   letterSpacing: '-0.02em',
                 }}
               >
-                Ajuda e Lazer
+                {t('lazer.title')}
               </h1>
               <p
                 style={{
@@ -249,7 +252,7 @@ export const GamesMenu: React.FC = () => {
                   fontWeight: 500,
                 }}
               >
-                Jogos, fotos e momentos de descanso — tudo pelo olhar
+                {t('lazer.subtitle')}
               </p>
             </div>
           </div>
@@ -260,8 +263,11 @@ export const GamesMenu: React.FC = () => {
       <DicaContextual id="jogos" />
 
       <div
+        data-testid="lazer-rolagem"
         style={{
           flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
           width: '100%',
           maxWidth: '1600px',
           margin: '0 auto',
@@ -269,9 +275,14 @@ export const GamesMenu: React.FC = () => {
           display: 'flex',
           flexDirection: 'column',
           gap: '2.25rem',
+          // Folga para a sombra dos cartões e para o anel de dwell não serem
+          // cortados pela borda do contêiner rolável.
+          padding: '0.75rem 0.75rem 2rem',
         }}
       >
-        {SECOES.map((secao) => (
+        {SECOES.map((secao) => {
+          const tituloDaSecao = t(`lazer.secoes.${secao.id}`);
+          return (
           <section key={secao.id} aria-labelledby={`secao-${secao.id}`} className="animate-fade-in-up">
             <h2
               id={`secao-${secao.id}`}
@@ -285,11 +296,11 @@ export const GamesMenu: React.FC = () => {
                 letterSpacing: '0.06em',
               }}
             >
-              {secao.titulo}
+              {tituloDaSecao}
             </h2>
 
             <ul
-              aria-label={secao.titulo}
+              aria-label={tituloDaSecao}
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
@@ -300,7 +311,10 @@ export const GamesMenu: React.FC = () => {
                 margin: 0,
               }}
             >
-              {secao.itens.map((activity) => (
+              {secao.itens.map((activity) => {
+                const title = t(`lazer.itens.${activity.chave}.title`);
+                const subtitle = t(`lazer.itens.${activity.chave}.subtitle`);
+                return (
                 <li key={activity.route} style={{ display: 'flex' }}>
                   {/* GazeButton em vez de <button> cru: o dwell global clicaria
                       os dois, mas só o GazeButton mostra o anel de progresso —
@@ -314,7 +328,7 @@ export const GamesMenu: React.FC = () => {
                       cumprirMissao('lazer');
                       navigate(activity.route);
                     }}
-                    aria-label={`Abrir ${activity.title} — ${activity.subtitle}`}
+                    aria-label={t('lazer.abrirAria', { title, subtitle })}
                     className="action-card"
                     style={{
                       background: activity.gradient,
@@ -356,7 +370,7 @@ export const GamesMenu: React.FC = () => {
                             border: '1px solid rgba(255, 255, 255, 0.4)',
                           }}
                         >
-                          {activity.badge}
+                          {t(`lazer.itens.${activity.chave}.badge`)}
                         </span>
                       )}
 
@@ -397,7 +411,7 @@ export const GamesMenu: React.FC = () => {
                             textShadow: '0 2px 10px rgba(0,0,0,0.2)',
                           }}
                         >
-                          {activity.title}
+                          {title}
                         </span>
                         <span
                           style={{
@@ -407,16 +421,18 @@ export const GamesMenu: React.FC = () => {
                             maxWidth: '300px',
                           }}
                         >
-                          {activity.subtitle}
+                          {subtitle}
                         </span>
                       </span>
                     </span>
                   </GazeButton>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </section>
-        ))}
+          );
+        })}
       </div>
     </main>
   );

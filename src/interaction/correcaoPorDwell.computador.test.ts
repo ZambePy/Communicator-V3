@@ -25,7 +25,7 @@ const contextoBom = {
 const selecao = { centroDoAlvo: { x: 1000, y: 500 }, olhar: { x: 950, y: 500 }, agoraMs: 1000, viewport };
 
 describe('origemAceita', () => {
-  it('externo nunca; overlay só com alvo ≥ 96 px; app sempre', () => {
+  it('externo nunca; overlay só com alvo ≥ ALVO_MINIMO_OVERLAY_PX; app sempre', () => {
     expect(origemAceita('externo', 400)).toBe(false);
     expect(origemAceita('overlay', ALVO_MINIMO_OVERLAY_PX - 1)).toBe(false);
     expect(origemAceita('overlay', ALVO_MINIMO_OVERLAY_PX)).toBe(true);
@@ -40,7 +40,9 @@ describe('deveAprender com origem', () => {
     expect(deveAprender({ ...contextoBom, origem: 'overlay', tamanhoDoAlvoPx: 32 })).toBe(false);
   });
 
-  it('botão de 96 px da barra da sobreposição ensina', () => {
+  it('botão da barra da sobreposição ensina a partir do menor lado que ela desenha (52 px)', () => {
+    expect(deveAprender({ ...contextoBom, origem: 'overlay', tamanhoDoAlvoPx: 52 })).toBe(true);
+    expect(deveAprender({ ...contextoBom, origem: 'overlay', tamanhoDoAlvoPx: 51 })).toBe(false);
     expect(deveAprender({ ...contextoBom, origem: 'overlay', tamanhoDoAlvoPx: 96 })).toBe(true);
   });
 });

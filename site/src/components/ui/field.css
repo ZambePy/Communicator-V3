@@ -48,8 +48,44 @@
 }
 
 .field__input::placeholder {
+  /* O placeholder é só exemplo; a instrução mora no hint visível. */
   color: var(--text-dim);
-  opacity: 0.75;
+  opacity: 0.85;
+}
+
+.field__textarea {
+  resize: vertical;
+  min-height: 8.5em;
+  line-height: 1.55;
+}
+
+/* Marca de "válido": aparece quando a página diz que o valor passou. */
+.field__valid {
+  position: absolute;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--ok-soft);
+  color: var(--ok);
+  pointer-events: none;
+  animation: pop-check 300ms var(--ease-spring) both;
+}
+
+.field__valid svg {
+  width: 13px;
+  height: 13px;
+}
+
+.field__textarea ~ .field__valid {
+  top: 12px;
+}
+
+.field--valid .field__input {
+  border-color: var(--ok-line);
+  padding-right: 44px;
 }
 
 .field__input:hover {
@@ -58,8 +94,10 @@
 
 .field__input:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
+  /* Anel de foco visível: 3 px sólidos, não translúcidos. Teal claro,
+     porque o azul institucional some no fundo marinho. */
+  border-color: var(--teal-300);
+  box-shadow: 0 0 0 3px var(--teal-300);
   background: var(--surface);
 }
 
@@ -81,7 +119,8 @@
 }
 
 .field--error .field__input:focus {
-  box-shadow: 0 0 0 4px rgba(229, 72, 77, 0.2);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger);
 }
 
 .field__hint {

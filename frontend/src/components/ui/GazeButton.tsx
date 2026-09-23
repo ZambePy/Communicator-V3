@@ -32,6 +32,13 @@ interface GazeButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> 
    * `alvoMinimoPx()` de distância.
    */
   isolado?: boolean;
+  /**
+   * Variante visual. `secundaria` (padrão) é a superfície calma; `primaria` é
+   * a ação principal da tela, preenchida; `perigo` é destrutiva reversível
+   * (apagar, limpar). Emergência continua sendo `emergency`, o único vermelho
+   * cheio do app. Só classe: tamanho, zona de acerto e dwell não mudam.
+   */
+  variante?: 'primaria' | 'secundaria' | 'perigo';
 }
 
 export const GazeButton: React.FC<GazeButtonProps> = ({
@@ -42,6 +49,7 @@ export const GazeButton: React.FC<GazeButtonProps> = ({
   recovery = false,
   noWarn = false,
   isolado = false,
+  variante = 'secundaria',
   disabled,
   style,
   className = '',
@@ -85,7 +93,7 @@ export const GazeButton: React.FC<GazeButtonProps> = ({
       // vizinho acionável — vira rótulo para a correção por dwell. A classe
       // acima não serve para isso: `dataset` é o contrato com o dispatcher.
       data-isolado={isolado ? 'true' : undefined}
-      className={`gaze-button ${emergency ? 'emergency' : ''} ${isolado ? 'gaze-button--isolado' : ''} ${className}`}
+      className={`gaze-button ${emergency ? 'emergency' : ''} ${isolado ? 'gaze-button--isolado' : ''} ${variante !== 'secundaria' ? `gaze-button--${variante}` : ''} ${className}`}
       style={{
         width: width ? `${width}px` : undefined,
         height: height ? `${height}px` : undefined,

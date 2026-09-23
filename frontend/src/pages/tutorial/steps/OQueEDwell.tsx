@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnelDeDwell } from '../../../components/ui/AnelDeDwell';
+import { AvisoDeTelaCheia } from '../../../components/AvisoDeTelaCheia';
 
 /**
  * O que é olhar para clicar.
@@ -147,6 +148,10 @@ export const OQueEDwell: React.FC<{ dwellMs: number }> = ({ dwellMs }) => {
           {t('tutorial.dwell.estatico')}
         </span>
       )}
+
+      {/* Primeiro passo do tutorial: é aqui que a pessoa (e o cuidador ao
+          lado) aprende que a tela cheia é de propósito — e como sair dela. */}
+      <AvisoDeTelaCheia />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import React from 'react';
@@ -9,7 +9,7 @@ import { AuthProvider } from '../../context/AuthContext';
 import { aceitarConsentimento } from '../../services/local/consent';
 import { criarPerfil } from '../../services/local/profiles';
 import { INTRO_SEEN_KEY } from './bootDestination';
-import { isDevMode } from '../../devMode';
+import { isDevMode, setDevMode } from '../../devMode';
 import {
   createMockLicenseService,
   CONTAS_DE_TESTE,
@@ -136,5 +136,30 @@ describe('Modo Desenvolvedor', () => {
 
     expect(isDevMode()).toBe(true);
     await waitFor(() => expect(screen.getByText('tela de menu')).toBeInTheDocument(), ESPERA);
+  });
+
+  // No instalador (build de produção) o atalho não existe: ele pula licença,
+  // termo, perfil e calibração. E uma chave esquecida no sessionStorage não
+  // liga nada — nem o cursor desligado, nem os portões abertos.
+  describe('no build de produção', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      sessionStorage.removeItem('irisflow_dev_mode');
+    });
+
+    it('o botão não aparece no splash', () => {
+      vi.stubEnv('DEV', false);
+      montar();
+      expect(screen.queryByRole('button', { name: /modo desenvolvedor/i })).toBeNull();
+    });
+
+    it('isDevMode é falso mesmo com a chave gravada, e setDevMode(true) não grava nada', () => {
+      vi.stubEnv('DEV', false);
+      sessionStorage.setItem('irisflow_dev_mode', 'true');
+      expect(isDevMode()).toBe(false);
+      sessionStorage.removeItem('irisflow_dev_mode');
+      setDevMode(true);
+      expect(sessionStorage.getItem('irisflow_dev_mode')).toBeNull();
+    });
   });
 });

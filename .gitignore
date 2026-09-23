@@ -69,18 +69,19 @@ voice-engine/.pytest_cache/
 # ─────────────────────────────────────────────────────────────────────────────
 # Documentação, anotações e arquivos de dados fora do código
 #
-# Decisão de 10/09/2026: o repositório guarda CÓDIGO. Texto solto (.txt),
-# documentação (.md) e planilhas ficam de fora, porque quase todos carregam
-# alguma coisa que não deve ir para um repositório público — credenciais,
-# roteiros internos, e principalmente qualquer coisa com dado de paciente.
-# A única exceção é o protocolo de medição, que é a base metodológica do
-# projeto e precisa acompanhar o código.
+# Decisão de 10/09/2026, apertada em 23/09/2026: o repositório guarda CÓDIGO.
+# Texto solto (.txt), documentação (.md) e planilhas ficam de fora, porque
+# quase todos carregam alguma coisa que não deve ir para um repositório
+# público — credenciais, roteiros internos, e principalmente qualquer coisa
+# com dado de paciente. Ficam só dois documentos: o README.md da raiz (que
+# descreve o monorepo inteiro — desktop, site, app, banco e hospedagem) e o
+# protocolo de medição, que é a base metodológica do projeto. Os .gitignore
+# de site/ e app/ seguem a mesma regra, sem exceções.
 # ─────────────────────────────────────────────────────────────────────────────
 *.txt
 *.md
-!docs/MEDICOES.md
-!docs/GATE-V2.md
-!docs/INTEGRACAO.md
+!/README.md
+!/docs/MEDICOES.md
 
 # Duas exceções técnicas ao "*.txt" acima. Se quiser mesmo tirar as duas do
 # repositório, apague estas linhas — mas saiba o que cada uma quebra:
@@ -158,3 +159,19 @@ coverage/
 .nyc_output/
 .vite/
 *.tsbuildinfo
+
+# Lixo de sistema operacional e de editor (Windows cria desktop.ini e
+# Thumbs.db em pastas sincronizadas pelo OneDrive; o Office deixa ~$arquivo
+# enquanto um documento está aberto).
+desktop.ini
+Thumbs.db
+ehthumbs.db
+$RECYCLE.BIN/
+~$*
+*.tmp
+
+# Caches de Python fora do motor de voz e artefatos do Playwright.
+__pycache__/
+*.pyc
+playwright-report/
+test-results/

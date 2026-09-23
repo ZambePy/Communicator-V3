@@ -1,53 +1,85 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Info, Newspaper, Volume2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ArrowLeft, BookOpen, Volume2, Square } from 'lucide-react';
 import { GazeButton } from '../../components/ui/GazeButton';
-import { falar } from '../../services/voz';
+import { falar, pararFala } from '../../services/voz';
 
 /**
- * NOTÍCIAS — conteúdo de DEMONSTRAÇÃO.
+ * LEITURAS — textos que o cuidador guardou, lidos em voz alta pelo olhar.
  *
- * As três notícias são fixas no código e continuam assim de propósito: não há
- * fonte de notícias configurada, nenhuma requisição de rede é feita, e inventar
- * uma faria o app apresentar texto falso como se fosse jornal. Para quem
- * depende deste app para se informar, isso não é um detalhe de produto — é
- * desinformação. O aviso no topo da tela diz isso ao usuário, em vez de deixar
- * o comentário só no código.
+ * Era "Jornal do Dia", com três notícias fixas no código e um aviso de que
+ * eram demonstração. Não há fonte de notícias e o app roda offline; inventar
+ * uma faria o app apresentar texto falso como se fosse jornal. Então a tela
+ * passou a ler o que ALGUÉM DE VERDADE escreveu para esta pessoa: um trecho
+ * de livro, uma carta, o resumo do jogo — o que o cuidador colar.
+ *
+ * A fonte é `localStorage['irisflow_leituras']`, um array de
+ * `{ id, titulo, texto, criadoEm }`. Esta tela só LÊ. Quem escreve é a tela
+ * do cuidador (Configurações), que não faz parte deste módulo; enquanto ela
+ * não tiver o formulário, o estado vazio diz o que falta e onde.
+ *
+ * Tudo local: nada é buscado nem enviado.
  */
-const NOTICIAS = [
-  {
-    id: 1,
-    title: 'Avanços na Medicina',
-    summary:
-      'Nova tecnologia de eye-tracking permite maior independência para pacientes em UTIs.',
-  },
-  {
-    id: 2,
-    title: 'Clima para o Fim de Semana',
-    summary:
-      'Previsão de tempo ensolarado para o próximo final de semana em toda a região sul e sudeste.',
-  },
-  {
-    id: 3,
-    title: 'Esportes',
-    summary:
-      'Time local vence o campeonato regional em partida emocionante decidida nos últimos minutos.',
-  },
-];
+
+export const CHAVE_DAS_LEITURAS = 'irisflow_leituras';
+
+export interface Leitura {
+  id: string;
+  titulo: string;
+  texto: string;
+  /** ISO 8601. */
+  criadoEm: string;
+}
+
+function ehLeitura(v: unknown): v is Leitura {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.texto === 'string' && o.texto.trim().length > 0;
+}
+
+/** Lê as leituras guardadas. Registro ilegível vira lista vazia. */
+export function lerLeituras(): Leitura[] {
+  try {
+    const raw = localStorage.getItem(CHAVE_DAS_LEITURAS);
+    if (!raw) return [];
+    const v: unknown = JSON.parse(raw);
+    if (!Array.isArray(v)) return [];
+    return v.filter(ehLeitura).map((l, i) => ({
+      id: typeof l.id === 'string' && l.id ? l.id : `leitura_${i}`,
+      titulo: typeof l.titulo === 'string' && l.titulo.trim() ? l.titulo : `Leitura ${i + 1}`,
+      texto: l.texto,
+      criadoEm: typeof l.criadoEm === 'string' ? l.criadoEm : new Date(0).toISOString(),
+    }));
+  } catch {
+    return [];
+  }
+}
 
 export const NewsScreen: React.FC = () => {
   const navigate = useNavigate();
-  /** Id da notícia sendo lida, só para dar retorno visual — o paciente não tem
+  const { t } = useTranslation();
+  const [leituras, setLeituras] = useState<Leitura[]>([]);
+  /** Id da leitura sendo lida, só para dar retorno visual — o paciente não tem
    *  como saber que o dwell "pegou" se nada mudar na tela. */
-  const [lendo, setLendo] = useState<number | null>(null);
+  const [lendo, setLendo] = useState<string | null>(null);
 
-  const ler = useCallback((id: number, texto: string) => {
-    setLendo(id);
-    void falar(texto, { rate: 0.9 })
+  useEffect(() => {
+    setLeituras(lerLeituras());
+  }, []);
+
+  const ler = useCallback((l: Leitura) => {
+    setLendo(l.id);
+    void falar(`${l.titulo}. ${l.texto}`, { rate: 0.9 })
       .catch(() => {
         /* voz indisponível: o texto continua na tela, que é o essencial */
       })
-      .finally(() => setLendo(null));
+      .finally(() => setLendo((atual) => (atual === l.id ? null : atual)));
+  }, []);
+
+  const parar = useCallback(() => {
+    pararFala();
+    setLendo(null);
   }, []);
 
   return (
@@ -55,27 +87,43 @@ export const NewsScreen: React.FC = () => {
       role="main"
       aria-labelledby="news-title"
       style={{
-        minHeight: '100vh',
-        width: '100vw',
+        // Altura fixa; quem rola é a lista (abaixo), não o documento — senão
+        // as leituras passavam por baixo da Emergência, que é fixa.
+        height: '100dvh',
+        width: '100%',
         boxSizing: 'border-box',
         background: 'var(--color-bg-base)',
         color: 'var(--color-text-base)',
-        padding: '2rem 3rem 4rem 3rem',
+        padding: '2rem 3rem 0 3rem',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
         fontFamily: "'Inter', system-ui, sans-serif",
       }}
     >
-      <header style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginBottom: '1.5rem' }}>
+      <header
+        className="reserva-emergencia"
+        style={{
+          '--reserva-margem': '3rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1.5rem',
+          marginBottom: '1.5rem',
+          flexShrink: 0,
+        }}
+      >
         <GazeButton
           onClick={() => navigate('/games')}
           width={200}
-          height={68}
+          height={72}
+          isolado
           style={{
             borderRadius: '1.5rem',
             background: 'var(--color-card-bg)',
             border: '2px solid var(--color-card-border)',
             boxShadow: '0 6px 20px var(--color-card-shadow)',
           }}
-          aria-label="Voltar para Ajuda e Lazer"
+          aria-label={t('lazer.voltarAria')}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', fontSize: '1.3rem', fontWeight: 800 }}>
             <ArrowLeft size={28} /> Voltar
@@ -96,97 +144,128 @@ export const NewsScreen: React.FC = () => {
               justifyContent: 'center',
             }}
           >
-            <Newspaper size={30} />
+            <BookOpen size={30} />
           </span>
-          <h1 id="news-title" style={{ fontSize: '2rem', fontWeight: 900, margin: 0, letterSpacing: '-0.02em' }}>
-            Jornal do Dia
-          </h1>
+          <div>
+            <h1 id="news-title" style={{ fontSize: '2rem', fontWeight: 900, margin: 0, letterSpacing: '-0.02em' }}>
+              Leituras
+            </h1>
+            <p style={{ margin: '0.2rem 0 0 0', fontSize: '1.1rem', opacity: 0.75, fontWeight: 500 }}>
+              Textos guardados para você, lidos em voz alta
+            </p>
+          </div>
         </div>
       </header>
 
-      {/* Aviso de demonstração, visível na tela e não só no código. */}
-      <div
-        role="note"
-        data-no-dwell="true"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.85rem',
-          maxWidth: 900,
-          margin: '0 auto 2rem auto',
-          background: 'rgba(234, 179, 8, 0.14)',
-          border: '2px solid rgba(234, 179, 8, 0.5)',
-          borderRadius: '1.25rem',
-          padding: '1rem 1.5rem',
-          fontSize: '1.05rem',
-          fontWeight: 700,
-        }}
-      >
-        <Info size={26} aria-hidden="true" style={{ flexShrink: 0 }} />
-        <span>
-          Conteúdo de demonstração. Estes textos são exemplos fixos do aplicativo — não são
-          notícias reais nem vêm de nenhum jornal.
-        </span>
-      </div>
-
-      <ol
-        aria-label="Notícias de demonstração"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1.75rem',
-          maxWidth: 900,
-          margin: '0 auto',
-          padding: 0,
-          listStyle: 'none',
-        }}
-      >
-        {NOTICIAS.map((item) => (
-          <li key={item.id}>
-            <article
-              aria-labelledby={`news-${item.id}-title`}
-              style={{
-                background: 'var(--color-card-bg)',
-                border: '2px solid var(--color-card-border)',
-                padding: '2rem 2.25rem',
-                borderRadius: '1.75rem',
-                boxShadow: '0 10px 26px var(--color-card-shadow)',
-              }}
-            >
-              <h2
-                id={`news-${item.id}-title`}
-                style={{ fontSize: '1.6rem', fontWeight: 900, margin: '0 0 0.75rem 0' }}
-              >
-                {item.title}
-              </h2>
-              <p style={{ fontSize: '1.3rem', lineHeight: 1.6, margin: 0, opacity: 0.9 }}>
-                {item.summary}
-              </p>
-
-              <div style={{ marginTop: '1.5rem' }}>
-                <GazeButton
-                  onClick={() => ler(item.id, `${item.title}. ${item.summary}`)}
-                  width={250}
-                  height={72}
+      {leituras.length === 0 ? (
+        <section
+          aria-label="Nenhuma leitura guardada"
+          style={{
+            maxWidth: 760,
+            margin: '3rem auto 0 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '1.25rem',
+            textAlign: 'center',
+            padding: '2.5rem 2rem',
+            borderRadius: '1.75rem',
+            background: 'var(--color-card-bg)',
+            border: '2px solid var(--color-card-border)',
+          }}
+        >
+          <BookOpen size={64} aria-hidden="true" style={{ opacity: 0.35 }} />
+          <p style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800 }}>Nenhuma leitura ainda.</p>
+          <p style={{ margin: 0, fontSize: '1.15rem', lineHeight: 1.55, opacity: 0.8 }}>
+            Quem cuida de você pode guardar textos aqui — um trecho de livro, uma carta, o resumo
+            do jogo de ontem — e o computador lê em voz alta quando você olhar para o botão. Peça
+            para adicionarem uma leitura em Configurações.
+          </p>
+        </section>
+      ) : (
+        <ol
+          aria-label="Leituras guardadas"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1.75rem',
+            maxWidth: 900,
+            width: '100%',
+            margin: '0 auto',
+            padding: '0.5rem 0.5rem 4rem',
+            listStyle: 'none',
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+          }}
+        >
+          {leituras.map((item) => {
+            const estaLendo = lendo === item.id;
+            return (
+              <li key={item.id}>
+                <article
+                  aria-labelledby={`leitura-${item.id}-title`}
                   style={{
-                    borderRadius: '1.5rem',
-                    background: 'linear-gradient(135deg, #1b54a8, #2563eb)',
-                    color: '#ffffff',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    boxShadow: '0 8px 22px rgba(27,84,168,0.3)',
+                    background: 'var(--color-card-bg)',
+                    border: `2px solid ${estaLendo ? 'var(--color-primary)' : 'var(--color-card-border)'}`,
+                    padding: '2rem 2.25rem',
+                    borderRadius: '1.75rem',
+                    boxShadow: '0 10px 26px var(--color-card-shadow)',
                   }}
-                  aria-label={`Ouvir a notícia ${item.title} em voz alta`}
                 >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', fontSize: '1.25rem', fontWeight: 800 }}>
-                    <Volume2 size={28} />
-                    {lendo === item.id ? 'Lendo…' : 'Ouvir'}
-                  </span>
-                </GazeButton>
-              </div>
-            </article>
-          </li>
-        ))}
-      </ol>
+                  <h2
+                    id={`leitura-${item.id}-title`}
+                    style={{ fontSize: '1.6rem', fontWeight: 900, margin: '0 0 0.75rem 0' }}
+                  >
+                    {item.titulo}
+                  </h2>
+                  <p
+                    style={{
+                      fontSize: '1.3rem',
+                      lineHeight: 1.6,
+                      margin: 0,
+                      opacity: 0.9,
+                      whiteSpace: 'pre-wrap',
+                    }}
+                  >
+                    {item.texto}
+                  </p>
+
+                  <div style={{ marginTop: '1.5rem' }}>
+                    <GazeButton
+                      onClick={() => (estaLendo ? parar() : ler(item))}
+                      width={250}
+                      height={76}
+                      isolado
+                      style={{
+                        borderRadius: '1.5rem',
+                        background: estaLendo
+                          ? 'var(--color-card-bg)'
+                          : 'linear-gradient(135deg, #1b54a8, #2563eb)',
+                        color: estaLendo ? 'var(--color-primary)' : '#ffffff',
+                        border: estaLendo
+                          ? '3px solid var(--color-primary)'
+                          : '2px solid rgba(255,255,255,0.3)',
+                        boxShadow: '0 8px 22px rgba(27,84,168,0.3)',
+                      }}
+                      aria-label={
+                        estaLendo
+                          ? `Parar a leitura de ${item.titulo}`
+                          : `Ouvir ${item.titulo} em voz alta`
+                      }
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', fontSize: '1.25rem', fontWeight: 800 }}>
+                        {estaLendo ? <Square size={26} /> : <Volume2 size={28} />}
+                        {estaLendo ? 'Parar' : 'Ouvir'}
+                      </span>
+                    </GazeButton>
+                  </div>
+                </article>
+              </li>
+            );
+          })}
+        </ol>
+      )}
     </main>
   );
 };

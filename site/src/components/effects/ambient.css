@@ -26,6 +26,8 @@
   position: absolute;
   filter: blur(72px);
   opacity: 0.4;
+  /* O blur é rasterizado uma vez e depois só transformado. */
+  will-change: transform;
 }
 
 .ambient__blob--a {
@@ -46,16 +48,6 @@
   animation-duration: 30s;
   animation-direction: reverse;
   opacity: 0.26;
-}
-
-.ambient__blob--c {
-  width: 46vw;
-  height: 40vw;
-  left: 34%;
-  bottom: -22vh;
-  background: radial-gradient(circle at 50% 50%, #2f66c2, transparent 72%);
-  animation-duration: 36s;
-  opacity: 0.24;
 }
 
 .ambient__grid {
@@ -106,7 +98,7 @@
   box-shadow: 0 0 12px rgba(63, 214, 194, 0.9);
 }
 
-/* ---------- variante para fundo claro ---------- */
+/* ---------- variante discreta (páginas de fluxo: beta, conta, acesso) ---------- */
 .ambient--light .ambient__mesh {
   opacity: 0.09;
   filter: blur(10px);
@@ -118,8 +110,8 @@
 
 .ambient--light .ambient__grid {
   background-image:
-    linear-gradient(rgba(11, 27, 58, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(11, 27, 58, 0.05) 1px, transparent 1px);
+    linear-gradient(rgba(174, 201, 240, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(174, 201, 240, 0.04) 1px, transparent 1px);
 }
 
 .ambient--light .ambient__dot {
@@ -128,9 +120,37 @@
   opacity: 0.4;
 }
 
+/* ---------- modo leve: máquina modesta, tela estreita ou movimento reduzido ----------
+   Sem blur animado, sem partículas, sem varredura: fica o gradiente
+   estático, que custa o mesmo que uma imagem de fundo. */
+.ambient--lite .ambient__mesh {
+  animation: none;
+  filter: none;
+  background-size: 100% 100%;
+}
+
+.ambient--lite .ambient__blob {
+  animation: none;
+  filter: blur(40px);
+  will-change: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ambient__scan,
   .ambient__dot {
     display: none;
+  }
+  .ambient__mesh,
+  .ambient__blob {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .ambient__blob {
+    filter: blur(40px);
+  }
+  .ambient__grid {
+    background-size: 48px 48px;
   }
 }

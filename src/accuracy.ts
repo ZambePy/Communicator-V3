@@ -492,9 +492,11 @@ const VALIDATION_POINTS = [
   { name: 'P9', screenX: 0.75, screenY: 0.75 },
 ];
 
-// Quatro cantos a 5/95: extrapolação em X, onde a UI de fato põe botões. Só
-// quatro porque cada ponto custa ~2,3 s (COLLECTION_MS + a pausa de 300 ms) a
-// um paciente com fadiga limitante.
+// Quatro cantos a 5/95, onde a UI de fato põe botões. Até 23/09/2026 mediam
+// extrapolação; desde então a calibração padrão tem pontos nesses mesmos
+// cantos, e eles medem a acurácia no canto calibrado (ver `prepararRodada`).
+// Só quatro porque cada ponto custa ~2,3 s (COLLECTION_MS + a pausa de 300 ms)
+// a um paciente com fadiga limitante.
 const EDGE_POINTS = [
   { name: 'B1', screenX: 0.05, screenY: 0.05 },
   { name: 'B2', screenX: 0.95, screenY: 0.05 },
@@ -649,11 +651,25 @@ function prepararRodada(
   runtime?: RuntimeInfo,
 ) {
   const overlap = checkValidationOverlap(getCalibrationTargets(), ALL_VALIDATION_POINTS);
-  if (overlap.length > 0) {
+  // Desde 23/09/2026 a calibração padrão tem os quatro cantos da tela, no mesmo
+  // lugar dos pontos B1–B4: ali o teste passa a medir a acurácia NO CANTO
+  // CALIBRADO (a pessoa volta a olhar o canto depois do treino), que é o que o
+  // botão de canto sente — não mais a extrapolação. Sobreposição no miolo
+  // continua sendo defeito: a grade P1–P9 existe para medir generalização.
+  const nomesDeBorda = new Set(EDGE_POINTS.map((p) => p.name));
+  const noMiolo = overlap.filter((o) => !nomesDeBorda.has(o.validationPoint));
+  const naBorda = overlap.filter((o) => nomesDeBorda.has(o.validationPoint));
+  if (noMiolo.length > 0) {
     console.warn(
-      `[accuracy] ⚠ ${overlap.length} ponto(s) de validação coincidem com alvos de ` +
-      `calibração (${overlap.map(o => o.validationPoint).join(', ')}). O erro nesses ` +
+      `[accuracy] ⚠ ${noMiolo.length} ponto(s) de validação do miolo coincidem com alvos de ` +
+      `calibração (${noMiolo.map(o => o.validationPoint).join(', ')}). O erro nesses ` +
       `pontos mede memorização, não generalização.`,
+    );
+  }
+  if (naBorda.length > 0) {
+    console.log(
+      `[accuracy] cantos ${naBorda.map(o => o.validationPoint).join(', ')} são pontos da calibração: ` +
+      'ali o teste mede a acurácia no canto calibrado, não a extrapolação.',
     );
   }
   // Ordem sorteada: em ordem fixa o participante antecipa o próximo alvo e a

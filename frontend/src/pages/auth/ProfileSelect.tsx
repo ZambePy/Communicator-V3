@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useAuth, type Profile } from '../../context/AuthContext';
 import { UserCircle, UserPlus, ArrowRight, Trash2, AlertCircle, Camera, X } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { ProgressoDoOnboarding } from '../../components/ui/ProgressoDoOnboarding';
+import { EstadoVazio } from '../../components/ui/EstadoDaTela';
 
 /**
  * Escolha e cadastro do paciente.
@@ -104,16 +106,22 @@ export const ProfileSelect: React.FC = () => {
       style={{
         minHeight: '100vh',
         background: 'var(--settings-bg)',
+        backgroundImage: 'var(--page-bg)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
+        gap: '1.5rem',
         padding: '2.5rem 2rem',
       }}
     >
+      <ProgressoDoOnboarding atual="perfil" />
+      {/* `coluna-livre-da-emergencia`: a 1280×720 o título de 860 px chegava
+          por baixo da Emergência quando a página rolava. */}
       <div
-        className="animate-fade-in-up"
+        className="animate-fade-in-up coluna-livre-da-emergencia"
         style={{
+          '--coluna-largura': '860px',
           width: '100%',
           maxWidth: 860,
           display: 'flex',
@@ -130,50 +138,29 @@ export const ProfileSelect: React.FC = () => {
             textAlign: 'center',
           }}
         >
-          <h1
-            id="profiles-title"
-            style={{
-              fontSize: '2.1rem',
-              fontWeight: 800,
-              margin: 0,
-              color: 'var(--color-text-base)',
-            }}
-          >
+          <h1 id="profiles-title" className="t-display" style={{ margin: 0, color: 'var(--color-text-base)' }}>
             {t('profiles.title')}
           </h1>
-          <p
-            style={{
-              margin: 0,
-              fontSize: '1.02rem',
-              opacity: 0.8,
-              color: 'var(--color-text-base)',
-            }}
-          >
+          <p className="t-body-lg" style={{ margin: 0, color: 'var(--color-text-muted)', maxWidth: '48ch' }}>
             {t('profiles.subtitle')}
           </p>
         </div>
 
         {criando ? (
           <div
-            className="glass-card"
+            className="surface surface--elevated"
             style={{
-              background: 'var(--color-card-bg)',
-              borderRadius: '1.6rem',
+              borderRadius: 'var(--radius-xl)',
               padding: '2rem',
               display: 'flex',
               flexDirection: 'column',
               gap: '1.15rem',
-              boxShadow: '0 12px 32px rgba(27,84,168,0.08)',
+              maxWidth: 560,
+              width: '100%',
+              alignSelf: 'center',
             }}
           >
-            <h2
-              style={{
-                fontSize: '1.3rem',
-                fontWeight: 800,
-                margin: 0,
-                color: 'var(--color-text-base)',
-              }}
-            >
+            <h2 className="t-h2" style={{ margin: 0, color: 'var(--color-text-base)' }}>
               {t('profiles.form.title')}
             </h2>
 
@@ -257,7 +244,7 @@ export const ProfileSelect: React.FC = () => {
                   fontSize: '0.9rem',
                 }}
               >
-                <AlertCircle size={17} color="#dc2626" aria-hidden="true" />
+                <AlertCircle size={17} color="var(--color-danger)" aria-hidden="true" />
                 <span>{erro}</span>
               </div>
             )}
@@ -274,15 +261,18 @@ export const ProfileSelect: React.FC = () => {
         ) : (
           <>
             {profiles.length === 0 && (
-              <p style={{ textAlign: 'center', fontSize: '1.02rem', opacity: 0.75, margin: 0 }}>
-                {t('profiles.empty')}
-              </p>
+              <EstadoVazio
+                titulo={t('profiles.empty')}
+                icone={<UserCircle size={32} aria-hidden="true" />}
+                style={{ padding: 'var(--space-5)' }}
+              />
             )}
 
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 300px))',
+                justifyContent: 'center',
                 gap: '1.5rem',
               }}
             >
@@ -291,10 +281,9 @@ export const ProfileSelect: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => escolher(p)}
-                    className="glass-card"
+                    className="surface glass-card"
                     style={{
-                      background: 'var(--color-card-bg)',
-                      borderRadius: '1.6rem',
+                      borderRadius: 'var(--radius-xl)',
                       padding: '2rem 1.25rem',
                       display: 'flex',
                       flexDirection: 'column',
@@ -303,8 +292,7 @@ export const ProfileSelect: React.FC = () => {
                       cursor: 'pointer',
                       textAlign: 'center',
                       width: '100%',
-                      border: 'none',
-                      boxShadow: '0 8px 24px rgba(27,84,168,0.06)',
+                      color: 'var(--color-text-base)',
                     }}
                   >
                     {p.avatar ? (
@@ -325,32 +313,27 @@ export const ProfileSelect: React.FC = () => {
                           width: 84,
                           height: 84,
                           borderRadius: '50%',
-                          background: 'rgba(27,84,168,0.1)',
+                          background: 'var(--color-primary-light)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
                       >
-                        <UserCircle size={56} color="#1B54A8" aria-hidden="true" />
+                        <UserCircle size={56} color="var(--color-primary)" aria-hidden="true" />
                       </div>
                     )}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                      <span
-                        style={{
-                          fontSize: '1.2rem',
-                          fontWeight: 800,
-                          color: 'var(--color-text-base)',
-                        }}
-                      >
+                      <span className="t-h2" style={{ color: 'var(--color-text-base)' }}>
                         {p.name}
                       </span>
                       {p.condition && (
-                        <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>{p.condition}</span>
+                        <span className="t-caption">{p.condition}</span>
                       )}
                       <span
                         style={{
-                          fontSize: '0.85rem',
-                          color: '#1B54A8',
+                          marginTop: '0.25rem',
+                          fontSize: '0.9rem',
+                          color: 'var(--color-primary)',
                           fontWeight: 700,
                           display: 'flex',
                           alignItems: 'center',
@@ -382,7 +365,7 @@ export const ProfileSelect: React.FC = () => {
                       cursor: 'pointer',
                     }}
                   >
-                    <Trash2 size={15} color="#dc2626" aria-hidden="true" />
+                    <Trash2 size={15} color="var(--color-danger)" aria-hidden="true" />
                   </button>
                 </div>
               ))}
@@ -391,9 +374,9 @@ export const ProfileSelect: React.FC = () => {
                 type="button"
                 onClick={() => setCriando(true)}
                 style={{
-                  background: 'rgba(27,84,168,0.04)',
-                  border: '2px dashed rgba(27,84,168,0.3)',
-                  borderRadius: '1.6rem',
+                  background: 'var(--state-active-bg)',
+                  border: '2px dashed var(--state-hover-border)',
+                  borderRadius: 'var(--radius-xl)',
                   padding: '2rem 1.25rem',
                   display: 'flex',
                   flexDirection: 'column',
@@ -402,10 +385,11 @@ export const ProfileSelect: React.FC = () => {
                   gap: '0.85rem',
                   cursor: 'pointer',
                   minHeight: 200,
+                  color: 'var(--color-primary)',
                 }}
               >
-                <UserPlus size={40} color="#1B54A8" aria-hidden="true" />
-                <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#1B54A8' }}>
+                <UserPlus size={40} aria-hidden="true" />
+                <span style={{ fontSize: '1.05rem', fontWeight: 800 }}>
                   {t('profiles.new')}
                 </span>
               </button>

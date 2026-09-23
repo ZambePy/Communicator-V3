@@ -3,8 +3,9 @@
 //
 // ─── Regularização branqueada pelo ruído intra-fixação ──────────────────────
 //
-// Com 27 dims por olho depois da expansão polinomial e apenas 9 alvos
-// distintos, sobram direções
+// Com 7 colunas por olho depois da expansão parcial (eram 27 na expansão
+// completa de 6 dims; a conta continua valendo) e apenas 9 alvos distintos,
+// sobram direções
 // que NENHUM alvo restringe. Com `+λI` (penalidade isotrópica) o Ridge
 // preenche essas direções com o jitter de fixação e a deriva lenta de
 // pose/landmark, que ficam ALIASADOS com a identidade do alvo (cada alvo é
@@ -20,13 +21,13 @@
 //
 // que penaliza forte as direções sem informação de olhar e deixa livres as
 // direções que separam alvos. É o mesmo branqueamento por covariância de ruído
-// da LDA regularizada. Custo: uma acumulação 27×27 por olho (~ms).
+// da LDA regularizada. Custo: uma acumulação d×d por olho (7×7 hoje; ~ms).
 //
 // O fator `m` (nº de amostras) escala λ junto com ΦᵀΦ: sem ele, λ significa
 // coisas diferentes conforme quantos frames a coleta conseguiu reter (500
 // frames → ΦᵀΦ ~ 500 na diagonal, e λ=1 vira regularização relativa de 0.002).
 // Com o fator, λ é adimensional e o grid do CV cobre de "sem regularização"
-// (1e-4) a "encolhimento total" (1e3).
+// (1e-5, ver `LAMBDA_GRID`) a "encolhimento total" (1e3).
 //
 // Sem `groups` a penalidade cai de volta para a identidade (comportamento
 // isotrópico histórico), preservando os callers que não agrupam por alvo.
@@ -205,7 +206,8 @@ export interface RidgeTrainOptions {
    * diagonal depende.
    *
    * Sem reusá-las, cada tentativa de λ refaz a Gram inteira — O(m·d²), que
-   * domina o custo. Medido com 644 amostras e 27 dims: a busca de λ levava
+   * domina o custo. Medido com 644 amostras e 27 dims (expansão completa da
+   * época; hoje são 7): a busca de λ levava
    * 1346 ms dos 1537 ms da calibração completa, e é o congelamento que o
    * operador vê no fim do último alvo.
    *
@@ -352,9 +354,9 @@ export function predictRidge(
   if (features.length !== model.numFeatures) {
     throw new RangeError(
       `[ridge] dimensão incompatível: modelo treinado com ${model.numFeatures} features, ` +
-      `recebeu ${features.length}. Causa provável: calibração feita com o bloco L2CS ` +
-      `ativo (44 dims/olho) e inferência sem ele (37 dims), ou vice-versa. ` +
-      `Recalibre com o worker L2CS em estado 'ready'.`
+      `recebeu ${features.length}. Causa provável: o conjunto de features ativo ou a ` +
+      `forma da expansão mudou desde a calibração (flags \`blocoL2csCompleto\`, ` +
+      `\`formaDaExpansao\`, \`dimsDaIris\`), ou o perfil é de outra versão. Recalibre.`
     );
   }
   const f = [1.0, ...features];

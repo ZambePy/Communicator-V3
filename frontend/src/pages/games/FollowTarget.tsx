@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Crosshair, RotateCcw } from 'lucide-react';
 import { GazeButton } from '../../components/ui/GazeButton';
 
@@ -77,6 +78,7 @@ function sortearAlvo(indice: number): Alvo {
 
 export const FollowTarget: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [fase, setFase] = useState<Fase>('jogando');
   const [alvo, setAlvo] = useState<Alvo>(() => sortearAlvo(0));
   const [acertos, setAcertos] = useState(0);
@@ -152,7 +154,9 @@ export const FollowTarget: React.FC = () => {
     >
       {/* Saída sempre visível, dentro da faixa onde nenhum alvo nasce. */}
       <header
+        className="reserva-emergencia"
         style={{
+          '--reserva-margem': '2.5rem',
           position: 'absolute',
           top: '2rem',
           left: '2.5rem',
@@ -174,7 +178,7 @@ export const FollowTarget: React.FC = () => {
             border: '2px solid rgba(248,250,252,0.35)',
             color: '#f8fafc',
           }}
-          aria-label="Voltar para Ajuda e Lazer"
+          aria-label={t('lazer.voltarAria')}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', fontSize: '1.3rem', fontWeight: 800 }}>
             <ArrowLeft size={28} /> Voltar
@@ -347,7 +351,7 @@ export const FollowTarget: React.FC = () => {
                   border: '2px solid rgba(248,250,252,0.4)',
                   color: '#f8fafc',
                 }}
-                aria-label="Voltar para Ajuda e Lazer"
+                aria-label={t('lazer.voltarAria')}
               >
                 <span style={{ fontSize: '1.3rem', fontWeight: 800 }}>Voltar ao menu</span>
               </GazeButton>

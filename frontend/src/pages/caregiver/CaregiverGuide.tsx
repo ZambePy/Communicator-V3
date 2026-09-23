@@ -19,8 +19,8 @@ export const CaregiverGuide: React.FC = () => {
           display: 'flex',
           flexDirection: 'column',
           gap: '2rem',
-          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-          color: '#cbd5e1',
+          fontFamily: 'var(--font-body)',
+          color: 'var(--color-text-muted)',
         }}
       >
         {/* Botão de Voltar */}
@@ -31,17 +31,17 @@ export const CaregiverGuide: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '0.5rem',
-            background: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
+            background: 'var(--color-card-bg)',
+            border: '1px solid var(--color-card-border)',
             borderRadius: '0.75rem',
-            color: '#f8fafc',
+            color: 'var(--color-text-base)',
             padding: '0.6rem 1.2rem',
             fontSize: '0.95rem',
             fontWeight: 600,
             cursor: 'pointer',
             transition: 'background 0.2s',
           }}
-          {...hoverAndFocusBackground('rgba(255, 255, 255, 0.05)', 'rgba(255, 255, 255, 0.15)')}
+          {...hoverAndFocusBackground('var(--color-card-bg)', 'var(--state-active-bg)')}
         >
           <ArrowLeft size={18} /> Voltar
         </button>
@@ -49,16 +49,16 @@ export const CaregiverGuide: React.FC = () => {
         {/* Introdução */}
         <section
           style={{
-            background: '#1e293b',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'var(--color-card-bg)',
+            border: '1px solid var(--color-card-border)',
             borderRadius: '1.5rem',
             padding: '2rem',
           }}
         >
-          <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#f8fafc', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Info size={28} color="#3b82f6" /> Instalação e Rastreamento Ocular
+          <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--color-text-base)', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Info size={28} color="var(--color-primary)" /> Instalação e Rastreamento Ocular
           </h2>
-          <p style={{ fontSize: '1.1rem', lineHeight: 1.6, margin: 0, color: '#94a3b8' }}>
+          <p style={{ fontSize: '1.1rem', lineHeight: 1.6, margin: 0, color: 'var(--color-text-muted)' }}>
             Este guia foi elaborado para ajudar o cuidador a configurar e calibrar o rastreador ocular de forma eficiente. O posicionamento correto e a boa iluminação reduzem drasticamente falsos positivos, erros e chamados de suporte.
           </p>
         </section>
@@ -66,13 +66,13 @@ export const CaregiverGuide: React.FC = () => {
         {/* Câmera */}
         <section
           style={{
-            background: '#1e293b',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'var(--color-card-bg)',
+            border: '1px solid var(--color-card-border)',
             borderRadius: '1.5rem',
             padding: '2rem',
           }}
         >
-          <h3 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <h3 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-text-base)', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <Video size={24} color="var(--color-primary)" /> 1. Posicionamento da Câmera
           </h3>
           <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '1.05rem', lineHeight: 1.6 }}>
@@ -91,14 +91,14 @@ export const CaregiverGuide: React.FC = () => {
         {/* Iluminação */}
         <section
           style={{
-            background: '#1e293b',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'var(--color-card-bg)',
+            border: '1px solid var(--color-card-border)',
             borderRadius: '1.5rem',
             padding: '2rem',
           }}
         >
-          <h3 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <Sun size={24} color="#f59e0b" /> 2. Iluminação do Ambiente
+          <h3 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-text-base)', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Sun size={24} color="var(--color-warn)" /> 2. Iluminação do Ambiente
           </h3>
           <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '1.05rem', lineHeight: 1.6 }}>
             <li>
@@ -116,13 +116,13 @@ export const CaregiverGuide: React.FC = () => {
         {/* Óculos */}
         <section
           style={{
-            background: '#1e293b',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'var(--color-card-bg)',
+            border: '1px solid var(--color-card-border)',
             borderRadius: '1.5rem',
             padding: '2rem',
           }}
         >
-          <h3 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <h3 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-text-base)', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <Eye size={24} color="var(--color-primary)" /> 3. Uso de Óculos e Lentes
           </h3>
           <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '1.05rem', lineHeight: 1.6 }}>
@@ -141,13 +141,13 @@ export const CaregiverGuide: React.FC = () => {
         {/* Resolução de Problemas */}
         <section
           style={{
-            background: '#1e293b',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'var(--color-card-bg)',
+            border: '1px solid var(--color-card-border)',
             borderRadius: '1.5rem',
             padding: '2rem',
           }}
         >
-          <h3 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <h3 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-text-base)', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             🛠️ O que fazer se a calibração falhar constantemente?
           </h3>
           <ul style={{ paddingLeft: '1.25rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '1.05rem', lineHeight: 1.6 }}>

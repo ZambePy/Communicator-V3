@@ -131,3 +131,40 @@ describe('sem sessionStorage (janela anônima, dados bloqueados)', () => {
     expect(passoGuardado()).toBeNull();
   });
 });
+
+/**
+ * A faixa de missão e o cartão do menu precisam REAGIR: `sessionStorage` não
+ * avisa a própria aba, então o módulo dispara um evento a cada mudança.
+ */
+describe('evento de mudança e ensaio guardado', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it('avisa os assinantes a cada mudança e para de avisar depois de cancelar', async () => {
+    const { aoMudarMissao, guardarEnsaio, ensaioGuardado } = await import('./missao');
+    const cb = vi.fn();
+    const cancelar = aoMudarMissao(cb);
+
+    iniciarMissao('lazer');
+    expect(cb).toHaveBeenCalledTimes(1);
+    cumprirMissao('lazer');
+    expect(cb).toHaveBeenCalledTimes(3); // grava cumpridas + zera ativa
+    guardarPasso('lazer');
+    expect(cb).toHaveBeenCalledTimes(4);
+
+    cancelar();
+    guardarEnsaio();
+    expect(cb).toHaveBeenCalledTimes(4);
+    expect(ensaioGuardado()).toBe(true);
+  });
+
+  it('o ensaio sobrevive a uma remontagem e é esquecido ao sair', async () => {
+    const { guardarEnsaio, ensaioGuardado } = await import('./missao');
+    expect(ensaioGuardado()).toBe(false);
+    guardarEnsaio();
+    expect(ensaioGuardado()).toBe(true);
+    limparMissoes();
+    expect(ensaioGuardado()).toBe(false);
+  });
+});

@@ -1,33 +1,45 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInDown, FadeInLeft, FadeInRight, LinearTransition } from 'react-native-reanimated';
-import { DemoBanner, IrisLogo, PressableScale, StatusPill, Text } from '@/components';
+import Animated, { LinearTransition } from 'react-native-reanimated';
+import { Avatar, ConversationSkeleton, EmptyState, IconButton, LiveDot, Notice, PressableScale, Text } from '@/components';
 import { Message } from '@/data/types';
 import { useApp } from '@/store/AppProvider';
-import { fonts, radius, spacing, useTheme } from '@/theme';
-import { dateLong, hm } from '@/utils/format';
+import { fonts, layout, motion, radius, sizes, spacing, typeScale, useEntrada, useTheme } from '@/theme';
+import { mensagemDeErro } from '@/utils/errors';
+import { dateLong, firstName, hm } from '@/utils/format';
 
-const SUGGESTIONS = ['Já estou indo', 'Precisa de algo?', 'Quer água?', 'Está confortável?', 'Vou trocar de posição', 'Te amo'];
+const SUGESTOES = ['Já estou indo', 'Precisa de algo?', 'Quer água?', 'Está confortável?', 'Vou trocar de posição', 'Te amo'];
 
 export default function Conversa() {
   const { colors, mode } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { patient, messages, sendMessage, markRead, session, devices, isDemo } = useApp();
+  const { patient, messages, sendMessage, markRead, session, devices, unreadCount, patientLoaded, error, refresh } = useApp();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [falha, setFalha] = useState<string | null>(null);
   const list = useRef<FlatList<Row>>(null);
+  const focada = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
-      markRead();
+      focada.current = true;
+      markRead().catch(() => undefined);
+      return () => {
+        focada.current = false;
+      };
     }, [markRead]),
   );
+
+  // Mensagem nova chegando COM a aba em foco: marca como lida na hora. Antes
+  // só o focus marcava, então o selo de não lidas subia enquanto o cuidador
+  // estava olhando exatamente para a conversa.
+  useEffect(() => {
+    if (focada.current && unreadCount > 0) markRead().catch(() => undefined);
+  }, [unreadCount, markRead]);
 
   useEffect(() => {
     const t = setTimeout(() => list.current?.scrollToEnd({ animated: true }), 120);
@@ -35,7 +47,9 @@ export default function Conversa() {
   }, [messages.length]);
 
   const rows = useMemo(() => groupByDay(messages), [messages]);
-  const online = devices[0]?.online ?? false;
+  const device = devices.find((d) => !d.revoked_at);
+  const online = device?.online ?? false;
+  const nome = patient ? firstName(patient.user_name) : 'o paciente';
 
   const send = async (t: string, kind: Message['kind'] = 'texto') => {
     const value = t.trim();
@@ -44,116 +58,117 @@ export default function Conversa() {
     setFalha(null);
     try {
       await sendMessage(value, kind);
-      // Limpar só depois do sucesso: antes o campo era esvaziado logo de
-      // saída, então uma falha de envio apagava o texto do cuidador sem aviso
-      // nenhum e sem nada ter chegado ao paciente.
+      // Limpar só depois do sucesso: uma falha de envio não pode apagar o
+      // texto do cuidador sem nada ter chegado ao paciente.
       if (kind === 'texto') setText('');
     } catch (e) {
-      setFalha(e instanceof Error ? e.message : 'Não foi possível enviar agora.');
+      setFalha(mensagemDeErro(e, 'Não foi possível enviar agora.'));
     } finally {
       setSending(false);
     }
   };
 
+  const status = session ? 'Escrevendo com os olhos' : online ? 'Computador ligado' : device ? 'Desligado · as mensagens esperam na fila' : 'Nenhum computador conectado';
+  const podeEnviar = Boolean(text.trim()) && !sending;
+
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
-      {/* cabeçalho */}
-      <LinearGradient colors={[colors.gradientHeader[0], colors.gradientHeader[1]]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <PressableScale onPress={() => router.push('/paciente')} style={styles.headerRow} scaleTo={0.98}>
-          <IrisLogo size={44} onDark spinning={online} breathing={online} />
-          <View style={{ flex: 1 }}>
-            <Text variant="h3" tone="onPrimary">
+    <KeyboardAvoidingView style={[styles.flex, { backgroundColor: colors.background }]} behavior="padding">
+      {/* Cabeçalho fixo */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing.sm, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
+        <PressableScale onPress={() => router.push('/paciente')} accessibilityRole="button" accessibilityLabel={`${patient?.user_name ?? 'Paciente'}. ${status}. Abrir perfil`} scaleTo={motion.pressScaleCard} style={styles.headerWho}>
+          <Avatar name={patient?.user_name} />
+          <View style={styles.flex}>
+            <Text variant="h3" numberOfLines={1} accessibilityRole="header">
               {patient?.user_name ?? 'Paciente'}
             </Text>
-            <Text variant="caption" style={{ color: 'rgba(255,255,255,0.75)' }}>
-              {session ? 'Escrevendo com os olhos no IrisFlow Communicator' : online ? 'Computador conectado' : 'Computador offline — mensagens ficam na fila'}
-            </Text>
+            <View style={styles.statusRow}>
+              {session ? <LiveDot color={colors.accent} /> : <View style={[styles.dot, { backgroundColor: online ? colors.accent : colors.textMuted }]} />}
+              <Text variant="caption" tone="muted" style={styles.flex} numberOfLines={2}>
+                {status}
+              </Text>
+            </View>
           </View>
-          <StatusPill label={session ? 'Ao vivo' : online ? 'Online' : 'Offline'} live={Boolean(session)} onDark />
         </PressableScale>
-        <PressableScale onPress={() => router.push('/frases')} style={styles.phrasesBtn}>
-          <Ionicons name="albums-outline" size={16} color="#FFF" />
-          <Text variant="caption" tone="onPrimary" weight="semibold">
-            Frases rápidas do paciente
-          </Text>
-          <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.8)" />
-        </PressableScale>
-      </LinearGradient>
-
-      {isDemo && <DemoBanner text="Modo demonstração — a conversa é simulada, nenhuma mensagem chega a um paciente real." style={styles.demo} />}
+        <IconButton icon="albums-outline" variant="tinted" accessibilityLabel="Frases rápidas" accessibilityHint={`Editar as frases que aparecem na tela de ${nome}`} onPress={() => router.push('/frases')} />
+      </View>
 
       <FlatList
         ref={list}
         data={rows}
         keyExtractor={(r) => r.key}
-        contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing.xl, gap: spacing.sm }}
-        renderItem={({ item }) => (item.type === 'day' ? <DayLabel label={item.label} /> : <Bubble m={item.message} patientName={patient?.user_name ?? ''} />)}
+        contentContainerStyle={styles.listContent}
+        renderItem={({ item }) => (item.type === 'day' ? <DayLabel label={item.label} /> : <Bubble m={item.message} nome={nome} />)}
         ListEmptyComponent={
-          <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl }}>
-            <Ionicons name="chatbubbles-outline" size={40} color={colors.textMuted} />
-            <Text variant="bodySmall" tone="muted" center style={{ marginTop: spacing.md, maxWidth: 280 }}>
-              Quando {patient?.user_name ?? 'o paciente'} escrever com os olhos, a frase aparece aqui. O que você enviar é falado e exibido na tela do computador.
-            </Text>
-          </View>
+          !patientLoaded ? (
+            <ConversationSkeleton />
+          ) : error ? (
+            <EmptyState icon="cloud-offline-outline" title="Não deu para carregar a conversa" body="Confira a internet e tente de novo." action={{ label: 'Tentar de novo', icon: 'refresh', onPress: () => void refresh() }} />
+          ) : (
+            <EmptyState icon="chatbubbles-outline" title="Nenhuma mensagem ainda" body={`Quando ${nome} escrever com os olhos, aparece aqui. O que você mandar é falado na tela do computador.`} />
+          )
         }
         onContentSizeChange={() => list.current?.scrollToEnd({ animated: false })}
+        keyboardShouldPersistTaps="handled"
       />
 
-      {/* sugestões */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.suggestions} keyboardShouldPersistTaps="handled">
-        {SUGGESTIONS.map((s) => (
-          <PressableScale key={s} onPress={() => send(s, 'frase')} style={[styles.chip, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text variant="bodySmall" weight="medium" tone="primary">
-              {s}
-            </Text>
-          </PressableScale>
-        ))}
-      </ScrollView>
-
-      {/* composer */}
-      <View style={[styles.composer, { backgroundColor: colors.surface, borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, spacing.sm) + 72 }]}>
-        {falha && (
-          <View style={[styles.falha, { backgroundColor: colors.dangerTint }]}>
-            <Ionicons name="cloud-offline" size={16} color={colors.danger} />
-            <Text variant="caption" tone="danger" style={{ flex: 1 }}>
-              Não enviado: {falha} O texto continua aí — toque em enviar para tentar de novo.
-            </Text>
-          </View>
-        )}
-        <View style={styles.yesno}>
-          <PressableScale onPress={() => send('Sim', 'simnao')} style={[styles.yn, { backgroundColor: colors.accentTint }]}>
-            <Ionicons name="checkmark" size={20} color={colors.accentDeep} />
-            <Text variant="bodySmall" weight="bold" style={{ color: colors.accentDeep }}>
-              Sim
-            </Text>
-          </PressableScale>
-          <PressableScale onPress={() => send('Não', 'simnao')} style={[styles.yn, { backgroundColor: colors.dangerTint }]}>
-            <Ionicons name="close" size={20} color={colors.danger} />
-            <Text variant="bodySmall" weight="bold" tone="danger">
-              Não
-            </Text>
-          </PressableScale>
-        </View>
-        <View style={[styles.inputRow, { backgroundColor: colors.surfaceAlt }]}>
+      {/* Respostas prontas + campo */}
+      <View style={[styles.composer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+        {falha ? <Notice tone="danger" title="Não enviado" text={`${falha} O texto continua no campo — toque em enviar para tentar de novo.`} style={styles.falha} /> : null}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
+          <Chip label="Sim" icon="checkmark" tone="accent" onPress={() => void send('Sim', 'simnao')} disabled={sending} nome={nome} />
+          <Chip label="Não" icon="close" tone="danger" onPress={() => void send('Não', 'simnao')} disabled={sending} nome={nome} />
+          {SUGESTOES.map((s) => (
+            <Chip key={s} label={s} onPress={() => void send(s, 'frase')} disabled={sending} nome={nome} />
+          ))}
+        </ScrollView>
+        <View style={styles.inputRow}>
           <TextInput
-            style={[styles.input, { color: colors.text }]}
-            placeholder="Escreva para ser falado na tela…"
+            style={[styles.input, { color: colors.text, backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+            placeholder={`Escreva — ${nome} ouve na tela`}
             placeholderTextColor={colors.textMuted}
             value={text}
             onChangeText={setText}
             multiline
             maxLength={500}
-            onSubmitEditing={() => send(text)}
-            blurOnSubmit
+            // "Enviar" no teclado manda a mensagem (em vez de quebrar linha), como antes.
             returnKeyType="send"
+            submitBehavior="blurAndSubmit"
+            onSubmitEditing={() => void send(text)}
             keyboardAppearance={mode}
+            selectionColor={colors.primary}
+            accessibilityLabel={`Mensagem para ${nome}`}
+            accessibilityHint="O texto é falado e mostrado na tela do computador"
+            maxFontSizeMultiplier={1.6}
           />
-          <PressableScale onPress={() => send(text)} disabled={!text.trim() || sending} haptic="medium" style={[styles.sendBtn, { backgroundColor: text.trim() ? colors.primary : colors.border }]} accessibilityLabel="Enviar">
-            <Ionicons name="volume-high" size={20} color="#FFF" />
+          <PressableScale
+            onPress={() => void send(text)}
+            disabled={!podeEnviar}
+            haptic="medium"
+            accessibilityRole="button"
+            accessibilityLabel="Enviar"
+            accessibilityHint="Envia para ser falado na tela"
+            accessibilityState={{ disabled: !podeEnviar, busy: sending }}
+            style={[styles.sendBtn, { backgroundColor: podeEnviar ? colors.primaryStrong : colors.surfaceAlt }]}
+          >
+            <Ionicons name="send" size={sizes.icon.md} color={podeEnviar ? colors.onPrimary : colors.textMuted} />
           </PressableScale>
         </View>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+function Chip({ label, icon, tone = 'primary', onPress, disabled, nome }: { label: string; icon?: keyof typeof Ionicons.glyphMap; tone?: 'primary' | 'accent' | 'danger'; onPress: () => void; disabled?: boolean; nome: string }) {
+  const { colors } = useTheme();
+  const fg = tone === 'accent' ? colors.accentText : tone === 'danger' ? colors.dangerText : colors.primary;
+  const bg = tone === 'accent' ? colors.accentTint : tone === 'danger' ? colors.dangerTint : colors.primaryTint;
+  return (
+    <PressableScale onPress={onPress} disabled={disabled} haptic="medium" accessibilityRole="button" accessibilityLabel={`Enviar “${label}” para ${nome}`} style={[styles.chip, { backgroundColor: bg }]}>
+      {icon ? <Ionicons name={icon} size={sizes.icon.sm} color={fg} /> : null}
+      <Text variant="bodySmall" weight="semibold" style={{ color: fg }}>
+        {label}
+      </Text>
+    </PressableScale>
   );
 }
 
@@ -177,85 +192,134 @@ function groupByDay(messages: Message[]): Row[] {
 function DayLabel({ label }: { label: string }) {
   const { colors } = useTheme();
   return (
-    <Animated.View entering={FadeInDown.duration(300)} style={{ alignSelf: 'center', backgroundColor: colors.surfaceAlt, paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.pill, marginVertical: spacing.sm }}>
+    <View style={[styles.day, { backgroundColor: colors.surfaceAlt }]} accessibilityRole="header">
       <Text variant="caption" tone="muted" weight="semibold">
         {label}
       </Text>
+    </View>
+  );
+}
+
+/**
+ * Mensagem de sistema com estilo próprio — NÃO é um rótulo de dia. Do
+ * paciente ("Estou bem", enviado pela tela do computador): pílula teal com
+ * remetente e hora, para que o cuidador veja que foi um sinal deliberado e
+ * quando. Do servidor (escalonamento sem confirmação): âmbar, com alerta.
+ */
+function SystemNote({ m, nome }: { m: Message; nome: string }) {
+  const { colors } = useTheme();
+  const entrada = useEntrada();
+  const doPaciente = m.sender === 'paciente';
+  const bg = doPaciente ? colors.accentTint : colors.warningTint;
+  const fg = doPaciente ? colors.accentText : colors.warningText;
+  const icon: keyof typeof Ionicons.glyphMap = doPaciente ? 'checkmark-circle' : 'alert-circle';
+  const remetente = doPaciente ? nome : 'IrisFlow';
+  return (
+    <Animated.View entering={entrada.suave()} style={[styles.systemNote, { backgroundColor: bg }]} accessible accessibilityLabel={`${remetente}: ${m.text}, às ${hm(m.created_at)}`}>
+      <Ionicons name={icon} size={sizes.icon.md} color={fg} />
+      <View style={styles.flexShrink}>
+        <Text variant="body" weight="semibold" style={{ color: fg }}>
+          {m.text}
+        </Text>
+        <Text variant="caption" tone="muted">
+          {remetente} · {hm(m.created_at)}
+        </Text>
+      </View>
     </Animated.View>
   );
 }
 
-function Bubble({ m, patientName }: { m: Message; patientName: string }) {
+function Bubble({ m, nome }: { m: Message; nome: string }) {
   const { colors } = useTheme();
+  const entrada = useEntrada();
   const mine = m.sender === 'cuidador';
-  const kindIcon: Record<Message['kind'], keyof typeof Ionicons.glyphMap | null> = { texto: null, frase: 'flash-outline', pictograma: 'images-outline', simnao: 'toggle-outline', sistema: 'information-circle-outline' };
-  const icon = kindIcon[m.kind];
 
-  if (m.kind === 'sistema') return <DayLabel label={m.text} />;
+  if (m.kind === 'sistema') return <SystemNote m={m} nome={nome} />;
+
+  const sim = m.kind === 'simnao' && m.text.trim().toLowerCase().startsWith('s');
+  const tipo = !mine && m.kind === 'frase' ? 'frase rápida' : !mine && m.kind === 'pictograma' ? 'pictograma' : null;
+  const estado = mine ? (m.spoken ? 'falado na tela' : 'na fila') : null;
+  const rotulo = `${mine ? 'Você' : nome}${tipo ? `, ${tipo}` : ''}: ${m.text}. ${hm(m.created_at)}${estado ? `, ${estado}` : ''}`;
 
   return (
-    <Animated.View entering={mine ? FadeInRight.duration(320) : FadeInLeft.duration(320)} layout={LinearTransition.springify()} style={[styles.bubbleRow, mine ? { justifyContent: 'flex-end' } : null]}>
-      {!mine && (
-        <View style={[styles.eyeAvatar, { backgroundColor: colors.primaryTint }]}>
-          <Ionicons name="eye" size={16} color={colors.primary} />
-        </View>
-      )}
-      <View style={{ maxWidth: '80%' }}>
+    <Animated.View entering={entrada.suave()} layout={entrada.reduzir ? undefined : LinearTransition} style={[styles.bubbleRow, mine && styles.mineRow]} accessible accessibilityLabel={rotulo}>
+      <View style={styles.bubbleCol}>
         {mine ? (
-          <LinearGradient colors={[colors.primaryDeep, colors.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.bubble, styles.bubbleMine]}>
+          <View style={[styles.bubble, styles.bubbleMine, { backgroundColor: colors.primaryStrong }]}>
             <Text variant="body" tone="onPrimary">
               {m.text}
             </Text>
-          </LinearGradient>
+          </View>
+        ) : m.kind === 'simnao' ? (
+          <View style={[styles.bubble, styles.bubbleTheirs, styles.yesNo, { backgroundColor: sim ? colors.accentTint : colors.dangerTint }]}>
+            <Ionicons name={sim ? 'checkmark-circle' : 'close-circle'} size={sizes.icon.lg} color={sim ? colors.accentText : colors.dangerText} />
+            <Text variant="h2" style={{ color: sim ? colors.accentText : colors.dangerText }}>
+              {m.text}
+            </Text>
+          </View>
         ) : (
-          <View style={[styles.bubble, styles.bubbleTheirs, { backgroundColor: colors.surface, borderColor: colors.border }, m.kind === 'simnao' && { backgroundColor: m.text.toLowerCase().startsWith('s') ? colors.accentTint : colors.dangerTint }]}>
-            {m.kind === 'simnao' ? (
-              <Text variant="h2" style={{ color: m.text.toLowerCase().startsWith('s') ? colors.accentDeep : colors.danger }}>
-                {m.text}
-              </Text>
-            ) : (
-              <Text variant="body">{m.text}</Text>
-            )}
+          <View style={[styles.bubble, styles.bubbleTheirs, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text variant="body">{m.text}</Text>
           </View>
         )}
-        <View style={[styles.meta, mine && { justifyContent: 'flex-end' }]}>
-          {icon && <Ionicons name={icon} size={12} color={colors.textMuted} />}
-          <Text variant="caption" tone="muted" style={{ fontSize: 11, lineHeight: 14 }}>
-            {!mine && m.kind === 'frase' ? 'frase rápida · ' : !mine && m.kind === 'pictograma' ? 'pictograma · ' : ''}
+        <View style={[styles.meta, mine && styles.metaMine]}>
+          {tipo ? (
+            <Text variant="caption" tone="muted">
+              {tipo} ·
+            </Text>
+          ) : null}
+          <Text variant="caption" tone="muted">
             {hm(m.created_at)}
           </Text>
-          {mine && <Ionicons name={m.spoken ? 'volume-high' : 'time-outline'} size={12} color={m.spoken ? colors.accent : colors.textMuted} />}
-          {mine && (
-            <Text variant="caption" style={{ fontSize: 11, lineHeight: 14, color: m.spoken ? colors.accent : colors.textMuted }}>
-              {m.spoken ? 'falado na tela' : 'enviando'}
-            </Text>
-          )}
+          {mine ? (
+            <>
+              <Ionicons name={m.spoken ? 'volume-high' : 'time-outline'} size={sizes.icon.xs} color={m.spoken ? colors.accentText : colors.textMuted} />
+              <Text variant="caption" tone={m.spoken ? 'accent' : 'muted'}>
+                {estado}
+              </Text>
+            </>
+          ) : null}
         </View>
       </View>
-      {!mine && <View style={{ width: 0 }} />}
-      {!mine && patientName ? null : null}
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  demo: { marginHorizontal: spacing.lg, marginTop: spacing.md },
-  phrasesBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.pill, marginTop: spacing.md },
-  bubbleRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
-  eyeAvatar: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  flex: { flex: 1 },
+  flexShrink: { flexShrink: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: layout.gutter, paddingBottom: spacing.md, borderBottomWidth: sizes.hairline },
+  headerWho: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: sizes.touch },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dot: { width: sizes.dot, height: sizes.dot, borderRadius: radius.pill },
+  listContent: { paddingHorizontal: layout.gutter, paddingVertical: spacing.lg, gap: spacing.md, flexGrow: 1 },
+  day: { alignSelf: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill, marginVertical: spacing.sm },
+  systemNote: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, alignSelf: 'center', maxWidth: '92%', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.lg, marginVertical: spacing.xs },
+  bubbleRow: { flexDirection: 'row' },
+  mineRow: { justifyContent: 'flex-end' },
+  bubbleCol: { maxWidth: '84%' },
   bubble: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.lg },
-  bubbleMine: { borderBottomRightRadius: 6 },
-  bubbleTheirs: { borderBottomLeftRadius: 6, borderWidth: StyleSheet.hairlineWidth },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, paddingHorizontal: 4 },
-  suggestions: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingVertical: spacing.sm },
-  chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderWidth: 1 },
-  composer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, gap: spacing.sm },
-  falha: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm, borderRadius: radius.sm },
-  yesno: { flexDirection: 'row', gap: spacing.sm },
-  yn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: spacing.sm + 2, borderRadius: radius.md },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', borderRadius: radius.lg, paddingLeft: spacing.lg, paddingRight: 6, paddingVertical: 6 },
-  input: { flex: 1, fontSize: 16, fontFamily: fonts.regular, maxHeight: 110, paddingVertical: 8 },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  bubbleMine: { borderBottomRightRadius: radius.xs },
+  bubbleTheirs: { borderBottomLeftRadius: radius.xs, borderWidth: sizes.border, borderColor: 'transparent' },
+  yesNo: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  meta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs, paddingHorizontal: spacing.xs },
+  metaMine: { justifyContent: 'flex-end' },
+  composer: { paddingTop: spacing.sm, paddingBottom: spacing.md, borderTopWidth: sizes.hairline, gap: spacing.sm },
+  falha: { marginHorizontal: layout.gutter },
+  chips: { paddingHorizontal: layout.gutter, gap: spacing.sm },
+  chip: { minHeight: sizes.touch, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, borderRadius: radius.pill },
+  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, paddingHorizontal: layout.gutter },
+  input: {
+    flex: 1,
+    minHeight: sizes.touch,
+    maxHeight: sizes.composerMax,
+    borderRadius: radius.lg,
+    borderWidth: sizes.border,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    fontFamily: fonts.regular,
+    fontSize: typeScale.body.fontSize,
+  },
+  sendBtn: { width: sizes.touch, height: sizes.touch, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
 });

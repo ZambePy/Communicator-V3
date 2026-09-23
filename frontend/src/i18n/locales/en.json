@@ -10,31 +10,102 @@
     "backAria": "Go back to the previous screen"
   },
   "menu": {
-    "tabs": {
-      "communication": "Communication",
-      "care": "Care",
-      "leisure": "Leisure",
-      "system": "System"
+    "modulos": {
+      "communication": {
+        "title": "Communication",
+        "description": "Quick phrases and pictograms"
+      },
+      "keyboard": {
+        "title": "Virtual Keyboard",
+        "description": "Type freely"
+      },
+      "computer": {
+        "title": "Computer",
+        "description": "Virtual mouse and system"
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Adjustments and calibration"
+      },
+      "leisure": {
+        "title": "Leisure and well-being",
+        "description": "Games, photos, readings and rest"
+      },
+      "conversation": {
+        "title": "Conversation",
+        "description": "Caregiver messages"
+      },
+      "rest": {
+        "title": "Rest Mode",
+        "description": "Pause the screen and rest your eyes"
+      },
+      "voice": {
+        "title": "Voice Control",
+        "description": "Voice commands"
+      },
+      "accessibility": {
+        "title": "Accessibility",
+        "description": "Inclusive features"
+      }
     },
-    "items": {
-      "emergency": "Medical\nEmergency",
-      "pictograms": "Pictograms\n(AAC)",
-      "phrases": "Quick\nPhrases",
-      "keyboard": "Virtual\nKeyboard",
-      "options": "My\nOptions",
-      "caregiver": "Caregiver\nDashboard",
-      "meditation": "Guided\nMeditation",
-      "iamok": "Alert:\nI'm OK",
-      "games": "Mini Games",
-      "drawing": "Free\nDrawing",
-      "gallery": "Photo\nGallery",
-      "news": "Daily\nNews",
-      "settings": "General\nSettings",
-      "virtualMouse": "Virtual\nMouse (PC)"
+    "abrirAria": "{{title}}: {{description}}",
+    "novasMensagens": "{{n}} new messages",
+    "continuarTutorial": {
+      "title": "Continue the tutorial",
+      "lead": "You stopped at step {{n}} of {{total}}: {{passo}}"
+    }
+  },
+  "lazer": {
+    "title": "Leisure and well-being",
+    "subtitle": "Games, photos, readings and rest — all with your eyes",
+    "voltar": "Back",
+    "voltarMenuAria": "Back to the main menu",
+    "voltarAria": "Back to Leisure and well-being",
+    "abrirAria": "Open {{title}} — {{subtitle}}",
+    "secoes": {
+      "fotos": "Photos and memories",
+      "jogos": "Gaze games",
+      "bemEstar": "Well-being"
     },
-    "openItem": "Open {{item}}",
-    "skipToContent": "Skip to main content",
-    "tabsAriaLabel": "Menu categories"
+    "itens": {
+      "foto": {
+        "title": "Take a Photo",
+        "subtitle": "Fun camera and memories",
+        "badge": "New ✨"
+      },
+      "galeria": {
+        "title": "Photo Gallery",
+        "subtitle": "Album and saved memories"
+      },
+      "bolhas": {
+        "title": "Bubble Pop",
+        "subtitle": "Eye fixation training"
+      },
+      "memoria": {
+        "title": "Memory Game",
+        "subtitle": "Cognitive and attention training"
+      },
+      "alvo": {
+        "title": "Follow the Target",
+        "subtitle": "Accuracy and fixation time"
+      },
+      "desenho": {
+        "title": "Gaze Drawing",
+        "subtitle": "Free artistic expression"
+      },
+      "leituras": {
+        "title": "Readings",
+        "subtitle": "Texts read aloud"
+      },
+      "meditacao": {
+        "title": "Meditation",
+        "subtitle": "Guided breathing and relaxation"
+      },
+      "descanso": {
+        "title": "Rest",
+        "subtitle": "A calm screen to rest your eyes"
+      }
+    }
   },
   "settings": {
     "title": "Settings",
@@ -305,6 +376,15 @@
     "next": "Continue",
     "finish": "Finish",
     "skip": "Skip the tutorial",
+    "faixa": {
+      "voltar": "Back to the tutorial",
+      "feito": "Done — back to the tutorial",
+      "cumprida": "Mission done. Go back to the tutorial whenever you want."
+    },
+    "semCalibracao": {
+      "texto": "Your gaze has not been calibrated yet, so looking at targets will not click. Calibrate first to do the tutorial with your eyes.",
+      "ir": "Calibrate my gaze"
+    },
     "steps": {
       "oQueEDwell": "The click",
       "pratica": "Practice",

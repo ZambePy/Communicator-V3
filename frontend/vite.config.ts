@@ -174,7 +174,17 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     target: 'es2022',
-    sourcemap: true,
+    // Build de produção SEM source map: é este bundle que vai para dentro do
+    // instalador, e um .map carrega o código-fonte original inteiro
+    // (`sourcesContent`) — o núcleo de rastreamento incluso. O servidor de
+    // desenvolvimento (`npm run dev` / `electron:dev`) tem source map sempre,
+    // independente disto. Para depurar um build de produção localmente
+    // (`vite preview`): `IRISFLOW_SOURCEMAP=1 npm run build`. Mesmo assim o
+    // empacotamento exclui `**/*.map` (package.json → `build.files`).
+    //
+    // A minificação é o padrão do `vite build` (Oxc): identificadores
+    // encurtados e nenhum comentário no JavaScript gerado.
+    sourcemap: process.env.IRISFLOW_SOURCEMAP === '1',
     rollupOptions: {
       // Duas páginas: o app (`index.html`) e a sobreposição do Modo Computador
       // (`overlay.html`), que o Electron abre numa janela transparente por

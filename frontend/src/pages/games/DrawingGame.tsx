@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eraser, Eye, EyeOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ArrowLeft, Eraser, Eye, EyeOff, ImageDown, Check, AlertTriangle } from 'lucide-react';
 import { GazeButton } from '../../components/ui/GazeButton';
 import { useGaze } from '../../context/GazeContext';
+import { canvasParaAlbum, salvarNoAlbum } from '../entertainment/album';
 
 /**
  * DESENHO COM O OLHAR.
@@ -51,6 +53,7 @@ const SALTO_MAXIMO_PX = 220;
 
 export const DrawingGame: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { subscribe } = useGaze();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pincelLigado, setPincelLigado] = useState(false);
@@ -160,12 +163,36 @@ export const DrawingGame: React.FC = () => {
     });
   }, []);
 
+  /** Resultado do último "Guardar no álbum", para o botão e o aviso. */
+  const [guardado, setGuardado] = useState<'ok' | 'cheio' | 'indisponivel' | null>(null);
+
   const apagarTudo = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ultimoPontoRef.current = null;
+    setGuardado(null);
+  }, []);
+
+  /**
+   * Guardar no álbum — o mesmo álbum da câmera (`entertainment/album.ts`).
+   *
+   * Sem isto o desenho morria ao sair da tela: a pessoa passava minutos num
+   * traço pelo olhar e não tinha como mostrar depois. Vai reduzido e sobre
+   * fundo branco (JPEG não tem transparência), na mesma chave e forma das
+   * fotos, com `filter: 'Desenho'` para a galeria rotular.
+   */
+  const guardarNoAlbum = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dataUrl = canvasParaAlbum(canvas);
+    if (!dataUrl) {
+      setGuardado('indisponivel');
+      return;
+    }
+    const r = salvarNoAlbum(dataUrl, 'Desenho');
+    setGuardado(r.ok ? 'ok' : r.motivo);
   }, []);
 
   // ── Desenho por mouse (para testes sem rastreamento) ───────────────────────
@@ -224,7 +251,7 @@ export const DrawingGame: React.FC = () => {
             border: '2px solid var(--color-card-border)',
             background: 'var(--color-bg-base)',
           }}
-          aria-label="Voltar para Ajuda e Lazer"
+          aria-label={t('lazer.voltarAria')}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.2rem', fontWeight: 800 }}>
             <ArrowLeft size={26} /> Voltar
@@ -344,6 +371,49 @@ export const DrawingGame: React.FC = () => {
             <Eraser size={28} /> Apagar tudo
           </span>
         </GazeButton>
+
+        <GazeButton
+          onClick={guardarNoAlbum}
+          width={290}
+          height={88}
+          noWarn
+          aria-label="Guardar o desenho no álbum"
+          style={{
+            borderRadius: '1.25rem',
+            border: '3px solid var(--color-primary)',
+            background: guardado === 'ok' ? 'var(--tint-ok-bg)' : 'var(--color-bg-base)',
+            color: guardado === 'ok' ? 'var(--tint-ok-text)' : 'var(--color-primary)',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', fontSize: '1.2rem', fontWeight: 800 }}>
+            {guardado === 'ok' ? <Check size={28} /> : <ImageDown size={28} />}
+            {guardado === 'ok' ? 'Guardado no álbum' : 'Guardar no álbum'}
+          </span>
+        </GazeButton>
+
+        {(guardado === 'cheio' || guardado === 'indisponivel') && (
+          <div
+            role="alert"
+            data-no-dwell="true"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.6rem',
+              padding: '0.85rem 1rem',
+              borderRadius: '1rem',
+              background: 'var(--tint-warn-bg)',
+              border: '2px solid var(--tint-warn-border)',
+              fontSize: '1rem',
+              fontWeight: 700,
+              lineHeight: 1.4,
+            }}
+          >
+            <AlertTriangle size={22} aria-hidden="true" style={{ flexShrink: 0 }} />
+            {guardado === 'cheio'
+              ? 'Álbum cheio — apague fotos antigas na Galeria.'
+              : 'Não foi possível guardar o desenho.'}
+          </div>
+        )}
       </aside>
 
       {/* Área de desenho */}

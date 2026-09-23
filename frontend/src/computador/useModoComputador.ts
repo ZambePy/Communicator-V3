@@ -4,6 +4,9 @@ import { EXPERIMENT } from '@tracker/config/experiment';
 import { tamanhoDoCursorNoSistema } from '@tracker/computador/geometria';
 import type { CapacidadesDoSistema } from '@tracker/computador/protocolo';
 import { useGaze, suspenderDwell } from '../context/GazeContext';
+import { aprenderComSelecao, deveAprender } from '@tracker/interaction/correcaoPorDwell';
+import { getSaturacaoDoOlhar } from '@tracker/calibration';
+import { modoApresentacaoAtivo } from '../services/apresentacao';
 import { useSettings } from '../context/SettingsContext';
 import { limitarDwellMs } from '../dwellMs';
 import { mensagemDeSaida, ponteDoModoComputador, type PonteDoModoComputador } from './ponte';
@@ -125,7 +128,37 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
     // olhar passa a ser da sobreposição.
     suspenderDwell(true);
     ativoRef.current = true;
-    cancelarFluxoRef.current = subscribe((s) => {
+    // Rótulos da sobreposição → correção por dwell. É o único caminho pelo
+    // qual ela aprende no Modo Computador: a janela do app está oculta e
+    // nenhuma seleção "do app" acontece ali. O alvo é sempre desenhado por nós
+    // (barra ou teclado flutuante), logo `alvoIsolado`; `degradado` já foi
+    // filtrado na sobreposição, que não manda seleção de amostra degradada.
+    const cancelarSelecao = ponte.onSelecao?.((sel) => {
+      if (!ativoRef.current) return;
+      const ok = deveAprender({
+        alvoIsolado: true,
+        origem: 'overlay',
+        tamanhoDoAlvoPx: sel.tamanhoPx,
+        degradado: false,
+        apresentacao: modoApresentacaoAtivo(),
+        emergencia: false,
+        alvoEspecial: false,
+        saturado: getSaturacaoDoOlhar().fora,
+      });
+      if (!ok) return;
+      aprenderComSelecao({
+        centroDoAlvo: sel.centro,
+        olhar: sel.olhar,
+        agoraMs: performance.now(),
+        viewport: {
+          largura: document.documentElement.clientWidth,
+          altura: document.documentElement.clientHeight,
+        },
+        origem: 'overlay',
+        tamanhoDoAlvoPx: sel.tamanhoPx,
+      });
+    }) ?? null;
+    const cancelarOlhar = subscribe((s) => {
       ponte.olhar({
         x: s.x,
         y: s.y,
@@ -136,6 +169,10 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
         uncalibrated: s.uncalibrated === true,
       });
     });
+    cancelarFluxoRef.current = () => {
+      cancelarOlhar();
+      cancelarSelecao?.();
+    };
     setIniciando(false);
     setAtivo(true);
   }, [ponte, ativo, iniciando, settings.dwellMs, subscribe, pararFluxo]);

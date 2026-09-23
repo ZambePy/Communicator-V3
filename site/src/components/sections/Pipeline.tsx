@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatedHeadline } from '@/components/effects/AnimatedHeadline'
 import { Reveal } from '@/components/effects/Reveal'
-import { PIPELINE } from '@/data/content'
+import { PIPELINE, PIPELINE_SIMPLE } from '@/data/content'
 import './pipeline.css'
 
 /**
@@ -60,6 +60,25 @@ export function Pipeline() {
             O ciclo inteiro roda a cada quadro de vídeo, no computador da própria pessoa. Nenhuma
             imagem sai do dispositivo.
           </p>
+        </Reveal>
+
+        {/* A versão para famílias vem primeiro: três frases, sem jargão. As etapas
+            abaixo falam do que cada uma entrega, não de como é feita (content.ts). */}
+        <Reveal anim="up" delay={200}>
+          <ol className="pipeline__simple" aria-label="Em três frases">
+            {PIPELINE_SIMPLE.map((line, i) => (
+              <li key={line}>
+                <span className="pipeline__simple-n" aria-hidden="true">
+                  {i + 1}
+                </span>
+                <span>{line}</span>
+              </li>
+            ))}
+          </ol>
+        </Reveal>
+
+        <Reveal anim="fade" delay={260}>
+          <p className="pipeline__detail-label">Etapa por etapa:</p>
         </Reveal>
 
         <div className="pipeline__track" ref={sectionRef}>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatedHeadline } from '@/components/effects/AnimatedHeadline'
 import { Reveal } from '@/components/effects/Reveal'
+import { useReducedMotion } from '@/hooks/useReducedMotion'
 import './dwell-demo.css'
 
 /* ------------------------------------------------------------------
@@ -142,6 +143,10 @@ export function DwellDemo() {
   const [spoken, setSpoken] = useState(false)
   const timer = useRef<number>()
   const cool = useRef<number>()
+  // Com movimento reduzido, a fixação automática (passar o cursor e
+  // esperar o anel encher) sai de cena: o alvo só dispara no clique ou no
+  // Enter, e nada anima sozinho.
+  const reduced = useReducedMotion()
 
   useEffect(
     () => () => {
@@ -162,7 +167,7 @@ export function DwellDemo() {
   }
 
   const begin = (id: string, value: string) => {
-    if (locked) return
+    if (locked || reduced) return
     setHolding(id)
     timer.current = window.setTimeout(() => {
       setHolding(null)
@@ -219,8 +224,10 @@ export function DwellDemo() {
             de pictogramas existe: um alvo, uma frase pronta, dita em voz alta. Na IrisFlow o
             gatilho é o olhar estimado pela webcam; aqui, para você experimentar sem instalar nada,
             é o cursor ou a tecla Tab. O resto é idêntico: contorno de destaque ao entrar no alvo,
-            mudança de cor durante a seleção, preenchimento até a confirmação e um período
-            refratário de 800 ms para impedir o disparo duplo.
+            mudança de cor durante a seleção, preenchimento até a confirmação e uma pausa curta
+            depois de cada seleção, para impedir o disparo duplo.
+            {reduced &&
+              ' Como o seu sistema pede menos movimento, aqui a seleção acontece no clique ou no Enter, sem o anel de espera.'}
           </p>
         </Reveal>
 
@@ -230,7 +237,7 @@ export function DwellDemo() {
             <div className="demo__status">
               <span className="demo__chip demo__chip--ok">câmera ativa</span>
               <span className="demo__chip demo__chip--ok">rastreamento estável</span>
-              <span className="demo__chip">calibração 9/9</span>
+              <span className="demo__chip">calibrado</span>
               <span className="demo__spacer" />
               <span className="demo__chip demo__chip--sos">emergência</span>
             </div>
@@ -240,7 +247,9 @@ export function DwellDemo() {
               <p className="demo__output" aria-live="polite">
                 {phrase || (
                   <span className="demo__placeholder">
-                    passe o cursor sobre um pictograma e segure…
+                    {reduced
+                      ? 'clique em um pictograma ou escolha com Tab e Enter…'
+                      : 'passe o cursor sobre um pictograma e segure…'}
                   </span>
                 )}
               </p>

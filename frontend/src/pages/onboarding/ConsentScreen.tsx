@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ShieldCheck, MonitorSmartphone, Cloud } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { ProgressoDoOnboarding } from '../../components/ui/ProgressoDoOnboarding';
 import { useLicense } from '../../context/LicenseContext';
 import { aceitarConsentimento } from '../../services/local/consent';
 
@@ -35,19 +36,21 @@ export const ConsentScreen: React.FC = () => {
       style={{
         minHeight: '100vh',
         background: 'var(--settings-bg)',
+        backgroundImage: 'var(--page-bg)',
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
+        gap: '1.5rem',
         padding: '2rem',
       }}
     >
+      <ProgressoDoOnboarding atual="privacidade" />
       <div
-        className="glass-card animate-scale-in"
+        className="surface surface--elevated animate-scale-in"
         style={{
-          background: 'var(--color-card-bg)',
           padding: '2.75rem 2.5rem',
-          borderRadius: '2rem',
-          boxShadow: '0 20px 40px -10px rgba(27,84,168,0.12)',
+          borderRadius: 'var(--radius-xl)',
           width: '100%',
           maxWidth: 620,
           display: 'flex',
@@ -64,42 +67,41 @@ export const ConsentScreen: React.FC = () => {
             textAlign: 'center',
           }}
         >
-          <ShieldCheck size={44} color="#1B54A8" aria-hidden="true" />
-          <h1
-            id="consent-title"
+          <span
+            aria-hidden="true"
             style={{
-              fontSize: '1.85rem',
-              fontWeight: 800,
-              margin: 0,
-              color: 'var(--color-text-base)',
+              width: 64,
+              height: 64,
+              borderRadius: '50%',
+              background: 'var(--color-primary-light)',
+              color: 'var(--color-primary)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
+            <ShieldCheck size={34} />
+          </span>
+          <h1 id="consent-title" className="t-h1" style={{ margin: 0, color: 'var(--color-text-base)' }}>
             {t('consent.title')}
           </h1>
-          <p
-            style={{
-              margin: 0,
-              fontSize: '1.02rem',
-              opacity: 0.8,
-              color: 'var(--color-text-base)',
-            }}
-          >
+          <p className="t-body" style={{ margin: 0, color: 'var(--color-text-muted)', maxWidth: '48ch' }}>
             {t('consent.lead')}
           </p>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <Bloco
-            icone={<MonitorSmartphone size={22} color="#15803d" aria-hidden="true" />}
-            cor="#15803d"
+            icone={<MonitorSmartphone size={22} color="var(--tint-ok-text)" aria-hidden="true" />}
+            cor="var(--tint-ok-text)"
             fundo="var(--tint-ok-bg)"
             borda="var(--tint-ok-border)"
             titulo={t('consent.localTitle')}
             corpo={t('consent.localBody')}
           />
           <Bloco
-            icone={<Cloud size={22} color="#1B54A8" aria-hidden="true" />}
-            cor="#1B54A8"
+            icone={<Cloud size={22} color="var(--tint-info-text)" aria-hidden="true" />}
+            cor="var(--tint-info-text)"
             fundo="var(--tint-info-bg)"
             borda="var(--tint-info-border)"
             titulo={t('consent.remoteTitle')}
@@ -113,7 +115,7 @@ export const ConsentScreen: React.FC = () => {
             alignItems: 'flex-start',
             gap: '0.85rem',
             padding: '1rem 1.15rem',
-            borderRadius: '1rem',
+            borderRadius: 'var(--radius-md)',
             border: `2px solid ${aceito ? 'var(--color-primary)' : 'var(--color-card-border)'}`,
             background: aceito ? 'var(--tint-info-bg)' : 'transparent',
             cursor: 'pointer',
@@ -129,7 +131,7 @@ export const ConsentScreen: React.FC = () => {
               height: 22,
               marginTop: 2,
               cursor: 'pointer',
-              accentColor: '#1B54A8',
+              accentColor: 'var(--color-primary)',
               flexShrink: 0,
             }}
           />
@@ -172,7 +174,7 @@ const Bloco: React.FC<{
       display: 'flex',
       gap: '0.9rem',
       padding: '1.1rem 1.25rem',
-      borderRadius: '1.1rem',
+      borderRadius: 'var(--radius-md)',
       background: fundo,
       border: `1px solid ${borda}`,
     }}

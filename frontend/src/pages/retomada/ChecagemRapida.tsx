@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, AlertTriangle, Info } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { GazeButton } from '../../components/ui/GazeButton';
 import { useGaze } from '../../context/GazeContext';
 import { useSettings } from '../../context/SettingsContext';
 import { erroAngularDeg } from '@tracker/accuracy';
@@ -324,21 +325,26 @@ export const ChecagemRapida: React.FC = () => {
         </span>
       </div>
 
-      <button
+      {/* Era um botão de texto de 157×22 px com `data-dwell-ms`: dwellável
+          no papel, inalcançável pelo olhar na prática — e é a saída de quem
+          não quer ou não consegue fazer a conferência agora. */}
+      <GazeButton
         type="button"
         onClick={pular}
         data-dwell-ms="2000"
+        width={280}
+        height={76}
         style={{
           background: 'transparent',
-          border: 'none',
+          border: '2px solid var(--color-card-border)',
           color: 'var(--color-primary)',
-          fontSize: '0.9rem',
+          fontSize: '1.05rem',
           fontWeight: 700,
-          cursor: 'pointer',
+          borderRadius: '1rem',
         }}
       >
         {t('retomada.pular')}
-      </button>
+      </GazeButton>
     </main>
   );
 };

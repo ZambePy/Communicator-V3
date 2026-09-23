@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FileDown, Monitor, Sun, Layers, Crosshair, Info } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { BackButton } from '../../components/ui/BackButton';
 import {
   lerUltimoRelatorio,
   exportarResumo,
@@ -131,8 +132,9 @@ const Moldura: React.FC<{ titulo: string; children: React.ReactNode }> = ({ titu
     }}
   >
     <div
-      className="glass-card"
+      className="glass-card coluna-livre-da-emergencia"
       style={{
+        '--coluna-largura': '600px',
         width: '100%',
         maxWidth: 600,
         background: 'var(--color-card-bg)',
@@ -144,18 +146,22 @@ const Moldura: React.FC<{ titulo: string; children: React.ReactNode }> = ({ titu
         gap: '1.2rem',
       }}
     >
-      <h1
-        id="relatorio-title"
-        style={{
-          margin: 0,
-          fontSize: '1.2rem',
-          fontWeight: 700,
-          opacity: 0.7,
-          color: 'var(--color-text-base)',
-        }}
-      >
-        {titulo}
-      </h1>
+      {/* Voltar: a tela não tinha saída além do botão de rodar o teste. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <BackButton to="/settings" />
+        <h1
+          id="relatorio-title"
+          style={{
+            margin: 0,
+            fontSize: '1.2rem',
+            fontWeight: 700,
+            opacity: 0.7,
+            color: 'var(--color-text-base)',
+          }}
+        >
+          {titulo}
+        </h1>
+      </div>
       {children}
       <div style={{ display: 'flex', gap: '0.55rem', alignItems: 'flex-start' }}>
         <Info

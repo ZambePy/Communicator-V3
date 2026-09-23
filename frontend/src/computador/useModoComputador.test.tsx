@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type { GazeSample } from '../context/GazeContext';
-import type { MotivoDeSaida } from '@tracker/computador/protocolo';
+import type { MotivoDeSaida, SelecaoDaSobreposicao } from '@tracker/computador/protocolo';
 import { useModoComputador } from './useModoComputador';
 import type { PonteDoModoComputador } from './ponte';
 
@@ -21,10 +21,29 @@ vi.mock('../context/GazeContext', () => ({
 }));
 vi.mock('../context/SettingsContext', () => ({ useSettings: () => ({ settings: { dwellMs: 1200 } }) }));
 
+// Correção por dwell: o que interessa aqui é COM QUE argumentos ela é chamada
+// a partir da seleção da sobreposição; a política dela tem teste próprio.
+const aprenderComSelecao = vi.fn();
+const deveAprender = vi.fn(() => true);
+vi.mock('@tracker/interaction/correcaoPorDwell', () => ({
+  aprenderComSelecao: (e: unknown) => aprenderComSelecao(e),
+  deveAprender: (c: unknown) => deveAprender(c),
+}));
+vi.mock('@tracker/calibration', () => ({ getSaturacaoDoOlhar: () => ({ fora: false }) }));
+vi.mock('../services/apresentacao', () => ({ modoApresentacaoAtivo: () => false }));
+
 function pontoFalsa() {
   let aoParar: ((m: MotivoDeSaida) => void) | null = null;
+  let aoSelecionar: ((s: SelecaoDaSobreposicao) => void) | null = null;
   const olhares: unknown[] = [];
-  const ponte: PonteDoModoComputador & { simularParada: (m: MotivoDeSaida) => void; olhares: unknown[]; iniciar: ReturnType<typeof vi.fn> } = {
+  const ponte: PonteDoModoComputador & {
+    simularParada: (m: MotivoDeSaida) => void;
+    simularSelecao: (s: SelecaoDaSobreposicao) => void;
+    olhares: unknown[];
+    iniciar: ReturnType<typeof vi.fn>;
+  } = {
+    onSelecao: (cb) => { aoSelecionar = cb; return () => { aoSelecionar = null; }; },
+    simularSelecao: (sel) => aoSelecionar?.(sel),
     capacidades: vi.fn(async () => ({ suportado: true, plataforma: 'win32', mouse: true, teclado: true, lupa: true })),
     iniciar: vi.fn(async () => ({ ok: true as const })),
     parar: vi.fn(async () => {}),
@@ -124,5 +143,42 @@ describe('useModoComputador', () => {
     act(() => ponte.simularParada('tela_mudou'));
     expect(screen.getByTestId('ativo').textContent).toBe('false');
     expect(screen.getByTestId('aviso').textContent).toMatch(/Recalibre/);
+  });
+  it('uma seleção concluída na sobreposição vira rótulo da correção por dwell, com origem overlay', async () => {
+    aprenderComSelecao.mockClear();
+    deveAprender.mockClear();
+    const ponte = pontoFalsa();
+    montar(ponte);
+    fireEvent.click(screen.getByText('ligar'));
+    await waitFor(() => expect(screen.getByTestId('ativo').textContent).toBe('true'));
+
+    const sel: SelecaoDaSobreposicao = { centro: { x: 1800, y: 240 }, olhar: { x: 1790, y: 250 }, tamanhoPx: 72, t: 1 };
+    act(() => ponte.simularSelecao(sel));
+
+    expect(deveAprender).toHaveBeenCalledWith(expect.objectContaining({ origem: 'overlay', tamanhoDoAlvoPx: 72, alvoIsolado: true }));
+    expect(aprenderComSelecao).toHaveBeenCalledTimes(1);
+    expect(aprenderComSelecao).toHaveBeenCalledWith(expect.objectContaining({
+      origem: 'overlay',
+      tamanhoDoAlvoPx: 72,
+      centroDoAlvo: sel.centro,
+      olhar: sel.olhar,
+    }));
+
+    // Depois de desligar, a seleção não ensina mais nada.
+    fireEvent.click(screen.getByText('desligar'));
+    await waitFor(() => expect(screen.getByTestId('ativo').textContent).toBe('false'));
+    act(() => ponte.simularSelecao(sel));
+    expect(aprenderComSelecao).toHaveBeenCalledTimes(1);
+  });
+
+  it('a política pode recusar a seleção (deveAprender falso) e nada é aprendido', async () => {
+    aprenderComSelecao.mockClear();
+    deveAprender.mockImplementationOnce(() => false);
+    const ponte = pontoFalsa();
+    montar(ponte);
+    fireEvent.click(screen.getByText('ligar'));
+    await waitFor(() => expect(screen.getByTestId('ativo').textContent).toBe('true'));
+    act(() => ponte.simularSelecao({ centro: { x: 1, y: 1 }, olhar: { x: 1, y: 1 }, tamanhoPx: 20, t: 1 }));
+    expect(aprenderComSelecao).not.toHaveBeenCalled();
   });
 });

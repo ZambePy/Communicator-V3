@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertOctagon, ShieldCheck, Info } from 'lucide-react';
-import { PrimaryButton } from '../../../components/ui/PrimaryButton';
+import { AlertOctagon, ShieldCheck, Info, ArrowRight } from 'lucide-react';
+import { GazeButton } from '../../../components/ui/GazeButton';
 import { useEmergency } from '../../../context/EmergencyContext';
 
 /**
@@ -14,10 +14,17 @@ import { useEmergency } from '../../../context/EmergencyContext';
  * O ensaio é o ponto do passo: saber o que vai acontecer ANTES de precisar. O
  * isolamento vive no `EmergencyContext` — nada sai do app durante o ensaio, e
  * `EmergencyContext.ensaio.test.tsx` afirma isso pelo lado do envio.
+ *
+ * "Não quero ensaiar agora" AVANÇA o passo. Antes chamava `aoEnsaiar(false)`,
+ * que o wizard descartava — o botão não fazia nada, e um botão que não faz
+ * nada ensina ao paciente que o app não responde ao olhar dele.
  */
 export const BotaoDeEmergencia: React.FC<{
-  aoEnsaiar: (ensaiou: boolean) => void;
-}> = ({ aoEnsaiar }) => {
+  /** Chamado quando o ensaio foi de fato disparado. */
+  aoEnsaiar: () => void;
+  /** Chamado por "Não quero ensaiar agora": segue para o próximo passo. */
+  aoPular: () => void;
+}> = ({ aoEnsaiar, aoPular }) => {
   const { t } = useTranslation();
   const { setModoEnsaio, ensaioDisparado } = useEmergency();
 
@@ -30,7 +37,7 @@ export const BotaoDeEmergencia: React.FC<{
   }, [setModoEnsaio]);
 
   useEffect(() => {
-    if (ensaioDisparado) aoEnsaiar(true);
+    if (ensaioDisparado) aoEnsaiar();
   }, [ensaioDisparado, aoEnsaiar]);
 
   return (
@@ -137,14 +144,23 @@ export const BotaoDeEmergencia: React.FC<{
         </span>
       </div>
 
-      <PrimaryButton
+      {/* GazeButton de 76 px, e não `PrimaryButton`: é acionado pelo olhar. */}
+      <GazeButton
         type="button"
-        variant="ghost"
-        onClick={() => aoEnsaiar(false)}
-        style={{ alignSelf: 'flex-start' }}
+        height={76}
+        isolado
+        onClick={aoPular}
+        style={{
+          width: '100%',
+          background: 'transparent',
+          border: '2px solid var(--color-card-border)',
+          color: 'var(--color-text-base)',
+          borderRadius: '1rem',
+          fontWeight: 700,
+        }}
       >
-        {t('tutorial.emergencia.pular')}
-      </PrimaryButton>
+        {t('tutorial.emergencia.pular')} <ArrowRight size={20} aria-hidden="true" />
+      </GazeButton>
     </div>
   );
 };

@@ -159,9 +159,17 @@ vi.mock('@/context/AccountContext', () => ({
   useAccount: () => ({ account: conta, authenticated: true, loading: false }),
 }))
 
-vi.mock('@/hooks/useDownloads', () => ({
-  useDownloads: () => ({ windows: '#', macos: '#', linux: '#' }),
-}))
+vi.mock('@/hooks/useDownloads', async () => {
+  const { buildDownloads } = await import('@/lib/releases')
+  // nenhum instalador publicado: os três cartões em "Em breve"
+  return {
+    useDownloads: () => ({
+      platforms: buildDownloads('dono/repo', []),
+      detected: null,
+      releasesPage: 'https://github.com/dono/repo/releases',
+    }),
+  }
+})
 
 describe('<Sucesso />', () => {
   beforeEach(() => {

@@ -5,16 +5,33 @@
    e o AccountContext falam só com as funções daqui, então trocar de
    provedor um dia não passa deste arquivo.
 
-   O esquema correspondente está em ../supabase/schema.sql e nas migrações
-   em ../supabase/migrations/ (a da beta é 20260915_beta.sql).
+   O esquema correspondente está nas migrações de ../supabase/migrations/
+   (a base é 20260923022346_schema_base.sql; a da beta, 20260923022616_beta.sql).
    ============================================================ */
 
 import { client, mensagemDeErro } from '@/lib/supabase'
 import type { Account, BetaProfile, Payment, Profile } from '@/context/AccountContext'
-import { BETA, getPlan, PLANS, type Plan, type PlanId } from '@/data/content'
+import { BETA, getPlan, PLANS, SITE_URL, type Plan, type PlanId } from '@/data/content'
+import { absoluteUrl } from '@/seo/site'
+import { phoneDigits } from '@/utils/format'
 
 /** Base de uma API própria, caso existam Edge Functions. Opcional. */
 export const API_URL = import.meta.env.VITE_API_URL ?? ''
+
+/**
+ * Para onde os links dos e-mails do Supabase Auth levam. A origem é a
+ * pública do site (VITE_SITE_URL, padrão em src/seo/site.ts), e não a da
+ * aba atual: o link precisa funcionar mesmo aberto em outro aparelho. As
+ * duas URLs precisam estar em Authentication > URL Configuration >
+ * Redirect URLs no painel — fora da lista, o Supabase ignora o destino e
+ * manda para a Site URL.
+ */
+export const AUTH_REDIRECT = {
+  /** Link de confirmação do cadastro: volta para o acesso, já com a sessão aberta. */
+  confirmacao: absoluteUrl(SITE_URL, '/entrar'),
+  /** Link de redefinição de senha. */
+  novaSenha: absoluteUrl(SITE_URL, '/nova-senha'),
+}
 
 /**
  * Link do app do cuidador (APK, Expo ou loja), mostrado na página /beta.
@@ -58,6 +75,27 @@ export function ehErroDeAutenticacao(erro: unknown): boolean {
 
 function erro(causa: unknown): never {
   throw new ApiError(causa)
+}
+
+/**
+ * O usuário foi criado, mas o projeto exige confirmar o e-mail ("Confirm
+ * email" ligado) e o signUp voltou sem sessão. Não é uma falha: a tela da
+ * beta troca o formulário pelo aviso de "confirme o e-mail", e o cadastro
+ * pago mostra a mensagem. Depois de confirmar e entrar, a conta sem
+ * inscrição é levada de volta a /beta para concluir.
+ */
+export class ConfirmacaoDeEmailPendente extends Error {
+  /** E-mail para onde o link foi (ou seria) enviado, já normalizado. */
+  readonly email: string
+
+  constructor(email: string) {
+    super(
+      'Conta criada. Confirme o e-mail pelo link que enviamos (confira também o spam) e ' +
+        'depois entre com o mesmo e-mail e senha para continuar.',
+    )
+    this.name = 'ConfirmacaoDeEmailPendente'
+    this.email = email
+  }
 }
 
 /* ------------------------------------------------------------
@@ -155,25 +193,39 @@ async function criarUsuarioSeNecessario(profile: Profile, password: string): Pro
   const { data: sessaoAtual } = await sb.auth.getSession()
   if (sessaoAtual.session) return
 
+  const email = profile.email.trim().toLowerCase()
   const { data, error } = await sb.auth.signUp({
-    email: profile.email.trim().toLowerCase(),
+    email,
     password,
     options: {
       data: { buyer_name: profile.buyerName, newsletter: profile.newsletter },
+      // Só é usado com "Confirm email" ligado: o link do e-mail abre /entrar
+      // já autenticado, e de lá a conta sem inscrição volta para concluir.
+      emailRedirectTo: AUTH_REDIRECT.confirmacao,
     },
   })
   if (error) erro(error)
 
-  // Sem sessão aqui significa "Confirm email" ligado no painel: o
-  // usuário existe, mas ainda não está autenticado, e a RPC seguinte
-  // seria negada.
-  if (!data.session) {
-    erro(
-      'Conta criada, mas é preciso confirmar o e-mail antes de continuar. ' +
-        'Para o fluxo seguir direto até o checkout, desligue "Confirm email" em ' +
-        'Authentication > Sign In / Providers > Email no painel do Supabase.',
-    )
-  }
+  // Sem sessão aqui significa "Confirm email" ligado no painel: o usuário
+  // existe, mas ainda não está autenticado, e a RPC seguinte seria negada.
+  // Com um e-mail que já tinha conta, o Supabase responde igual (sem sessão
+  // e sem erro) de propósito, para não revelar quem é cliente — por isso o
+  // aviso da tela é o mesmo nos dois casos.
+  if (!data.session) throw new ConfirmacaoDeEmailPendente(email)
+}
+
+/**
+ * Reenvia o link de confirmação do cadastro. Resolve em silêncio também
+ * para e-mail sem conta (o Supabase não diz a diferença); o único erro que
+ * costuma chegar é o de intervalo mínimo entre envios, já traduzido.
+ */
+export async function reenviarConfirmacao(email: string): Promise<void> {
+  const { error } = await client().auth.resend({
+    type: 'signup',
+    email: email.trim().toLowerCase(),
+    options: { emailRedirectTo: AUTH_REDIRECT.confirmacao },
+  })
+  if (error) erro(error)
 }
 
 /**
@@ -189,7 +241,8 @@ export async function signUp(profile: Profile, password: string, planId: PlanId)
   await criarUsuarioSeNecessario(profile, password)
 
   const { error: erroRpc } = await sb.rpc('complete_registration', {
-    p_phone: profile.phone,
+    // só dígitos (ou null): o CHECK de profiles.phone aceita 10–11 dígitos
+    p_phone: phoneDigits(profile.phone),
     p_document: profile.document,
     p_user_name: profile.userName,
     p_relation: profile.relation,
@@ -208,7 +261,8 @@ export async function signUp(profile: Profile, password: string, planId: PlanId)
 }
 
 /* ---------------- programa beta ----------------
-   Contrato em docs/BETA.md; banco em ../supabase/migrations/20260915_beta.sql.
+   Contrato no README da raiz (seções "Conta IrisFlow e nuvem" e "Site
+   (site/)"); banco em ../supabase/migrations/20260923022616_beta.sql.
    Mesmo desenho do cadastro pago, com três diferenças: o CPF é opcional,
    não há plano a escolher (é sempre 'beta', sem cobrança) e a inscrição
    grava a linha de beta_registrations.
@@ -216,15 +270,20 @@ export async function signUp(profile: Profile, password: string, planId: PlanId)
 
 /**
  * Cria a conta da beta: `auth.signUp` (se ainda não há sessão) seguido de
- * `complete_beta_registration`. O CPF só vai quando preenchido; vazio vira
- * null, que o banco aceita.
+ * `complete_beta_registration`. CPF e telefone são opcionais: vazios viram
+ * null, que o banco aceita. O telefone vai só com os dígitos — nunca a
+ * máscara nem uma string fora do formato —, e null mantém o número que a
+ * conta já tiver (migração 20260923022800_telefone_opcional.sql).
+ *
+ * Com uma sessão já aberta (conta criada numa tentativa anterior, ou que
+ * acabou de confirmar o e-mail), o signUp é pulado e a senha não é usada.
  */
 export async function signUpBeta(profile: BetaProfile, password: string): Promise<Account> {
   const sb = client()
   await criarUsuarioSeNecessario(profile, password)
 
   const { error: erroRpc } = await sb.rpc('complete_beta_registration', {
-    p_phone: profile.phone,
+    p_phone: phoneDigits(profile.phone),
     p_user_name: profile.userName,
     p_relation: profile.relation,
     p_condition: profile.condition,
@@ -325,9 +384,10 @@ export async function signOut(): Promise<void> {
    Dois passos, os dois no Supabase Auth:
 
    1. requestPasswordReset manda o e-mail com o link. O link aponta para
-      /nova-senha DESTE site, e por isso a URL precisa estar cadastrada em
-      Authentication > URL Configuration > Redirect URLs no painel — sem
-      isso o Supabase ignora o redirectTo e manda para a Site URL.
+      /nova-senha do site público (AUTH_REDIRECT.novaSenha), e por isso a
+      URL precisa estar cadastrada em Authentication > URL Configuration >
+      Redirect URLs no painel — sem isso o Supabase ignora o redirectTo e
+      manda para a Site URL.
    2. updatePassword troca a senha. Só funciona com sessão aberta, que é
       a que o link do e-mail abre ao chegar em /nova-senha.
    ------------------------------------------------------ */
@@ -339,7 +399,10 @@ export async function signOut(): Promise<void> {
  * tem conta" entregaria a lista de clientes a quem testasse endereços.
  * O único erro que chega aqui é o de limite de envio (60 s), traduzido.
  */
-export async function requestPasswordReset(email: string, redirectTo: string): Promise<void> {
+export async function requestPasswordReset(
+  email: string,
+  redirectTo: string = AUTH_REDIRECT.novaSenha,
+): Promise<void> {
   const { error } = await client().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
     redirectTo,
   })
@@ -365,6 +428,48 @@ export async function fetchAccount(): Promise<Account | null> {
   if (error) erro(error)
 
   return data ? paraAccount(data as MyAccountRow) : null
+}
+
+/** O que a conta já tem antes de concluir a inscrição (nome e e-mail do signUp). */
+export type PerfilBasico = {
+  buyerName: string
+  email: string
+  /** Só dígitos; vazio quando não informado (a coluna aceita NULL). */
+  phone: string
+  newsletter: boolean
+}
+
+/**
+ * Perfil da sessão atual, lido de `profiles` (a RLS só deixa ver o próprio).
+ * Existe desde o signUp, pelo gatilho on_auth_user_created, mesmo quando a
+ * inscrição não foi concluída — é o que a /beta usa para não pedir de novo
+ * nome e e-mail a quem voltou depois de confirmar o endereço. Nunca rejeita:
+ * sem sessão, sem rede ou sem linha, devolve null e o formulário segue vazio.
+ */
+export async function fetchPerfilBasico(): Promise<PerfilBasico | null> {
+  try {
+    const sb = client()
+    const { data: sessao } = await sb.auth.getSession()
+    const uid = sessao.session?.user.id
+    if (!uid) return null
+
+    const { data, error } = await sb
+      .from('profiles')
+      .select('buyer_name, email, phone, newsletter')
+      .eq('id', uid)
+      .maybeSingle()
+    if (error || !data) return null
+
+    const row = data as { buyer_name: string; email: string; phone: string | null; newsletter: boolean }
+    return {
+      buyerName: row.buyer_name ?? '',
+      email: row.email ?? '',
+      phone: phoneDigits(row.phone) ?? '',
+      newsletter: Boolean(row.newsletter),
+    }
+  } catch {
+    return null
+  }
 }
 
 /* ---------------- assinatura ---------------- */
@@ -410,45 +515,13 @@ export async function sendContactMessage(input: {
   if (error) erro(error)
 }
 
-/* ---------------- instaladores ---------------- */
-
-export type Downloads = { windows: string; macos: string; linux: string }
-
-/**
- * Reserva dos instaladores: as variáveis VITE_DOWNLOAD_*_URL (docs/BETA.md §4)
- * valem enquanto `app_releases` não tem linha para o sistema; sem elas, '#',
- * que as telas tratam como "sem versão publicada".
- */
-function reservaDownloads(): Downloads {
-  const env = import.meta.env
-  return {
-    windows: env.VITE_DOWNLOAD_WINDOWS_URL?.trim() || '#',
-    macos: env.VITE_DOWNLOAD_MACOS_URL?.trim() || '#',
-    linux: env.VITE_DOWNLOAD_LINUX_URL?.trim() || '#',
-  }
-}
-
-/** Usado enquanto a consulta não volta, e se a tabela estiver vazia. */
-export const DOWNLOADS: Downloads = reservaDownloads()
-
-export async function fetchDownloads(): Promise<Downloads> {
-  const { data, error } = await client()
-    .from('app_releases')
-    .select('os, download_url')
-    .eq('is_current', true)
-
-  if (error || !data) return DOWNLOADS
-
-  return data.reduce<Downloads>(
-    (acc, r) => {
-      const chave = r.os as keyof Downloads
-      // Linha sem URL não apaga a reserva do .env
-      if (chave in acc && r.download_url) acc[chave] = r.download_url
-      return acc
-    },
-    { ...DOWNLOADS },
-  )
-}
+/* ---------------- instaladores ----------------
+   Os links de download não passam pelo banco: vêm do GitHub Releases,
+   montados em src/lib/releases.ts a partir de VITE_RELEASES_REPO e
+   VITE_RELEASES_AVAILABLE. A tabela app_releases do esquema base ficou no
+   banco, mas ninguém a lê — nem o site nem o desktop, que se atualiza pelo
+   próprio GitHub Releases.
+   ------------------------------------------------ */
 
 /* ---------------- planos ----------------
    O preço de verdade mora em public.plans: é o que complete_registration
@@ -460,7 +533,7 @@ export async function fetchDownloads(): Promise<Downloads> {
    há coluna de limite de dispositivos nem de suporte, então esses textos,
    os bullets e as notas continuam vindo do content.ts, casados pelo id.
 
-   `purchasable` (migração 20260915_beta.sql) diz se o plano pode ser
+   `purchasable` (migração 20260923022616_beta.sql) diz se o plano pode ser
    contratado: durante a beta todos ficam false e o card aparece como
    indisponível. Na reserva (`PLANS`), quem decide é `BETA.ativo`, já no
    content.ts — a identidade do array é preservada porque usePlans a usa
@@ -566,7 +639,7 @@ export async function createBoleto(_accountId: string): Promise<{
 /* ---------------- ecossistema: desktop e app do cuidador ----------------
    O e-mail e a senha desta conta também abrem o aplicativo desktop e o app
    do cuidador. As funções abaixo leem o que a migração
-   supabase/migrations/20260908_integracao_ecossistema.sql acrescentou.
+   supabase/migrations/20260923022507_integracao_ecossistema.sql acrescentou.
    ------------------------------------------------------------------------ */
 
 /** Resposta de `desktop_license()` — a MESMA regra que o desktop consulta ao entrar. */

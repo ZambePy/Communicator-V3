@@ -147,11 +147,11 @@ export function evaluateDistanceRange(
   const sentido = deltaCm < 0 ? 'mais perto' : 'mais longe';
   const abs = Math.abs(deltaCm).toFixed(0);
 
-  // O status é INFORMAÇÃO, não recado: em `warn` e `out` a correção aditiva
-  // continua sendo aplicada com o fator clampado — ninguém é mandado de volta
+  // O status é INFORMAÇÃO, não recado: em `warn` e `out` o escalonamento pela razão
+  // continua sendo aplicado com o fator clampado — ninguém é mandado de volta
   // à cadeira. O texto diz o que o sistema está fazendo e o que a pessoa pode
-  // esperar; a saída para um desvio grande é reancorar olhando o centro, não
-  // reposicionar o corpo.
+  // esperar; para um desvio além da faixa medida, a saída é calibrar de novo
+  // na posição nova, não reposicionar o corpo.
   const message =
     status === 'ok'
       ? deltaCm >= -1.5 && deltaCm <= 1.5
@@ -161,7 +161,7 @@ export function evaluateDistanceRange(
       ? `${abs} cm ${sentido} que na calibração. A correção automática continua ativa; ` +
         `a precisão pode cair um pouco nas bordas.`
       : `${abs} cm ${sentido} que na calibração — além da faixa medida. A correção continua ` +
-        `ativa com o fator limitado; se o cursor errar nas bordas, reancore olhando o centro da tela.`;
+        `ativa com o fator limitado; se o cursor errar nas bordas, calibre de novo nesta posição.`;
 
   return { status, deltaCm, screenDistanceNowCm: screenNow, ratio, message };
 }

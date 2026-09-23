@@ -23,6 +23,33 @@ jest.mock('@react-native-async-storage/async-storage', () => require('@react-nat
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(async () => undefined),
   notificationAsync: jest.fn(async () => undefined),
+  selectionAsync: jest.fn(async () => undefined),
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
   NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
+}));
+
+// Sentry: módulo nativo. O app só o liga com EXPO_PUBLIC_SENTRY_DSN, mas o
+// import acontece sempre (src/lib/sentry.ts); aqui tudo vira no-op observável.
+jest.mock('@sentry/react-native', () => ({
+  init: jest.fn(),
+  wrap: jest.fn((C) => C),
+  captureException: jest.fn(),
+  captureMessage: jest.fn(),
+  addBreadcrumb: jest.fn(),
+  setUser: jest.fn(),
+  setTag: jest.fn(),
+  ErrorBoundary: ({ children }) => children,
+}));
+
+// expo-updates: sem binário nativo no Node. Mesma forma da API usada pelo app.
+jest.mock('expo-updates', () => ({
+  isEnabled: false,
+  isEmbeddedLaunch: true,
+  channel: null,
+  updateId: null,
+  runtimeVersion: null,
+  createdAt: null,
+  checkForUpdateAsync: jest.fn(async () => ({ isAvailable: false })),
+  fetchUpdateAsync: jest.fn(async () => ({ isNew: false })),
+  reloadAsync: jest.fn(async () => undefined),
 }));

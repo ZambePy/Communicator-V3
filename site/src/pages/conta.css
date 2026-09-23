@@ -125,3 +125,15 @@
   color: var(--ok);
   background: var(--ok-soft);
 }
+
+.conta__downloads {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.conta__downloads .btn {
+  padding: 0.6rem 1.1rem;
+  font-size: 0.92rem;
+}

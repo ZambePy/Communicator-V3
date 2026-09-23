@@ -1,0 +1,134 @@
+.dl {
+  width: 100%;
+  text-align: left;
+}
+
+.dl__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-4);
+}
+
+.dl__card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.dl__card.is-mine {
+  border-color: var(--ok-line);
+  box-shadow: 0 0 0 1px var(--ok-line), var(--shadow-md);
+}
+
+.dl__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.dl__name {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.dl__badge {
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  background: var(--teal-300);
+  color: #04231f;
+  font-size: var(--fs-min);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* "Em breve": amarelo claro sobre marinho, 10:1. */
+.dl__badge--soon {
+  background: transparent;
+  color: var(--warn);
+  border: 1px solid var(--warn-line);
+}
+
+.dl__req {
+  margin: 0 0 var(--sp-2);
+  font-size: 0.92rem;
+  color: var(--text-dim);
+}
+
+.dl__main {
+  margin-top: auto;
+}
+
+.dl__detail {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.dl__alt {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 44px;
+  color: var(--ok);
+  font-weight: 650;
+  font-size: 0.94rem;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dl__alt span {
+  color: var(--text-dim);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.dl__foot {
+  display: grid;
+  gap: var(--sp-3);
+  justify-items: start;
+  margin-top: var(--sp-4);
+}
+
+.dl__all {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--ok);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dl__note {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 0.94rem;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+.dl__note .icon {
+  flex: none;
+  margin-top: 3px;
+  color: var(--accent);
+}

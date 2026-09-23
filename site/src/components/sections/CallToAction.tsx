@@ -23,7 +23,7 @@ export function CallToAction() {
 
         <Reveal anim="up" delay={240}>
           <p className="cta__lead">
-            Instale no computador que já está em casa, calibre em menos de trinta segundos e veja
+            Instale no computador que já está em casa, calibre em cerca de meio minuto e veja
             com os próprios olhos se funciona para o seu caso.{' '}
             {BETA.ativo
               ? 'Durante a beta o acesso é gratuito e sem cartão, e nenhum texto de site substitui essa verificação.'

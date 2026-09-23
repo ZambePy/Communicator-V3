@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { supabase } from '@/lib/supabase'
+import { apagarRascunhoBeta, limparRascunhoVencido } from '@/lib/rascunhoBeta'
 import * as api from '@/services/api'
 import type { PlanId } from '@/data/content'
 
@@ -19,7 +20,9 @@ import type { PlanId } from '@/data/content'
    ao sair e ao recarregar a página.
 
    Nada aqui grava em localStorage. Quem persiste a sessão é o próprio
-   supabase-js; a conta é sempre relida do banco.
+   supabase-js; a conta é sempre relida do banco. O único rastro local da
+   inscrição (o rascunho sem dados sensíveis de lib/rascunhoBeta.ts, usado
+   enquanto o e-mail não é confirmado) é apagado aqui ao concluir e ao sair.
    ============================================================ */
 
 export type Profile = {
@@ -40,7 +43,7 @@ export type Profile = {
 }
 
 /**
- * Inscrição no programa beta (docs/BETA.md). Mesmos dados do Profile, com
+ * Inscrição no programa beta (README da raiz, seção "Site (site/)"). Mesmos dados do Profile, com
  * o CPF opcional (string vazia = não informado) e o que é só da beta.
  */
 export type BetaProfile = Profile & {
@@ -81,9 +84,9 @@ type Ctx = {
   account: Account | null
   /**
    * Há sessão do Supabase aberta. Pode ser verdadeiro com `account`
-   * nulo: é o caso de quem criou o usuário mas abandonou o cadastro
-   * antes de concluir, e precisa voltar para /cadastro, não para o
-   * login.
+   * nulo: é o caso de quem criou o usuário mas não concluiu a inscrição
+   * (abandonou no meio, ou acabou de confirmar o e-mail), e precisa ir
+   * para /beta (/cadastro fora da beta) concluir, não para o login.
    */
   authenticated: boolean
   /**
@@ -105,12 +108,27 @@ type Ctx = {
   registerBeta: (profile: BetaProfile, password: string) => Promise<Account>
   /** Guarda a forma de pagamento. A cobrança só ocorre ao fim da avaliação. */
   attachPayment: (payment: Payment) => Promise<void>
+  /**
+   * Entra com e-mail e senha. Rejeita só quando o login falha (senha errada,
+   * e-mail não confirmado); se a leitura da conta falhar depois, a sessão fica
+   * de pé e o motivo vai para `sessionError`.
+   */
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   cancel: () => Promise<void>
   reactivate: () => Promise<void>
   /** Relê a conta do banco. */
   refresh: () => Promise<void>
+  /**
+   * O supabase-js acabou de abrir uma sessão de RECUPERAÇÃO de senha (evento
+   * PASSWORD_RECOVERY: a pessoa abriu o link do e-mail). O link pode cair em
+   * qualquer página — a Site URL do painel, se o `redirectTo` não estiver na
+   * lista de Redirect URLs, ou um pedido feito pelo app do cuidador —, então
+   * o `EncaminharRecuperacaoDeSenha` leva para /nova-senha e baixa a marca.
+   */
+  recuperandoSenha: boolean
+  /** Chegou em /nova-senha: a marca de recuperação já cumpriu o papel. */
+  concluirRecuperacaoDeSenha: () => void
 }
 
 const AccountContext = createContext<Ctx | null>(null)
@@ -120,6 +138,29 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [authenticated, setAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sessionError, setSessionError] = useState<string | null>(null)
+  const [recuperandoSenha, setRecuperandoSenha] = useState(false)
+  const concluirRecuperacaoDeSenha = useCallback(() => setRecuperandoSenha(false), [])
+
+  /** Lê a conta da sessão aberta, separando "sessão acabou" de "rede caiu". */
+  const lerConta = useCallback(async () => {
+    try {
+      setAccount(await api.fetchAccount())
+      setSessionError(null)
+    } catch (e) {
+      if (api.ehErroDeAutenticacao(e)) {
+        // Token recusado pelo servidor: a sessão de fato acabou.
+        setAuthenticated(false)
+        setAccount(null)
+        setSessionError(null)
+        return
+      }
+      // Rede fora, banco fora, 500: o estado anterior continua valendo. A conta
+      // que já estava carregada segue na tela e o aviso explica o que houve.
+      setSessionError(
+        e instanceof Error ? e.message : 'Não foi possível falar com o servidor agora.',
+      )
+    }
+  }, [])
 
   const refresh = useCallback(async () => {
     // Quem decide se há sessão é getSession, que lê o que o supabase-js guarda
@@ -148,29 +189,15 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    try {
-      setAccount(await api.fetchAccount())
-      setSessionError(null)
-    } catch (e) {
-      if (api.ehErroDeAutenticacao(e)) {
-        // Token recusado pelo servidor: a sessão de fato acabou.
-        setAuthenticated(false)
-        setAccount(null)
-        setSessionError(null)
-        return
-      }
-      // Rede fora, banco fora, 500: o estado anterior continua valendo. A conta
-      // que já estava carregada segue na tela e o aviso explica o que houve.
-      setSessionError(
-        e instanceof Error ? e.message : 'Não foi possível falar com o servidor agora.',
-      )
-    }
-  }, [])
+    await lerConta()
+  }, [lerConta])
 
   // Carrega a sessão de partida e acompanha login e logout, inclusive os
   // que acontecem em outra aba.
   useEffect(() => {
     let vivo = true
+    // rascunho de inscrição vencido não fica esquecido no navegador
+    limparRascunhoVencido()
 
     refresh().finally(() => {
       if (vivo) setLoading(false)
@@ -182,12 +209,14 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         setAccount(null)
         setAuthenticated(false)
         setSessionError(null)
+        setRecuperandoSenha(false)
         return
       }
       // PASSWORD_RECOVERY: o usuário chegou pelo link do e-mail de
       // redefinição e o supabase-js abriu a sessão a partir da URL. Sem
       // reler aqui, /nova-senha veria `authenticated` falso e diria que o
-      // link não vale.
+      // link não vale. A marca faz qualquer página encaminhar para lá.
+      if (evento === 'PASSWORD_RECOVERY') setRecuperandoSenha(true)
       if (
         evento === 'SIGNED_IN' ||
         evento === 'TOKEN_REFRESHED' ||
@@ -212,6 +241,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
 
   const registerBeta = useCallback(async (profile: BetaProfile, password: string) => {
     const nova = await api.signUpBeta(profile, password)
+    // inscrição concluída: o rascunho da espera pela confirmação não serve mais
+    apagarRascunhoBeta()
     setAccount(nova)
     setAuthenticated(true)
     return nova
@@ -222,13 +253,23 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     setAccount(await api.fetchAccount())
   }, [])
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    await api.signIn(email, password)
-    setAccount(await api.fetchAccount())
-  }, [])
+  const signIn = useCallback(
+    async (email: string, password: string) => {
+      await api.signIn(email, password)
+      // A sessão já existe: marca antes de ler a conta. Sem isto, a tela que
+      // vem depois (/conta) podia ver `authenticated` ainda falso numa conta
+      // sem inscrição concluída e devolver a pessoa para /entrar, em vez de
+      // levá-la para concluir. Falha de rede na leitura vira `sessionError`,
+      // não "senha errada".
+      setAuthenticated(true)
+      await lerConta()
+    },
+    [lerConta],
+  )
 
   const signOut = useCallback(async () => {
     await api.signOut()
+    apagarRascunhoBeta()
     setAccount(null)
     setAuthenticated(false)
     setSessionError(null)
@@ -258,6 +299,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       cancel,
       reactivate,
       refresh,
+      recuperandoSenha,
+      concluirRecuperacaoDeSenha,
     }),
     [
       account,
@@ -272,6 +315,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       cancel,
       reactivate,
       refresh,
+      recuperandoSenha,
+      concluirRecuperacaoDeSenha,
     ],
   )
 

@@ -1,7 +1,12 @@
-import { useEffect } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Header } from './Header'
 import { Footer } from './Footer'
+import { NavigationEnhancer } from './NavigationEnhancer'
+import { CookieNotice } from './CookieNotice'
+import { StickyCta } from './StickyCta'
+import { RouteMeta } from '@/hooks/useDocumentMeta'
+import { SkeletonCard } from '@/components/ui/Skeleton'
 import './layout.css'
 
 /** Rola para o topo, ou para a âncora, a cada mudança de rota.
@@ -54,6 +59,31 @@ function ScrollManager() {
   return null
 }
 
+/**
+ * Exibido enquanto o pedaço da rota ainda está chegando — mas só depois
+ * de 200 ms. Numa navegação rápida (pedaço já em cache ou pré-carregado)
+ * o esqueleto piscaria por um quadro e chamaria mais atenção do que o
+ * espaço vazio. Fica dentro do <main>: cabeçalho e rodapé não somem
+ * enquanto a página carrega.
+ */
+function RouteFallback() {
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    const t = window.setTimeout(() => setShow(true), 200)
+    return () => window.clearTimeout(t)
+  }, [])
+  if (!show) return <div className="section route-fallback" aria-busy="true" />
+  return (
+    <div className="container section route-fallback" aria-busy="true">
+      <div className="grid grid--3">
+        <SkeletonCard />
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    </div>
+  )
+}
+
 export function Layout() {
   const { pathname } = useLocation()
 
@@ -63,14 +93,20 @@ export function Layout() {
         Pular para o conteúdo
       </a>
       <ScrollManager />
+      <RouteMeta />
+      <NavigationEnhancer />
       <Header />
       {/* A key remonta o <main> a cada rota, o que dá a transição de página.
           Sem padding-top: cada rota abre com a própria faixa escura, que
           corre por baixo do cabeçalho transparente. */}
       <main id="conteudo" key={pathname} className="main anim-page">
-        <Outlet />
+        <Suspense fallback={<RouteFallback />}>
+          <Outlet />
+        </Suspense>
       </main>
       <Footer />
+      <StickyCta />
+      <CookieNotice />
     </>
   )
 }

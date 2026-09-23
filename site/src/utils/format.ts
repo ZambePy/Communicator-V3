@@ -46,8 +46,21 @@ export function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim())
 }
 
+/** Telefone com DDD: 10 dígitos (fixo) ou 11 (celular), com ou sem máscara. */
 export function isPhone(value: string) {
-  return onlyDigits(value).length >= 10
+  const n = onlyDigits(value).length
+  return n === 10 || n === 11
+}
+
+/**
+ * O que vai para o banco: só os dígitos do telefone, ou null quando ele não
+ * foi informado ou não tem o formato de DDD + número. O CHECK de
+ * `profiles.phone` aceita apenas 10–11 dígitos, então uma string fora disso
+ * nunca deve sair daqui.
+ */
+export function phoneDigits(value: string | null | undefined): string | null {
+  const d = onlyDigits(value ?? '')
+  return d.length === 10 || d.length === 11 ? d : null
 }
 
 /** Validação real de CPF pelos dois dígitos verificadores. */
@@ -113,8 +126,27 @@ export function last4(value: string) {
 export const brl = (value: number) =>
   value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+/** Datas sempre no fuso de Brasília: o fim da beta é "31/03 23:59 -03", e no
+    fuso do navegador (UTC, Europa) ele virava "01 de abril". */
 export const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+  new Date(iso).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'America/Sao_Paulo',
+  })
 
 export const daysUntil = (iso: string) =>
   Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000))
+
+/** Rótulos legíveis para os valores dos selects de cadastro. */
+export const OS_LABELS: Record<string, string> = {
+  windows: 'Windows',
+  macos: 'macOS',
+  linux: 'Linux',
+  'nao-sei': 'Não sei dizer',
+}
+
+export function osLabel(value: string): string {
+  return OS_LABELS[value] ?? value
+}

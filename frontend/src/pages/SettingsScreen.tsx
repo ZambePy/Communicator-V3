@@ -80,19 +80,21 @@ import { applyUptimeToRunMetaIfDefault } from '../utils/autoTestMeta';
 import { proximoBloco } from '../registroDaSessao';
 import { gravarUltimoRelatorio } from '../services/local/ultimoRelatorio';
 import { getCalibrationTimestampMs } from '@tracker/calibration';
-import { hoverAndFocusBackground } from '../components/ui/hoverFocus';
 import { ControleDeDwell } from '../components/ui/ControleDeDwell';
 import { AtalhoDeTutorial } from './tutorial/AtalhoDeTutorial';
 import { AtalhoDePerfilEConta } from './conta/AtalhoDePerfilEConta';
+import { SobreOIrisFlow } from './settings/SobreOIrisFlow';
+import { LeiturasSection } from './settings/LeiturasSection';
+import { PrimaryButton } from '../components/ui/PrimaryButton';
 
 const cardStyle: React.CSSProperties = {
-  background: 'var(--color-card-bg, rgba(255,255,255,0.75))',
+  background: 'var(--color-card-bg)',
   backdropFilter: 'blur(16px)',
   WebkitBackdropFilter: 'blur(16px)',
-  border: '1px solid var(--color-card-border, rgba(255,255,255,0.7))',
-  borderRadius: '1.5rem',
-  padding: '2rem',
-  boxShadow: '0 8px 32px var(--color-card-shadow, rgba(27,84,168,0.08))',
+  border: '1px solid var(--color-card-border)',
+  borderRadius: 'var(--radius-lg)',
+  padding: 'var(--space-6)',
+  boxShadow: 'var(--shadow-1)',
   transition: 'background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease',
 };
 
@@ -580,13 +582,13 @@ export const SettingsScreen: React.FC = () => {
         >
           <h2
             id="dashboard-link-title"
+            className="t-h2"
             style={{
-              fontSize: '1.25rem',
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
               color: 'var(--color-primary)',
-              marginTop: 0,
+              margin: '0 0 0.5rem 0',
             }}
           >
             <Activity size={24} /> Painel de Acompanhamento (Rotina & Diário)
@@ -603,24 +605,9 @@ export const SettingsScreen: React.FC = () => {
             Acesse a rotina diária de cuidados, registro clínico de sintomas e histórico recente do
             paciente.
           </p>
-          <button
-            onClick={() => navigate('/caregiver')}
-            style={{
-              padding: '0.8rem 1.8rem',
-              background: 'var(--color-primary)',
-              border: 'none',
-              color: 'white',
-              borderRadius: '0.75rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px var(--color-card-shadow)',
-              fontSize: '1rem',
-              transition: 'background 0.2s',
-            }}
-            {...hoverAndFocusBackground('var(--color-primary)', 'var(--color-primary-dark, #143e80)')}
-          >
+          <PrimaryButton onClick={() => navigate('/caregiver')}>
             {t('settings.dashboardLink.button')}
-          </button>
+          </PrimaryButton>
         </section>
 
         {/* Preparo do ambiente — o atalho para refazer quando muda a sala,
@@ -647,13 +634,13 @@ export const SettingsScreen: React.FC = () => {
         >
           <h2
             id="guide-link-title"
+            className="t-h2"
             style={{
-              fontSize: '1.25rem',
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
               color: 'var(--color-primary)',
-              marginTop: 0,
+              margin: '0 0 0.5rem 0',
             }}
           >
             <FileText size={24} /> Guia de Instalação e Suporte do Cuidador
@@ -670,25 +657,15 @@ export const SettingsScreen: React.FC = () => {
             Instruções passo a passo sobre como posicionar a câmera, melhorar a iluminação do
             ambiente e solucionar problemas com óculos ou calibração.
           </p>
-          <button
-            onClick={() => navigate('/caregiver/guide?from=/settings')}
-            style={{
-              padding: '0.8rem 1.8rem',
-              background: 'var(--color-primary)',
-              border: 'none',
-              color: 'white',
-              borderRadius: '0.75rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px var(--color-card-shadow)',
-              fontSize: '1rem',
-              transition: 'background 0.2s',
-            }}
-            {...hoverAndFocusBackground('var(--color-primary)', 'var(--color-primary-dark, #143e80)')}
-          >
+          <PrimaryButton onClick={() => navigate('/caregiver/guide?from=/settings')}>
             Abrir Guia do Cuidador
-          </button>
+          </PrimaryButton>
         </section>
+        {/* Leituras: o que o paciente ouve em voz alta no módulo Leituras.
+            A tela de Leituras só lê o localStorage; este é o único lugar que
+            escreve nele. */}
+        <LeiturasSection cardStyle={cardStyle} />
+
         {/* Temporizador */}
         <section aria-labelledby="dwell-title" style={cardStyle}>
           <div
@@ -700,7 +677,7 @@ export const SettingsScreen: React.FC = () => {
             }}
           >
             <Clock size={28} color="var(--color-primary)" aria-hidden="true" />
-            <h2 id="dwell-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
+            <h2 id="dwell-title" className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}>
               {t('settings.dwell.title')}
             </h2>
           </div>
@@ -728,7 +705,7 @@ export const SettingsScreen: React.FC = () => {
             ) : (
               <VolumeX size={28} color="var(--color-text-muted)" aria-hidden="true" />
             )}
-            <h2 id="sound-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
+            <h2 id="sound-title" className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}>
               {t('settings.sound.title')}
             </h2>
           </div>
@@ -997,7 +974,7 @@ export const SettingsScreen: React.FC = () => {
           >
             <h2
               id="language-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
+              className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}
             >
               {t('settings.language.title')}
             </h2>
@@ -1017,7 +994,7 @@ export const SettingsScreen: React.FC = () => {
             }}
           >
             <Mic size={28} color="var(--color-primary)" aria-hidden="true" />
-            <h2 id="voice-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
+            <h2 id="voice-title" className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}>
               {t('settings.voice.title')}
             </h2>
             {/* O mesmo selo da tela de voz. Quem vê "Voz personalizada" nos
@@ -1100,7 +1077,7 @@ export const SettingsScreen: React.FC = () => {
         <section aria-labelledby="assistente-title" style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
             <Sparkles size={28} color="var(--color-accent)" aria-hidden="true" />
-            <h2 id="assistente-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
+            <h2 id="assistente-title" className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}>
               Assistente de escrita
             </h2>
           </div>
@@ -1180,7 +1157,7 @@ export const SettingsScreen: React.FC = () => {
         <section aria-labelledby="apresentacao-title" style={cardStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
             <Monitor size={28} color="var(--color-primary)" aria-hidden="true" />
-            <h2 id="apresentacao-title" style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
+            <h2 id="apresentacao-title" className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}>
               Apresentação e suporte
             </h2>
           </div>
@@ -1417,6 +1394,10 @@ export const SettingsScreen: React.FC = () => {
         </section>
 
 
+        {/* Sobre: Beta, atualização automática e tela cheia (com a saída
+            pelo teclado). Lê o mesmo estado de atualização desta tela. */}
+        <SobreOIrisFlow versao={versaoDoApp} atualizacao={atualizacao} cardStyle={cardStyle} />
+
         {/* Suavização do cursor (presets do filtro One-Euro): parâmetro de engenharia. O cuidador ajusta o tempo de dwell, não o filtro. */}
         {devMode && (
         <section aria-labelledby="filter-title" style={cardStyle}>
@@ -1431,7 +1412,7 @@ export const SettingsScreen: React.FC = () => {
             <Clock size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="filter-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
+              className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}
             >
               Suavização do cursor
             </h2>
@@ -1501,7 +1482,7 @@ export const SettingsScreen: React.FC = () => {
             <Target size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="accuracy-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
+              className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}
             >
               Teste de precisão
             </h2>
@@ -1898,8 +1879,10 @@ export const SettingsScreen: React.FC = () => {
           )}
         </section>
 
-        {/* Gravador de sessão: ferramenta de desenvolvimento (frames brutos para reprocessar o rastreador). Não é ajuste de cuidador. */}
-        {devMode && (
+        {/* Gravador de sessão: recurso de SUPORTE (frames brutos, sem vídeo,
+            para reprocessar o rastreador e entender uma falha à distância).
+            Ficava atrás do Modo Desenvolvedor, que não existe no instalador —
+            então fica aqui, na área do cuidador (protegida pelo PIN). */}
         <section aria-labelledby="recorder-title" style={cardStyle}>
           <div
             style={{
@@ -1912,7 +1895,7 @@ export const SettingsScreen: React.FC = () => {
             <Video size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="recorder-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
+              className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}
             >
               Gravador de sessão
             </h2>
@@ -1926,8 +1909,10 @@ export const SettingsScreen: React.FC = () => {
               lineHeight: 1.6,
             }}
           >
-            Grava landmarks, saída do L2CS, features e ponto predito em JSONL —{' '}
-            <strong>sem vídeo</strong>. Use para depurar sem se preocupar em reproduzir a sessão.
+            Grava, para o suporte técnico, os pontos do rosto, a leitura do modelo de olhar e o
+            ponto calculado na tela, num arquivo JSONL — <strong>sem vídeo e sem o texto
+            digitado</strong>. O arquivo só sai deste computador se você o enviar. Use quando o
+            suporte pedir: grave alguns minutos do problema, exporte e anexe ao pedido de ajuda.
           </p>
 
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -2020,7 +2005,6 @@ export const SettingsScreen: React.FC = () => {
             </div>
           </div>
         </section>
-        )}
 
         {/* Lembretes e Rotinas do Paciente */}
         <section aria-labelledby="reminders-title" style={cardStyle}>
@@ -2035,7 +2019,7 @@ export const SettingsScreen: React.FC = () => {
             <Clock size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="reminders-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
+              className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}
             >
               Lembretes e Rotina Diária
             </h2>
@@ -2241,7 +2225,7 @@ export const SettingsScreen: React.FC = () => {
             <UserCog size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="clinical-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
+              className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}
             >
               Histórico Clínico e Telemetria (LGPD)
             </h2>
@@ -2623,7 +2607,7 @@ export const SettingsScreen: React.FC = () => {
             <Download size={28} color="var(--color-primary)" aria-hidden="true" />
             <h2
               id="backup-title"
-              style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-text-base)' }}
+              className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}
             >
               {t('settings.backup.title')}
             </h2>

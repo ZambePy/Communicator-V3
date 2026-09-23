@@ -61,32 +61,31 @@ export const IAmOkScreen: React.FC = () => {
         }}
       >
         <div
+          className="surface surface--elevated"
           style={{
-            background: 'var(--color-card-bg)',
-            padding: '3.5rem 3rem',
-            borderRadius: '2.5rem',
-            border: '2px solid var(--color-card-border)',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
+            padding: '3rem 3rem',
+            borderRadius: 'var(--radius-xl)',
             textAlign: 'center',
-            maxWidth: 600,
+            maxWidth: 720,
             width: '100%',
             boxSizing: 'border-box',
           }}
         >
-          <div style={{ display: 'inline-flex', background: 'rgba(22, 163, 74, 0.1)', padding: '1.5rem', borderRadius: '2rem', marginBottom: '1.5rem' }}>
-            <ThumbsUp size={80} color="#16a34a" aria-hidden="true" />
+          <div style={{ display: 'inline-flex', background: 'var(--tint-ok-bg)', border: '1px solid var(--tint-ok-border)', padding: '1.5rem', borderRadius: '50%', marginBottom: '1.25rem' }}>
+            <ThumbsUp size={64} color="var(--color-ok)" aria-hidden="true" />
           </div>
-          
+
           <h1
             id="iamok-title"
-            style={{ fontSize: '2.5rem', color: '#166534', margin: '0 0 1rem 0', fontWeight: 900 }}
+            className="t-h1"
+            style={{ color: 'var(--color-text-base)', margin: '0 0 1rem 0' }}
           >
             Modo "Estou Bem"
           </h1>
 
           {sent ? (
             <div role="status" aria-live="polite" style={{ marginTop: '1.5rem' }}>
-              <p style={{ fontSize: '1.6rem', color: '#15803d', fontWeight: 700 }}>
+              <p style={{ fontSize: '1.6rem', color: 'var(--tint-ok-text)', fontWeight: 700 }}>
                 Sinal "Estou bem" enviado ao cuidador.
               </p>
               {/* Sem conta vinculada o barramento não tem para onde entregar.
@@ -96,35 +95,38 @@ export const IAmOkScreen: React.FC = () => {
                 Se este computador ainda não estiver ligado a uma conta IrisFlow, o aviso fica guardado e
                 sai assim que a conta for configurada.
               </p>
-              <div style={{ display: 'inline-flex', marginTop: '1.5rem', animation: 'bounce 2s infinite' }}>
-                <Send size={48} color="#22c55e" aria-hidden="true" />
+              {/* Sem animação contínua: o sinal saiu, e o ícone parado diz isso. */}
+              <div style={{ display: 'inline-flex', marginTop: '1.5rem' }}>
+                <Send size={48} color="var(--color-ok)" aria-hidden="true" />
               </div>
             </div>
           ) : (
             <div style={{ marginTop: '1rem' }}>
-              <p style={{ fontSize: '1.4rem', color: 'var(--color-text-base)', opacity: 0.9, fontWeight: 500 }}>
+              <p className="t-body-lg" style={{ color: 'var(--color-text-muted)', fontWeight: 500, margin: 0 }}>
                 Enviando notificação automática em:
               </p>
               <div
                 role="timer"
                 aria-live="polite"
                 aria-atomic="true"
-                style={{ fontSize: '5rem', fontWeight: 900, color: '#16a34a', margin: '1rem 0' }}
+                style={{ fontFamily: 'var(--font-display)', fontSize: '5rem', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1, fontVariantNumeric: 'tabular-nums', color: 'var(--color-ok)', margin: '1rem 0' }}
               >
                 {timeLeft}s
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+              {/* Dois alvos lado a lado, ambos com 200 px de altura (≥ 5°) e
+                  1,5° de folga entre eles — antes eram faixas de 76 px. */}
+              <div style={{ display: 'flex', gap: '3.75rem', marginTop: '1.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                 <GazeButton
                   onClick={dispatchSignal}
                   disabled={sending}
+                  width={230}
+                  height={200}
                   style={{
-                    width: '100%',
-                    height: '76px',
-                    background: '#16a34a',
-                    border: 'none',
-                    borderRadius: '1.25rem',
-                    color: 'white',
+                    background: 'var(--color-ok)',
+                    border: '2px solid var(--color-ok)',
+                    borderRadius: 'var(--radius-lg)',
+                    color: 'var(--color-navy)',
                   }}
                 >
                   <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>
@@ -134,14 +136,10 @@ export const IAmOkScreen: React.FC = () => {
 
                 <GazeButton
                   onClick={() => window.history.back()}
-                  style={{
-                    width: '100%',
-                    height: '76px',
-                    background: 'rgba(239, 68, 68, 0.05)',
-                    border: '2px solid rgba(239, 68, 68, 0.2)',
-                    borderRadius: '1.25rem',
-                    color: '#dc2626',
-                  }}
+                  variante="perigo"
+                  width={230}
+                  height={200}
+                  style={{ borderRadius: 'var(--radius-lg)' }}
                 >
                   <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>
                     Cancelar
@@ -152,7 +150,6 @@ export const IAmOkScreen: React.FC = () => {
           )}
         </div>
       </div>
-      <style>{`@keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }`}</style>
     </GazePageLayout>
   );
 };

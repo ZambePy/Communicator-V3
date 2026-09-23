@@ -5,17 +5,16 @@ import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 
 /**
- * O tutorial precisa ser PERCORRÍVEL — em qualquer direção.
+ * O tutorial precisa ser PERCORRÍVEL — em qualquer direção — PELO OLHAR.
  *
- * O bug relatado era "entro numa parte e não consigo mais ir para outra aba".
- * A causa: a trilha de passos era um `div` com `span`, sem `onClick`, sem
- * `role` e fora do `DWELL_SELECTOR` do GazeContext — parecia um conjunto de
- * abas e era inerte para mouse, teclado e olhar.
+ * A trilha de passos já foi um `div` inerte que parecia abas, e depois dez
+ * `<button>` de ~60×56 px — abaixo do alvo mínimo, inoperáveis pelo dwell.
+ * Agora ela é só indicador: quem navega são Voltar e Continuar, de 76 px, e
+ * Pular, que virou alvo de olhar em vez de um texto de 130×20.
  *
  * Estes testes travam o contrato mínimo: dá para chegar do primeiro ao último
- * passo, voltar, e pular direto para qualquer um pela trilha. E, desde que a
- * jornada passou a ir até as telas reais, mais dois contratos: a única trava
- * do tutorial trava mesmo, e ela abre — por ter sido cumprida, ou pelo tempo.
+ * passo e voltar, sem nenhum alvo cru no caminho; a única trava do tutorial
+ * trava mesmo, e ela abre — por ter sido cumprida, ou pelo tempo.
  */
 
 const navigate = vi.fn();
@@ -40,12 +39,29 @@ vi.mock('../../context/SettingsContext', () => ({
   useSettings: () => ({ settings: { dwellMs: 900 }, updateSettings }),
 }));
 
+// Sem calibração o dwell não liga; o wizard consulta isto para avisar.
+const gaze = vi.hoisted(() => ({ calibrado: true }));
+vi.mock('../../context/GazeContext', () => ({
+  useGaze: () => ({ calibration: { isCalibrated: () => gaze.calibrado } }),
+  useIsDwelling: () => false,
+}));
+
 // Os passos usam gaze/emergência de verdade; aqui só interessa a navegação.
 vi.mock('./steps/OQueEDwell', () => ({ OQueEDwell: () => <div>passo-oQueEDwell</div> }));
 vi.mock('./steps/PraticaGuiada', () => ({ PraticaGuiada: () => <div>passo-pratica</div> }));
 vi.mock('./steps/AjusteDoTempo', () => ({ AjusteDoTempo: () => <div>passo-ajuste</div> }));
 vi.mock('./steps/BotaoDeEmergencia', () => ({
-  BotaoDeEmergencia: () => <div>passo-emergencia</div>,
+  BotaoDeEmergencia: ({ aoEnsaiar, aoPular }: { aoEnsaiar: () => void; aoPular: () => void }) => (
+    <div>
+      passo-emergencia
+      <button type="button" onClick={aoEnsaiar}>
+        ensaiar
+      </button>
+      <button type="button" onClick={aoPular}>
+        nao-ensaiar
+      </button>
+    </div>
+  ),
 }));
 vi.mock('./steps/Concluido', () => ({ Concluido: () => <div>passo-concluido</div> }));
 vi.mock('./steps/MaisRecursos', () => ({ MaisRecursos: () => <div>passo-recursos</div> }));
@@ -57,7 +73,7 @@ vi.mock('./steps/PassoDeMissao', () => ({
 
 import { TutorialWizard } from './TutorialWizard';
 import { PASSOS_DO_TUTORIAL, PASSO_COM_TRAVA, ESPERA_MAXIMA_MS } from './passos';
-import { cumprirMissao, iniciarMissao } from './missao';
+import { cumprirMissao, iniciarMissao, guardarPasso } from './missao';
 
 function montar() {
   return render(
@@ -67,13 +83,13 @@ function montar() {
   );
 }
 
-/** Aba da trilha pelo índice do passo. */
-function aba(n: number): HTMLElement {
-  return within(screen.getByRole('tablist')).getAllByRole('tab')[n];
-}
-
 /** Índice de um passo, para o teste não depender do tamanho da jornada. */
 const idx = (p: string) => (PASSOS_DO_TUTORIAL as readonly string[]).indexOf(p);
+
+/** Marca da trilha pelo índice do passo (indicador, não alvo). */
+function marca(n: number): HTMLElement {
+  return within(screen.getByRole('list', { name: /tutorial\.title/ })).getAllByRole('listitem')[n];
+}
 
 // Sem i18n inicializado, `t()` devolve a própria chave — e é por ela que os
 // botões são localizados aqui. Casar pelo texto traduzido deixaria o teste
@@ -90,49 +106,40 @@ function jaEscreveuUmaFrase() {
   cumprirMissao('digitacao');
 }
 
-describe('TutorialWizard — a trilha navega', () => {
+/** Anda até um passo pelo Continuar — o único caminho para a frente. */
+function irPara(p: string) {
+  const alvo = idx(p);
+  for (let i = 0; i < alvo; i++) avancar();
+  expect(screen.getByText(`passo-${p}`)).toBeInTheDocument();
+}
+
+describe('TutorialWizard — navegar pelo olhar', () => {
   beforeEach(() => {
     navigate.mockClear();
     gravarTutorial.mockClear();
+    gaze.calibrado = true;
   });
 
-  it('a trilha é um tablist com um tab clicável por passo', () => {
+  it('a trilha é um indicador: uma marca por passo, nenhuma é botão', () => {
     montar();
-    const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
-    expect(tabs).toHaveLength(PASSOS_DO_TUTORIAL.length);
-    // O contrato que faltava: são BOTÕES. Um `div` aqui é inerte para o olhar.
-    for (const tab of tabs) expect(tab.tagName).toBe('BUTTON');
-    // E cada um se identifica para leitor de tela: com dez passos os rótulos
-    // saíram da tela (cada aba ficaria mais estreita que o alvo mínimo), então
-    // o nome vive no `aria-label`.
-    for (const tab of tabs) expect(tab).toHaveAttribute('aria-label');
+    const marcas = within(screen.getByRole('list', { name: /tutorial\.title/ })).getAllByRole('listitem');
+    expect(marcas).toHaveLength(PASSOS_DO_TUTORIAL.length);
+    // O contrato que mudou: dez alvos de 60 px não são alvos para o olhar.
+    // Nada na trilha pode ser clicável, nem casar com o seletor de dwell.
+    expect(screen.queryByRole('tab')).toBeNull();
+    for (const m of marcas) {
+      expect(m.querySelector('button, a, [role="button"]')).toBeNull();
+      expect(m).toHaveAttribute('aria-label');
+    }
   });
 
-  it('clicar numa aba salta direto para aquele passo', () => {
+  it('a marca atual se anuncia para leitor de tela e acompanha o passo', () => {
     montar();
-    expect(screen.getByText('passo-oQueEDwell')).toBeInTheDocument();
-    fireEvent.click(aba(idx('emergencia')));
-    expect(screen.getByText('passo-emergencia')).toBeInTheDocument();
-    expect(screen.queryByText('passo-oQueEDwell')).toBeNull();
-  });
-
-  it('dá para voltar pela trilha depois de ter avançado — o bug relatado', () => {
-    montar();
-    fireEvent.click(aba(idx('concluido')));
-    expect(screen.getByText('passo-concluido')).toBeInTheDocument();
-    fireEvent.click(aba(idx('pratica')));
-    expect(screen.getByText('passo-pratica')).toBeInTheDocument();
-    fireEvent.click(aba(0));
-    expect(screen.getByText('passo-oQueEDwell')).toBeInTheDocument();
-  });
-
-  it('a aba atual se anuncia para leitor de tela', () => {
-    montar();
-    expect(aba(0)).toHaveAttribute('aria-selected', 'true');
-    expect(aba(2)).toHaveAttribute('aria-selected', 'false');
-    fireEvent.click(aba(2));
-    expect(aba(2)).toHaveAttribute('aria-selected', 'true');
-    expect(aba(0)).toHaveAttribute('aria-selected', 'false');
+    expect(marca(0)).toHaveAttribute('aria-current', 'step');
+    expect(marca(1)).not.toHaveAttribute('aria-current');
+    avancar();
+    expect(marca(1)).toHaveAttribute('aria-current', 'step');
+    expect(marca(0)).not.toHaveAttribute('aria-current');
   });
 
   it('o caminho inteiro pelo botão Continuar chega ao fim e conclui', () => {
@@ -149,22 +156,90 @@ describe('TutorialWizard — a trilha navega', () => {
     expect(navigate).toHaveBeenCalledWith('/welcome', { replace: true });
   });
 
-  it('Voltar está desabilitado só no primeiro passo', () => {
+  it('Voltar está desabilitado só no primeiro passo, e volta de verdade', () => {
     montar();
     const voltar = () => screen.getByRole('button', { name: /tutorial\.back/ });
     expect(voltar()).toBeDisabled();
-    fireEvent.click(aba(2));
+    irPara('ajuste');
     expect(voltar()).not.toBeDisabled();
     fireEvent.click(voltar());
     expect(screen.getByText('passo-pratica')).toBeInTheDocument();
   });
 
+  it('Pular é um alvo de olhar (GazeButton, 76 px), não um texto', () => {
+    montar();
+    const pular = screen.getByRole('button', { name: /tutorial\.skip/ });
+    expect(pular.className).toContain('gaze-button');
+    expect(pular.style.height).toBe('76px');
+    expect(pular).toHaveAttribute('data-isolado', 'true');
+  });
+
   it('Pular sai sem gravar conclusão, de qualquer passo', () => {
     montar();
-    fireEvent.click(aba(idx('conversa')));
+    irPara('comunicacao');
     fireEvent.click(screen.getByRole('button', { name: /tutorial\.skip/ }));
     expect(gravarTutorial).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith('/menu', { replace: true });
+  });
+
+  it('sem calibração avisa e dá o caminho — pelo olhar', () => {
+    gaze.calibrado = false;
+    montar();
+    expect(screen.getByRole('alert')).toHaveTextContent(/tutorial\.semCalibracao\.texto/);
+    const ir = screen.getByRole('button', { name: /tutorial\.semCalibracao\.ir/ });
+    expect(ir.className).toContain('gaze-button');
+    fireEvent.click(ir);
+    expect(navigate).toHaveBeenCalledWith('/calibration-check');
+  });
+
+  it('com calibração não há aviso', () => {
+    montar();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+/**
+ * O ensaio de emergência.
+ *
+ * "Não quero ensaiar agora" tem de FAZER alguma coisa (avançar), e o ensaio
+ * feito tem de sobreviver a uma remontagem — o passo vem depois das missões
+ * que saem desta rota, e um F5 zerava o `ensaiou` da conclusão.
+ */
+describe('TutorialWizard — o ensaio de emergência', () => {
+  beforeEach(() => {
+    navigate.mockClear();
+    gravarTutorial.mockClear();
+    gaze.calibrado = true;
+  });
+
+  it('"não quero ensaiar agora" avança o passo', () => {
+    jaEscreveuUmaFrase();
+    montar();
+    irPara('emergencia');
+    fireEvent.click(screen.getByText('nao-ensaiar'));
+    expect(screen.getByText('passo-concluido')).toBeInTheDocument();
+  });
+
+  it('o ensaio feito é gravado na conclusão mesmo depois de remontar', () => {
+    jaEscreveuUmaFrase();
+    const { unmount } = montar();
+    irPara('emergencia');
+    fireEvent.click(screen.getByText('ensaiar'));
+    unmount();
+
+    montar();
+    expect(screen.getByText('passo-emergencia')).toBeInTheDocument();
+    avancar();
+    avancar();
+    expect(gravarTutorial).toHaveBeenCalledWith('p1', expect.objectContaining({ ensaiouEmergencia: true }));
+  });
+
+  it('sem ensaio a conclusão diz que não ensaiou', () => {
+    jaEscreveuUmaFrase();
+    montar();
+    irPara('concluido');
+    avancar();
+    expect(gravarTutorial).toHaveBeenCalledWith('p1', expect.objectContaining({ ensaiouEmergencia: false }));
   });
 });
 
@@ -180,6 +255,7 @@ describe('TutorialWizard — a trava de escrever uma frase', () => {
   beforeEach(() => {
     navigate.mockClear();
     gravarTutorial.mockClear();
+    gaze.calibrado = true;
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -187,7 +263,7 @@ describe('TutorialWizard — a trava de escrever uma frase', () => {
 
   it('segura o Continuar enquanto a frase não foi escrita', () => {
     montar();
-    fireEvent.click(aba(idx(PASSO_COM_TRAVA)));
+    irPara(PASSO_COM_TRAVA);
     expect(botaoAvancar()).toBeDisabled();
     // E diz por quê: um botão desabilitado sem explicação é indistinguível de
     // um app quebrado, e quem está aqui não tem como investigar.
@@ -200,7 +276,7 @@ describe('TutorialWizard — a trava de escrever uma frase', () => {
   it('libera assim que a frase foi escrita na tela real', () => {
     jaEscreveuUmaFrase();
     montar();
-    fireEvent.click(aba(idx(PASSO_COM_TRAVA)));
+    irPara(PASSO_COM_TRAVA);
     expect(botaoAvancar()).not.toBeDisabled();
     avancar();
     expect(screen.getByText('passo-conversa')).toBeInTheDocument();
@@ -209,7 +285,7 @@ describe('TutorialWizard — a trava de escrever uma frase', () => {
   it('libera sozinha depois da espera máxima — ninguém fica preso', () => {
     vi.useFakeTimers();
     montar();
-    fireEvent.click(aba(idx(PASSO_COM_TRAVA)));
+    irPara(PASSO_COM_TRAVA);
     expect(botaoAvancar()).toBeDisabled();
     act(() => {
       vi.advanceTimersByTime(ESPERA_MAXIMA_MS + 1000);
@@ -221,14 +297,14 @@ describe('TutorialWizard — a trava de escrever uma frase', () => {
     // A trava é para quem CONSEGUE e ainda não tentou, nunca para prender quem
     // não consegue.
     montar();
-    fireEvent.click(aba(idx(PASSO_COM_TRAVA)));
+    irPara(PASSO_COM_TRAVA);
     fireEvent.click(screen.getByRole('button', { name: /tutorial\.skip/ }));
     expect(navigate).toHaveBeenCalledWith('/menu', { replace: true });
   });
 
   it('Voltar continua livre no passo travado', () => {
     montar();
-    fireEvent.click(aba(idx(PASSO_COM_TRAVA)));
+    irPara(PASSO_COM_TRAVA);
     fireEvent.click(screen.getByRole('button', { name: /tutorial\.back/ }));
     expect(screen.getByText('passo-comunicacao')).toBeInTheDocument();
   });
@@ -247,18 +323,25 @@ describe('TutorialWizard — retomar de onde parou', () => {
   });
 
   it('remontar retoma o passo guardado', () => {
+    jaEscreveuUmaFrase();
     const { unmount } = montar();
-    fireEvent.click(aba(idx('lazer')));
-    expect(screen.getByText('passo-lazer')).toBeInTheDocument();
+    irPara('lazer');
     unmount();
 
     montar();
     expect(screen.getByText('passo-lazer')).toBeInTheDocument();
   });
 
+  it('abre no passo guardado pela tela real (a volta de uma missão)', () => {
+    guardarPasso('conversa');
+    montar();
+    expect(screen.getByText('passo-conversa')).toBeInTheDocument();
+  });
+
   it('sair do tutorial esquece o passo — a próxima vez começa do começo', () => {
+    jaEscreveuUmaFrase();
     const { unmount } = montar();
-    fireEvent.click(aba(idx('lazer')));
+    irPara('lazer');
     fireEvent.click(screen.getByRole('button', { name: /tutorial\.skip/ }));
     unmount();
 

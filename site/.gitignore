@@ -17,11 +17,15 @@ yarn-error.log*
 # Documentação, anotações e arquivos de dados fora do código
 #
 # Decisão de 10/09/2026: o repositório guarda CÓDIGO. Texto solto (.txt) e
-# documentação (.md) ficam de fora — inclusive o INTEGRACAO.md, que descreve
-# o esquema do banco e as chaves usadas por cada projeto.
+# documentação (.md) ficam de fora. Desde 23/09/2026 a documentação do site
+# vive no README.md da raiz ("Site" e "Hospedagem e publicação").
 # ─────────────────────────────────────────────────────────────────────────────
 *.txt
 *.md
+# Exceção (23/09/2026): a licença da fonte Sora (OFL) precisa acompanhar os
+# arquivos da fonte publicados em /fonts. Sem isto o build do Cloudflare
+# Pages, que parte do git, sairia sem ela.
+!/public/fonts/LICENSE-*.txt
 
 *.csv
 *.tsv

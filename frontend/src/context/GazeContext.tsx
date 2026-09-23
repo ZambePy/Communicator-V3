@@ -30,6 +30,11 @@ import { estiloDoCursor, limitarTamanho } from '@tracker/interaction/cursorStyle
 import { geometriaDoAnel } from '@tracker/interaction/dwellRing';
 import { GazeFallback } from '@tracker/interaction/gazeFallback';
 import { SeguidorDeCursor } from '@tracker/interaction/seguidorDeCursor';
+import {
+  consultar as consultarVigia, dispensar as dispensarVigia, resolvido as vigiaResolvido,
+  estadoInicialDoAviso, INTERVALO_DE_CONSULTA_MS, type EstadoDoAviso,
+} from '@tracker/vigiaDeRecalibracao.aviso';
+import type { MotivoDeRecalibracao } from '@tracker/vigiaDeRecalibracao';
 import { DetectorDeOlharForaDaTela } from '@tracker/interaction/olharForaDaTela';
 import { DetectorDeOlhosFechados } from '@tracker/interaction/olhosFechados';
 import { preflight, podeComecar } from '@tracker/diagnostics/preflight';
@@ -148,6 +153,19 @@ interface GazeContextValue {
    * continua o de sempre: cursor congelado a 35% de opacidade, sem aviso.
    */
   gazeLostMessage: string | null;
+  /**
+   * Reajuste rápido (alvo único de 2 s) em curso. O `EmergencyProvider` lê
+   * isto para pôr o botão de Emergência POR CIMA do alvo preto do reajuste —
+   * ele nunca pode sumir, nem por 2 segundos.
+   */
+  reancorando: boolean;
+  /**
+   * Interrompe o reajuste em curso e DESCARTA o que ele colheu (nada é
+   * aplicado às referências). Sem reajuste em curso, não faz nada. Quem chama:
+   * a Emergência — escolhida durante o reajuste, ela o cancela e segue o fluxo
+   * normal.
+   */
+  cancelarReancoragem: () => void;
 }
 
 const GazeContext = createContext<GazeContextValue | null>(null);
@@ -364,6 +382,15 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const avisoDistanciaRef = useRef(new AvisoDeDistancia());
   /** A referência lenta está parada há tempo demais por postura diferente. */
   const [avisoDePostura, setAvisoDePostura] = useState(false);
+  /**
+   * Vigia de recalibração: o motivo em exibição (`null` = nada). O vigia
+   * existia no engine e ninguém o consultava — "os nove pontos só são pedidos
+   * quando o modelo deixou de descrever a pessoa" era verdade só no papel.
+   * A política de exibição (duas consultas seguidas, soneca de 10 min) é a de
+   * `vigiaDeRecalibracao.aviso.ts`; aqui só há o relógio e o estado.
+   */
+  const [avisoDeRecalibracao, setAvisoDeRecalibracao] = useState<MotivoDeRecalibracao>(null);
+  const vigiaRef = useRef<EstadoDoAviso>(estadoInicialDoAviso());
   /** Reajuste rápido (alvo único de 2 s) em curso. */
   const [reancorando, setReancorando] = useState(false);
   const [calibrationInvalidated, setCalibrationInvalidated] = useState<string | null>(null);
@@ -685,7 +712,6 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const MAX_ITER = 14;
       let ultimoBrilho: number | undefined;
-      let convergiu = false;
       for (let i = 0; i < MAX_ITER; i++) {
         if (isCancelled()) return;
         const d = engine.getDiagnostics();
@@ -715,7 +741,6 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
         cameraTuningRef.current = step;
         ultimoBrilho = d.quality.brightness;
-        convergiu = step.converged;
 
         if (step.converged || Object.keys(step.constraints).length === 0) {
           if (step.reasons.length) console.log('[camera]', step.reasons.join(' | '));
@@ -752,9 +777,17 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       }
 
-      // Travar exposição/balanço/foco só faz sentido com a imagem boa: travar
+      // Travar exposição/balanço/foco só faz sentido com a IMAGEM BOA: travar
       // uma imagem escura porque o zoom bateu no limite congelaria o problema
       // pelo resto da sessão. Sem brilho medido, a exposição segue automática.
+      //
+      // Convergir NÃO é exigido, de propósito: `converged` já implica brilho em
+      // [0,37; 0,53] ⊂ [0,25; 0,75], então "convergiu OU imagem boa" era
+      // exatamente "imagem boa" — só que escrito de um jeito que fazia parecer
+      // que a convergência era necessária (o README chegou a dizer isso). Uma
+      // sessão que sai do laço sem convergir (zoom no limite, driver recusando
+      // `applyConstraints`) mas com brilho bom trava do mesmo jeito, e é o
+      // comportamento certo: o que se quer congelar é a exposição boa.
       const imagemBoa =
         typeof ultimoBrilho === 'number' && ultimoBrilho >= 0.25 && ultimoBrilho <= 0.75;
       const stab = planStabilizationStep(caps, powerLineHz);
@@ -762,7 +795,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (stab.constraints.powerLineFrequency !== undefined) {
         constraints.powerLineFrequency = stab.constraints.powerLineFrequency;
       }
-      if (convergiu || imagemBoa) {
+      if (imagemBoa) {
         for (const k of ['exposureMode', 'whiteBalanceMode', 'focusMode'] as const) {
           if (stab.constraints[k] !== undefined) constraints[k] = stab.constraints[k];
         }
@@ -1621,7 +1654,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.log(
               `[latencia] fps=${d.fpsRender.toFixed(1)} l2cs=${d.l2cs.hz.toFixed(1)} Hz ` +
                 `inferência=${d.l2cs.latencyMs.toFixed(0)} ms stale=${d.l2cs.stalePct.toFixed(1)}% ` +
-                `crop=${EXPERIMENT.l2csInputSize}² ep=${d.l2cs.executionProvider ?? '?'}`
+                `crop=${d.l2cs.inputSize}² ep=${d.l2cs.executionProvider ?? '?'}`
             );
             if (d.l2cs.stalePct > 50) {
               console.warn(
@@ -1928,33 +1961,121 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => clearInterval(id);
   }, []);
 
+  // Vigia de recalibração a cada 15 s — a BCEA recente é uma mediana de
+  // fixações e muda na escala de minutos. Só consulta com modelo carregado e
+  // rastreando; sem isso o veredicto é "não sei", e "não sei" não acusa.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const eng = engineRef.current;
+      if (!eng) return;
+      const rastreando = eng.getState() === 'tracking' && eng.calibration.isCalibrated();
+      const veredicto = rastreando ? eng.precisaDeRecalibracao() : { precisa: false, motivo: null };
+      vigiaRef.current = consultarVigia(vigiaRef.current, veredicto, performance.now());
+      const motivo = vigiaRef.current.motivoExibido;
+      setAvisoDeRecalibracao((anterior) => (anterior === motivo ? anterior : motivo));
+    }, INTERVALO_DE_CONSULTA_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  /** "Agora não" no aviso do vigia: esconde e dorme 10 min. */
+  const dispensarRecalibracao = useCallback(() => {
+    vigiaRef.current = dispensarVigia(vigiaRef.current, performance.now());
+    setAvisoDeRecalibracao(null);
+  }, []);
+
   /**
-   * Reajuste rápido: 2 s com a pessoa olhando o centro. Quem conta o tempo é o
-   * ENGINE — o overlay só desenha o anel fechando, e some quando a promessa
-   * resolve. Assim o que aparece na tela não pode divergir do que foi colhido.
+   * "Calibrar de novo": o provider fica FORA do router, então navega pelo
+   * hash — é o HashRouter que escuta. Zera o vigia: a próxima calibração
+   * grava uma referência nova e o episódio acabou.
+   */
+  const irRecalibrar = useCallback(() => {
+    vigiaRef.current = vigiaResolvido();
+    setAvisoDeRecalibracao(null);
+    window.location.hash = '#/calibration-check';
+  }, []);
+
+  /**
+   * Reajuste rápido: 2 s com a pessoa olhando o centro — o engine mede onde o
+   * modelo põe o olhar e corrige a deriva (as referências da calibração não
+   * mudam). Quem conta o tempo é o ENGINE — o overlay só desenha o anel
+   * fechando, e some quando a promessa resolve. Assim o que aparece na tela não
+   * pode divergir do que foi colhido.
    *
    * Reentrância: o engine já encerra uma reancoragem anterior ao começar outra,
    * e o `reancorando` mantém o botão desabilitado enquanto isso.
+   *
+   * Cada coleta ganha um número (`reancoragemAtivaRef`). Um cancelamento
+   * (`cancelarReancoragem`, chamado pela Emergência) zera o número: quando a
+   * promessa daquela coleta resolver, ela já não é a ativa e não mexe em nada
+   * — nem no aviso de postura, nem no overlay de uma coleta seguinte.
    */
+  const reancoragemAtivaRef = useRef<number | null>(null);
+  const proximaReancoragemRef = useRef(0);
   const reancorar = useCallback(() => {
     const eng = engineRef.current;
     if (!eng) return;
+    // Emergência em curso (contagem de confirmação ou tela de socorro): nada
+    // de overlay preto por cima dela. O aviso de postura fica acima da
+    // confirmação, e um "Reajustar" acionado ali taparia o CANCELAR.
+    if (emergenciaAtiva()) {
+      console.warn('[calib] reajuste rápido recusado: emergência em curso');
+      return;
+    }
+    const id = ++proximaReancoragemRef.current;
+    reancoragemAtivaRef.current = id;
     setReancorando(true);
     void eng
       .reancorarReferencias({ duracaoMs: DURACAO_DO_REAJUSTE_MS })
       .then((r) => {
+        if (reancoragemAtivaRef.current !== id) return;
         console.log(
           `[calib] reajuste rápido: ${r.amostras} amostra(s)` +
-            (r.distanciaCm > 0
-              ? `, nova base ${r.distanciaCm.toFixed(1)} cm`
-              : ', sem amostras suficientes — nada foi alterado')
+            (r.aplicado
+              ? `, viés de ${r.desvioPx?.toFixed(0) ?? '?'} px no centro corrigido`
+              : r.desvioPx !== null
+                ? `, viés de ${r.desvioPx.toFixed(0)} px grande demais para corrigir — calibre de novo`
+                : ', sem amostras suficientes — nada foi alterado')
         );
-        // Reancorou: a referência lenta recomeçou no zero, então o aviso de
-        // postura some sem esperar o próximo tick de 500 ms.
-        if (r.amostras > 0) setAvisoDePostura(false);
+        // Corrigiu: o aviso some sem esperar o próximo tick de 500 ms.
+        if (r.aplicado) setAvisoDePostura(false);
       })
       .catch((e) => console.warn('[calib] reajuste rápido falhou:', e))
-      .finally(() => setReancorando(false));
+      .finally(() => {
+        if (reancoragemAtivaRef.current !== id) return;
+        reancoragemAtivaRef.current = null;
+        setReancorando(false);
+      });
+  }, []);
+
+  /**
+   * Interrompe o reajuste em curso SEM aplicar nada.
+   *
+   * O overlay sai na hora (a Emergência não espera o anel fechar) e a coleta é
+   * abandonada no engine: os quadros de quem desviou o olhar para a Emergência
+   * — ou virou a cabeça para ela — não descrevem a postura olhando o centro, e
+   * aplicá-los reescreveria as referências com lixo. É o mesmo "abandonar, não
+   * concluir" que o engine já faz quando o perfil muda no meio da coleta.
+   *
+   * `cancelarReancoragem()` é a porta do engine para isso. Um engine sem ela
+   * (versão anterior do núcleo) não tem como descartar a coleta pela metade:
+   * o overlay sai do mesmo jeito, mas a coleta termina sozinha em segundo
+   * plano — e o aviso no log diz exatamente isso, em vez de fingir que
+   * descartou.
+   */
+  const cancelarReancoragem = useCallback(() => {
+    if (reancoragemAtivaRef.current === null) return;
+    reancoragemAtivaRef.current = null;
+    setReancorando(false);
+    const eng = engineRef.current as (GazeEngine & { cancelarReancoragem?: () => void }) | null;
+    if (typeof eng?.cancelarReancoragem === 'function') {
+      eng.cancelarReancoragem();
+      console.log('[calib] reajuste rápido cancelado pela Emergência — amostras descartadas');
+    } else {
+      console.warn(
+        '[calib] reajuste rápido interrompido na tela, mas este engine não tem cancelarReancoragem(): ' +
+          'a coleta termina em segundo plano e é aplicada'
+      );
+    }
   }, []);
 
   const value = useMemo<GazeContextValue>(
@@ -1983,6 +2104,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       cameraError,
       calibrationInvalidated,
       gazeLostMessage,
+      reancorando,
+      cancelarReancoragem,
     }),
     // `isDwelling` deliberadamente FORA das deps — ver o comentário acima e
     // `DwellContext`.
@@ -2000,6 +2123,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       calibrationInvalidated,
       gazeLostMessage,
       avisoDeCamera,
+      reancorando,
+      cancelarReancoragem,
     ]
   );
 
@@ -2021,8 +2146,13 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         avisoDePostura={avisoDePostura}
         onReancorar={reancorar}
         reancorando={reancorando}
+        avisoDeRecalibracao={avisoDeRecalibracao}
+        onRecalibrar={irRecalibrar}
+        onDispensarRecalibracao={dispensarRecalibracao}
       />
-      {/* Alvo único de 2 s: aparece só durante a coleta do reajuste rápido. */}
+      {/* Alvo único de 2 s: aparece só durante a coleta do reajuste rápido.
+          Cobre a tela inteira MENOS a Emergência, que o `EmergencyProvider`
+          sobe para cima dele enquanto `reancorando` (ver `Z_DO_REAJUSTE`). */}
       {reancorando && <ReancoragemOverlay duracaoMs={DURACAO_DO_REAJUSTE_MS} />}
       {/* A varredura fica DENTRO do provider e FORA do `DwellContext`: ela não
           depende de dwell e não deve re-renderizar a cada alternância dele. */}

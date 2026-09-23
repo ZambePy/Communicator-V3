@@ -9,6 +9,11 @@ interface PageHeaderProps {
   showBack?: boolean;
 }
 
+/**
+ * Cabeçalho de página fora do `GazePageLayout` (telas do cuidador e o modo
+ * Computador). Mesma gramática do cabeçalho canônico: Voltar quadrado à
+ * esquerda, título em display, uma linha de apoio abaixo.
+ */
 export const PageHeader: React.FC<PageHeaderProps> = ({
   title,
   subtitle,
@@ -16,38 +21,53 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   actions,
   showBack = true,
 }) => (
+  // `reserva-emergencia`: este cabeçalho vai até a borda direita, onde a
+  // Emergência (fixa, global) fica. A classe só age quando o botão está lá.
   <header
+    className="reserva-emergencia"
     style={{
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: '2rem',
-      paddingBottom: '1rem',
+      gap: 'var(--space-4)',
+      marginBottom: 'var(--space-6)',
+      paddingBottom: 'var(--space-4)',
       borderBottom: '1px solid var(--color-card-border)',
     }}
   >
-    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', minWidth: 0 }}>
       {showBack && <BackButton />}
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {icon && <div style={{ display: 'flex', alignItems: 'center' }}>{icon}</div>}
-          <h1
-            style={{
-              fontSize: '1.75rem',
-              fontWeight: 800,
-              color: 'var(--color-text-base)',
-              margin: 0,
-            }}
-          >
+          {icon && (
+            <div
+              aria-hidden="true"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 44,
+                height: 44,
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--color-primary-light)',
+                color: 'var(--color-primary)',
+                flexShrink: 0,
+              }}
+            >
+              {icon}
+            </div>
+          )}
+          <h1 className="t-h1" style={{ margin: 0, color: 'var(--color-text-base)' }}>
             {title}
           </h1>
         </div>
         {subtitle && (
           <p
+            className="t-body"
             style={{
-              margin: '0.25rem 0 0 0',
+              margin: '0.35rem 0 0 0',
               color: 'var(--color-text-muted)',
-              fontSize: '0.95rem',
+              maxWidth: '70ch',
             }}
           >
             {subtitle}
@@ -55,6 +75,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         )}
       </div>
     </div>
-    {actions && <div style={{ display: 'flex', gap: '0.75rem' }}>{actions}</div>}
+    {actions && <div style={{ display: 'flex', gap: '0.75rem', flexShrink: 0 }}>{actions}</div>}
   </header>
 );

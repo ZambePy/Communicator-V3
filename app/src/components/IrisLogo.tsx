@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { brand, spectrum } from '@/theme';
+import { brand, sizes, spectrum, useReduceMotion, useTheme } from '@/theme';
 
 interface Props {
   size?: number;
@@ -11,7 +11,7 @@ interface Props {
   spinning?: boolean;
   /** pulsa a pupila como um olhar vivo */
   breathing?: boolean;
-  /** versão branca para fundos escuros */
+  /** versão branca para fundos escuros; omitido = acompanha o tema (branca no escuro) */
   onDark?: boolean;
   /**
    * halo colorido atrás do símbolo — usar em surfaces de destaque
@@ -32,13 +32,39 @@ const symbolWhite = require('../../assets/images/symbol-white.png');
  * Símbolo da IrisFlow: as lâminas do diafragma giram lentamente, a pupila fica fixa
  * com dois reflexos (principal e secundário) — a mesma leitura do LOGO oficial.
  */
-export function IrisLogo({ size = 96, spinning = true, breathing = true, onDark = false, halo = false, refraction = false }: Props) {
+export function IrisLogo({ size = sizes.logo.xl, spinning = true, breathing = true, onDark: onDarkProp, halo = false, refraction = false }: Props) {
+  const { mode } = useTheme();
+  const onDark = onDarkProp ?? mode === 'dark';
   const rotation = useSharedValue(0);
   const orbit = useSharedValue(0);
   const scale = useSharedValue(1);
   const haloPulse = useSharedValue(0.85);
+  // "Reduzir movimento": o giro contínuo das lâminas, a órbita do fio espectral
+  // e a respiração da pupila são exatamente o que a preferência pede para tirar.
+  // `withRepeat` não passa pelo corte automático das animações de entrada.
+  const reduceMotion = useReduceMotion();
 
   useEffect(() => {
+    if (reduceMotion) {
+      // Estático: sem giro nem órbita; a pupila e o halo ficam parados.
+      cancelAnimation(rotation);
+      cancelAnimation(orbit);
+      cancelAnimation(scale);
+      cancelAnimation(haloPulse);
+      rotation.value = 0;
+      orbit.value = 0;
+      scale.value = 1;
+      haloPulse.value = 0.95;
+      return;
+    }
+    // O que deixou de ser pedido para (ex.: computador saiu do ar → sem giro).
+    if (!spinning) cancelAnimation(rotation);
+    if (!refraction) cancelAnimation(orbit);
+    if (!breathing) {
+      cancelAnimation(scale);
+      cancelAnimation(haloPulse);
+      scale.value = 1;
+    }
     if (spinning) {
       rotation.value = withRepeat(withTiming(360, { duration: 14000, easing: Easing.linear }), -1, false);
     }
@@ -57,7 +83,7 @@ export function IrisLogo({ size = 96, spinning = true, breathing = true, onDark 
         true,
       );
     }
-  }, [spinning, breathing, refraction, rotation, orbit, scale, haloPulse]);
+  }, [spinning, breathing, refraction, reduceMotion, rotation, orbit, scale, haloPulse]);
 
   const bladesStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${rotation.value}deg` }] }));
   const pupilStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -72,7 +98,7 @@ export function IrisLogo({ size = 96, spinning = true, breathing = true, onDark 
   const dot = Math.max(3, size * 0.055);
 
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       {halo && (
         <Animated.View pointerEvents="none" style={[styles.halo, { width: haloSize, height: haloSize }, haloStyle]}>
           <Svg width="100%" height="100%">
@@ -100,7 +126,7 @@ export function IrisLogo({ size = 96, spinning = true, breathing = true, onDark 
             height: pupil,
             borderRadius: pupil / 2,
             backgroundColor: brand.navy,
-            borderColor: onDark ? brand.navy : '#FFFFFF',
+            borderColor: onDark ? brand.navy : brand.white,
             borderWidth: size * 0.02,
           },
           pupilStyle,
@@ -115,7 +141,7 @@ export function IrisLogo({ size = 96, spinning = true, breathing = true, onDark 
             width: highlight,
             height: highlight,
             borderRadius: highlight / 2,
-            backgroundColor: '#FFFFFF',
+            backgroundColor: brand.white,
           }}
         />
         {/* Reflexo secundário — o pequeno brilho abaixo, dá "olhar molhado". */}
@@ -127,7 +153,7 @@ export function IrisLogo({ size = 96, spinning = true, breathing = true, onDark 
             width: secondary,
             height: secondary,
             borderRadius: secondary / 2,
-            backgroundColor: 'rgba(255,255,255,0.75)',
+            backgroundColor: brand.whiteSoft,
           }}
         />
       </Animated.View>

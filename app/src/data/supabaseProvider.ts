@@ -1,15 +1,16 @@
 /**
  * Provedor de produção sobre o projeto Supabase da IrisFlow (um banco para site,
- * desktop e este app; esquema em `../supabase/schema.sql`).
+ * desktop e este app; esquema nas migrações de `../supabase/migrations/`).
  *
  * Tabelas do site: profiles, beneficiaries, subscriptions, plans.
- * Tabelas criadas por `../supabase/migrations/20260904_caregiver_app.sql`:
+ * Tabelas criadas por `../supabase/migrations/20260923022425_caregiver_app.sql`:
  * devices, sessions, help_requests, messages, quick_phrases, patient_settings, push_tokens.
- * Da beta (`../supabase/migrations/20260915_beta.sql`): `plans.purchasable`, `beta_registrations`.
+ * Da beta (`../supabase/migrations/20260923022616_beta.sql`): `plans.purchasable`, `beta_registrations`.
  *
  * Toda leitura passa por RLS: o cuidador só enxerga os beneficiários do próprio profile.
  */
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { siteRoute } from '@/lib/config';
 import { getSupabase } from '@/lib/supabase';
 import {
   AccuracySummary,
@@ -30,19 +31,10 @@ import {
   Subscription,
 } from './types';
 
-const DEFAULT_SETTINGS: Omit<PatientSettings, 'beneficiary_id' | 'updated_at'> = {
-  dwell_ms: 1500,
-  filter_preset: 'balanceado',
-  keyboard_layout: 'frequencia',
-  sensitivity: 5,
-  voice: 'pt-BR padrão',
-  emergency_timeout_s: 45,
-  emergency_contacts: [],
-};
-
 export class SupabaseProvider implements DataProvider {
-  readonly kind = 'supabase' as const;
   private sb = getSupabase();
+  /** Token Expo Push registrado nesta execução — apagado do perfil no `signOut`. */
+  private pushToken: string | null = null;
 
   // ---------- auth ----------
   async getUser(): Promise<AuthUser | null> {
@@ -56,6 +48,15 @@ export class SupabaseProvider implements DataProvider {
     return { id: data.user.id, email: data.user.email ?? '' };
   }
   async signOut() {
+    // Antes de derrubar a sessão (a RLS de `push_tokens` exige auth.uid()):
+    // sem isto o celular continuava recebendo socorro de uma conta da qual
+    // o cuidador já tinha saído.
+    const token = this.pushToken;
+    if (token) {
+      const { error } = await this.sb.from('push_tokens').delete().eq('token', token);
+      if (error) console.warn('[IrisFlow Cuidador] token de push não removido ao sair:', error.message);
+      else this.pushToken = null;
+    }
     await this.sb.auth.signOut();
   }
   onAuthChange(cb: (u: AuthUser | null) => void) {
@@ -66,10 +67,16 @@ export class SupabaseProvider implements DataProvider {
     return () => data.subscription.unsubscribe();
   }
   async requestPasswordReset(email: string) {
-    // Sem `redirectTo`: o destino do link (o `/nova-senha` do site) é a "Site URL"
-    // configurada no painel do Supabase (Authentication → URL Configuration).
-    // Manter isso fora do app evita um build por ambiente e uma URL divergente da do site.
-    const { error } = await this.sb.auth.resetPasswordForEmail(email.trim().toLowerCase());
+    // O link do e-mail leva à página do site onde se define a senha nova — a
+    // mesma que o "esqueci a senha" do próprio site usa. Sem `redirectTo`, o
+    // Supabase mandava para a "Site URL" do painel (a página inicial), e quem
+    // abria o link não via onde trocar a senha. A URL precisa estar em
+    // Authentication → URL Configuration → Redirect URLs; se não estiver, o
+    // Supabase cai na Site URL e o site encaminha o evento de recuperação
+    // para /nova-senha de qualquer página.
+    const { error } = await this.sb.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: siteRoute('/nova-senha'),
+    });
     if (!error) return;
     // O Supabase já responde 200 para e-mail desconhecido, justamente para não
     // revelar quem tem conta. Se alguma configuração fizer o erro vazar mesmo
@@ -170,9 +177,12 @@ export class SupabaseProvider implements DataProvider {
     return (data ?? []) as HelpRequest[];
   }
   async acknowledgeHelpRequest(id: string) {
+    // `acknowledged_by` = quem confirmou (auth.uid()): com mais de um celular
+    // na conta, o histórico diz qual cuidador viu o pedido.
+    const user = await this.getUser();
     const { error } = await this.sb
       .from('help_requests')
-      .update({ acknowledged_at: new Date().toISOString() })
+      .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: user?.id ?? null })
       .eq('id', id)
       .is('acknowledged_at', null);
     if (error) throw error;
@@ -188,14 +198,17 @@ export class SupabaseProvider implements DataProvider {
 
   // ---------- conversa ----------
   async listMessages(beneficiaryId: string): Promise<Message[]> {
+    // As 200 MAIS RECENTES (desc + limit), devolvidas em ordem cronológica.
+    // Com `asc + limit` vinham as 200 mais antigas: numa conversa longa a
+    // tela mostrava só o passado e as mensagens novas nunca apareciam.
     const { data, error } = await this.sb
       .from('messages')
       .select('*')
       .eq('beneficiary_id', beneficiaryId)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(200);
     if (error) throw error;
-    return (data ?? []) as Message[];
+    return ((data ?? []) as Message[]).reverse();
   }
   async sendMessage(beneficiaryId: string, text: string, kind: MessageKind = 'texto'): Promise<Message> {
     const { data, error } = await this.sb
@@ -236,38 +249,29 @@ export class SupabaseProvider implements DataProvider {
   }
 
   // ---------- ajustes remotos ----------
-  async getSettings(beneficiaryId: string): Promise<PatientSettings> {
+  /**
+   * A linha de ajustes, ou `null` se o cuidador nunca salvou nada. Sem linha
+   * NÃO se inventam padrões: o computador do paciente segue com o que foi
+   * configurado localmente, e a tela diz "ainda não sincronizado".
+   */
+  async getSettings(beneficiaryId: string): Promise<PatientSettings | null> {
     const { data, error } = await this.sb.from('patient_settings').select('*').eq('beneficiary_id', beneficiaryId).maybeSingle();
     if (error) throw error;
-    if (data) return data as PatientSettings;
-    return { beneficiary_id: beneficiaryId, updated_at: new Date().toISOString(), ...DEFAULT_SETTINGS };
+    return data ? (data as PatientSettings) : null;
   }
   /**
-   * Cria a linha de ajustes se ela ainda não existir, com o que a tela mostra hoje
-   * (o mesmo que `getSettings` devolve: a linha salva ou os padrões).
+   * Upsert PARCIAL: só as colunas alteradas vão no payload. O PostgREST faz
+   * `ON CONFLICT DO UPDATE SET` apenas dessas colunas; na primeira gravação a
+   * linha nasce com o campo alterado e o resto fica com o padrão do banco.
    *
-   * Motivo: o `voice.status` da Edge Function faz UPDATE, não upsert — sem linha ele
-   * devolve `stored: false` e o rótulo da voz em uso no computador se perde. Chamado na
-   * primeira abertura dos Ajustes, para que o rótulo passe a ser gravado desde então.
+   * Antes a primeira gravação (ou o `ensureSettings`) mandava a linha inteira
+   * com os padrões do app, e o desktop — que assina `patient_settings` —
+   * sobrescrevia o dwell configurado localmente com 1500 ms sem ninguém pedir.
    */
-  async ensureSettings(beneficiaryId: string, current?: Partial<PatientSettings>): Promise<PatientSettings> {
-    const { data, error } = await this.sb.from('patient_settings').select('*').eq('beneficiary_id', beneficiaryId).maybeSingle();
-    if (error) throw error;
-    if (data) return data as PatientSettings;
-    const row: PatientSettings = {
-      ...DEFAULT_SETTINGS,
-      ...current,
-      beneficiary_id: beneficiaryId,
-      updated_at: new Date().toISOString(),
-    };
-    const { data: created, error: upsertError } = await this.sb.from('patient_settings').upsert(row).select('*').single();
-    if (upsertError) throw upsertError;
-    return created as PatientSettings;
-  }
   async updateSettings(beneficiaryId: string, patch: Partial<PatientSettings>): Promise<PatientSettings> {
-    const current = await this.getSettings(beneficiaryId);
-    const next = { ...current, ...patch, beneficiary_id: beneficiaryId, updated_at: new Date().toISOString() };
-    const { data, error } = await this.sb.from('patient_settings').upsert(next).select('*').single();
+    const { beneficiary_id: _b, updated_at: _u, ...campos } = patch;
+    const row = { ...campos, beneficiary_id: beneficiaryId, updated_at: new Date().toISOString() };
+    const { data, error } = await this.sb.from('patient_settings').upsert(row, { onConflict: 'beneficiary_id' }).select('*').single();
     if (error) throw error;
     return data as PatientSettings;
   }
@@ -283,7 +287,7 @@ export class SupabaseProvider implements DataProvider {
       // '*' e não só INSERT: o escalonamento é um UPDATE feito pelo servidor
       // (`escalated_at`), e o reconhecimento feito em outro celular também.
       // A tabela está na publicação `supabase_realtime` com REPLICA IDENTITY FULL
-      // (migração 20260904), então `p.new` traz a linha inteira nos dois eventos.
+      // (migração 20260923022425_caregiver_app), então `p.new` traz a linha inteira nos dois eventos.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'help_requests', filter }, (p) => {
         if (p.new && 'id' in p.new) handlers.onHelpRequest?.(p.new as HelpRequest);
       })
@@ -301,8 +305,16 @@ export class SupabaseProvider implements DataProvider {
 
   async registerPushToken(token: string) {
     const user = await this.getUser();
-    if (!user) return;
-    await this.sb.from('push_tokens').upsert({ profile_id: user.id, token, platform: 'expo' }, { onConflict: 'token' });
+    if (!user) throw new Error('Sem sessão: o token de push não foi registrado.');
+    // O erro SOBE: antes era ignorado e o app dizia que avisaria o celular
+    // sem que o token existisse no banco (RLS negada, rede fora, tabela
+    // ausente). Quem chama decide o que mostrar; aqui só o registro.
+    const { error } = await this.sb.from('push_tokens').upsert({ profile_id: user.id, token, platform: 'expo' }, { onConflict: 'token' });
+    if (error) {
+      console.warn('[IrisFlow Cuidador] falha ao registrar o token de push:', error.message);
+      throw new Error(traduzErroPush(error.message));
+    }
+    this.pushToken = token;
   }
 }
 
@@ -373,6 +385,12 @@ function traduzErro(msg?: string) {
   if (/email not confirmed/i.test(msg)) return 'Confirme seu e-mail antes de entrar.';
   if (/network/i.test(msg)) return 'Sem conexão. Verifique sua internet.';
   return msg;
+}
+
+function traduzErroPush(msg: string) {
+  if (/network|fetch/i.test(msg)) return 'Sem conexão ao registrar o celular para receber alertas.';
+  if (/permission|policy|row-level/i.test(msg)) return 'O servidor recusou o registro deste celular para alertas.';
+  return `Falha ao registrar este celular para alertas: ${msg}`;
 }
 
 /** Só as falhas que de fato acontecem no `resetPasswordForEmail`: limite de envio, rede, e-mail malformado. */

@@ -12,7 +12,7 @@ export const RestScreen: React.FC = () => {
       aria-labelledby="rest-title"
       className="tela-de-descanso"
       style={{
-        width: '100vw',
+        width: '100%',
         height: '100vh',
         background: '#020617', // Fundo ultra-escuro (Slate-950) para descanso do olhar
         color: '#f8fafc',
@@ -22,7 +22,7 @@ export const RestScreen: React.FC = () => {
         justifyContent: 'center',
         gap: '2.5rem',
         overflow: 'hidden',
-        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+        fontFamily: 'var(--font-body)',
       }}
     >
       <div
@@ -51,28 +51,21 @@ export const RestScreen: React.FC = () => {
             marginBottom: '1rem',
           }}
         >
-          <Moon size={44} className="animate-float" />
+          {/* Sem `animate-float`: movimento contínuo ao lado do único alvo da
+              tela puxa o olhar para fora dele. */}
+          <Moon size={44} aria-hidden="true" />
         </div>
 
         <h1
           id="rest-title"
-          style={{
-            fontSize: '2rem',
-            fontWeight: 800,
-            margin: 0,
-            color: '#f1f5f9',
-          }}
+          className="t-display"
+          style={{ margin: 0, color: '#f1f5f9' }}
         >
           Modo Descanso
         </h1>
         <p
-          style={{
-            fontSize: '1.15rem',
-            opacity: 0.65,
-            lineHeight: 1.5,
-            margin: 0,
-            fontWeight: 500,
-          }}
+          className="t-body-lg"
+          style={{ opacity: 0.7, margin: 0, fontWeight: 500 }}
         >
           O rastreamento ocular de ações foi pausado.
           <br />
@@ -80,22 +73,25 @@ export const RestScreen: React.FC = () => {
         </p>
       </div>
 
+      {/* Único alvo da tela: 320×200 fica acima do mínimo nos dois eixos e
+          `isolado` estende a zona — não há vizinho para roubar. */}
       <GazeButton
         onClick={() => navigate('/menu')}
+        width={320}
+        height={200}
+        isolado
         style={{
-          width: '320px',
-          height: '96px',
           background: 'rgba(255, 255, 255, 0.04)',
-          border: '2px solid rgba(255, 255, 255, 0.12)',
-          borderRadius: '2rem',
+          border: '2px solid rgba(255, 255, 255, 0.14)',
+          borderRadius: 'var(--radius-xl)',
           color: '#ffffff',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-          transition: 'all 0.3s ease',
+          boxShadow: 'none',
         }}
         data-dwell-ms={3000} // Tempo absoluto customizado: 3.0s
       >
-        <span style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '0.02em' }}>
-          Acordar Tela (3s)
+        <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.01em' }}>Acordar Tela (3s)</span>
+          <span style={{ fontSize: '1rem', fontWeight: 600, opacity: 0.6 }}>Fixe o olhar aqui por 3 segundos</span>
         </span>
       </GazeButton>
     </main>

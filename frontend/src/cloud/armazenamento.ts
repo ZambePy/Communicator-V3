@@ -55,11 +55,34 @@ export const cofre = {
   async gravarJson(chave: string, valor: unknown): Promise<boolean> {
     return this.gravar(chave, JSON.stringify(valor));
   },
-  /** Cifrado de verdade (safeStorage) ou só localStorage? Para a tela de conta dizer a verdade. */
-  cifrado(): boolean {
-    return ipc() !== null;
+  /**
+   * O que o cofre faz de verdade com o que grava, para a tela de conta dizer a
+   * verdade. Ter a ponte do Electron não basta: sem `safeStorage` disponível
+   * (Linux sem chaveiro, por exemplo) o processo principal grava SEM cifra.
+   * Quem sabe é ele — `appInfo().encryptionAvailable` é
+   * `safeStorage.isEncryptionAvailable()`, a mesma checagem que decide a
+   * gravação.
+   */
+  async protecao(): Promise<ProtecaoDoCofre> {
+    const bridge = ipc();
+    if (!bridge) return 'navegador';
+    try {
+      const info = await bridge.appInfo();
+      if (typeof info?.encryptionAvailable !== 'boolean') return 'desconhecida';
+      return info.encryptionAvailable ? 'cifrado' : 'sem-cifra';
+    } catch {
+      return 'desconhecida';
+    }
   },
 };
+
+/**
+ * `cifrado`: safeStorage do sistema (DPAPI, Keychain, chaveiro do Linux).
+ * `sem-cifra`: Electron sem safeStorage — gravado em texto no perfil do app.
+ * `navegador`: fora do Electron (desenvolvimento), no localStorage.
+ * `desconhecida`: não deu para perguntar ao processo principal.
+ */
+export type ProtecaoDoCofre = 'cifrado' | 'sem-cifra' | 'navegador' | 'desconhecida';
 
 /** Identidade deste computador para o pareamento. Fora do Electron, inventa algo legível. */
 export async function infoDoApp(): Promise<{ version: string; hostname: string; platform: string }> {

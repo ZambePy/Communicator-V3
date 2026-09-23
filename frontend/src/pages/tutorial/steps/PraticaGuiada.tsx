@@ -1,7 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight } from 'lucide-react';
-import { PrimaryButton } from '../../../components/ui/PrimaryButton';
 import { GazeButton } from '../../../components/ui/GazeButton';
 
 /**
@@ -37,10 +36,23 @@ export type VereditoDoTempo = 'rapido' | 'bom' | 'lento' | 'indeterminado';
 const MS_MINIMO_PARA_SER_OLHAR = 200;
 
 /**
- * Compara o tempo até o clique com o dwell configurado.
+ * Classe que o `GazeContext` põe no alvo enquanto o olhar está sobre ele —
+ * ou seja, enquanto o dwell está correndo. É o "início do dwell" que a
+ * prática mede; ver `inicioDoDwell` abaixo.
+ */
+const CLASSE_DE_HOVER = 'gaze-hover';
+
+/**
+ * Compara o tempo DE DWELL (do olhar pousar no alvo até o clique) com o dwell
+ * configurado.
  *
  * Heurística, e assumida como tal no §8 do spec: mede o que aconteceu, não o
  * conforto de quem estava olhando. A decisão continua sendo do cuidador.
+ *
+ * Antes media da montagem do alvo até o clique — o que, no primeiro alvo,
+ * incluía o tempo de LER o título e o texto de apoio. Resultado: "você
+ * segurou mais do que precisava" para quem só leu a instrução antes de olhar.
+ * Conselho inventado, e no pior momento — o primeiro contato com o dwell.
  */
 export function vereditoDoTempo(msAteOClique: number, dwellMs: number): VereditoDoTempo {
   // O cuidador testando com o mouse produz ~0 ms. "Disparou rápido demais,
@@ -59,14 +71,44 @@ export const PraticaGuiada: React.FC<{
   const { t } = useTranslation();
   const [feitos, setFeitos] = useState(0);
   const [veredito, setVeredito] = useState<VereditoDoTempo | null>(null);
-  const inicioDoAlvo = useRef(performance.now());
+
+  /**
+   * Instante em que o olhar pousou no alvo corrente, ou `null` se ainda não
+   * pousou (ou o clique veio do mouse, sem hover do olhar).
+   *
+   * Observado pela classe `gaze-hover` que o `GazeContext` põe e tira do alvo:
+   * cada entrada do olhar reinicia a contagem, como o próprio dwell reinicia.
+   * Sem esse instante não há veredito — "Registrado." e nada mais. É melhor
+   * não opinar do que opinar sobre o tempo de leitura.
+   */
+  const inicioDoDwell = useRef<number | null>(null);
+  const arena = useRef<HTMLDivElement>(null);
 
   const terminou = feitos >= ALVOS_DA_PRATICA;
 
+  useEffect(() => {
+    inicioDoDwell.current = null;
+    if (terminou) return;
+    const alvo = arena.current?.querySelector('button');
+    if (!alvo || typeof MutationObserver === 'undefined') return;
+    let sobre = alvo.classList.contains(CLASSE_DE_HOVER);
+    if (sobre) inicioDoDwell.current = performance.now();
+    const obs = new MutationObserver(() => {
+      const agora = alvo.classList.contains(CLASSE_DE_HOVER);
+      if (agora && !sobre) inicioDoDwell.current = performance.now();
+      if (!agora && sobre) inicioDoDwell.current = null;
+      sobre = agora;
+    });
+    obs.observe(alvo, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, [feitos, terminou]);
+
   const acertou = () => {
-    const agora = performance.now();
-    setVeredito(vereditoDoTempo(agora - inicioDoAlvo.current, dwellMs));
-    inicioDoAlvo.current = agora;
+    const inicio = inicioDoDwell.current;
+    setVeredito(
+      inicio === null ? 'indeterminado' : vereditoDoTempo(performance.now() - inicio, dwellMs)
+    );
+    inicioDoDwell.current = null;
     setFeitos((n) => n + 1);
   };
 
@@ -100,6 +142,7 @@ export const PraticaGuiada: React.FC<{
       </div>
 
       <div
+        ref={arena}
         style={{
           position: 'relative',
           minHeight: 320,
@@ -188,14 +231,22 @@ export const PraticaGuiada: React.FC<{
               Mexer no dwell sem o cuidador pedir mudaria o app debaixo do
               paciente no meio do aprendizado. */}
           {(veredito === 'rapido' || veredito === 'lento') && (
-            <PrimaryButton
+            <GazeButton
               type="button"
-              variant="secondary"
+              height={76}
+              isolado
               onClick={aoSugerirAjuste}
-              style={{ alignSelf: 'flex-start' }}
+              style={{
+                width: '100%',
+                background: 'var(--color-card-bg)',
+                border: '2px solid var(--color-primary)',
+                color: 'var(--color-primary)',
+                borderRadius: '1rem',
+                fontWeight: 700,
+              }}
             >
-              {t('tutorial.pratica.ajustar')} <ArrowRight size={16} aria-hidden="true" />
-            </PrimaryButton>
+              {t('tutorial.pratica.ajustar')} <ArrowRight size={18} aria-hidden="true" />
+            </GazeButton>
           )}
         </div>
       )}

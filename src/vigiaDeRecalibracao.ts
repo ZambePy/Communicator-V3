@@ -112,16 +112,20 @@ export function avaliarNecessidadeDeRecalibracao(
   recente: MedidaRecente,
   referencia: ReferenciaDePrecisao | null,
 ): VeredictoDeRecalibracao {
-  if (!referencia) return { precisa: false, motivo: null };
-
   // Correção por dwell encostada no teto: ela já corrigiu tudo o que podia e
-  // o viés continua. Critério independente da referência, e o único que
-  // funciona para quem calibrou mal desde o começo — nesse caso o limiar
-  // relativo abaixo fica acima do teto da própria correção e jamais dispara.
+  // o viés continua. Critério INDEPENDENTE da referência — e por isso vem
+  // ANTES do `!referencia` (o comentário sempre disse isso; o código o
+  // avaliava depois, e quem nunca fez o teste de precisão nunca era
+  // avisado). Não é palpite: é a própria correção dizendo que esgotou. É
+  // também o único critério que funciona para quem calibrou mal desde o
+  // começo — nesse caso o limiar relativo abaixo fica acima do teto da
+  // própria correção e jamais dispara.
   const fracao = recente.fracaoDoTeto;
   if (typeof fracao === 'number' && Number.isFinite(fracao) && fracao >= FRACAO_DO_TETO_MAX) {
     return { precisa: true, motivo: 'vies' };
   }
+
+  if (!referencia) return { precisa: false, motivo: null };
 
   if (recente.viesPx !== null && referencia.viesPx !== null) {
     const limiar = Math.min(

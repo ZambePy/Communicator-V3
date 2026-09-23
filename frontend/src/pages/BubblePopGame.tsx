@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, RotateCcw, Timer, Trophy } from 'lucide-react';
 import { GazeButton } from '../components/ui/GazeButton';
 
@@ -120,6 +121,7 @@ function sortearPosicao(tamanho: number, existentes: Bolha[]): { x: number; y: n
 
 export const BubblePopGame: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [fase, setFase] = useState<Fase>('jogando');
   const [pontos, setPontos] = useState(0);
   const [segundos, setSegundos] = useState(DURACAO_DA_RODADA_S);
@@ -217,7 +219,9 @@ export const BubblePopGame: React.FC = () => {
       {/* Barra superior: saída sempre visível e alcançável pelo olhar. Vive
           dentro da faixa segura, onde nenhuma bolha pode nascer. */}
       <header
+        className="reserva-emergencia"
         style={{
+          '--reserva-margem': '2.5rem',
           position: 'absolute',
           top: '2rem',
           left: '2.5rem',
@@ -238,7 +242,7 @@ export const BubblePopGame: React.FC = () => {
             border: '2px solid var(--color-card-border)',
             boxShadow: '0 6px 20px var(--color-card-shadow)',
           }}
-          aria-label="Voltar para Ajuda e Lazer"
+          aria-label={t('lazer.voltarAria')}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', fontSize: '1.3rem', fontWeight: 800 }}>
             <ArrowLeft size={28} /> Voltar
@@ -369,7 +373,7 @@ export const BubblePopGame: React.FC = () => {
                   border: '2px solid var(--color-primary)',
                   color: 'var(--color-primary)',
                 }}
-                aria-label="Voltar para Ajuda e Lazer"
+                aria-label={t('lazer.voltarAria')}
               >
                 <span style={{ fontSize: '1.3rem', fontWeight: 800 }}>Voltar ao menu</span>
               </GazeButton>

@@ -18,6 +18,8 @@ import { getResumoDoPonto } from '@tracker/calibration';
 import { esperarPintura } from '@tracker/aguardarPintura';
 import { ReadinessPanel } from '../../components/ui/ReadinessPanel';
 import { ChecksDaCamera } from '../../components/ui/ChecksDaCamera';
+import { ProgressoDoOnboarding } from '../../components/ui/ProgressoDoOnboarding';
+import { IlustracaoDoRosto } from '../../components/ui/IlustracaoDoRosto';
 import { isDevMode } from '../../devMode';
 import { PreparoDaCalibracao } from '../calibration/PreparoDaCalibracao';
 import { ordemDaGrade } from '../calibration/ordemDaGrade';
@@ -900,6 +902,10 @@ export const CalibrationCheck: React.FC = () => {
                 animation: 'cfFadeUp 0.4s ease-out both',
               }}
             >
+              {/* Primeira calibração: é o último passo da primeira abertura, e
+                  a barra diz isso. Numa recalibração não há jornada a mostrar. */}
+              {!temCalibracaoSalva && <ProgressoDoOnboarding atual="calibracao" />}
+
               {/* Preview do ponto — mostra ao usuário o que vai aparecer */}
               <div
                 style={{
@@ -945,12 +951,8 @@ export const CalibrationCheck: React.FC = () => {
 
               <div>
                 <h1
-                  style={{
-                    fontSize: '2.1rem',
-                    fontWeight: 800,
-                    margin: '0 0 0.75rem',
-                    color: TEXT_PRIMARY,
-                  }}
+                  className="t-h1"
+                  style={{ margin: '0 0 0.75rem', color: TEXT_PRIMARY }}
                 >
                   Vamos ensinar o IrisFlow a entender o seu olhar
                 </h1>
@@ -970,6 +972,10 @@ export const CalibrationCheck: React.FC = () => {
                   mudam o resultado — inclusive "pisque normalmente", que a
                   versao ingenua ("nao pisque") inverte com o pior efeito
                   possivel: o olho resseca durante a coleta. */}
+              {/* Como se posicionar: a referência visual acima dos checks. Só
+                  diz "assim"; quem diz "está certo" são as três linhas — por
+                  isso a ilustração não muda de cor com o resultado. */}
+              <IlustracaoDoRosto largura={240} style={{ margin: '0 auto' }} />
               <ChecksDaCamera onPronto={setChecksProntos} />
 
               {mostrarDetalhes && <PreparoDaCalibracao />}
@@ -1149,7 +1155,9 @@ export const CalibrationCheck: React.FC = () => {
                 )}
               >
                 {l2csReady &&
-                  (checksProntos ? '👁  Começar (9 pontos)' : 'Ajuste a câmera para começar')}
+                  (checksProntos
+                    ? `👁  Começar (${nominalPoints.length} pontos)`
+                    : 'Ajuste a câmera para começar')}
                 {l2csStatus === 'loading' && (
                   <>
                     <Loader2 size={20} style={{ animation: 'cfSpin 1s linear infinite' }} />
@@ -1200,7 +1208,7 @@ export const CalibrationCheck: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => handleStart(true)}
-                  /* idem ao botão de 9 pontos: dwell longo em vez de
+                  /* idem ao botão da calibração completa: dwell longo em vez de
                      bloqueio, para a recalibração rápida ser alcançável só
                      com o olhar. */
                   data-dwell-ms="2500"

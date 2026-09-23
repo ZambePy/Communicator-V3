@@ -3,15 +3,16 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Button } from '@/components/ui/Button'
+import { DownloadPanel } from '@/components/ui/DownloadPanel'
 import { Card, CardIcon } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
 import { SessionLoading } from '@/components/ui/Skeleton'
 import { useAccount } from '@/context/AccountContext'
 import { brl, daysUntil, formatDate } from '@/utils/format'
-import { useDownloads } from '@/hooks/useDownloads'
 import { LinkedDevices } from '@/components/sections/LinkedDevices'
 import { BETA, BETA_CTA, TRIAL_DAYS } from '@/data/content'
 import { usePlans } from '@/hooks/usePlans'
+import { useDownloads } from '@/hooks/useDownloads'
 import './checkout.css'
 import './conta.css'
 
@@ -26,8 +27,9 @@ export default function Conta() {
   const { account, authenticated, loading, sessionError, cancel, reactivate, refresh, signOut } =
     useAccount()
   const navigate = useNavigate()
-  const downloads = useDownloads()
   const { getPlan } = usePlans()
+  // Frase de sistemas coerente com o painel de download logo abaixo.
+  const { platformsText } = useDownloads()
   const [confirming, setConfirming] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [falha, setFalha] = useState<string | null>(null)
@@ -80,7 +82,8 @@ export default function Conta() {
   }
 
   // Conta do programa beta: nada de cobrança, forma de pagamento nem
-  // cancelamento (docs/BETA.md §3). O acesso vale até next_charge_at, que
+  // cancelamento (README da raiz, seção "Conta IrisFlow e nuvem"). O acesso
+  // vale até next_charge_at, que
   // a inscrição gravou como o fim do programa.
   const naBeta = account.planId === 'beta'
   const status = naBeta
@@ -302,24 +305,16 @@ export default function Conta() {
                 <h3>{naBeta ? 'Baixar o aplicativo' : 'Instaladores'}</h3>
                 <p>
                   {naBeta
-                    ? 'A página da beta tem os instaladores dos três sistemas, o app do cuidador e a verificação de compatibilidade.'
-                    : 'Baixe novamente o aplicativo para qualquer um dos três sistemas.'}
+                    ? `A página da beta tem o instalador para ${platformsText.long}, o app do cuidador e a verificação de compatibilidade.`
+                    : `Baixe novamente o aplicativo para ${platformsText.long}.`}
                 </p>
                 {naBeta && (
                   <Link to={BETA_CTA.to} className="conta__link" style={{ marginBottom: 8 }}>
                     Ir para a página da beta
                   </Link>
                 )}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 'auto' }}>
-                  <a href={downloads.windows} className="conta__link">
-                    Windows
-                  </a>
-                  <a href={downloads.macos} className="conta__link">
-                    macOS
-                  </a>
-                  <a href={downloads.linux} className="conta__link">
-                    Linux
-                  </a>
+                <div className="conta__downloads">
+                  <DownloadPanel compact />
                 </div>
               </Card>
             </Reveal>
@@ -331,7 +326,7 @@ export default function Conta() {
                 </CardIcon>
                 <h3>Primeiros passos</h3>
                 <p>
-                  Prepare o posto de uso, calibre em nove pontos e comece pelo teclado e pelas
+                  Prepare o posto de uso, faça a calibração rápida e comece pelo teclado e pelas
                   frases rápidas, os módulos mais usados no primeiro dia.
                 </p>
                 <Link to="/como-funciona" className="conta__link" style={{ marginTop: 'auto' }}>

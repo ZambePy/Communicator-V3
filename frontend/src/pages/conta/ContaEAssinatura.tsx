@@ -11,6 +11,7 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { BackButton } from '../../components/ui/BackButton';
 import { useLicense } from '../../context/LicenseContext';
 import { idadeEmTexto } from '../../idadeEmTexto';
 import { CloudStatusLines } from '../../cloud/CloudStatusLines';
@@ -62,8 +63,9 @@ export const ContaEAssinatura: React.FC = () => {
       }}
     >
       <div
-        className="glass-card"
+        className="glass-card coluna-livre-da-emergencia"
         style={{
+          '--coluna-largura': '560px',
           width: '100%',
           maxWidth: 560,
           background: 'var(--color-card-bg)',
@@ -75,17 +77,22 @@ export const ContaEAssinatura: React.FC = () => {
           gap: '1.2rem',
         }}
       >
-        <h1
-          id="conta-title"
-          style={{
-            margin: 0,
-            fontSize: '1.3rem',
-            fontWeight: 800,
-            color: 'var(--color-text-base)',
-          }}
-        >
-          {t('sessao.conta.title')}
-        </h1>
+        {/* Sem Voltar esta tela era um beco: só "Sair da conta" ou o
+            Histórico. Volta para os Ajustes, de onde se chega aqui. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <BackButton to="/settings" />
+          <h1
+            id="conta-title"
+            style={{
+              margin: 0,
+              fontSize: '1.3rem',
+              fontWeight: 800,
+              color: 'var(--color-text-base)',
+            }}
+          >
+            {t('sessao.conta.title')}
+          </h1>
+        </div>
 
         {/* O estado vem primeiro: é a pergunta que traz alguém a esta tela. */}
         <div

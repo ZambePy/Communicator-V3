@@ -32,6 +32,8 @@ const { auth, fake, clientMock, estado } = vi.hoisted(() => {
     signInWithPassword: vi.fn(),
     getSession: vi.fn(async () => ({ data: { session: null } })),
     signUp: vi.fn(),
+    resend: vi.fn(async () => ({ data: { user: null, session: null }, error: null })),
+    resetPasswordForEmail: vi.fn(async () => ({ data: {}, error: null })),
   }
   const estado = {
     respostaPlans: (async () => ({ data: [], error: null })) as () => Resposta,
@@ -291,7 +293,8 @@ describe('signUpBeta', () => {
       'complete_beta_registration',
       expect.objectContaining({
         p_document: null,
-        p_phone: '(11) 90000-0000',
+        // só os dígitos: a máscara nunca vai para o banco
+        p_phone: '11900000000',
         p_user_name: 'João',
         p_os: 'windows',
         p_wants_caregiver_app: true,
@@ -308,6 +311,54 @@ describe('signUpBeta', () => {
     expect(conta.priceBRL).toBe(0)
     expect(conta.status).toBe('ativa')
     expect(conta.nextChargeAt).toBe(LINHA_MY_ACCOUNT.next_charge_at)
+  })
+
+  it('telefone vazio vai como null (a RPC mantém o que existir), nunca como string vazia', async () => {
+    await api.signUpBeta({ ...perfilBeta, phone: '' }, 'segredo123')
+    expect(fake.rpc).toHaveBeenCalledWith(
+      'complete_beta_registration',
+      expect.objectContaining({ p_phone: null }),
+    )
+  })
+
+  it('telefone fora do formato (DDD + 8 ou 9 dígitos) também vai como null, nunca inválido', async () => {
+    await api.signUpBeta({ ...perfilBeta, phone: '(11) 9000' }, 'segredo123')
+    expect(fake.rpc).toHaveBeenCalledWith(
+      'complete_beta_registration',
+      expect.objectContaining({ p_phone: null }),
+    )
+
+    fake.rpc.mockClear()
+    await api.signUpBeta({ ...perfilBeta, phone: '(11) 3333-4444' }, 'segredo123')
+    expect(fake.rpc).toHaveBeenCalledWith(
+      'complete_beta_registration',
+      expect.objectContaining({ p_phone: '1133334444' }),
+    )
+  })
+
+  it('o link de confirmação do e-mail aponta para /entrar do site público', async () => {
+    await api.signUpBeta(perfilBeta, 'segredo123')
+    expect(auth.signUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          emailRedirectTo: 'https://irisflow.pages.dev/entrar',
+        }),
+      }),
+    )
+    // e os dados sensíveis não vão no signUp (viram metadado e viajam no JWT)
+    const opcoes = auth.signUp.mock.calls[0][0].options
+    expect(Object.keys(opcoes.data)).toEqual(['buyer_name', 'newsletter'])
+  })
+
+  it('"Confirm email" ligado: signUp sem sessão vira ConfirmacaoDeEmailPendente e a RPC não roda', async () => {
+    auth.signUp.mockResolvedValueOnce({ data: { user: { id: 'u1' }, session: null }, error: null })
+
+    const erro = await api.signUpBeta(perfilBeta, 'segredo123').catch((e) => e)
+
+    expect(erro).toBeInstanceOf(api.ConfirmacaoDeEmailPendente)
+    expect(erro.email).toBe('maria@exemplo.com.br')
+    expect(erro.message).toMatch(/Confirme o e-mail/)
+    expect(fake.rpc).not.toHaveBeenCalled()
   })
 
   it('manda o CPF quando preenchido', async () => {
@@ -374,6 +425,137 @@ describe('fetchBetaProgram', () => {
     await expect(api.fetchBetaProgram()).resolves.toBe(api.BETA_PROGRAM_RESERVA)
     expect(api.BETA_PROGRAM_RESERVA.open).toBe(true)
     expect(api.BETA_PROGRAM_RESERVA.endsAt).toBe(BETA.fimReserva)
+  })
+})
+
+describe('e-mails de conta (confirmação e nova senha)', () => {
+  it('reenviarConfirmacao reenvia o link do cadastro com o mesmo destino /entrar', async () => {
+    await api.reenviarConfirmacao('  Maria@Exemplo.com.br ')
+
+    expect(auth.resend).toHaveBeenCalledWith({
+      type: 'signup',
+      email: 'maria@exemplo.com.br',
+      options: { emailRedirectTo: 'https://irisflow.pages.dev/entrar' },
+    })
+  })
+
+  it('reenviarConfirmacao traduz o intervalo mínimo entre envios', async () => {
+    auth.resend.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: {
+        message: 'For security purposes, you can only request this after 42 seconds.',
+        status: 429,
+        code: 'over_email_send_rate_limit',
+      },
+    } as never)
+
+    const erro = await api.reenviarConfirmacao('maria@exemplo.com.br').catch((e) => e)
+    expect(erro).toBeInstanceOf(api.ApiError)
+    expect(erro.message).toBe('Aguarde 42 segundos antes de tentar de novo.')
+  })
+
+  it('requestPasswordReset usa /nova-senha do site público por padrão', async () => {
+    await api.requestPasswordReset('maria@exemplo.com.br')
+
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledWith('maria@exemplo.com.br', {
+      redirectTo: 'https://irisflow.pages.dev/nova-senha',
+    })
+    expect(api.AUTH_REDIRECT).toEqual({
+      confirmacao: 'https://irisflow.pages.dev/entrar',
+      novaSenha: 'https://irisflow.pages.dev/nova-senha',
+    })
+  })
+
+  it('com VITE_SITE_URL no build, o link de nova senha vai para /nova-senha desse domínio', async () => {
+    vi.stubEnv('VITE_SITE_URL', 'https://www.irisflow.com.br/')
+    vi.resetModules()
+    try {
+      const apiComDominio = await import('./api')
+      expect(apiComDominio.AUTH_REDIRECT.novaSenha).toBe('https://www.irisflow.com.br/nova-senha')
+
+      await apiComDominio.requestPasswordReset('Maria@Exemplo.com.br')
+      expect(auth.resetPasswordForEmail).toHaveBeenLastCalledWith('maria@exemplo.com.br', {
+        redirectTo: 'https://www.irisflow.com.br/nova-senha',
+      })
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
+  it('falha de envio do servidor de e-mail vira mensagem que a família entende', async () => {
+    auth.signUp.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: { message: 'Email address "x@y.com" cannot be used as it is not authorized', code: 'email_address_not_authorized', status: 400 },
+    })
+
+    const erro = await api.signUpBeta(perfilBeta, 'segredo123').catch((e) => e)
+    expect(erro).toBeInstanceOf(api.ApiError)
+    expect(erro.message).toMatch(/Não conseguimos enviar o e-mail agora/)
+  })
+})
+
+describe('signUp (fluxo pago, fechado na beta)', () => {
+  it('manda o telefone só com dígitos para complete_registration', async () => {
+    auth.getSession
+      .mockResolvedValueOnce({ data: { session: null } })
+      .mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
+    auth.signUp.mockResolvedValue({ data: { session: { user: { id: 'u1' } } }, error: null })
+    estado.respostaSingle = async (tabela) =>
+      tabela === 'my_account'
+        ? { data: { ...LINHA_MY_ACCOUNT, plan_id: 'completo', status: 'avaliacao' }, error: null }
+        : { data: null, error: null }
+
+    await api.signUp({ ...perfilBeta, document: '123.456.789-09' }, 'segredo123', 'completo')
+
+    expect(fake.rpc).toHaveBeenCalledWith(
+      'complete_registration',
+      expect.objectContaining({ p_phone: '11900000000', p_plan_id: 'completo' }),
+    )
+  })
+})
+
+describe('fetchPerfilBasico', () => {
+  it('lê nome, e-mail, telefone (só dígitos) e newsletter do próprio perfil', async () => {
+    auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
+    estado.respostaSingle = async (tabela) =>
+      tabela === 'profiles'
+        ? {
+            data: { buyer_name: 'Maria Souza', email: 'maria@exemplo.com.br', phone: '(11) 90000-0000', newsletter: false },
+            error: null,
+          }
+        : { data: null, error: null }
+
+    await expect(api.fetchPerfilBasico()).resolves.toEqual({
+      buyerName: 'Maria Souza',
+      email: 'maria@exemplo.com.br',
+      phone: '11900000000',
+      newsletter: false,
+    })
+    expect(fake.from).toHaveBeenCalledWith('profiles')
+  })
+
+  it('telefone NULL no banco vira string vazia', async () => {
+    auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
+    estado.respostaSingle = async () => ({
+      data: { buyer_name: 'Maria Souza', email: 'maria@exemplo.com.br', phone: null, newsletter: true },
+      error: null,
+    })
+
+    await expect(api.fetchPerfilBasico()).resolves.toMatchObject({ phone: '' })
+  })
+
+  it('sem sessão, com erro ou sem cliente, devolve null em vez de rejeitar', async () => {
+    await expect(api.fetchPerfilBasico()).resolves.toBeNull()
+
+    auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
+    estado.respostaSingle = async () => ({ data: null, error: { message: 'boom' } })
+    await expect(api.fetchPerfilBasico()).resolves.toBeNull()
+
+    clientMock.mockImplementation(() => {
+      throw new Error('sem cliente')
+    })
+    await expect(api.fetchPerfilBasico()).resolves.toBeNull()
   })
 })
 

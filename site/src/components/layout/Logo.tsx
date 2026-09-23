@@ -10,6 +10,8 @@ type Props = {
   size?: 'sm' | 'md' | 'lg' | 'xl'
   /** Quando falso, renderiza sem link (útil dentro de um cabeçalho já linkado). */
   link?: boolean
+  /** Enfeite ao lado de um título que já diz tudo: alt vazio e aria-hidden. */
+  decorative?: boolean
   className?: string
 }
 
@@ -34,15 +36,18 @@ export function Logo({
   tone = 'positivo',
   size = 'md',
   link = true,
+  decorative = false,
   className = '',
 }: Props) {
   const img = (
     <img
       src={FILES[variant][tone]}
-      alt="IrisFlow"
+      // Dentro do link, o nome acessível vem do aria-label do <Link>.
+      alt={decorative || link ? '' : 'IrisFlow'}
+      aria-hidden={decorative || undefined}
       className={`logo__img logo__img--${variant}`}
-      width={variant === 'full' ? 1841 : 437}
-      height={variant === 'full' ? 480 : 440}
+      width={variant === 'full' ? 1200 : 512}
+      height={variant === 'full' ? 287 : 512}
     />
   )
 
@@ -82,8 +87,8 @@ export function IrisMark({
         src={FILES.symbol[tone]}
         alt=""
         className={`irismark__img${spin ? ' is-spinning' : ''}`}
-        width={640}
-        height={640}
+        width={512}
+        height={512}
       />
     </span>
   )

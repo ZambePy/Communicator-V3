@@ -69,7 +69,11 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     indisponivelPorque: onde
       ? undefined
       : app.isPackaged
-        ? 'Este instalador veio sem o motor de voz. Gere-o com voice-engine/build-voice-engine.ps1 e reempacote o app.'
+        // Os instaladores de macOS e Linux saem sem o motor (o empacotamento
+        // com PyInstaller só existe para Windows): a fala usa a voz do sistema.
+        ? process.platform === 'win32'
+          ? 'Este instalador veio sem o motor de voz. Gere-o com voice-engine/build-voice-engine.ps1 e reempacote o app.'
+          : 'A voz personalizada ainda não está disponível no macOS e no Linux nesta versão beta. O IrisFlow fala com a voz do sistema.'
         : 'Motor de voz não encontrado: instale o Python 3.11 e rode `pip install -r voice-engine/requirements.txt` (ver README).',
     motor: 'parado',
     modelo: { baixado: false, baixando: false, progresso: null },

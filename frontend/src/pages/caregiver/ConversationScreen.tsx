@@ -5,6 +5,7 @@ import { Check, X, Volume2, Keyboard, MessageSquare, Cloud, CloudOff, LogIn, Spa
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeGrid } from '../../components/ui/GazeGrid';
 import { GazeButton } from '../../components/ui/GazeButton';
+import { EstadoVazio } from '../../components/ui/EstadoDaTela';
 import { useCloud } from '../../cloud/CloudContext';
 import { emitirFalaDoPaciente } from '../../cloud/eventos';
 import { falar } from '../../services/voz';
@@ -97,22 +98,24 @@ export const ConversationScreen: React.FC = () => {
 
   if (!cloud.configurada || !cloud.vinculo) {
     return (
-      <GazePageLayout showBack backRoute="/menu">
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1.5rem', textAlign: 'center' }}>
+      <GazePageLayout showBack backRoute="/menu" titulo="Conversa com o cuidador">
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 'var(--space-5)', textAlign: 'center' }}>
           {/* Também aqui: sem conta ligada a conversa não roda, e quem chegou
               pelo tutorial precisa de um caminho de volta que não seja
               adivinhar. O passo não é obrigatório — ninguém fica preso. */}
           <FaixaDeMissao missao="conversa" instrucao={t('tutorial.conversa.missao')} />
-          <CloudOff size={72} color="#94a3b8" aria-hidden="true" />
-          <h1 style={{ fontSize: '2.4rem', fontWeight: 900, margin: 0, color: 'var(--color-text-base)' }}>Conversa com o cuidador</h1>
-          <p style={{ fontSize: '1.3rem', maxWidth: 640, margin: 0, color: 'var(--color-text-base)', opacity: 0.8, lineHeight: 1.5 }}>
+          <span aria-hidden="true" className="estado-da-tela__icone" style={{ width: '6rem', height: '6rem' }}>
+            <CloudOff size={44} />
+          </span>
+          <h2 className="t-display" style={{ margin: 0, color: 'var(--color-text-base)' }}>Sem conta ligada</h2>
+          <p className="t-body-lg" style={{ maxWidth: '56ch', margin: 0, color: 'var(--color-text-muted)' }}>
             {cloud.configurada
               ? 'Este computador ainda não está ligado a uma conta IrisFlow. Entre com o e-mail e a senha da assinatura para receber e responder mensagens do celular do cuidador.'
               : 'A conversa com o celular do cuidador precisa da conta IrisFlow configurada neste computador (frontend/.env.local). Sem ela, o aplicativo funciona só localmente.'}
           </p>
           {cloud.configurada && (
-            <GazeButton onClick={() => navigate('/login')} width={360} height={90} style={{ borderRadius: '1.5rem' }}>
-              <LogIn size={30} /> <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Entrar com a conta</span>
+            <GazeButton onClick={() => navigate('/login')} variante="primaria" width={360} height={200} isolado style={{ borderRadius: 'var(--radius-lg)' }}>
+              <LogIn size={30} aria-hidden="true" /> <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Entrar com a conta</span>
             </GazeButton>
           )}
         </div>
@@ -121,24 +124,35 @@ export const ConversationScreen: React.FC = () => {
   }
 
   return (
-    <GazePageLayout showBack backRoute="/menu">
+    <GazePageLayout
+      showBack
+      backRoute="/menu"
+      titulo={`Conversa com o ${nomeDoCuidador}`}
+      subtitulo={`${cloud.vinculo.beneficiary_name} · ${cloud.online ? (cloud.realtime === 'conectado' ? 'ao vivo' : 'sincronizando') : 'sem internet — as respostas ficam na fila'}`}
+    >
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', gap: '1rem', boxSizing: 'border-box' }}>
         <FaixaDeMissao missao="conversa" instrucao={t('tutorial.conversa.missao')} />
         <DicaContextual id="conversa" />
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-          <div>
-            <h1 style={{ fontSize: '2.2rem', fontWeight: 900, margin: 0, color: 'var(--color-text-base)' }}>
-              Conversa com o {nomeDoCuidador}
-            </h1>
-            <p style={{ margin: '0.25rem 0 0', fontSize: '1.1rem', opacity: 0.75, color: 'var(--color-text-base)' }}>
-              {cloud.vinculo.beneficiary_name} · {cloud.online ? (cloud.realtime === 'conectado' ? 'ao vivo' : 'sincronizando') : 'sem internet — as respostas ficam na fila'}
-            </p>
-          </div>
-          <div aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: cloud.online ? '#16a34a' : '#b45309', fontWeight: 700 }}>
-            {cloud.online ? <Cloud size={26} /> : <CloudOff size={26} />}
-            {cloud.filaPendente > 0 ? `${cloud.filaPendente} na fila` : cloud.online ? 'conectado' : 'offline'}
-          </div>
-        </header>
+        <div
+          aria-live="polite"
+          data-no-dwell="true"
+          style={{
+            alignSelf: 'flex-start',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.35rem 0.9rem',
+            borderRadius: 'var(--radius-pill)',
+            background: cloud.online ? 'var(--tint-ok-bg)' : 'var(--tint-warn-bg)',
+            border: `1px solid ${cloud.online ? 'var(--tint-ok-border)' : 'var(--tint-warn-border)'}`,
+            color: cloud.online ? 'var(--tint-ok-text)' : 'var(--tint-warn-text)',
+            fontSize: '0.9rem',
+            fontWeight: 700,
+          }}
+        >
+          {cloud.online ? <Cloud size={18} aria-hidden="true" /> : <CloudOff size={18} aria-hidden="true" />}
+          {cloud.filaPendente > 0 ? `${cloud.filaPendente} na fila` : cloud.online ? 'conectado' : 'offline'}
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 1fr)', gap: '1.5rem', flex: 1, minHeight: 0 }}>
           {/* mensagens */}
@@ -148,15 +162,19 @@ export const ConversationScreen: React.FC = () => {
             aria-label="Mensagens"
             style={{
               overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem',
-              padding: '1rem', borderRadius: '1.5rem',
-              background: 'var(--color-card-bg, rgba(255,255,255,0.06))',
-              border: '2px solid var(--color-card-border, rgba(148,163,184,0.3))',
+              padding: '1rem', borderRadius: 'var(--radius-lg)',
+              background: 'var(--color-card-bg)',
+              border: '1px solid var(--color-card-border)',
+              boxShadow: 'var(--shadow-1)',
             }}
           >
             {ultimas.length === 0 && (
-              <p style={{ margin: 'auto', textAlign: 'center', opacity: 0.7, fontSize: '1.2rem', color: 'var(--color-text-base)' }}>
-                Quando o cuidador escrever no celular, a mensagem aparece aqui e é falada em voz alta.
-              </p>
+              <EstadoVazio
+                titulo="Nenhuma mensagem ainda"
+                texto="Quando o cuidador escrever no celular, a mensagem aparece aqui e é falada em voz alta."
+                icone={<MessageSquare size={30} aria-hidden="true" />}
+                style={{ margin: 'auto', border: 'none' }}
+              />
             )}
             {ultimas.map((m) => {
               const doCuidador = m.sender === 'cuidador';
@@ -164,10 +182,10 @@ export const ConversationScreen: React.FC = () => {
                 <div key={m.id} style={{ display: 'flex', justifyContent: doCuidador ? 'flex-start' : 'flex-end' }}>
                   <div
                     style={{
-                      maxWidth: '85%', padding: '0.9rem 1.2rem', borderRadius: '1.25rem',
-                      background: doCuidador ? '#1B54A8' : 'rgba(22,163,74,0.18)',
-                      color: doCuidador ? '#fff' : 'var(--color-text-base)',
-                      border: doCuidador ? 'none' : '2px solid rgba(22,163,74,0.5)',
+                      maxWidth: '85%', padding: '0.9rem 1.2rem', borderRadius: 'var(--radius-md)',
+                      background: doCuidador ? 'var(--color-primary-fill)' : 'var(--tint-ok-bg)',
+                      color: doCuidador ? 'var(--color-primary-contrast)' : 'var(--color-text-base)',
+                      border: doCuidador ? 'none' : '2px solid var(--tint-ok-border)',
                       fontSize: m.kind === 'simnao' ? '1.8rem' : '1.35rem', fontWeight: m.kind === 'simnao' ? 900 : 600, lineHeight: 1.35,
                     }}
                   >
@@ -185,24 +203,24 @@ export const ConversationScreen: React.FC = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 0 }}>
             <div style={{ flex: 1, minHeight: 0 }}>
               <GazeGrid columns={2} rows={2} gap={16}>
-                <GazeButton onClick={() => responder('Sim', 'simnao')} style={{ height: '100%', background: '#16a34a', color: '#fff', border: '3px solid #15803d', borderRadius: '1.5rem' }}>
+                <GazeButton onClick={() => responder('Sim', 'simnao')} style={{ height: '100%', background: '#16a34a', color: '#fff', border: '3px solid #15803d', borderRadius: 'var(--radius-lg)' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                     <Check size={56} /> <span style={{ fontSize: '2rem', fontWeight: 900 }}>Sim</span>
                   </div>
                 </GazeButton>
-                <GazeButton onClick={() => responder('Não', 'simnao')} style={{ height: '100%', background: '#dc2626', color: '#fff', border: '3px solid #991b1b', borderRadius: '1.5rem' }}>
+                <GazeButton onClick={() => responder('Não', 'simnao')} style={{ height: '100%', background: '#dc2626', color: '#fff', border: '3px solid #991b1b', borderRadius: 'var(--radius-lg)' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                     <X size={56} /> <span style={{ fontSize: '2rem', fontWeight: 900 }}>Não</span>
                   </div>
                 </GazeButton>
                 <GazeButton onClick={() => cloud.repetirUltimaMensagem()} style={{ height: '100%', borderRadius: '1.5rem' }} aria-label="Repetir a última mensagem em voz alta">
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <Volume2 size={48} color="#1B54A8" /> <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Repetir</span>
+                    <Volume2 size={48} color="var(--color-primary)" aria-hidden="true" /> <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Repetir</span>
                   </div>
                 </GazeButton>
                 <GazeButton onClick={() => navigate('/keyboard')} style={{ height: '100%', borderRadius: '1.5rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <Keyboard size={48} color="#1B54A8" /> <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Escrever</span>
+                    <Keyboard size={48} color="var(--color-primary)" aria-hidden="true" /> <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Escrever</span>
                   </div>
                 </GazeButton>
               </GazeGrid>
@@ -221,12 +239,12 @@ export const ConversationScreen: React.FC = () => {
                         // A sugestão do assistente se distingue por um contorno
                         // âmbar, não por cor de fundo: o paciente precisa saber
                         // de onde veio a frase sem que o alvo mude de peso visual.
-                        ...(sugerida ? { border: '3px solid #F0A030' } : {}),
+                        ...(sugerida ? { border: '3px solid var(--color-accent)' } : {}),
                       }}
                     >
                       <span style={{ fontSize: '1.15rem', fontWeight: 700, padding: '0 0.5rem', textAlign: 'center' }}>
                         {sugerida ? (
-                          <Sparkles size={18} color="#F0A030" style={{ verticalAlign: '-3px', marginRight: 6 }} />
+                          <Sparkles size={18} color="var(--color-accent)" style={{ verticalAlign: '-3px', marginRight: 6 }} />
                         ) : (
                           <MessageSquare size={18} style={{ verticalAlign: '-3px', marginRight: 6 }} />
                         )}

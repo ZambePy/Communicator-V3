@@ -80,7 +80,7 @@
 }
 
 .flow__optional-title span {
-  font-size: 0.72rem;
+  font-size: var(--fs-min);
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -150,7 +150,23 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--sp-3);
-  margin-bottom: var(--sp-5);
+  margin: 0 0 var(--sp-5);
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.method__input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+
+.method:has(.method__input:focus-visible) {
+  outline: 3px solid var(--blue-500);
+  outline-offset: 3px;
 }
 
 .method {
@@ -193,7 +209,7 @@
 }
 
 .method__note {
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   color: var(--text-dim);
 }
 
@@ -356,4 +372,19 @@
   .flow__actions .btn {
     width: 100%;
   }
+}
+
+.flow__inner--narrow {
+  max-width: 520px;
+}
+
+/* reenvio do link de confirmação, na tela de acesso ("Confirm email" ligado) */
+.entrar__reenvio {
+  display: grid;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-4);
+}
+
+.entrar__reenvio p {
+  margin: 0;
 }

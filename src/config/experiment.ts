@@ -89,13 +89,29 @@ export interface ExperimentConfig {
   /**
    * Referência geométrica LENTA para pose e centro facial (dois relógios).
    *
-   * A referência contra a qual `poseCompensation`/`translationCompensation`
+   * Ligada, a referência contra a qual `poseCompensation`/`translationCompensation`
    * medem o Δ deixa de ser a média congelada da calibração e passa a ser uma
-   * EMA com constante de tempo de ~30 s, que nasce nela. A postura que migra
-   * ao longo de meia hora é absorvida; uma virada de cabeça em 200 ms entra
-   * inteira no Δ. Ver `referenciaLenta.ts`.
+   * EMA com constante de tempo de ~30 s, que nasce nela. Ver `referenciaLenta.ts`.
+   *
+   * DESLIGADA por padrão desde 23/09/2026. Na gravação daquele dia a cabeça
+   * girou de verdade +2,1° de yaw e −1,8° de pitch entre a calibração e o
+   * teste (a ponta do nariz andou 107 % e 72 % do que a pose previa: rotação,
+   * não deriva do estimador), e a EMA absorveu 43–48 % do giro em ~35 s —
+   * desfazendo uma compensação que estava CERTA. Replay pelo núcleo real:
+   * erro médio no miolo 88 → 67 px com a referência fixa; o fator físico k = 1
+   * da compensação continua sendo o melhor. A física não distingue "virada
+   * rápida" de "postura que migrou": em ambas o olho gira na órbita o mesmo
+   * tanto para olhar o mesmo ponto. O que sobra de deriva real é tratado pelo
+   * que mede o ERRO, não a pose: a correção por dwell e o reajuste rápido
+   * olhando o centro.
    */
   referenciaLenta: boolean;
+  /**
+   * Correção local nos alvos de calibração fora da grade interna — os cantos
+   * da tela (ver `correcaoLocal.ts`). Ligada por padrão; a flag existe para a
+   * medição A/B (URL `?cantos=0`).
+   */
+  correcaoLocal: boolean;
   /**
    * EMA curta (≤ 150 ms) dos ângulos do L2CS durante a FIXAÇÃO, solta pela
    * velocidade angular na sacada. Reduz o ruído de precisão sem atrasar a
@@ -135,12 +151,21 @@ export interface ExperimentConfig {
   /**
    * Cancela o roll da cabeça no recorte do L2CS (sprint S6).
    *
-   * DESLIGADA por padrão, e por um motivo específico: o ganho só existe se esta
-   * normalização for a MESMA usada no treino do checkpoint empacotado.
-   * Normalização diferente da do dataset piora em vez de melhorar, e este
-   * projeto ainda não confirmou como o modelo foi treinado. Ligar isto é uma
-   * condição de medição — duas sessões, uma com e outra sem, com a cadeira
-   * reclinada uns 15°, que é onde o efeito existe.
+   * LIGADA por padrão desde 22/09 (Etapa 0 da compensação de cabeça). Ficou
+   * desligada por uma cautela específica — "só ganha se for a mesma
+   * normalização do treino" — que não se sustenta para o checkpoint
+   * empacotado: ele foi treinado no Gaze360, cujos recortes vêm com toda
+   * inclinação natural de cabeça, inclusive nivelada. Rosto nivelado está
+   * DENTRO da distribuição de treino; a rede não vê nada estranho. E a saída
+   * é contra-rotacionada pelo vetor 3D (`roll.ts`), então a geometria fecha
+   * exatamente. Sem isto, cada grau de cabeça inclinada entrava no L2CS como
+   * imagem torta e saía como erro de olhar — numa cadeira reclinável, o estado
+   * normal. O roll que vai para o recorte é SUAVIZADO (`rollSuave.ts`, τ =
+   * 150 ms) para o tremor do MediaPipe não virar tremor de imagem.
+   *
+   * O que ainda falta é a MEDIÇÃO em vídeo real: duas sessões, uma com e outra
+   * sem, cabeça inclinada ~15°, comparando erro médio e BCEA no teste de
+   * precisão. Desligar: `__irisflowExp.set('normalizarRollNoCrop', false)`.
    */
   normalizarRollNoCrop: boolean;
   /**
@@ -210,13 +235,14 @@ export const DEFAULTS: ExperimentConfig = {
   dimsDaIris: 'absolutas',
   geometricPoseCompensation: true,
   lateralTranslationCompensation: true,
-  referenciaLenta: true,
+  referenciaLenta: false,
+  correcaoLocal: true,
   suavizarL2csNaFixacao: true,
   correcaoPorDwell: true,
   eyeNet: 'off',
   filterMode: 'oneEuro',
   estabilizarFixacao: true,
-  normalizarRollNoCrop: false,
+  normalizarRollNoCrop: true,
   blocoL2csCompleto: false,
   cursorSizePx: 48,
   dwellRingOnCursor: false,
@@ -393,8 +419,15 @@ if (typeof window !== 'undefined') {
     defaults: () => ({ ...DEFAULTS }),
     set(key: keyof ExperimentConfig, value: number | boolean | string) {
       const next = sanitizeExperiment({ ...loadSemEnv(), [key]: value });
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      console.warn('[exp] gravado. RECARREGUE a página para aplicar.', next);
+      // Grava só o que DIFERE do padrão. Gravar a configuração inteira
+      // congelava no disco os padrões daquele dia: quando um padrão muda numa
+      // versão nova (ex.: `referenciaLenta` em 23/09/2026), quem um dia usou o
+      // console continuaria rodando o antigo sem saber.
+      const diferencas = Object.fromEntries(
+        Object.entries(next).filter(([k, v]) => DEFAULTS[k as keyof ExperimentConfig] !== v),
+      );
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(diferencas));
+      console.warn('[exp] gravado. RECARREGUE a página para aplicar.', diferencas);
     },
     reset() {
       localStorage.removeItem(STORAGE_KEY);

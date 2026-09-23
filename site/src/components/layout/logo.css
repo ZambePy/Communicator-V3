@@ -10,8 +10,8 @@
   object-fit: contain;
 }
 
-/* A assinatura horizontal tem proporcao 2417x1320, com muito ar em
-   volta do desenho; a altura util e definida pelo tamanho escolhido. */
+/* A assinatura horizontal tem 1200x287 px (proporção ~4.2:1) e o
+   símbolo 512x512; a altura útil é definida pelo tamanho escolhido. */
 .logo--full .logo__img {
   height: var(--logo-h, 46px);
 }

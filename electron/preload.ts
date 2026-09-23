@@ -20,6 +20,7 @@
 //                      na pasta de dados do app; nada disto sai do computador.
 import { contextBridge, ipcRenderer } from 'electron';
 import { CANAIS } from '../src/computador/protocolo';
+import type { SelecaoDaSobreposicao } from '../src/computador/protocolo';
 import type { AmostraDeOlhar, CapacidadesDoSistema, MotivoDeSaida } from '../src/computador/protocolo';
 import { CANAIS_VOZ } from '../src/voz/protocolo';
 import type { EstadoDoMotorDeVoz, OpcoesDeSintese, ResultadoDaImportacao, ResultadoDaSintese } from '../src/voz/protocolo';
@@ -27,11 +28,16 @@ import type { EstadoDoMotorDeVoz, OpcoesDeSintese, ResultadoDaImportacao, Result
 export interface PhysicalPanelSizeIPC {
   widthCm: number;
   heightCm: number;
+  /** Diagnóstico: de onde veio o número ('edid-dtd' | 'edid-cm' | 'wmi' | 'coregraphics'). */
+  fonte?: string;
+  /** Nome do monitor declarado no EDID, quando houver. */
+  nome?: string;
 }
 
 contextBridge.exposeInMainWorld('irisflowSystem', {
-  /** Dimensões físicas dos monitores conectados, do EDID. Lista vazia quando
-   *  o SO não informa (não-Windows, EDID ausente, driver genérico). */
+  /** Dimensões físicas do(s) monitor(es) em uso, do EDID (registro/WMI no
+   *  Windows, sysfs no Linux, ioreg/CoreGraphics no macOS). Lista VAZIA quando
+   *  o SO não informa ou o valor não é confiável — a UI mantém o passo manual. */
   getMonitorSizes: (): Promise<PhysicalPanelSizeIPC[]> =>
     ipcRenderer.invoke('irisflow:monitor-sizes'),
   /** Resolução e fator de escala da tela primária, do SO. `window.screen` do
@@ -40,6 +46,11 @@ contextBridge.exposeInMainWorld('irisflowSystem', {
     widthPx: number; heightPx: number; scaleFactor: number;
     physicalWidthPx: number; physicalHeightPx: number;
   }> => ipcRenderer.invoke('irisflow:display-info'),
+
+  /** Abre a pasta de registros do app (log do processo principal, sem imagem
+   *  nem texto do paciente) no gerenciador de arquivos — para anexar num
+   *  pedido de suporte. `false` se não deu. */
+  abrirPastaDosLogs: (): Promise<boolean> => ipcRenderer.invoke('irisflow:abrir-pasta-dos-logs'),
 
   desktop: {
     capacidades: (): Promise<CapacidadesDoSistema> => ipcRenderer.invoke(CANAIS.capacidades),
@@ -52,6 +63,11 @@ contextBridge.exposeInMainWorld('irisflowSystem', {
       const handler = (_e: unknown, motivo: MotivoDeSaida) => cb(motivo);
       ipcRenderer.on(CANAIS.parou, handler);
       return () => ipcRenderer.removeListener(CANAIS.parou, handler);
+    },
+    onSelecao: (cb: (s: SelecaoDaSobreposicao) => void): (() => void) => {
+      const handler = (_e: unknown, s: SelecaoDaSobreposicao) => cb(s);
+      ipcRenderer.on(CANAIS.selecao, handler);
+      return () => ipcRenderer.removeListener(CANAIS.selecao, handler);
     },
   },
 });

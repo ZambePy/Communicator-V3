@@ -46,7 +46,9 @@ export const VirtualMouseScreen: React.FC = () => {
       <main
         role="main"
         style={{
-          minHeight: '100vh',
+          // Rolagem nesta caixa, não no documento (a Emergência é fixa).
+          height: '100dvh',
+          overflowY: 'auto',
           background: 'var(--color-bg-base)',
           padding: '2rem 2.5rem',
         }}
@@ -57,12 +59,17 @@ export const VirtualMouseScreen: React.FC = () => {
           icon={<MousePointer2 color="var(--color-primary)" size={28} aria-hidden="true" />}
         />
 
-        <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <div
+          className="coluna-livre-da-emergencia"
+          style={{ '--coluna-largura': '760px', maxWidth: 760, margin: '0 auto' }}
+        >
           <DicaContextual id="computador" />
         </div>
 
         <div
+          className="coluna-livre-da-emergencia"
           style={{
+            '--coluna-largura': '760px',
             maxWidth: 760,
             margin: '0 auto',
             display: 'flex',
