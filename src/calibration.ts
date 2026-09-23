@@ -1,7 +1,7 @@
 import { normalizarPorGrupo, pesoDaAmostra, resumoDePesos } from './calibration/pesoDaAmostra';
 import { EstabilidadeDoPonto, decidirFechamento } from './calibration/estabilidadeDoPonto';
 import { celulaDoAlvo, colher, type AmostraDePerseguicao, type ResultadoDaColheita } from './calibration/perseguicao';
-import { corrigirPorDwell, reiniciarCorrecao } from './interaction/correcaoPorDwell';
+import { corrigirDerivaPeloCentro, corrigirPorDwell, reiniciarCorrecao } from './interaction/correcaoPorDwell';
 import type { GazeRegressor } from './gazeRegressor';
 import {
   createRegressor,
@@ -21,6 +21,7 @@ import { compensarPredicao, deslocamentoPorPose, poseDeReferencia } from './pose
 import type { Pose } from './poseCompensation';
 import { compensarTranslacao, centroDeReferencia } from './translationCompensation';
 import { ReferenciaLenta, type AmostraGeometrica, type MotivoDeCongelamento } from './referenciaLenta';
+import { ajustarCorrecaoLocal, aplicarCorrecaoLocal, correcaoLocalValida, type CorrecaoLocal } from './correcaoLocal';
 import { clampNaBorda, type ModoDeClamp } from './computador/geometria';
 import type { NivelDeContraluz } from './contraluz';
 import { diagnosticarGrade } from './calibrationGridDiagnosis';
@@ -128,12 +129,23 @@ export interface CalibrationPoint {
    * Por isso a perseguição carimba aqui uma célula grosseira da tela.
    */
   grupo?: string;
+  /**
+   * Escala facial do quadro (distância cantal em px de vídeo e a régua da
+   * íris), capturada na coleta. É o que permite refazer, depois do treino, a
+   * compensação de TRANSLAÇÃO de cada amostra exatamente como o `mapGaze` faz
+   * — a correção local dos cantos (`correcaoLocal.ts`) precisa da predição no
+   * mesmo ponto do pipeline em que vai ser aplicada.
+   */
+  escala?: EscalaFacial | null;
 }
 
-// Amostragem ponderada na periferia. `COLLECTION_MS_BASE` é a duração para o
-// ponto central; pontos de canto coletam `+ COLLECTION_MS_RANGE` ms adicionais:
-// usuários fixam pior nas bordas, e o Ridge extrapola pior perto do limite do
-// fecho convexo.
+// Amostragem ponderada na periferia. `COLLECTION_MS_BASE` é o TETO da janela
+// útil para o ponto central; o teto cresce com a distância ao centro até
+// `+ COLLECTION_MS_RANGE` no canto geométrico (e o perfil `computador` soma
+// até outros 1120 ms por excentricidade angular): usuários fixam pior nas
+// bordas, e o Ridge extrapola pior perto do limite do fecho convexo. Desde a
+// S2 é teto, não duração: o ponto fecha antes se o olhar estabilizar
+// (`estabilidadeDoPonto.ts`, piso `COLLECTION_MIN_MS`).
 //
 // CUIDADO: se o total ultrapassar ~40 s (9 pontos × ~2,6 s + acomodação), a
 // fadiga do usuário-alvo (ELA) piora as fixações finais e anula o ganho.
@@ -450,6 +462,15 @@ let qualityRejects = 0;
 /** Peso relativo de cada olho, do resíduo de treino. `null` antes de
  *  qualquer calibração, e nesse caso a fusão volta a ser média simples. */
 let eyeReliability: { left: number; right: number } | null = null;
+/**
+ * Correção local nos alvos fora da grade interna (os cantos da tela), ajustada
+ * no treino. `null` = só o modelo global — sem cantos na calibração (modo
+ * rápido, perfil antigo) ou nada a corrigir. Ver `correcaoLocal.ts`.
+ */
+let correcaoLocal: CorrecaoLocal | null = null;
+/** Última predição de `mapGaze` ANTES da correção por dwell, em fração da
+ *  tela. É o que o reajuste rápido mede para corrigir a deriva no centro. */
+let ultimaPredicaoSemCorrecao: { x: number; y: number } | null = null;
 
 /** Campos de qualidade que o gate consulta. Lista explícita para o aviso
  *  de ausência poder nomear o que faltou. */
@@ -491,6 +512,9 @@ let collectedQualities: (any | null)[] = [];
  *  paralelo com `collectedFeatures*`; qualquer caminho que limpe um precisa
  *  limpar este. */
 let collectedPesos: number[] = [];
+/** Escala facial de cada amostra do ponto corrente. Anda em paralelo com
+ *  `collectedFeatures*`, como `collectedPesos`. */
+let collectedEscalas: (EscalaFacial | null)[] = [];
 /**
  * Coleta por perseguição suave em curso (sprint S8).
  *
@@ -780,28 +804,43 @@ function referenciasEmUso(): { pose: Pose | null; centro: CentroFacial | null } 
   return { pose: calibrationReferencePose, centro: calibrationReferenceCenter };
 }
 
-// ── reancoragem SEM retreinar ─────────────────────────────────────────────
+// ── reajuste rápido: correção de deriva pelo centro ──────────────────────
 
 /**
- * Reancora as referências geométricas num instante em que a pessoa está
- * olhando o centro da tela: a distância câmera→rosto vira a nova base da
- * correção aditiva de distância, e pose/centro recomeçam os dois relógios.
+ * Reajuste rápido: a pessoa olhou o centro da tela por ~2 s, e `predicao` é a
+ * mediana de onde o modelo pôs o olhar nesse tempo (antes da correção por
+ * dwell). A diferença até o centro é o viés corrente, e vira o deslocamento da
+ * correção de deriva (`corrigirDerivaPeloCentro`).
  *
- * NÃO retreina o Ridge: o mapeamento íris→tela continua o mesmo; só muda o
- * "zero" contra o qual as compensações medem. É o que resolve "sentei
- * diferente hoje" sem os nove pontos.
+ * NÃO retreina o Ridge e NÃO troca as referências geométricas. Até 23/09/2026
+ * esta função trocava distância, pose e centro facial pelos de agora — "sentei
+ * diferente hoje" resolvido declarando que a postura de agora é a da
+ * calibração. A física não deixa: quem virou a cabeça 5° e olha o centro tem o
+ * olho girado 5° na órbita, e o modelo, treinado na pose da calibração, só
+ * acerta com a compensação d·tan(Δ) — que a troca de referência zerava (a 60 cm,
+ * 5° de cabeça são ~190 px de erro). Medido numa gravação real, a compensação
+ * completa (k = 1) é a certa. O que sobra de viés depois dela — o estimador de
+ * pose, a pálpebra, a luz — é exatamente o que o centro mede.
+ *
+ * Devolve se a correção foi aplicada e o tamanho do viés medido, em px. Acima
+ * do teto da correção (~150 px) não aplica: é caso de calibrar de novo.
  */
-export function reancorarReferencias(medida: {
-  distanciaCm: number | null;
-  pose: Pose | null;
-  centro: CentroFacial | null;
-}): void {
-  if (medida.distanciaCm !== null && Number.isFinite(medida.distanciaCm) && medida.distanciaCm > 0) {
-    calibrationCameraDistanceCm = medida.distanciaCm;
+export function corrigirDerivaNoCentro(
+  predicao: { x: number; y: number } | null,
+): { aplicado: boolean; desvioPx: number | null } {
+  if (!predicao || !Number.isFinite(predicao.x) || !Number.isFinite(predicao.y)) {
+    return { aplicado: false, desvioPx: null };
   }
-  if (medida.pose) calibrationReferencePose = { ...medida.pose };
-  if (medida.centro) calibrationReferenceCenter = { ...medida.centro };
-  referenciaLenta.iniciar({ pose: calibrationReferencePose, centro: calibrationReferenceCenter });
+  const residuo = { x: 0.5 - predicao.x, y: 0.5 - predicao.y };
+  const vw = typeof document !== 'undefined' ? document.documentElement.clientWidth : 0;
+  const vh = typeof document !== 'undefined' ? document.documentElement.clientHeight : 0;
+  const desvioPx = vw > 0 && vh > 0 ? Math.hypot(residuo.x * vw, residuo.y * vh) : null;
+  const aplicado = corrigirDerivaPeloCentro(residuo, performance.now());
+  console.log(
+    `[calib] reajuste rápido: viés no centro ${desvioPx === null ? '?' : `${desvioPx.toFixed(0)} px`} — ` +
+    (aplicado ? 'corrigido' : 'NÃO aplicado (acima do teto da correção: calibre de novo)'),
+  );
+  return { aplicado, desvioPx };
 }
 
 // ── contraluz: o quadro não vale, a calibração não começa ────────────────
@@ -1030,6 +1069,7 @@ export function captureReferenceStateForProfile(): CalibrationReferenceState {
     refDistance: calibrationRefDistance,
     eyeReliability,
     viewport: viewportDaCalibracao,
+    correcaoLocal,
   };
 }
 
@@ -1057,6 +1097,10 @@ export function restoreReferenceStateFromProfile(
   // A confiabilidade por olho é substituída, nunca herdada: média simples é
   // neutra, peso herdado é errado E invisível.
   eyeReliability               = ref?.eyeReliability ?? null;
+  // A correção dos cantos pertence ao modelo do perfil: validada ao entrar
+  // (perfil de outra versão ou adulterado não chega ao `mapGaze`) e nunca
+  // herdada de outro perfil. Perfis anteriores a ela não a têm: modelo global.
+  correcaoLocal                = correcaoLocalValida(ref?.correcaoLocal ?? null);
   // A referência lenta nasce na referência do perfil (ou some com ele).
   if (ref) referenciaLenta.iniciar({ pose: calibrationReferencePose, centro: calibrationReferenceCenter });
   else referenciaLenta.limpar();
@@ -1129,6 +1173,7 @@ export function abortCalibration(): void {
   collectedFeaturesRight = [];
   collectedQualities = [];
   collectedPesos = [];
+  collectedEscalas = [];
   collectionStartTime = 0;
   lastDecision = null;
 
@@ -1661,8 +1706,14 @@ export function eccentricityExtentFraction(
 /**
  * Perfil da grade de calibração.
  *
- *  - `padrao`      o app: grade dentro do orçamento de excentricidade, porque
- *                  os botões do IrisFlow nunca encostam na borda.
+ *  - `padrao`      o app: 13 alvos — a grade 3×3 dentro do orçamento de
+ *                  excentricidade (`computeCalibrationTargets`) + os quatro
+ *                  CANTOS da tela a 5 % da borda (`INSET_CANTOS_PADRAO`). O
+ *                  app tem botão no canto (Emergência no alto à direita, voltar
+ *                  no alto à esquerda), e sem ponto ali o canto era previsto
+ *                  por extrapolação: 201 px de erro contra 88 px no miolo, na
+ *                  gravação de 23/09/2026. Com os cantos na calibração e a
+ *                  correção local deles (`correcaoLocal.ts`), ~40–110 px.
  *  - `computador`  o Modo Computador: os botões do Windows FICAM na borda (X
  *                  da janela, barra de tarefas), e o Ridge extrapola mal ali.
  *                  13 alvos: 3×3 com inset de 2 % nos cantos e bordas + 4
@@ -1676,6 +1727,23 @@ export type PerfilDeCalibracao = 'padrao' | 'computador';
 
 /** Inset dos alvos de borda no perfil `computador`, em fração da tela. */
 export const INSET_COMPUTADOR = 0.02;
+
+/**
+ * Inset dos quatro alvos de canto do perfil `padrao`, em fração da tela.
+ *
+ * 5 % é onde ficam os alvos de canto do teste de precisão e o centro dos botões
+ * de canto da interface. Calibrar exatamente onde estão os botões mais
+ * extremos — nem além, onde a fixação piora, nem aquém, onde volta a ser
+ * extrapolação — é a recomendação da literatura (SR Research: 13 pontos no
+ * modo remoto; Blignaut 2014: 9 → 14 pontos, 0,87° → 0,58°).
+ *
+ * Os cantos ficam FORA do orçamento de excentricidade de propósito: o orçamento
+ * continua decidindo a grade interna, que é o que segura o ganho do modelo no
+ * miolo; os cantos entram como pontos extras com correção local própria. Se a
+ * íris sumir num canto de baixo (pálpebra), o ponto sai com poucas amostras e o
+ * canto fica sem correção — o comportamento de antes, não um estrago.
+ */
+export const INSET_CANTOS_PADRAO = 0.05;
 
 export interface OpcoesDeAlvos {
   quick?: boolean;
@@ -1710,13 +1778,25 @@ export function alvosDeCalibracao(
     for (const c of cantos) out.push({ x: (0.5 + c.x) / 2, y: (0.5 + c.y) / 2 });
     return out;
   }
-  return computeCalibrationTargets(geometry, opcoes.quick ?? false);
+  const grade = computeCalibrationTargets(geometry, opcoes.quick ?? false);
+  // Modo rápido: só os 4 cantos DA GRADE — é uma recalibração de manutenção,
+  // e os cantos da tela precisam da correção local que só a calibração inteira
+  // ajusta.
+  if (opcoes.quick) return grade;
+  const lo = INSET_CANTOS_PADRAO;
+  const hi = 1 - INSET_CANTOS_PADRAO;
+  return [
+    ...grade,
+    { x: lo, y: lo }, { x: hi, y: lo },
+    { x: lo, y: hi }, { x: hi, y: hi },
+  ];
 }
 
 /**
  * Grade 3×3 (full) ou 4 cantos (quick) posicionada dentro do orçamento de
  * excentricidade. Pura e determinística — é o que o teste de regiões usa.
- * É o perfil `padrao` de `alvosDeCalibracao`.
+ * É a grade INTERNA do perfil `padrao` de `alvosDeCalibracao`, que soma a ela
+ * os quatro cantos da tela.
  */
 export function computeCalibrationTargets(
   geometry: CalibrationGeometry,
@@ -1758,7 +1838,11 @@ export function computeCalibrationTargets(
 }
 
 /**
- * Retângulo da tela, em fração, que a grade de calibração de fato cobre.
+ * Retângulo da tela, em fração, que a grade INTERNA de calibração cobre.
+ *
+ * Os cantos da tela (perfil `padrao`) ficam fora dele de propósito: são pontos
+ * extras cuja distorção a correção local (`correcaoLocal.ts`) trata, e é este
+ * retângulo que decide quem é "canto" (corrigido) e quem é âncora.
  *
  * É a fronteira entre INTERPOLAR e EXTRAPOLAR. Dentro dela o Ridge prevê entre
  * pontos que viu; fora, ele continua devolvendo um número — sem nenhum aviso —
@@ -1785,6 +1869,22 @@ export function regiaoCalibrada(
 }
 
 /**
+ * O alvo está na grade INTERNA (o retângulo de `regiaoCalibrada`, com 1 % de
+ * folga)? Fora dela ficam os cantos da tela do perfil padrão e o anel de borda
+ * do perfil computador — alvos cujo erro leave-one-target-out é extrapolação
+ * por construção e que, por isso, não entram nos diagnósticos que comparam
+ * alvos entre si (grade, outliers, reforço).
+ */
+export function naGradeInterna(
+  t: { x: number; y: number },
+  geometry: CalibrationGeometry = currentCalibrationGeometry(),
+): boolean {
+  const r = regiaoCalibrada(geometry);
+  const FOLGA = 0.01;
+  return t.x >= r.x0 - FOLGA && t.x <= r.x1 + FOLGA && t.y >= r.y0 - FOLGA && t.y <= r.y1 + FOLGA;
+}
+
+/**
  * Alvos extras ao redor dos que o modelo pior aprendeu (sprint S4).
  *
  * A grade é uniforme, mas o erro não é: o `looByTarget` do diagnóstico já diz,
@@ -1805,7 +1905,29 @@ export function alvosDeReforco(
   const maximo = opcoes?.maximo ?? 4;
   const razaoMinima = opcoes?.razaoMinima ?? 1.5;
 
-  const validos = looByTarget.filter((t) => Number.isFinite(t.errorPx));
+  // O reforço obedece ao MESMO orçamento angular da grade — inclusive a
+  // assimetria para baixo. Um alvo de reforço fora do orçamento pediria do olho
+  // exatamente a excentricidade que a grade evita, e traria de volta o alvo
+  // pulado que esta sprint existe para eliminar.
+  const cantos = computeCalibrationTargets(geometry, true);
+  const limite = {
+    xMin: Math.min(...cantos.map((c) => c.x)),
+    xMax: Math.max(...cantos.map((c) => c.x)),
+    yMin: Math.min(...cantos.map((c) => c.y)),
+    yMax: Math.max(...cantos.map((c) => c.y)),
+  };
+  const FOLGA = 0.01;
+  const dentroDaGrade = (t: { x: number; y: number }) =>
+    t.x >= limite.xMin - FOLGA && t.x <= limite.xMax + FOLGA &&
+    t.y >= limite.yMin - FOLGA && t.y <= limite.yMax + FOLGA;
+
+  // Só os alvos da GRADE INTERNA concorrem (e entram na mediana). O erro
+  // leave-one-target-out de um canto da tela é extrapolação por construção —
+  // cada canto tem a sua distorção, que nenhum outro alvo prevê — e não diz que
+  // uma região do miolo está cega. Sem este filtro, toda calibração de 13
+  // pontos pediria reforço na diagonal dos cantos, à toa. Os cantos têm a
+  // correção local própria (`correcaoLocal.ts`).
+  const validos = looByTarget.filter((t) => Number.isFinite(t.errorPx) && dentroDaGrade(t));
   if (validos.length < 3) return [];
 
   // Mediana como referência: com nove alvos e um outlier, a média já seria
@@ -1819,18 +1941,6 @@ export function alvosDeReforco(
     .slice(0, piores)
     .filter((t) => t.errorPx >= mediana * razaoMinima);
   if (candidatos.length === 0) return [];
-
-  // O reforço obedece ao MESMO orçamento angular da grade — inclusive a
-  // assimetria para baixo. Um alvo de reforço fora do orçamento pediria do olho
-  // exatamente a excentricidade que a grade evita, e traria de volta o alvo
-  // pulado que esta sprint existe para eliminar.
-  const cantos = computeCalibrationTargets(geometry, true);
-  const limite = {
-    xMin: Math.min(...cantos.map((c) => c.x)),
-    xMax: Math.max(...cantos.map((c) => c.x)),
-    yMin: Math.min(...cantos.map((c) => c.y)),
-    yMax: Math.max(...cantos.map((c) => c.y)),
-  };
 
   const out: { x: number; y: number }[] = [];
   const jaExiste = (p: { x: number; y: number }) =>
@@ -1903,7 +2013,7 @@ export function currentCalibrationGeometry(
 // Durante uma calibração real vale `getCalibrationTargets()`, que devolve a
 // grade calculada para a tela em uso.
 export const CALIBRATION_TARGETS_FULL: readonly { x: number; y: number }[] =
-  computeCalibrationTargets(currentCalibrationGeometry(), false);
+  alvosDeCalibracao(currentCalibrationGeometry(), { perfil: 'padrao' });
 export const CALIBRATION_TARGETS_QUICK: readonly { x: number; y: number }[] =
   computeCalibrationTargets(currentCalibrationGeometry(), true);
 
@@ -2014,6 +2124,8 @@ export function startCalibrationMode(
   reiniciarCorrecao();
   regressorLeft = null;
   regressorRight = null;
+  correcaoLocal = null;
+  ultimaPredicaoSemCorrecao = null;
   // Os regressores acabaram de ser descartados: o instante do treino deles não
   // pode sobreviver a eles (`completeCalibration` grava o novo).
   treinadoEmMs = null;
@@ -2099,6 +2211,7 @@ export function startCollectingPoint(x: number, y: number, onDone: (success: boo
   collectedFeaturesRight = [];
   collectedQualities = [];
   collectedPesos = [];
+  collectedEscalas = [];
   pointCompleteCallback = onDone;
   l2csRejects = 0;
   l2csRej = zerarRejeicoesL2cs();
@@ -2385,6 +2498,7 @@ export function feedRawData(featuresLeft: number[], featuresRight: number[], qua
     blocoZerado,
     l2csConfianca: blocoZerado ? null : ultimoDiagnosticoDoBloco().confidence,
   }));
+  collectedEscalas.push(latestFaceScale ? { ...latestFaceScale } : null);
 
   // Contagem de frames com reflexo especular alto. Não rejeita nada;
   // só acumula para o sumário do ponto avisar.
@@ -2581,6 +2695,7 @@ function processStaticPoint() {
       featuresRight: collectedFeaturesRight[i],
       quality: collectedQualities[i] ?? null,
       peso: collectedPesos[i] ?? 1,
+      escala: collectedEscalas[i] ?? null,
     });
   }
 
@@ -2951,6 +3066,115 @@ function poseDaAmostra(p: CalibrationPoint): Pose | null {
     : null;
 }
 
+/**
+ * Predição de uma amostra de TREINO no mesmo ponto do pipeline em que o
+ * `mapGaze` aplica a correção local: fusão binocular → compensação de pose →
+ * compensação de translação. A fusão usa a confiabilidade por olho e a
+ * dominância, sem o peso instantâneo de abertura do olho (a coleta não o
+ * guarda); a distância não entra porque, na calibração, ela é a própria
+ * referência (razão 1).
+ */
+function predicaoCompensadaDaAmostra(
+  p: CalibrationPoint,
+  vw: number,
+  vh: number,
+): { x: number; y: number } | null {
+  if (!regressorLeft || !regressorRight) return null;
+  const pl = regressorLeft.predict(featureScalerLeft.transformSingle(maybeExpandSingle(p.featuresLeft)));
+  const pr = regressorRight.predict(featureScalerRight.transformSingle(maybeExpandSingle(p.featuresRight)));
+  let wL = 1;
+  let wR = 1;
+  if (eyeReliability) {
+    wL *= Math.max(MIN_EYE_WEIGHT, eyeReliability.left);
+    wR *= Math.max(MIN_EYE_WEIGHT, eyeReliability.right);
+  }
+  if (eyeDominance === 'left') wL *= DOMINANCE_GAIN;
+  if (eyeDominance === 'right') wR *= DOMINANCE_GAIN;
+  let x = (pl.x * wL + pr.x * wR) / (wL + wR);
+  let y = (pl.y * wL + pr.y * wR) / (wL + wR);
+  if (EXPERIMENT.geometricPoseCompensation) {
+    const c = compensarPredicao(x, y, poseDaAmostra(p), calibrationReferencePose, screenDistancePx(), vw, vh);
+    x = c.x;
+    y = c.y;
+  }
+  if (EXPERIMENT.lateralTranslationCompensation) {
+    const q = p.quality;
+    const centro = q && typeof q.faceCenterX === 'number' && typeof q.faceCenterY === 'number'
+      ? { x: q.faceCenterX, y: q.faceCenterY }
+      : null;
+    const c = compensarTranslacao(x, y, centro, calibrationReferenceCenter, p.escala ?? null, screenPxPerCm(), vw, vh);
+    x = c.x;
+    y = c.y;
+  }
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+/**
+ * Ajusta a correção local dos cantos (`correcaoLocal.ts`) com o modelo recém
+ * treinado. Alvo "fora da grade" = fora do retângulo da grade interna
+ * (`regiaoCalibrada`), com 1 % de folga: os quatro cantos da tela no perfil
+ * `padrao`, o anel de borda no perfil `computador`. Os alvos da grade entram
+ * como âncoras de resíduo zero.
+ */
+function ajustarCorrecaoDosCantos(
+  amostras: readonly CalibrationPoint[],
+  grupos: readonly string[],
+  vw: number,
+  vh: number,
+): void {
+  correcaoLocal = null;
+  if (!EXPERIMENT.correcaoLocal) return;
+  const geometria = currentCalibrationGeometry();
+  const porGrupo = new Map<string, { ax: number; ay: number; px: number; py: number; n: number }>();
+  amostras.forEach((a, i) => {
+    const p = predicaoCompensadaDaAmostra(a, vw, vh);
+    if (!p) return;
+    const e = porGrupo.get(grupos[i]) ?? { ax: 0, ay: 0, px: 0, py: 0, n: 0 };
+    e.ax += a.screenX;
+    e.ay += a.screenY;
+    e.px += p.x;
+    e.py += p.y;
+    e.n += 1;
+    porGrupo.set(grupos[i], e);
+  });
+  const alvos = [...porGrupo.values()].map((e) => {
+    const alvo = { x: e.ax / e.n, y: e.ay / e.n };
+    return {
+      alvo,
+      predicaoMedia: { x: e.px / e.n, y: e.py / e.n },
+      foraDaGrade: !naGradeInterna(alvo, geometria),
+    };
+  });
+  const { correcao, descartados } = ajustarCorrecaoLocal(alvos);
+  correcaoLocal = correcao;
+  for (const d of descartados) {
+    console.warn(
+      `[calib] ⚠ canto (${(d.x * 100).toFixed(0)}%, ${(d.y * 100).toFixed(0)}%) com resíduo implausível — ` +
+      'fica sem correção local (provável olhar fora do alvo ou rosto perdido ali).',
+    );
+  }
+  if (correcao) {
+    const cantos = alvos.filter((a) => a.foraDaGrade);
+    const resumo = cantos
+      .map((a) => `(${(a.alvo.x * 100).toFixed(0)}%,${(a.alvo.y * 100).toFixed(0)}%) ` +
+        `${Math.hypot((a.alvo.x - a.predicaoMedia.x) * vw, (a.alvo.y - a.predicaoMedia.y) * vh).toFixed(0)}px`)
+      .join(' · ');
+    console.log(`[calib] correção local dos cantos — resíduo do modelo global: ${resumo}`);
+  }
+}
+
+/** Correção local em vigor (cópia), para diagnóstico e teste. */
+export function getCorrecaoLocal(): CorrecaoLocal | null {
+  return correcaoLocal
+    ? { centros: correcaoLocal.centros.map((p) => ({ ...p })), alfa: correcaoLocal.alfa.map((p) => ({ ...p })), ell: correcaoLocal.ell }
+    : null;
+}
+
+/** Última predição de `mapGaze` antes da correção por dwell (fração da tela). */
+export function getUltimaPredicaoSemCorrecao(): { x: number; y: number } | null {
+  return ultimaPredicaoSemCorrecao ? { ...ultimaPredicaoSemCorrecao } : null;
+}
+
 function trainScalersAndRegressors(trainingProfile: CalibrationPoint[]): TrainingSummary {
   const trainFeaturesLeft  = trainingProfile.map(p => p.featuresLeft);
   const trainFeaturesRight = trainingProfile.map(p => p.featuresRight);
@@ -3086,6 +3310,11 @@ function trainScalersAndRegressors(trainingProfile: CalibrationPoint[]): Trainin
   );
   // O modelo novo recomeça os dois relógios na referência em que foi treinado.
   referenciaLenta.iniciar({ pose: calibrationReferencePose, centro: calibrationReferenceCenter });
+
+  // Correção local dos cantos: precisa do modelo E das referências prontas,
+  // porque mede a predição no mesmo ponto do pipeline em que o `mapGaze` a
+  // aplica (depois de pose e translação).
+  ajustarCorrecaoDosCantos(trainingProfile, gruposDeAlvo, vw, vh);
 
   lastFitDiagnostics = computeFitDiagnostics(
     trainFeaturesLeft, trainFeaturesRight, trainTargets, trainingProfile,
@@ -3284,7 +3513,9 @@ export function computeFitDiagnostics(
     poseMean,
     poseStd,
     poseDrift: getSessionPoseDrift(),
-    gridDiagnosis: diagnosticarGrade(looByTarget),
+    // Só a grade interna: o LOO dos cantos da tela é extrapolação por
+    // construção e dispararia "alvo inaprendível" em toda calibração de 13.
+    gridDiagnosis: diagnosticarGrade(looByTarget.filter((t) => naGradeInterna(t))),
     l2csValidFraction,
     pesos: ultimoResumoDePesos,
     tempoUtilPorAlvoMs: [...tempoUtilPorAlvoMs],
@@ -3303,7 +3534,8 @@ export function computeFitDiagnostics(
 // Detecção de ponto outlier na calibração.
 //
 // Motivação: hoje só existe rejeição de outlier DENTRO de um ponto (variância
-// intra-ponto → warn; deriva de pose → rejeita frame). Um ponto INTEIRO mal
+// intra-ponto → warn; a deriva de pose já não rejeita quadro nenhum, só
+// conta). Um ponto INTEIRO mal
 // coletado (usuário olhou pro lado durante os 3 s de coleta) entra no treino
 // sem sinalização, empurra o Ridge por muitos px, e o único aviso é o erro
 // grande depois do accuracy test — tarde demais.
@@ -3686,7 +3918,10 @@ function persistActiveProfileToRegistry(summary: TrainingSummary): void {
   // não silenciar, sem deixar o perfil sem quality.
   let outlierSummary: NonNullable<StoredCalibrationProfile['quality']>['outlierTargets'] | undefined;
   try {
-    const rep = detectOutlierPoints(profile);
+    // Só a grade interna, pelo mesmo motivo do diagnóstico da grade: o LOO de
+    // um canto da tela é sempre alto, e cada calibração marcaria os quatro
+    // cantos como outliers.
+    const rep = detectOutlierPoints(profile.filter((p) => naGradeInterna({ x: p.screenX, y: p.screenY })));
     if (rep.reason) {
       console.log(`[calib] outlier detection SKIPPED (${rep.reason}, N=${rep.targetCount} alvos)`);
     } else {
@@ -3943,8 +4178,9 @@ export function mapGaze(
 ): { x: number; y: number } | null {
   if (!regressorLeft || !regressorRight) return null;
 
-  // A compensação de distância corrige a SAÍDA, não as features (ver o bloco
-  // no fim desta função e o cabeçalho de `distanceCompensation.ts`).
+  // A compensação de distância corrige a SAÍDA, não as features (ver a
+  // sequência distância → pose → translação → cantos → dwell → clamp logo
+  // abaixo e o cabeçalho de `distanceCompensation.ts`).
   const scaledLeft  = featureScalerLeft.transformSingle(maybeExpandSingle(featuresLeft));
   const scaledRight = featureScalerRight.transformSingle(maybeExpandSingle(featuresRight));
 
@@ -4055,7 +4291,13 @@ export function mapGaze(
   // distância, pose e translação. Aplicá-la antes delas faria o deslocamento
   // aprendido ser reprocessado pelas compensações, e ele passaria a perseguir
   // um alvo móvel.
-  const comDwell = corrigirPorDwell({ x: comPose.x, y: comPose.y }, performance.now());
+  // Correção local dos cantos (`correcaoLocal.ts`): depois das compensações
+  // geométricas, porque foi medida depois delas; antes do dwell, porque o dwell
+  // aprende o que SOBRA. Longe dos cantos ela vale ~0.
+  const comCantos = EXPERIMENT.correcaoLocal ? aplicarCorrecaoLocal(correcaoLocal, comPose) : comPose;
+  ultimaPredicaoSemCorrecao = comCantos;
+
+  const comDwell = corrigirPorDwell({ x: comCantos.x, y: comCantos.y }, performance.now());
 
   // Registrado ANTES do clamp: depois dele a informação some, e é exatamente
   // essa informação que explica o cursor parado na borda.

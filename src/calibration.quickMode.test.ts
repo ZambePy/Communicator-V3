@@ -5,16 +5,22 @@ import {
   getCalibrationMode,
   CALIBRATION_TARGETS_FULL,
   CALIBRATION_TARGETS_QUICK,
+  INSET_CANTOS_PADRAO,
 } from './calibration';
+
+/** Os quatro cantos da tela que o perfil padrão soma à grade interna. */
+const ehCantoDaTela = (t: { x: number; y: number }) =>
+  (t.x === INSET_CANTOS_PADRAO || t.x === 1 - INSET_CANTOS_PADRAO) &&
+  (t.y === INSET_CANTOS_PADRAO || t.y === 1 - INSET_CANTOS_PADRAO);
 
 describe('modo rápido de calibração', () => {
   beforeEach(() => {
-    // Sanity: os targets exportados são realmente 9 e 4.
-    expect(CALIBRATION_TARGETS_FULL).toHaveLength(9);
+    // Sanity: os targets exportados são 13 (grade 3×3 + 4 cantos da tela) e 4.
+    expect(CALIBRATION_TARGETS_FULL).toHaveLength(13);
     expect(CALIBRATION_TARGETS_QUICK).toHaveLength(4);
   });
 
-  it('sem calibração ativa: getCalibrationTargets() devolve os 9 pontos (default full)', () => {
+  it('sem calibração ativa: getCalibrationTargets() devolve os 13 pontos (default full)', () => {
     // Módulo pode carregar já com estado sujo de outro teste — força reset
     // via um startCalibrationMode explícito não ajuda porque queremos testar
     // o caminho "nada iniciado". A garantia é: `mode` cai pra null ao final
@@ -22,14 +28,14 @@ describe('modo rápido de calibração', () => {
     // de que o estado ficou preso — bug real, não flake.
     if (getCalibrationMode() === null) {
       expect(getCalibrationTargets()).toBe(CALIBRATION_TARGETS_FULL);
-      expect(getCalibrationTargets()).toHaveLength(9);
+      expect(getCalibrationTargets()).toHaveLength(13);
     }
   });
 
-  it('startCalibrationMode() (sem opts) → modo full, 9 alvos', () => {
+  it('startCalibrationMode() (sem opts) → modo full, 13 alvos', () => {
     startCalibrationMode();
     expect(getCalibrationMode()).toBe('full');
-    expect(getCalibrationTargets()).toHaveLength(9);
+    expect(getCalibrationTargets()).toHaveLength(13);
   });
 
   it('startCalibrationMode({ quick: true }) → modo quick, 4 alvos (cantos)', () => {
@@ -61,9 +67,12 @@ describe('modo rápido de calibração', () => {
     expect(keys.size).toBe(4);
   });
 
-  it('modo full: grade 3×3 com centro exato e cantos coincidindo com o quick', () => {
+  it('modo full: grade 3×3 com centro exato, os 4 cantos da tela, e cantos da grade coincidindo com o quick', () => {
     startCalibrationMode();
-    const full = getCalibrationTargets();
+    const todos = getCalibrationTargets();
+    // Os 4 cantos da tela entram além da grade, a 5 %/95 %.
+    expect(todos.filter(ehCantoDaTela)).toHaveLength(4);
+    const full = todos.filter((t) => !ehCantoDaTela(t));
     const xs = [...new Set(full.map((t) => t.x))].sort((a, b) => a - b);
     const ys = [...new Set(full.map((t) => t.y))].sort((a, b) => a - b);
     expect(xs).toHaveLength(3);
@@ -102,6 +111,6 @@ describe('modo rápido de calibração', () => {
     expect(getCalibrationMode()).toBe('quick');
     startCalibrationMode(); // full sem opts
     expect(getCalibrationMode()).toBe('full');
-    expect(getCalibrationTargets()).toHaveLength(9);
+    expect(getCalibrationTargets()).toHaveLength(13);
   });
 });

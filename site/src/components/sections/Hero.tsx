@@ -1,103 +1,104 @@
 import { Link } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
-import { Logo } from '@/components/layout/Logo'
-import { Typewriter } from '@/components/effects/Typewriter'
 import { Reveal } from '@/components/effects/Reveal'
 import { Button } from '@/components/ui/Button'
-import { BETA, BETA_CTA, BRAND, HERO_PHRASES, TRIAL_DAYS } from '@/data/content'
+import { Icon } from '@/components/ui/Icon'
+import { GazeStory } from './GazeStory'
+import {
+  BETA,
+  BETA_CTA,
+  HERO,
+  PLATFORMS,
+  PRIVACY_LINE,
+  TRIAL_DAYS,
+} from '@/data/content'
 import { usePlans } from '@/hooks/usePlans'
 import './hero.css'
 
+/**
+ * Hero da home: a mensagem e a chamada à esquerda (sempre na primeira
+ * dobra, no desktop e no celular) e, à direita, a ilustração animada de
+ * quem o produto atende — uma pessoa em cadeira de rodas usando o
+ * IrisFlow com o olhar, com a tela inicial de verdade no monitor.
+ */
 export function Hero() {
   const { cheapest } = usePlans()
 
   return (
     <section className="hero on-dark">
-      <AmbientBackground particles={26} />
+      <AmbientBackground particles={18} />
 
       <div className="container hero__inner">
-        <Reveal anim="zoom" duration={1000}>
-          <Logo variant="full" tone="negativo" size="xl" link={false} className="hero__logo" />
-        </Reveal>
+        <div className="hero__copy">
+          <Reveal anim="fade">
+            <span className="eyebrow hero__eyebrow">{HERO.eyebrow}</span>
+          </Reveal>
 
-        <Reveal anim="fade" delay={260}>
-          <p className="hero__tagline">Seu olhar tem voz.</p>
-        </Reveal>
-
-        {/* Uma janela por linha: cada máscara revela exatamente uma linha,
-            então o texto é quebrado à mão em vez de deixado ao acaso. */}
-        <h1 className="hero__title">
-          <span className="hero__title-mask">
-            <span className="hero__title-line" style={{ animationDelay: '420ms' }}>
-              Tecnologia assistiva
+          <h1 className="hero__title">
+            <span className="hero__title-mask">
+              <span className="hero__title-line" style={{ animationDelay: '120ms' }}>
+                {HERO.title}
+              </span>
             </span>
-          </span>
-          <span className="hero__title-mask">
-            <span className="hero__title-line" style={{ animationDelay: '520ms' }}>
-              que devolve a fala
-            </span>
-          </span>
-          <span className="hero__title-mask">
-            <span className="hero__title-line" style={{ animationDelay: '620ms' }}>
-              a quem <span className="accent-text">ainda tem o olhar</span>.
-            </span>
-          </span>
-        </h1>
+          </h1>
 
-        <Reveal anim="up" delay={700}>
-          <p className="lead hero__lead">
-            Quando alguém perde a fala, a família não sai atrás de tecnologia. Sai atrás de um
-            jeito de continuar conversando. O {BRAND.product} transforma o movimento dos olhos em
-            palavra e em controle do computador, usando a webcam que já está em casa — sem
-            equipamento de dezenas de milhares de reais e sem enviar uma única imagem para a
-            internet.
-          </p>
-        </Reveal>
+          <Reveal anim="up" delay={320}>
+            <p className="lead hero__lead">{HERO.lead}</p>
+          </Reveal>
 
-        <Reveal anim="up" delay={820}>
-          <div className="hero__say" aria-label="Exemplo de frase composta pelo olhar">
-            <span className="hero__say-label">escrevendo com o olhar</span>
-            <p className="hero__say-text">
-              <Typewriter phrases={HERO_PHRASES} />
+          <Reveal anim="up" delay={420}>
+            {/* data-sticky-hide: enquanto estes botões estão na tela, a barra
+                fixa de CTA do celular fica escondida (StickyCta). */}
+            <div className="hero__actions" data-sticky-hide>
+              {BETA.ativo ? (
+                <Button to={BETA_CTA.to} size="lg">
+                  {HERO.primary}
+                </Button>
+              ) : (
+                <Button to="/cadastro" size="lg">
+                  Testar grátis por {TRIAL_DAYS} dias
+                </Button>
+              )}
+              <Button to="/como-funciona" variant="secondary" size="lg">
+                {HERO.secondary}
+              </Button>
+            </div>
+          </Reveal>
+
+          <Reveal anim="fade" delay={540}>
+            <p className="hero__privacy">
+              <Icon name="cadeado" size={18} />
+              <span>{PRIVACY_LINE}</span>
             </p>
-          </div>
-        </Reveal>
+          </Reveal>
 
-        <Reveal anim="up" delay={920}>
-          <div className="hero__actions">
-            {BETA.ativo ? (
-              <Button to={BETA_CTA.to} size="lg">
-                {BETA_CTA.labelLong}
-              </Button>
-            ) : (
-              <Button to="/cadastro" size="lg">
-                Testar grátis por {TRIAL_DAYS} dias
-              </Button>
-            )}
-            <Button to="/como-funciona" variant="secondary" size="lg">
-              Ver como funciona
-            </Button>
-          </div>
-        </Reveal>
+          <Reveal anim="fade" delay={640}>
+            <p className="hero__fine">
+              {BETA.ativo ? (
+                <>
+                  Beta gratuita · Sem cartão · {PLATFORMS.long} ·{' '}
+                  <Link to={BETA_CTA.to} className="underline-grow">
+                    como participar
+                  </Link>
+                </>
+              ) : (
+                <>
+                  Sem cartão para começar · Sem fidelidade · a partir de R$ {cheapest.price} por
+                  mês depois da avaliação ·{' '}
+                  <Link to="/planos" className="underline-grow">
+                    ver os três planos
+                  </Link>
+                </>
+              )}
+            </p>
+          </Reveal>
+        </div>
 
-        <Reveal anim="fade" delay={1040}>
-          <p className="hero__fine">
-            {BETA.ativo ? (
-              <>
-                Beta fechada e gratuita · Sem cartão · Sem cobrança ·{' '}
-                <Link to={BETA_CTA.to} className="underline-grow">
-                  como participar
-                </Link>
-              </>
-            ) : (
-              <>
-                Sem cartão para começar · Sem fidelidade · a partir de R$ {cheapest.price} por
-                mês depois da avaliação ·{' '}
-                <Link to="/planos" className="underline-grow">
-                  ver os três planos
-                </Link>
-              </>
-            )}
+        <Reveal anim="zoom" delay={260} duration={1100} className="hero__mock">
+          <GazeStory />
+          <p className="hero__mock-caption">
+            Olhar fixo por um instante no botão, e ele é acionado. No monitor, a tela inicial do
+            IrisFlow.
           </p>
         </Reveal>
       </div>

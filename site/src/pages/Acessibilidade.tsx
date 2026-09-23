@@ -21,16 +21,7 @@ export default function Acessibilidade() {
             {A11Y_PRINCIPLES.map((p, i) => (
               <Reveal key={p.n} anim="up" delay={i * 100}>
                 <Card as="div">
-                  <span
-                    style={{
-                      fontFamily: 'var(--font-display)',
-                      fontSize: '2.6rem',
-                      lineHeight: 1,
-                      color: 'var(--ok)',
-                    }}
-                  >
-                    {p.n}
-                  </span>
+                  <span className="big-number">{p.n}</span>
                   <h3>{p.title}</h3>
                   <p>{p.text}</p>
                 </Card>
@@ -46,12 +37,12 @@ export default function Acessibilidade() {
             <span className="eyebrow">O retorno em três estágios</span>
           </Reveal>
           <Reveal anim="up">
-            <h2 style={{ maxWidth: '22ch', marginBottom: 'var(--sp-4)' }}>
+            <h2 className="section-title" style={{ '--title-w': '22ch' } as React.CSSProperties}>
               Passe o cursor sobre os alvos abaixo, ou chegue até eles pela tecla Tab.
             </h2>
           </Reveal>
           <Reveal anim="up" delay={120}>
-            <p className="lead" style={{ maxWidth: '70ch', marginBottom: 'var(--sp-6)' }}>
+            <p className="lead section-lead section-lead--tight">
               Cada alvo mostra o contorno de destaque ao receber o olhar, muda de cor durante a
               seleção e completa um aro de progresso até confirmar. Compare os três tempos de
               fixação que o produto oferece.
@@ -71,16 +62,7 @@ export default function Acessibilidade() {
           </div>
 
           <Reveal anim="fade" delay={420}>
-            <p
-              style={{
-                marginTop: 'var(--sp-5)',
-                maxWidth: '84ch',
-                fontSize: '0.95rem',
-                color: 'var(--text-dim)',
-                paddingLeft: 'var(--sp-5)',
-                borderLeft: '2px solid var(--line)',
-              }}
-            >
+            <p className="aside-note">
               O tempo padrão de 1500 ms se mostrou adequado nos testes de usabilidade já
               realizados, mas a IrisFlow mantém as opções de 800 e 2500 ms porque o tempo ideal varia
               com a fadiga e com o estágio da condição.
@@ -95,7 +77,7 @@ export default function Acessibilidade() {
             <h2>Compromissos deste site</h2>
           </Reveal>
           <Reveal anim="up" delay={120}>
-            <ul style={{ fontSize: '1rem' }}>
+            <ul>
               <li>Contraste elevado entre texto e fundo, sem texto essencial em corpo reduzido.</li>
               <li>Foco visível em todo elemento interativo, com contorno de três pixels.</li>
               <li>Navegação completa por teclado, com atalho para pular direto ao conteúdo.</li>
@@ -111,7 +93,7 @@ export default function Acessibilidade() {
             </ul>
           </Reveal>
           <Reveal anim="fade" delay={240}>
-            <p style={{ fontSize: '0.95rem', color: 'var(--text-dim)' }}>
+            <p className="aside-note" style={{ marginTop: 'var(--sp-4)' }}>
               Encontrou uma barreira? Escreva para irisflowteam@gmail.com. Corrigir acessibilidade
               é prioridade acima de qualquer item do roteiro.
             </p>

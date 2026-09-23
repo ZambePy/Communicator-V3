@@ -1,17 +1,44 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { Check } from 'lucide-react';
 import { GazeButton } from './ui/GazeButton';
-import { missaoAtiva, abandonarMissao, type Missao } from '../pages/tutorial/missao';
+import {
+  abandonarMissao,
+  aoMudarMissao,
+  missaoAtiva,
+  missaoCumprida,
+  passoGuardado,
+  type Missao,
+} from '../pages/tutorial/missao';
+import { passoDaMissao } from '../pages/tutorial/passos';
 
 /**
- * Faixa de "você está no tutorial" — mostrada NA TELA REAL enquanto uma missão
- * do tutorial está em curso.
+ * Faixa de "você está no tutorial" — mostrada NA TELA REAL enquanto a pessoa
+ * está no passo do tutorial que pede esta missão.
  *
  * Existe por um motivo bem concreto: o tutorial manda a pessoa para o teclado
  * de verdade, e sem esta faixa ela chega lá sem saber por quê, sem saber o que
  * precisa fazer para o tutorial continuar, e — o pior — sem caminho de volta
  * que não seja adivinhar. Um paciente que só tem o olhar como entrada não pode
  * ficar sem saída visível.
+ *
+ * ## Por que ela é REATIVA e olha o PASSO, não só a missão ativa
+ *
+ * A versão anterior lia `missaoAtiva()` uma vez na montagem. Dois defeitos:
+ *
+ *   1. `cumprirMissao` zera a missão ativa. A tela que cumpre a missão (os
+ *      jogos, o teclado) é a mesma em que a faixa está montada — então, no
+ *      instante em que a pessoa fazia a coisa certa, a faixa ou ficava com o
+ *      texto velho ou, ao remontar (jogo → voltar ao menu de jogos), sumia.
+ *      Resultado: a pessoa cumpria a missão e ficava fora do tutorial, sem
+ *      volta pelo olhar.
+ *   2. Nada avisava a faixa quando o estado mudava.
+ *
+ * Agora ela aparece enquanto `passoGuardado()` for o passo desta missão (o
+ * passo só é esquecido quando a pessoa sai do tutorial), troca o rótulo para
+ * "Feito — voltar ao tutorial" quando a missão foi cumprida, e assina o evento
+ * que `missao.ts` dispara a cada mudança.
  *
  * Três coisas, e só três: o que fazer, que isto é parte do tutorial, e como
  * voltar. A instrução vem de quem chamou, porque só o passo sabe o que pediu.
@@ -21,7 +48,7 @@ import { missaoAtiva, abandonarMissao, type Missao } from '../pages/tutorial/mis
  * um tremor vertical.
  */
 export const FaixaDeMissao: React.FC<{
-  /** A missão que esta tela cumpre. A faixa só aparece se for a ativa. */
+  /** A missão que esta tela cumpre. A faixa só aparece no passo dela. */
   missao: Missao;
   /** O que a pessoa precisa fazer aqui, em uma frase. */
   instrucao: string;
@@ -32,28 +59,49 @@ export const FaixaDeMissao: React.FC<{
    * reflexa, que é exatamente o que aquela tela foi desenhada para evitar.
    */
   tom?: 'padrao' | 'escuro';
-}> = ({ missao, instrucao, tom = 'padrao' }) => {
+  /**
+   * Classe e estilo extras no contêiner. Existe para a tela que põe a faixa
+   * no TOPO (o teclado, sem cabeçalho canônico) passar `reserva-emergencia`:
+   * sem isso o botão "Voltar ao tutorial" caía exatamente embaixo do botão de
+   * Emergência, que é fixo no canto superior direito.
+   */
+  className?: string;
+  style?: React.CSSProperties;
+}> = ({ missao, instrucao, tom = 'padrao', className, style }) => {
   const navigate = useNavigate();
-  // Lido uma vez na montagem e depois só quando a tela avisa: `sessionStorage`
-  // não emite eventos para a própria aba, então observar em intervalo seria
-  // custo por quadro para uma coisa que muda no máximo duas vezes por sessão.
-  const [ativa, setAtiva] = useState<Missao | null>(null);
+  const { t } = useTranslation();
+
+  const lerEstado = useCallback(() => {
+    const passo = passoGuardado();
+    const nestePasso = passo !== null && passo === passoDaMissao(missao);
+    // `missaoAtiva()` cobre o caso de um passo guardado divergente (não deve
+    // acontecer, mas custa nada): se a missão ativa é esta, a faixa aparece.
+    return {
+      visivel: nestePasso || missaoAtiva() === missao,
+      cumprida: missaoCumprida(missao),
+    };
+  }, [missao]);
+
+  const [estado, setEstado] = useState(lerEstado);
 
   useEffect(() => {
-    setAtiva(missaoAtiva());
-  }, []);
+    setEstado(lerEstado());
+    return aoMudarMissao(() => setEstado(lerEstado()));
+  }, [lerEstado]);
 
-  if (ativa !== missao) return null;
+  if (!estado.visivel) return null;
 
   const escuro = tom === 'escuro';
   const cores = escuro
     ? { fundo: '#151B24', borda: '#232C3A', texto: '#EDF1F7' }
-    : { fundo: 'var(--tint-info-bg)', borda: 'var(--tint-info-border)', texto: 'var(--tint-info-text)' };
+    : estado.cumprida
+      ? { fundo: 'var(--tint-ok-bg)', borda: 'var(--tint-ok-border)', texto: 'var(--tint-ok-text)' }
+      : { fundo: 'var(--tint-info-bg)', borda: 'var(--tint-info-border)', texto: 'var(--tint-info-text)' };
 
   const voltar = () => {
     // Voltar sem cumprir é legítimo e não é fracasso: o passo continua lá,
     // com o convite, e a pessoa pode tentar de novo ou seguir em frente.
-    abandonarMissao();
+    if (!estado.cumprida) abandonarMissao();
     navigate('/tutorial');
   };
 
@@ -61,7 +109,9 @@ export const FaixaDeMissao: React.FC<{
     <div
       role="status"
       aria-live="polite"
+      className={className}
       style={{
+        ...style,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -75,8 +125,19 @@ export const FaixaDeMissao: React.FC<{
         fontFamily: 'system-ui, sans-serif',
       }}
     >
-      <span style={{ fontSize: '1.05rem', lineHeight: 1.45, fontWeight: 700, flex: 1 }}>
-        {instrucao}
+      <span
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.6rem',
+          fontSize: '1.05rem',
+          lineHeight: 1.45,
+          fontWeight: 700,
+          flex: 1,
+        }}
+      >
+        {estado.cumprida && <Check size={22} aria-hidden="true" />}
+        {estado.cumprida ? t('tutorial.faixa.cumprida') : instrucao}
       </span>
       <GazeButton
         type="button"
@@ -92,7 +153,7 @@ export const FaixaDeMissao: React.FC<{
           fontWeight: 700,
         }}
       >
-        Voltar ao tutorial
+        {estado.cumprida ? t('tutorial.faixa.feito') : t('tutorial.faixa.voltar')}
       </GazeButton>
     </div>
   );

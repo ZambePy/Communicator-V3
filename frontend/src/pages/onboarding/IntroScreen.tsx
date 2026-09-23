@@ -7,6 +7,7 @@ import { ArrowRight } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { LanguageSwitcher } from '../../components/ui/LanguageSwitcher';
 import { INTRO_SEEN_KEY } from './bootDestination';
+import { AvisoDeTelaCheia } from '../../components/AvisoDeTelaCheia';
 
 /**
  * Boas-vindas — a primeira abertura.
@@ -39,12 +40,15 @@ export const IntroScreen: React.FC = () => {
       style={{
         minHeight: '100vh',
         background: 'var(--settings-bg)',
+        backgroundImage: 'var(--page-bg)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '2.5rem 2rem',
-        gap: '3rem',
+        // Embaixo, espaço para o seletor de idioma (absoluto): com o aviso de
+        // tela cheia, a 1280×720 os dois se encostavam.
+        padding: '2.5rem 2rem 5.5rem',
+        gap: 'clamp(1.5rem, 4vh, 3rem)',
         position: 'relative',
       }}
     >
@@ -57,7 +61,7 @@ export const IntroScreen: React.FC = () => {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: '2rem',
+          gap: 'clamp(1.1rem, 3vh, 2rem)',
           textAlign: 'center',
         }}
       >
@@ -90,17 +94,18 @@ export const IntroScreen: React.FC = () => {
               src={logoNegativo}
               alt="IrisFlow"
               draggable={false}
+              className="wordmark-negativo"
               style={{ width: 'min(300px, 60vw)', height: 'auto', display: 'block' }}
             />
             <span style={{ opacity: 0.8 }}>Communicator</span>
           </h1>
           <p
+            className="t-body-lg"
             style={{
               margin: 0,
-              fontSize: '1.35rem',
-              lineHeight: 1.5,
-              color: 'var(--color-text-base)',
-              opacity: 0.85,
+              fontSize: '1.4rem',
+              maxWidth: '34ch',
+              color: 'var(--color-text-muted)',
             }}
           >
             {t('onboarding.intro.tagline')}
@@ -113,12 +118,16 @@ export const IntroScreen: React.FC = () => {
           style={{
             padding: '1.25rem 3.5rem',
             fontSize: '1.25rem',
-            borderRadius: '1.5rem',
+            borderRadius: 'var(--radius-lg)',
             minHeight: 72,
           }}
         >
           {t('onboarding.intro.start')} <ArrowRight size={22} aria-hidden="true" />
         </PrimaryButton>
+
+        {/* Primeira abertura: a tela cheia é de propósito, e o cuidador
+            precisa saber como sair antes de precisar. */}
+        <AvisoDeTelaCheia style={{ maxWidth: 560 }} />
       </div>
 
       <div

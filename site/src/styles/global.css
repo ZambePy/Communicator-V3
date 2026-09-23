@@ -8,6 +8,7 @@
 }
 
 html {
+  color-scheme: dark;
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
   background: var(--bg);
@@ -100,15 +101,12 @@ hr {
   margin: var(--sp-6) 0;
 }
 
-/* ---------- foco visível: requisito de acessibilidade, não enfeite ---------- */
+/* ---------- foco visível: requisito de acessibilidade, não enfeite ----------
+   Teal claro: o azul institucional some sobre o fundo marinho. */
 :focus-visible {
-  outline: 3px solid var(--blue-500);
+  outline: 3px solid var(--teal-300);
   outline-offset: 3px;
   border-radius: 6px;
-}
-
-.on-dark :focus-visible {
-  outline-color: var(--teal-300);
 }
 
 ::selection {
@@ -194,16 +192,82 @@ hr {
   opacity: 0.55;
 }
 
-/* Palavra destacada dentro de um título. */
-.accent-text {
-  color: var(--blue);
+/* ---------- padrões de seção repetidos em várias páginas ----------
+   Substituem os estilos inline que se acumulavam nas páginas: título
+   com largura de leitura, lead com margem inferior, nota lateral e
+   número grande de destaque. */
+.section-title {
+  max-width: var(--title-w, 26ch);
+  margin-bottom: var(--sp-4);
 }
 
-.on-dark .accent-text {
+.section-lead {
+  max-width: var(--lead-w, 70ch);
+  margin-bottom: var(--sp-7);
+}
+
+.section-lead--tight {
+  margin-bottom: var(--sp-6);
+}
+
+.aside-note {
+  margin: var(--sp-6) 0 0;
+  max-width: 88ch;
+  font-size: 0.96rem;
+  color: var(--text-dim);
+  padding-left: var(--sp-5);
+  border-left: 2px solid var(--line);
+}
+
+.big-number {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 2.6rem;
+  line-height: 1;
+  color: var(--ok);
+}
+
+.link-ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.stack {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.actions-row {
+  display: flex;
+  gap: var(--sp-3);
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: var(--sp-5);
+}
+
+/* Palavra destacada dentro de um título. `.gradient-text` era usada em
+   títulos de seção (Planos, Comparativo) sem regra fora do AnimatedHeadline
+   — o trecho saía sem destaque nenhum. Agora as duas classes são iguais. */
+.gradient-text,
+.accent-text {
   background-image: linear-gradient(96deg, var(--blue-300), var(--teal-300));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* Dica sob o botão de enviar enquanto ele está desabilitado: diz o que
+   falta, em vez de deixar a pessoa adivinhando. */
+.form-hint {
+  margin: var(--sp-2) 0 0;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.noscript {
+  padding: var(--sp-5);
+  color: var(--text);
 }
 
 .sr-only {

@@ -49,6 +49,8 @@ const KB = {
    *  claro e cansa numa sessão longa; este recua sem brilhar. */
   ground: '#0A0D12',
   key: '#151B24',
+  /** Um degrau acima da tecla: a superfície de "Falar", a ação que compromete. */
+  keyRaised: '#1B2431',
   keyEdge: '#232C3A',
   /** Contraste cheio — nível 2, a letra que vai ser escrita. */
   glyph: '#EDF1F7',
@@ -79,6 +81,13 @@ const GRID_GAP = 18;
  *  2,6 s contínuos é decisão. */
 const DWELL_HOME_MS = 2600;
 const DWELL_BACK_MS = 2000;
+/** "Falar" na barra superior: fala o que está escrito sem entrar no grupo de
+ *  ações. Dwell mais longo que uma tecla — falar por engano custa mais que
+ *  uma letra errada — e fica à ESQUERDA, longe do fim da linha de composição,
+ *  onde o olho pousa ao conferir o texto. */
+const DWELL_SPEAK_MS = 2000;
+/** Duração do brilho de "falou" (ver `.kb-compose--falou` em index.css). */
+const FALOU_MS = 700;
 
 const FS_LETTER = '6rem';
 const FS_GROUP = '3.4rem';
@@ -139,6 +148,9 @@ export const KeyboardScreen: React.FC = () => {
   const navigate = useNavigate();
   const [text, setText] = useState('');
   const [lastPressed, setLastPressed] = useState<string | null>(null);
+  /** A linha de composição acabou de ser falada: brilho curto, uma vez. */
+  const [falou, setFalou] = useState(false);
+  const falouTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   /**
    * Frases inteiras. É a diferença entre economizar letras e economizar a frase:
@@ -183,6 +195,7 @@ export const KeyboardScreen: React.FC = () => {
   useEffect(() => {
     return () => {
       if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+      if (falouTimeoutRef.current) clearTimeout(falouTimeoutRef.current);
     };
   }, []);
 
@@ -238,6 +251,13 @@ export const KeyboardScreen: React.FC = () => {
       // Voz clonada do paciente quando pronta; senão a do sistema.
       void falar(text, { rate: 0.9 }).catch((e) => console.warn('[voz] falha ao falar:', e));
       triggerFeedback('speak');
+      // Reinicia o brilho se "Falar" vier duas vezes seguidas.
+      setFalou(false);
+      if (falouTimeoutRef.current) clearTimeout(falouTimeoutRef.current);
+      requestAnimationFrame(() => {
+        setFalou(true);
+        falouTimeoutRef.current = setTimeout(() => setFalou(false), FALOU_MS);
+      });
       registrarFalaDoPaciente(text);
       logSentence(text);
       // vai para o celular do cuidador (se a conta estiver ligada)
@@ -294,8 +314,17 @@ export const KeyboardScreen: React.FC = () => {
       .map((texto) => ({ texto, frase: false })),
   ].slice(0, 6);
 
-  const keyClass = (variante: 'group' | 'letter' | 'words', pressed = false) =>
-    'kb-key kb-key--' + variante + (pressed ? ' kb-key--fired' : '');
+  const keyClass = (variante: 'group' | 'letter' | 'words', pressed = false, extra = '') =>
+    'kb-key kb-key--' + variante + (pressed ? ' kb-key--fired' : '') + (extra ? ' ' + extra : '');
+
+  /** Classe de hierarquia de uma tecla do nível 2 (ver `.kb-key--*` no CSS). */
+  const classeDaAcao = (item: string): string => {
+    if (item === 'Falar') return 'kb-key--falar';
+    if (item === 'Apagar') return 'kb-key--apagar';
+    if (item === 'Limpar') return 'kb-key--limpar';
+    if (item === 'Espaço') return 'kb-key--espaco';
+    return '';
+  };
 
   const cell: React.CSSProperties = { height: '100%', width: '100%' };
 
@@ -385,7 +414,11 @@ export const KeyboardScreen: React.FC = () => {
               <span
                 key={word}
                 style={{
-                  fontSize: FS_SUGGESTION,
+                  // Na PRÉVIA (seis por tecla de grupo) a fonte acompanha a
+                  // altura: a 1366×768, com a faixa do tutorial, três palavras
+                  // + "+ 3 frases" em 2,5rem passavam da tecla e o topo da
+                  // primeira palavra saía cortado.
+                  fontSize: `min(${FS_SUGGESTION}, 4.2vh)`,
                   fontWeight: 500,
                   lineHeight: 1.24,
                 }}
@@ -399,7 +432,7 @@ export const KeyboardScreen: React.FC = () => {
               <span
                 style={{
                   marginTop: '0.35rem',
-                  fontSize: '1.5rem',
+                  fontSize: 'min(1.5rem, 2.6vh)',
                   fontWeight: 600,
                   letterSpacing: '0.08em',
                   textTransform: 'uppercase',
@@ -442,26 +475,37 @@ export const KeyboardScreen: React.FC = () => {
           const frase = activeGroup === 5 && ehFrase(item);
           if (activeGroup === 5)
             content = (
-              <span
-                style={{
-                  ...letterGlyph,
-                  // A frase é maior que a palavra e precisa caber; o corpo menor
-                  // e a quebra em duas linhas evitam corte no meio da palavra.
-                  fontSize: frase ? '1.9rem' : FS_SUGGESTION,
-                  lineHeight: frase ? 1.2 : 1,
-                  padding: frase ? '0 1rem' : 0,
-                  textAlign: 'center',
-                  color: frase ? KB.emberBright : undefined,
-                }}
-              >
-                {item}
+              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <span
+                  style={{
+                    ...letterGlyph,
+                    // A frase é maior que a palavra e precisa caber; o corpo menor
+                    // e a quebra em duas linhas evitam corte no meio da palavra.
+                    fontSize: frase ? '1.9rem' : FS_SUGGESTION,
+                    lineHeight: frase ? 1.2 : 1,
+                    padding: frase ? '0 1rem' : 0,
+                    textAlign: 'center',
+                    color: frase ? KB.emberBright : undefined,
+                  }}
+                >
+                  {item}
+                </span>
+                {/* A etiqueta diz o que a tecla escreve: uma palavra ou a frase
+                    inteira. É a diferença entre completar e substituir. */}
+                <span className="kb-key__etiqueta" aria-hidden="true">
+                  {frase ? 'frase inteira' : 'palavra'}
+                </span>
               </span>
             );
 
           return (
             <GazeButton
               key={index}
-              className={keyClass('letter', lastPressed === item)}
+              className={keyClass(
+                'letter',
+                lastPressed === item,
+                activeGroup === 5 ? 'kb-key--sugestao' : classeDaAcao(item),
+              )}
               onClick={() =>
                 activeGroup === 5
                   ? frase
@@ -517,6 +561,7 @@ export const KeyboardScreen: React.FC = () => {
             // Consumidas pelo bloco .kb-* em index.css
             '--kb-ground': KB.ground,
             '--kb-key': KB.key,
+            '--kb-key-raised': KB.keyRaised,
             '--kb-key-edge': KB.keyEdge,
             '--kb-glyph': KB.glyph,
             '--kb-glyph-dim': KB.glyphDim,
@@ -530,18 +575,31 @@ export const KeyboardScreen: React.FC = () => {
             barra superior e no tom escuro do teclado: uma mancha clara na
             periferia dispara sacada reflexa, que é justamente o que o desenho
             desta tela evita. Ocupa altura própria e some junto com a missão. */}
-        <FaixaDeMissao missao="digitacao" instrucao={t('tutorial.digitacao.missao')} tom="escuro" />
+        {/* `reserva-emergencia`: sem o cabeçalho canônico, esta faixa e a
+            barra superior encostam no topo — onde fica a Emergência, que é
+            fixa e global. A classe abre o espaço dela à direita. */}
+        <FaixaDeMissao
+          missao="digitacao"
+          instrucao={t('tutorial.digitacao.missao')}
+          tom="escuro"
+          className="reserva-emergencia--caixa"
+          style={{ '--reserva-margem': GRID_GAP + 'px' }}
+        />
 
         {/* ── Barra superior: saídas à esquerda, o que está sendo escrito à
             direita. O texto ocupa o maior espaço porque é o produto da tela. */}
         <div
-          style={{
-            flex: '0 0 ' + TOPBAR_H + 'px',
-            display: 'flex',
-            alignItems: 'stretch',
-            gap: GRID_GAP,
-            boxSizing: 'border-box',
-          }}
+          className="reserva-emergencia"
+          style={
+            {
+              flex: '0 0 ' + TOPBAR_H + 'px',
+              display: 'flex',
+              alignItems: 'stretch',
+              gap: GRID_GAP,
+              boxSizing: 'border-box',
+              '--reserva-margem': GRID_GAP + 'px',
+            } as React.CSSProperties
+          }
         >
           <GazeButton
             className="kb-nav"
@@ -571,17 +629,38 @@ export const KeyboardScreen: React.FC = () => {
             </GazeButton>
           )}
 
+          {/* Falar direto da barra: só existe com texto escrito. Sem texto não
+              teria função — e alvo sem função é alvo para errar. */}
+          {text.trim().length > 0 && (
+            <GazeButton
+              className="kb-nav kb-nav--falar"
+              onClick={speak}
+              aria-label="Falar o texto"
+              data-dwell-ms={DWELL_SPEAK_MS}
+              width={NAV_W}
+              height={NAV_H}
+              style={{ flex: '0 0 auto', color: KB.ember, borderColor: KB.emberEdge }}
+            >
+              {navContent(<Speech size={46} />, 'Falar')}
+            </GazeButton>
+          )}
+
           {/* Linha de composição, alinhada ao fim: o cursor fica sempre no mesmo
               lugar, então o olho não precisa procurar onde a frase cresceu. */}
           <div
             data-no-dwell="true"
+            className={'kb-compose' + (falou ? ' kb-compose--falou' : '')}
+            data-testid="kb-compose"
             style={{
               flex: 1,
               minWidth: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: text === '' ? 'flex-start' : 'flex-end',
-              padding: '0 2.5rem',
+              // À direita, a folga é do botão de Emergência (fixo, 200 px +
+              // 3 rem da borda): sem ela o fim da frase — onde o cursor mora —
+              // ficava escondido embaixo do botão.
+              padding: '0 calc(200px + 3.5rem) 0 2.5rem',
               borderRadius: 20,
               border: '1px solid ' + KB.keyEdge,
               background: KB.key,
@@ -599,9 +678,17 @@ export const KeyboardScreen: React.FC = () => {
                 Escolha um grupo para começar
               </span>
             ) : (
-              <span className="kb-landing" key={text.length} style={{ animation: 'kb-land 160ms ease-out' }}>
-                {text}
-              </span>
+              <>
+                {/* Ondas de voz: aparecem só no instante do "falou". */}
+                <span className="kb-ondas" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span className="kb-landing" key={text.length} style={{ animation: 'kb-land 160ms ease-out' }}>
+                  {text}
+                </span>
+              </>
             )}
             <span
               className="kb-caret"

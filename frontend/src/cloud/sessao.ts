@@ -7,7 +7,7 @@
  * condições da sessão. Nada bruto — nenhuma amostra, nenhum vetor.
  *
  * Se mudar uma chave aqui, mude `AccuracySummary` em
- * irisflow-cuidador/src/data/types.ts e a tela `app/sessao/[id].tsx`.
+ * app/src/data/types.ts e a tela `app/app/sessao/[id].tsx`.
  */
 import type { AccuracyResult, RunMeta } from '@tracker/accuracy';
 import type { ResumoDePrecisao, SessaoRemota } from './types';

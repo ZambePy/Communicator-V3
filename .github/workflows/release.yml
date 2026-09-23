@@ -1,89 +1,341 @@
 name: Release
 
-# Gera o instalador COMPLETO — com o motor de voz em Python empacotado — sem
-# nenhum passo manual. Antes, `voice-engine/build-voice-engine.ps1` tinha de
-# ser rodado à mão num PowerShell antes do `electron:build`; esquecer o passo
-# produzia um instalador sem voz que só se descobria na casa do paciente.
+# Instaladores do IrisFlow para Windows, macOS e Linux + atualização automática,
+# publicados num release do GitHub. O upload usa o GITHUB_TOKEN automático, e
+# assinatura de código é opcional. Numa tag, os ÚNICOS segredos obrigatórios são
+# VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (ver "Nuvem" abaixo).
 #
-# Dispara por tag `v*` (release de verdade) ou à mão (`workflow_dispatch`)
-# para gerar um instalador de teste a partir de qualquer branch.
+# QUANDO RODA
+#   - tag `v*` (ex.: v1.0.0-beta.3): verifica, empacota as três plataformas e
+#     PUBLICA o release. A versão do app VEM DA TAG (o package.json é ajustado
+#     no runner com `npm version <tag> --no-git-tag-version`; não precisa
+#     commitar o bump).
+#   - à mão (Actions → Release → Run workflow): empacota a partir de qualquer
+#     branch e deixa os instaladores como ARTEFATO do workflow (14 dias), sem
+#     release. Serve para testar um instalador antes de criar a tag. A opção
+#     "permitir_sem_nuvem" (desligada por padrão) aceita gerar esse teste sem os
+#     segredos da nuvem.
 #
-# O que este workflow NÃO faz: assinar o executável. Sem certificado de
-# assinatura de código (EV ou OV) o SmartScreen mostra a tela azul — ver
-# docs/GATE-V2.md, item "Certificado". Quando o certificado existir, os
-# segredos `CSC_LINK` / `CSC_KEY_PASSWORD` abaixo passam a ser lidos pelo
-# electron-builder automaticamente; até lá ficam vazios e o build segue.
+# NUVEM (obrigatória numa tag): sem VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
+# o instalador NÃO falha sozinho — cai no serviço de licença SIMULADO
+# (frontend/src/services/license/index.ts), sem login real e sem app do
+# cuidador. Por isso o primeiro job confere os dois (mesmo teste do app:
+# URL https:// e chave com mais de 20 caracteres) e, faltando, para o workflow
+# antes de gastar minutos. Só o teste manual com "permitir_sem_nuvem" passa.
+#
+# O QUE O RELEASE CONTÉM (nomes FIXOS — o site linka
+# https://github.com/<repositório de releases>/releases/latest/download/<nome>):
+#   Windows  IrisFlow-Setup.exe (+ IrisFlow-Setup.exe.blockmap, latest.yml)
+#   macOS    IrisFlow-mac-arm64.dmg, IrisFlow-mac-x64.dmg,
+#            IrisFlow-mac-arm64.zip, IrisFlow-mac-x64.zip (+ .blockmap, latest-mac.yml)
+#   Linux    IrisFlow-linux-x86_64.AppImage, IrisFlow-linux-amd64.deb,
+#            IrisFlow-linux-x86_64.rpm (+ latest-linux.yml)
+# O electron-updater dos apps instalados lê os latest*.yml do release mais
+# recente e baixa o arquivo pela URL da TAG (/releases/download/vX/<nome>),
+# por isso o nome sem versão não confunde versões.
+#
+# REPOSITÓRIO DE RELEASES (onde os instaladores são publicados e de onde o app
+# instalado se atualiza):
+#   variável IRISFLOW_RELEASES_REPO (Settings → Secrets and variables →
+#   Actions → Variables), no formato dono/repo. Sem ela, o próprio repositório.
+#   É o MESMO valor que `electron/package-app.mjs` grava no app-update.yml de
+#   cada instalador — publicar num lugar e o app procurar em outro não acontece.
+#   Para a beta pública ele precisa ser PÚBLICO: o app instalado baixa sem
+#   token e o site consulta a API do GitHub sem login. (Um repositório de
+#   releases privado funciona como distribuição interna: só quem tem acesso
+#   baixa, e nem o site nem a atualização automática enxergam as versões.)
+#   Quando ele é OUTRO repositório (código privado + releases públicos), o
+#   GITHUB_TOKEN automático não escreve lá: crie o segredo RELEASES_TOKEN — um
+#   token fine-grained com acesso SÓ aos repositórios de releases (e de
+#   modelos, abaixo), permissão "Contents: Read and write". Com o próprio
+#   repositório, nada disso é preciso.
+#
+# RELEASE NORMAL, NÃO "PRÉ-LANÇAMENTO" (decisão da beta): o link
+# /releases/latest/download/ do site só enxerga o release mais recente que
+# não é rascunho nem pré-lançamento. A "beta" está no NÚMERO da versão
+# (1.0.0-beta.N) e no título. O release só é criado depois que as TRÊS
+# plataformas passaram — o site nunca aponta para um release pela metade.
+#
+# SEGREDOS (Settings → Secrets and variables → Actions → Secrets). Eles NÃO
+# aparecem pelo nome neste arquivo — os passos recebem `toJSON(secrets)` e leem
+# só o que precisam (scripts/ci-segredos-opcionais.mjs para a nuvem e a
+# assinatura; o RELEASES_TOKEN só nos passos que falam com outro repositório).
+# Por isso a extensão do VS Code não acusa "Context access might be invalid"
+# enquanto eles não forem criados.
+#   Nuvem:   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (OBRIGATÓRIOS numa tag);
+#            VITE_SITE_URL, VITE_DESKTOP_SYNC_URL (opcionais)
+#   Windows: WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD (.pfx) — só estes: o CSC_* é
+#            do macOS e não chega ao job de Windows (se chegasse, o
+#            electron-builder assinaria o .exe com o certificado da Apple) —
+#            ou AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET,
+#            AZURE_TRUSTED_SIGNING_ENDPOINT/_ACCOUNT/_PROFILE/_PUBLISHER
+#   macOS:   CSC_LINK + CSC_KEY_PASSWORD (Developer ID, .p12), APPLE_ID +
+#            APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID (notarização)
+#   Falhas:  IRISFLOW_CRASH_URL (envio de minidumps; vazio = ficam no computador)
+#   Outro repositório (releases ou modelos): RELEASES_TOKEN (ver acima)
+#
+# MODELO DO L2CS: `l2cs_gaze360.onnx` (92 MB) é gitignored. O workflow o baixa
+# do release de tag `0.0.0-modelos` do repositório de modelos — variável
+# IRISFLOW_MODELOS_REPO; sem ela, o repositório de releases — e o empacota
+# DENTRO de todo instalador. Numa tag, sem modelo o release FALHA: um
+# instalador com rastreamento degradado não pode sair.
+#   - LICENÇA: os pesos atuais foram treinados no Gaze360, licença
+#     research-only (README, "Modelos" e "Pendências e riscos"). Num
+#     repositório PÚBLICO, o release de modelos deixa o arquivo para download
+#     de qualquer pessoa; até a decisão de licenciamento, guarde-o num
+#     repositório PRIVADO (IRISFLOW_MODELOS_REPO + RELEASES_TOKEN com leitura
+#     nele). Mesmo assim, todo instalador publicado leva os pesos no app.asar.
+#   - POR QUE A TAG `0.0.0-modelos` (antes, `modelos`): quando fica no MESMO
+#     repositório dos instaladores, esse release aparece no feed que o
+#     electron-updater lê. Um app instalado em versão beta (X.Y.Z-beta.N)
+#     escolhe a primeira entrada do feed que é semver e não é de canal próprio:
+#     `0.0.0-modelos` é semver do canal "modelos" e é sempre pulado (o nome
+#     antigo, que não é semver, só é pulado pelas versões do electron-updater
+#     que filtram tags inválidas, como a 6.8.9). Um app em versão estável
+#     consulta /releases/latest, que ignora pré-lançamentos — por isso o
+#     release de modelos PRECISA ser pré-lançamento (o passo "Modelo do L2CS"
+#     confere) e electron/atualizacao.ts não força `allowPrerelease`. A tag não
+#     começa com `v`, então criá-la não dispara este workflow. O nome antigo
+#     `modelos` ainda é aceito, com aviso para recriar.
+#
+# O QUE O INSTALADOR NÃO LEVA: código-fonte, source maps, DevTools. Cada
+# plataforma passa por scripts/conferir-pacote.mjs antes do upload (asar só
+# com o build, bundles minificados, fuses do Electron gravados).
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      permitir_sem_nuvem:
+        description: 'Teste sem VITE_SUPABASE_URL/ANON_KEY (instalador com licença simulada, sem login real). Nunca vale numa tag.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  NODE_VERSION: 24.11.1
+  # Tag do release que guarda os pesos do L2CS (não é uma versão do app; o
+  # porquê do nome está no cabeçalho). MODELOS_TAG_ANTIGA: nome anterior,
+  # aceito com aviso.
+  MODELOS_TAG: 0.0.0-modelos
+  MODELOS_TAG_ANTIGA: modelos
+  # Repositório de releases (ver cabeçalho). `electron/package-app.mjs` lê
+  # esta mesma variável de ambiente para o app-update.yml dos instaladores.
+  IRISFLOW_RELEASES_REPO: ${{ vars.IRISFLOW_RELEASES_REPO || github.repository }}
+  # Repositório do release de modelos (ver cabeçalho); pode ser privado.
+  IRISFLOW_MODELOS_REPO: ${{ vars.IRISFLOW_MODELOS_REPO || vars.IRISFLOW_RELEASES_REPO || github.repository }}
+
 jobs:
-  installer:
-    name: Instalador Windows com motor de voz
-    runs-on: windows-latest
-    # PyInstaller sobre torch + chatterbox leva um bom tempo; o teto folgado
-    # existe para o job não morrer no meio de um download lento do PyPI.
+  # -------------------------------------------------------------------------
+  # Versão, modo (publicar ou só artefato) e os portões baratos: repositórios
+  # válidos e a nuvem configurada. Tudo o mais espera este job.
+  # -------------------------------------------------------------------------
+  preparar:
+    name: Versão
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      versao: ${{ steps.v.outputs.versao }}
+      publicar: ${{ steps.v.outputs.publicar }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sem a nuvem, o instalador cai na licença simulada sem avisar ninguém
+      # (ver "Nuvem" no cabeçalho). Numa tag isso é erro, sempre; num teste
+      # manual, só com a opção "permitir_sem_nuvem" marcada.
+      - name: Nuvem do instalador (VITE_SUPABASE_*)
+        env:
+          SEGREDOS_JSON: ${{ toJSON(secrets) }}
+          PERMITIR_SEM_NUVEM: ${{ github.event_name == 'workflow_dispatch' && inputs.permitir_sem_nuvem }}
+        run: |
+          if [ "$PERMITIR_SEM_NUVEM" = "true" ]; then
+            node scripts/ci-segredos-opcionais.mjs --conferir-nuvem --permitir-sem-nuvem
+          else
+            node scripts/ci-segredos-opcionais.mjs --conferir-nuvem
+          fi
+
+      - id: v
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then
+            versao="${REF_NAME#v}"
+            # semver: 1.2.3 ou 1.2.3-beta.4
+            if ! printf '%s' "$versao" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+              echo "::error::tag '$REF_NAME' não é uma versão válida (use v1.2.3 ou v1.2.3-beta.4)"
+              exit 1
+            fi
+            publicar=true
+          else
+            versao="$(node -p "require('./package.json').version")"
+            publicar=false
+          fi
+          for par in "IRISFLOW_RELEASES_REPO=$IRISFLOW_RELEASES_REPO" "IRISFLOW_MODELOS_REPO=$IRISFLOW_MODELOS_REPO"; do
+            if ! printf '%s' "${par#*=}" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
+              echo "::error::${par%%=*}='${par#*=}' não é dono/repo"
+              exit 1
+            fi
+          done
+          echo "versao=$versao" >> "$GITHUB_OUTPUT"
+          echo "publicar=$publicar" >> "$GITHUB_OUTPUT"
+          echo "versão $versao — publicar release: $publicar — releases: $IRISFLOW_RELEASES_REPO — modelos: $IRISFLOW_MODELOS_REPO"
+
+  # -------------------------------------------------------------------------
+  # Os mesmos portões do CI (tipos, testes, builds de desktop, site e app).
+  # Um instalador nunca sai de um commit que não passa neles. Espera o
+  # `preparar`: sem nuvem ou com repositório inválido, nem começa.
+  # -------------------------------------------------------------------------
+  verificar:
+    name: Verificação (CI)
+    needs: preparar
+    uses: ./.github/workflows/ci.yml
+
+  # -------------------------------------------------------------------------
+  # Um instalador por sistema, cada um no sistema nativo.
+  # -------------------------------------------------------------------------
+  pacote:
+    name: Instalador ${{ matrix.plataforma }}
+    needs: [preparar, verificar]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - plataforma: windows
+            os: windows-latest
+            alvo: --win
+          - plataforma: macos
+            os: macos-latest
+            alvo: --mac
+          - plataforma: linux
+            os: ubuntu-latest
+            alvo: --linux
+    runs-on: ${{ matrix.os }}
+    # Windows empacota o motor de voz (PyInstaller sobre torch): demora.
     timeout-minutes: 90
-
     env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: 0
-      CSC_LINK: ${{ secrets.CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-      # Sem certificado, o electron-builder tentaria assinar com nada e
-      # falharia; com o segredo vazio ele pula a assinatura.
-      CSC_IDENTITY_AUTO_DISCOVERY: false
-
+      # O electron-builder baixa o Electron da plataforma-alvo por conta
+      # própria; o binário do postinstall do pacote `electron` não é usado.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      IRISFLOW_RELEASE_DIR: release
+      VERSAO: ${{ needs.preparar.outputs.versao }}
+      PUBLICAR: ${{ needs.preparar.outputs.publicar }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24.11.1
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: |
             package-lock.json
             frontend/package-lock.json
 
-      # A mesma versão que o script manual exige: o motor foi validado em 3.11
-      # e o PyInstaller precisa da mesma que gerou as dependências nativas.
+      # `npm ci` nos três sistemas: os dois lockfiles instalam igual no
+      # Windows, no macOS e no Linux (npm 10 e 11). Vem ANTES dos segredos:
+      # os scripts de instalação das dependências não precisam deles.
+      - name: Instalar dependências
+        run: |
+          npm ci --no-audit --no-fund
+          (cd frontend && npm ci --no-audit --no-fund)
+
+      # Só o que existe e só o que serve a esta plataforma vai para os passos
+      # seguintes. Ver o cabeçalho e scripts/ci-segredos-opcionais.mjs.
+      - name: Segredos opcionais
+        env:
+          SEGREDOS_JSON: ${{ toJSON(secrets) }}
+        run: node scripts/ci-segredos-opcionais.mjs --plataforma "${{ matrix.plataforma }}"
+
+      - name: Versão da tag no package.json
+        run: |
+          npm version "$VERSAO" --no-git-tag-version --allow-same-version
+          node -p "'versão do app: ' + require('./package.json').version"
+
+      # Pesos do L2CS, do release MODELOS_TAG em IRISFLOW_MODELOS_REPO (ver o
+      # cabeçalho: licença, nome da tag, repositório privado). Token: o do
+      # workflow quando o repositório de modelos é este mesmo; RELEASES_TOKEN
+      # quando é outro — um repositório de modelos PRIVADO só é lido com ele.
+      # Só este passo e o de publicar veem o segredo.
+      - name: Modelo do L2CS
+        env:
+          SEGREDOS_JSON: ${{ toJSON(secrets) }}
+          TOKEN_DO_WORKFLOW: ${{ github.token }}
+        run: |
+          token_de_releases="$(node -e "process.stdout.write(String((JSON.parse(process.env.SEGREDOS_JSON || '{}') || {}).RELEASES_TOKEN || ''))")"
+          unset SEGREDOS_JSON
+          if [ "$IRISFLOW_MODELOS_REPO" != "$GITHUB_REPOSITORY" ] && [ -n "$token_de_releases" ]; then
+            echo "::add-mask::$token_de_releases"
+            export GH_TOKEN="$token_de_releases"
+          else
+            export GH_TOKEN="$TOKEN_DO_WORKFLOW"
+          fi
+          destino=frontend/public/models/l2cs
+          mkdir -p "$destino"
+          tag="$MODELOS_TAG"
+          if ! gh release view "$tag" --repo "$IRISFLOW_MODELOS_REPO" >/dev/null 2>&1 \
+             && gh release view "$MODELOS_TAG_ANTIGA" --repo "$IRISFLOW_MODELOS_REPO" >/dev/null 2>&1; then
+            echo "::warning::Os pesos estão no release de tag antiga '$MODELOS_TAG_ANTIGA' em $IRISFLOW_MODELOS_REPO. Recrie-o com a tag '$MODELOS_TAG' (o motivo está no cabeçalho do release.yml) e apague o antigo."
+            tag="$MODELOS_TAG_ANTIGA"
+          fi
+          if gh release download "$tag" --repo "$IRISFLOW_MODELOS_REPO" --pattern 'l2cs_gaze360.onnx' \
+               --dir "$destino" --clobber; then
+            ls -l "$destino"
+            echo "IRISFLOW_EXIGIR_MODELO=1" >> "$GITHUB_ENV"
+            # No repositório dos instaladores, o release de modelos tem de ser
+            # PRÉ-LANÇAMENTO: senão, sendo o mais recente, vira o "latest" que o
+            # site (API /releases/latest) e os apps em versão estável tomam como
+            # a versão atual — e ali não há instalador nem latest*.yml.
+            if [ "$IRISFLOW_MODELOS_REPO" = "$IRISFLOW_RELEASES_REPO" ]; then
+              pre="$(gh release view "$tag" --repo "$IRISFLOW_MODELOS_REPO" --json isPrerelease --jq .isPrerelease)"
+              if [ "$pre" != "true" ]; then
+                echo "::error::O release '$tag' de $IRISFLOW_MODELOS_REPO precisa ser pré-lançamento. Edite-o no GitHub e marque 'Set as a pre-release' (ou: gh release edit $tag --repo $IRISFLOW_MODELOS_REPO --prerelease)."
+                exit 1
+              fi
+            fi
+            if [ "$(gh api "repos/$IRISFLOW_MODELOS_REPO" --jq .visibility 2>/dev/null || true)" = "public" ]; then
+              echo "::warning::Os pesos do L2CS estão num release PÚBLICO ($IRISFLOW_MODELOS_REPO): qualquer pessoa baixa o arquivo, e a licença do Gaze360 é research-only. Até a decisão de licenciamento, use um repositório privado de modelos (variável IRISFLOW_MODELOS_REPO + segredo RELEASES_TOKEN)."
+            fi
+          elif [ "$PUBLICAR" = "true" ]; then
+            echo "::error::Modelo L2CS não encontrado no release '$MODELOS_TAG' de $IRISFLOW_MODELOS_REPO. Antes de subir, veja a licença (README, 'Pendências e riscos'). Para criá-lo: gh release create $MODELOS_TAG frontend/public/models/l2cs/l2cs_gaze360.onnx --repo $IRISFLOW_MODELOS_REPO --prerelease --title 'Modelos (não é versão do app)' --notes 'Pesos usados pelo release.yml'"
+            exit 1
+          else
+            echo "::warning::Modelo L2CS ausente: este instalador de TESTE terá rastreamento degradado."
+          fi
+
+      # rpmbuild não vem no runner Ubuntu; sem ele o alvo rpm falha.
+      - name: Ferramentas de empacotamento (Linux)
+        if: matrix.plataforma == 'linux'
+        run: sudo apt-get update -q && sudo apt-get install -y -q rpm
+
+      # ---- Motor de voz: só Windows (o script de PyInstaller é para Windows).
+      # macOS e Linux saem sem ele; a tela de Voz diz que a voz personalizada
+      # ainda não está disponível e a fala usa a voz do sistema.
       - uses: actions/setup-python@v5
+        if: matrix.plataforma == 'windows'
         with:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: voice-engine/requirements.txt
 
-      - name: Instalar dependências (raiz)
-        run: npm ci
-
-      - name: Instalar dependências (frontend)
-        working-directory: frontend
-        run: npm ci
-
-      # Os mesmos portões do CI: um instalador nunca sai de um commit que não
-      # passa neles.
-      - name: Tipos e testes
-        run: |
-          npx tsc --noEmit -p tsconfig.json
-          npx tsc --noEmit -p electron/tsconfig.json
-          npm test
-      - name: Testes da interface
-        working-directory: frontend
-        run: npm test
-
-      # O script é o MESMO que o desenvolvedor roda à mão. Não há uma segunda
-      # versão "do CI" para divergir dela.
       - name: Empacotar o motor de voz (PyInstaller)
+        if: matrix.plataforma == 'windows'
         working-directory: voice-engine
         shell: pwsh
         run: .\build-voice-engine.ps1
 
       - name: Conferir o motor empacotado
+        if: matrix.plataforma == 'windows'
         working-directory: voice-engine
         shell: pwsh
         run: |
@@ -92,33 +344,111 @@ jobs:
           Write-Host $r
           if (-not $r) { throw 'o motor não respondeu ao status' }
 
-      # `electron:build` = build do frontend + compile do Electron + package.
-      # `package-app.mjs` encontra `voice-engine/dist/irisflow-voz` e o copia
-      # para `resources/voice-engine` sozinho — é o passo que antes dependia de
-      # alguém lembrar de rodar o .ps1.
-      - name: Build do app e instalador
-        run: npm run electron:build
+      # `package-app.mjs` é o MESMO que o desenvolvedor roda à mão
+      # (`npm run electron:build:<sistema>`); aqui só a pasta de saída muda.
+      - name: Build do app e instaladores
+        run: |
+          npm run build
+          npm run electron:compile
+          node electron/package-app.mjs ${{ matrix.alvo }}
 
-      - name: Publicar instalador como artefato
-        uses: actions/upload-artifact@v4
+      # O que sai para o usuário é o app, não o código: asar só com o build,
+      # nenhum source map, bundles minificados, fuses gravados no binário.
+      - name: Conferir o pacote (sem código-fonte, sem source map, fuses)
+        run: node scripts/conferir-pacote.mjs release
+
+      - name: Conferir nomes dos artefatos
+        env:
+          PLATAFORMA: ${{ matrix.plataforma }}
+        run: |
+          case "$PLATAFORMA" in
+            windows) esperados="IrisFlow-Setup.exe latest.yml" ;;
+            macos)   esperados="IrisFlow-mac-arm64.dmg IrisFlow-mac-x64.dmg IrisFlow-mac-arm64.zip IrisFlow-mac-x64.zip latest-mac.yml" ;;
+            linux)   esperados="IrisFlow-linux-x86_64.AppImage IrisFlow-linux-amd64.deb IrisFlow-linux-x86_64.rpm latest-linux.yml" ;;
+          esac
+          ls -la release
+          falta=0
+          for f in $esperados; do
+            if [ ! -f "release/$f" ]; then echo "::error::faltou release/$f (confira os artifactName no package.json)"; falta=1; fi
+          done
+          exit $falta
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: irisflow-installer-${{ github.ref_name }}
+          name: instaladores-${{ matrix.plataforma }}
           path: |
             release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
             release/*.blockmap
-            release/latest.yml
+            release/latest*.yml
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 14
 
-      # Numa tag, o instalador vira release do GitHub — é daqui que o
-      # electron-updater pode ler `latest.yml` quando o endereço de
-      # atualização apontar para cá.
-      - name: Release do GitHub
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+  # -------------------------------------------------------------------------
+  # Release do GitHub — só numa tag e só com as três plataformas prontas.
+  # -------------------------------------------------------------------------
+  publicar:
+    name: Publicar release
+    needs: [preparar, pacote]
+    if: needs.preparar.outputs.publicar == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          files: |
-            release/*.exe
-            release/*.blockmap
-            release/latest.yml
-          generate_release_notes: true
+          pattern: instaladores-*
+          path: dist
+          merge-multiple: true
+
+      - name: Criar (ou completar) o release
+        env:
+          SEGREDOS_JSON: ${{ toJSON(secrets) }}
+          TOKEN_DO_WORKFLOW: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSAO: ${{ needs.preparar.outputs.versao }}
+        run: |
+          token_de_releases="$(printf '%s' "$SEGREDOS_JSON" | jq -r '.RELEASES_TOKEN // empty')"
+          unset SEGREDOS_JSON
+          if [ "$IRISFLOW_RELEASES_REPO" = "$GITHUB_REPOSITORY" ]; then
+            # O próprio repositório: o token do workflow (contents: write) basta.
+            mesmo_repositorio=true
+            export GH_TOKEN="$TOKEN_DO_WORKFLOW"
+          else
+            mesmo_repositorio=false
+            if [ -z "$token_de_releases" ]; then
+              echo "::error::Os instaladores vão para $IRISFLOW_RELEASES_REPO (variável IRISFLOW_RELEASES_REPO), mas falta o segredo RELEASES_TOKEN: um token fine-grained com acesso a esse repositório e permissão 'Contents: Read and write'."
+              exit 1
+            fi
+            echo "::add-mask::$token_de_releases"
+            export GH_TOKEN="$token_de_releases"
+          fi
+
+          ls -la dist
+          titulo="IrisFlow $VERSAO"
+          case "$VERSAO" in *-*) titulo="$titulo (beta)";; esac
+          if gh release view "$TAG" --repo "$IRISFLOW_RELEASES_REPO" >/dev/null 2>&1; then
+            # Re-execução do workflow: substitui os arquivos e garante que o
+            # release está publicado e marcado como o mais recente.
+            gh release upload "$TAG" dist/* --repo "$IRISFLOW_RELEASES_REPO" --clobber
+            gh release edit "$TAG" --repo "$IRISFLOW_RELEASES_REPO" --draft=false --prerelease=false --latest
+          elif [ "$mesmo_repositorio" = "true" ]; then
+            # O gh sobe tudo antes de publicar: o release nunca aparece pela metade.
+            gh release create "$TAG" dist/* --repo "$IRISFLOW_RELEASES_REPO" --verify-tag \
+              --title "$titulo" --generate-notes --latest
+          else
+            # Repositório só de releases: a tag não existe lá, e o gh a cria
+            # no commit mais recente dele (o repositório precisa ter ao menos
+            # um commit, um README basta). Sem --generate-notes: as notas
+            # viriam dos commits DESSE repositório, não do código — e as do
+            # código, privado, não devem vazar num lugar público.
+            gh release create "$TAG" dist/* --repo "$IRISFLOW_RELEASES_REPO" \
+              --title "$titulo" --notes "Instaladores do IrisFlow $VERSAO para Windows, macOS e Linux." --latest
+          fi
+          echo "### Release $TAG publicado em $IRISFLOW_RELEASES_REPO" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download direto: https://github.com/$IRISFLOW_RELEASES_REPO/releases/latest/download/IrisFlow-Setup.exe" >> "$GITHUB_STEP_SUMMARY"

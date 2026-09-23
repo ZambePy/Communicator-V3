@@ -20,7 +20,7 @@
  * captura.
  */
 
-import { BrowserWindow, desktopCapturer, globalShortcut, ipcMain, screen, type Display, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, desktopCapturer, globalShortcut, ipcMain, screen, type Display, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import {
   janelaParaSobreposicao,
   sobreposicaoParaTela,
@@ -29,6 +29,7 @@ import {
   type Ponto,
   type QuadroDeTela,
   reacaoAMudancaDeTela,
+  sobreposicaoParaJanela,
 } from '../../src/computador/geometria';
 import { ehTeclaNomeada } from '../../src/computador/entradaWindows';
 import {
@@ -43,6 +44,7 @@ import {
   type RespostaDaAcao,
 } from '../../src/computador/protocolo';
 import { controleDoSistema, type ControleDoSistema } from './controle';
+import { preferenciasWebSeguras } from '../../src/electronSecurity';
 
 export interface OpcoesDoModo {
   /** Janela do app (a que tem a câmera). */
@@ -222,6 +224,20 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
           else s.sobreposicao.setIgnoreMouseEvents(true, { forward: true });
         }
         return { ok: true };
+      case 'selecao': {
+        // Rótulo para a correção por dwell: volta para a janela do app nas
+        // coordenadas DELA. Não toca no sistema; se a janela já se foi, some.
+        const principal = opcoes.janelaPrincipal();
+        if (principal && !principal.isDestroyed()) {
+          principal.webContents.send(CANAIS.selecao, {
+            centro: sobreposicaoParaJanela(acao.centro, s.quadro),
+            olhar: sobreposicaoParaJanela(acao.olhar, s.quadro),
+            tamanhoPx: acao.tamanhoPx,
+            t: Date.now(),
+          });
+        }
+        return { ok: true };
+      }
       case 'sair':
         parar(acao.motivo);
         return { ok: true };
@@ -336,10 +352,10 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
       enableLargerThanScreen: true,
       backgroundColor: '#00000000',
       webPreferences: {
+        // Mesmas preferências seguras da janela principal (isolamento,
+        // sandbox, sem Node, sem <webview>, DevTools só em dev).
+        ...preferenciasWebSeguras(app.isPackaged),
         preload: opcoes.preloadDaSobreposicao,
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
         backgroundThrottling: false,
       },
     });

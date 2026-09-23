@@ -1,5 +1,7 @@
 .btn {
   position: relative;
+  /* Alvo de toque mínimo de 44 px (WCAG 2.5.5 / diretrizes móveis). */
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -54,11 +56,11 @@
   transition: opacity var(--dur) var(--ease-out);
 }
 
-.btn:hover .btn__shine {
+.btn:hover:not(:disabled) .btn__shine {
   opacity: 1;
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
   transform: translateY(-2px);
 }
 
@@ -66,72 +68,70 @@
   transform: translateY(0) scale(0.985);
 }
 
-.btn:disabled,
 .btn.is-loading {
-  cursor: not-allowed;
-  opacity: 0.6;
+  cursor: progress;
+  opacity: 0.75;
   transform: none;
+}
+
+/* Desabilitado precisa continuar LEGÍVEL: nada de opacidade que joga texto
+   escuro sobre fundo escuro. Superfície neutra, borda tracejada e texto
+   claro (#c3d2e8 sobre #132844 ≈ 9:1). Vale para todas as variantes. */
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  cursor: not-allowed;
+  transform: none;
+  opacity: 1;
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  border-style: dashed;
+  color: var(--text-soft);
+  box-shadow: none;
+}
+
+.btn:disabled .btn__shine,
+.btn[aria-disabled='true'] .btn__shine {
+  display: none;
 }
 
 /* --- variantes --- */
 .btn--primary {
-  background: var(--blue);
+  background: linear-gradient(135deg, var(--blue-400), var(--blue));
   color: #fff;
   box-shadow: var(--glow);
 }
 
-.btn--primary:hover {
-  background: var(--blue-700);
-  box-shadow: 0 18px 44px rgba(27, 84, 168, 0.34);
-}
-
-.on-dark .btn--primary {
-  background: linear-gradient(135deg, var(--blue-400), var(--blue));
-}
-
-.on-dark .btn--primary:hover {
+.btn--primary:hover:not(:disabled) {
   background: linear-gradient(135deg, var(--blue-400), var(--blue-500));
+  box-shadow: 0 18px 44px rgba(27, 84, 168, 0.5);
 }
 
+/* Teal claro com texto marinho: 8,9:1. */
 .btn--teal {
-  background: var(--teal-600);
-  color: #fff;
+  background: linear-gradient(135deg, var(--teal-300), var(--teal));
+  color: #04231f;
   box-shadow: 0 12px 32px rgba(0, 166, 147, 0.26);
 }
 
-.btn--teal:hover {
-  background: #016f63;
-  box-shadow: 0 18px 44px rgba(0, 166, 147, 0.34);
-}
-
-.on-dark .btn--teal {
-  background: linear-gradient(135deg, var(--teal-300), var(--teal));
-  color: #04231f;
+.btn--teal:hover:not(:disabled) {
+  box-shadow: 0 18px 44px rgba(0, 166, 147, 0.4);
 }
 
 .btn--secondary {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.07);
   border-color: var(--line-strong);
   color: var(--text);
 }
 
-.btn--secondary:hover {
-  border-color: var(--blue);
-  color: var(--blue);
-  background: var(--accent-soft);
-}
-
-.on-dark .btn--secondary {
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.on-dark .btn--secondary:hover {
+.btn--secondary:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.14);
   border-color: var(--blue-300);
   color: #fff;
+}
+
+.on-dark .btn--secondary {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .btn--ghost {
@@ -140,7 +140,7 @@
   padding-inline: 1rem;
 }
 
-.btn--ghost:hover {
+.btn--ghost:hover:not(:disabled) {
   color: var(--text);
   background: var(--surface-2);
 }

@@ -292,6 +292,7 @@ export const SetupWizard: React.FC = () => {
       }}
     >
       <div
+        className="coluna-livre-da-emergencia"
         style={{
           width: '100%',
           maxWidth: 640,
@@ -364,6 +365,7 @@ export const SetupWizard: React.FC = () => {
               diagonalDoEdid={
                 settings.screenGeometrySource === 'auto' ? settings.screenDiagonalIn : null
               }
+              diagonalAtual={settings.screenDiagonalIn}
               aoMudar={(d, o) => {
                 setDiagonal(d);
                 setOrigemDaDiagonal(o);

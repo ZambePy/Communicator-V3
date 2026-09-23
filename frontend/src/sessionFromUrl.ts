@@ -99,11 +99,23 @@ export function aplicarSessaoDaUrl(
   // Flags do V2 que o plano de medição varia (docs/MEDICOES.md §4.6).
   // Booleanos aceitam 1/0; o ramo ocular aceita o nome do provedor.
   const booleanas: Array<
-    [string, 'normalizarRollNoCrop' | 'estabilizarFixacao' | 'correcaoPorDwell' | 'persistirCalibracao']
+    [
+      string,
+      | 'normalizarRollNoCrop'
+      | 'estabilizarFixacao'
+      | 'correcaoPorDwell'
+      | 'persistirCalibracao'
+      | 'referenciaLenta'
+      | 'correcaoLocal',
+    ]
   > = [
     ['rollCrop', 'normalizarRollNoCrop'],
     ['estabilizar', 'estabilizarFixacao'],
     ['dwellCorrige', 'correcaoPorDwell'],
+    // Referência de pose lenta (EMA) e correção local dos cantos: as duas
+    // mudanças de acurácia de 23/09/2026, variáveis para medir o antes/depois.
+    ['refLenta', 'referenciaLenta'],
+    ['cantos', 'correcaoLocal'],
     // `?calib=0` abre sem carregar (e sem gravar) calibração — cada abertura
     // exige uma nova. Para desenvolvimento; ver `persistirCalibracao`.
     ['calib', 'persistirCalibracao'],

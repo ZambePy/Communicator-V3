@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
@@ -32,7 +33,13 @@ const cal = (errorDeg: number, dia: string, herdado = false): CalibrationLog => 
   ...(herdado ? { herdado: true } : {}),
 });
 
-const montar = () => render(<HistoricoDeSessoes />);
+// Router: a tela ganhou o Voltar (BackButton usa `useNavigate`).
+const montar = () =>
+  render(
+    <MemoryRouter>
+      <HistoricoDeSessoes />
+    </MemoryRouter>
+  );
 
 describe('sem medicoes', () => {
   it('diz que nao ha, em vez de mostrar tela vazia', () => {

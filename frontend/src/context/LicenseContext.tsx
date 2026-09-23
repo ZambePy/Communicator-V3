@@ -1,4 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { cofre, CHAVES } from '../cloud/armazenamento';
+import { cloudConfig } from '../cloud/config';
 import {
   licenseService as servicoPadrao,
   getDeviceBinding,
@@ -22,16 +24,33 @@ import type {
  * viajarem no mesmo objeto dos que vão ao servidor.
  */
 
+/**
+ * Onde a licença mora:
+ *
+ *   `irisflow_license` (localStorage)  conta, plano e datas — nada secreto. Os
+ *                                      serviços de voz e do assistente leem o
+ *                                      plano daqui, de forma síncrona.
+ *   `irisflow.licenca` (cofre)         o `token`, que é a chave do computador
+ *                                      (`pair_device()`) e autentica tudo o que
+ *                                      o desktop manda à nuvem. No Electron, o
+ *                                      cofre é o safeStorage do sistema.
+ *
+ * Versões anteriores gravavam o token junto, no localStorage; a primeira
+ * leitura o passa para o cofre. Se o cofre recusar a gravação, o token fica
+ * onde estava — perder a licença por isso seria pior.
+ */
 export const LICENSE_KEY = 'irisflow_license';
 
 /**
  * Quanto tempo uma licença em cache vale sem conseguir falar com o servidor.
  *
- * Sete dias é uma escolha de produto, não técnica: quem usa este app tem ELA e
- * muitas vezes está sozinho. Perder a comunicação porque o Wi-Fi caiu é pior
- * do que uma semana de uso não verificado.
+ * Sete dias (o padrão) é uma escolha de produto, não técnica: quem usa este
+ * app tem ELA e muitas vezes está sozinho. Perder a comunicação porque o
+ * Wi-Fi caiu é pior do que uma semana de uso não verificado. O build pode
+ * trocar o número por `VITE_LICENSE_OFFLINE_DAYS` (`cloudConfig`) — a
+ * variável existia no `.env.example` e era lida, mas este prazo ignorava.
  */
-export const GRACE_PERIOD_MS = 7 * 24 * 60 * 60 * 1000;
+export const GRACE_PERIOD_MS = cloudConfig.carenciaOfflineDias * 24 * 60 * 60 * 1000;
 
 export type LicenseStatus = 'checking' | 'active' | 'grace' | 'none' | 'blocked';
 
@@ -62,20 +81,12 @@ export interface LicenseContextData {
 
 const LicenseContext = createContext<LicenseContextData>({} as LicenseContextData);
 
-function ler(): LicenceGravada | null {
+function lerMetadados(): Partial<LicenceGravada> | null {
   try {
     const raw = localStorage.getItem(LICENSE_KEY);
     if (!raw) return null;
-    const p = JSON.parse(raw) as Partial<LicenceGravada>;
-    if (!p.token || !p.account || !p.plan || !p.deviceId) return null;
-    return {
-      account: p.account,
-      plan: p.plan,
-      token: p.token,
-      deviceId: p.deviceId,
-      boundAt: p.boundAt ?? new Date(0).toISOString(),
-      lastVerifiedAt: typeof p.lastVerifiedAt === 'number' ? p.lastVerifiedAt : 0,
-    };
+    const p = JSON.parse(raw) as Partial<LicenceGravada> | null;
+    return p && typeof p === 'object' ? p : null;
   } catch {
     // JSON truncado por quota estourada já derrubou o boot deste app uma vez,
     // pelo `SettingsContext`. Aqui o pior caso é pedir login de novo.
@@ -83,7 +94,7 @@ function ler(): LicenceGravada | null {
   }
 }
 
-function gravar(l: LicenceGravada): void {
+function gravarMetadados(l: Partial<LicenceGravada>): void {
   try {
     localStorage.setItem(LICENSE_KEY, JSON.stringify(l));
   } catch {
@@ -91,12 +102,75 @@ function gravar(l: LicenceGravada): void {
   }
 }
 
+/**
+ * Sobe a cada `gravar()` e `apagar()`. Gravar o token no cofre é assíncrono;
+ * uma gravação que termina depois de um `apagar()` (sair logo após entrar)
+ * não pode regravar os metadados da licença que acabou de ser apagada.
+ */
+let ultimaEscrita = 0;
+
+/** Grava o token no cofre; falso quando o cofre recusou. */
+async function guardarToken(token: string): Promise<boolean> {
+  try {
+    return await cofre.gravar(CHAVES.licenca, token);
+  } catch {
+    return false;
+  }
+}
+
+/** Há uma licença gravada (conta, plano e máquina)? Síncrono: não abre o cofre. */
+function temLicencaGravada(p: Partial<LicenceGravada> | null): p is Partial<LicenceGravada> & Pick<LicenceGravada, 'account' | 'plan' | 'deviceId'> {
+  return !!p && !!p.account && !!p.plan && !!p.deviceId;
+}
+
+async function ler(): Promise<LicenceGravada | null> {
+  const p = lerMetadados();
+  if (!temLicencaGravada(p)) return null;
+  let token = typeof p.token === 'string' && p.token ? p.token : null;
+  if (token) {
+    // Formato antigo (token no localStorage): passa para o cofre.
+    const antes = ultimaEscrita;
+    if ((await guardarToken(token)) && antes === ultimaEscrita) {
+      const semToken = { ...p };
+      delete semToken.token;
+      gravarMetadados(semToken);
+    }
+  } else {
+    try {
+      token = await cofre.ler(CHAVES.licenca);
+    } catch {
+      token = null;
+    }
+  }
+  if (!token) return null;
+  return {
+    account: p.account,
+    plan: p.plan,
+    token,
+    deviceId: p.deviceId,
+    boundAt: p.boundAt ?? new Date(0).toISOString(),
+    lastVerifiedAt: typeof p.lastVerifiedAt === 'number' ? p.lastVerifiedAt : 0,
+  };
+}
+
+async function gravar(l: LicenceGravada): Promise<void> {
+  const minha = ++ultimaEscrita;
+  const noCofre = await guardarToken(l.token);
+  // Um apagar() (ou gravação mais nova) veio depois: ele é quem vale.
+  if (minha !== ultimaEscrita) return;
+  const semToken: Partial<LicenceGravada> = { ...l };
+  delete semToken.token;
+  gravarMetadados(noCofre ? semToken : l);
+}
+
 function apagar(): void {
+  ultimaEscrita++;
   try {
     localStorage.removeItem(LICENSE_KEY);
   } catch {
     /* idem */
   }
+  void cofre.remover(CHAVES.licenca).catch(() => undefined);
 }
 
 const paraGravada = (l: ActiveLicense, verificadaEm: number): LicenceGravada => ({
@@ -147,7 +221,11 @@ export const LicenseProvider: React.FC<{
     const minhaGeracao = ++geracao.current;
     /** Nada mudou desde que esta verificação começou? */
     const vigente = () => geracao.current === minhaGeracao;
-    const gravada = ler();
+    // Sem licença gravada, a resposta sai na hora — sem esperar o cofre —, e a
+    // tela de login não pisca um "Carregando…" à toa.
+    const gravada = temLicencaGravada(lerMetadados()) ? await ler() : null;
+    // Ler o token do cofre é assíncrono: um login no meio do caminho vale mais.
+    if (!vigente()) return;
     if (!gravada) {
       setStatus('none');
       setLicense(null);
@@ -162,7 +240,7 @@ export const LicenseProvider: React.FC<{
 
     if (r.ok) {
       const agora = Date.now();
-      gravar(paraGravada(r.license, agora));
+      void gravar(paraGravada(r.license, agora));
       setLicense(r.license);
       setLastVerifiedAt(agora);
       setBlockedReason(null);
@@ -201,7 +279,7 @@ export const LicenseProvider: React.FC<{
     geracao.current++;
     if (r.ok) {
       const agora = Date.now();
-      gravar(paraGravada(r.license, agora));
+      void gravar(paraGravada(r.license, agora));
       setLicense(r.license);
       setLastVerifiedAt(agora);
       setBlockedReason(null);
@@ -226,7 +304,7 @@ export const LicenseProvider: React.FC<{
     // Antes do `await`: a decisão de sair já foi tomada, e uma verificação em
     // voo não pode ressuscitar a sessão quando responder.
     geracao.current++;
-    const gravada = ler();
+    const gravada = await ler();
     if (gravada) {
       try {
         await service.logout(gravada.token);

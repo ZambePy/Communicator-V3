@@ -1,0 +1,65 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "base": {
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      }
+    },
+    "development": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "environment": "development",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xouznaqxhqzjdgeshlmh.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhvdXpuYXF4aHF6amRnZXNobG1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMjYyODcsImV4cCI6MjEwNTcwMjI4N30.QCQMB5mqsgUvSu3sJBBkfJs2VC-F4vBVEqVKHdp6ujc"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "channel": "preview",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "preview",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xouznaqxhqzjdgeshlmh.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhvdXpuYXF4aHF6amRnZXNobG1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMjYyODcsImV4cCI6MjEwNTcwMjI4N30.QCQMB5mqsgUvSu3sJBBkfJs2VC-F4vBVEqVKHdp6ujc"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "extends": "base",
+      "distribution": "store",
+      "channel": "production",
+      "environment": "production",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://xouznaqxhqzjdgeshlmh.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhvdXpuYXF4aHF6amRnZXNobG1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMjYyODcsImV4cCI6MjEwNTcwMjI4N30.QCQMB5mqsgUvSu3sJBBkfJs2VC-F4vBVEqVKHdp6ujc"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
+    }
+  }
+}

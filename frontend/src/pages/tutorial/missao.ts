@@ -37,12 +37,32 @@ export const MISSOES: readonly Missao[] = ['comunicacao', 'digitacao', 'conversa
 const CHAVE_ATIVA = 'irisflow_tutorial_missao';
 const CHAVE_CUMPRIDAS = 'irisflow_tutorial_missoes_ok';
 const CHAVE_PASSO = 'irisflow_tutorial_passo';
+const CHAVE_ENSAIO = 'irisflow_tutorial_ensaio';
+
+/**
+ * Evento disparado em `window` a cada mudança de estado deste módulo.
+ *
+ * `sessionStorage` não emite `storage` para a própria aba, e a faixa de missão
+ * (`FaixaDeMissao`) fica montada NA MESMA tela que chama `cumprirMissao`: sem
+ * um aviso, ela lia o estado uma vez na montagem e ficava com o texto velho —
+ * a pessoa cumpria a missão e continuava vendo "Voltar ao tutorial" sem saber
+ * que tinha terminado, ou, pior, a faixa sumia e não havia volta pelo olhar.
+ */
+export const EVENTO_DE_MISSAO = 'irisflow:missao';
 
 function ler(chave: string): string | null {
   try {
     return sessionStorage.getItem(chave);
   } catch {
     return null;
+  }
+}
+
+function avisar(): void {
+  try {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(EVENTO_DE_MISSAO));
+  } catch {
+    /* sem window (SSR/teste puro): ninguém para ouvir */
   }
 }
 
@@ -53,6 +73,19 @@ function escrever(chave: string, valor: string | null): void {
   } catch {
     /* sem storage: o tutorial funciona, só não lembra entre recargas */
   }
+  avisar();
+}
+
+/**
+ * Assina as mudanças de missão/passo. Devolve a função que cancela.
+ *
+ * É o que a faixa e o cartão do menu usam para reagir sem remontar e sem
+ * observar o storage em intervalo.
+ */
+export function aoMudarMissao(cb: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener(EVENTO_DE_MISSAO, cb);
+  return () => window.removeEventListener(EVENTO_DE_MISSAO, cb);
 }
 
 function ehMissao(v: string | null): v is Missao {
@@ -115,9 +148,26 @@ export function passoGuardado(): string | null {
   return ler(CHAVE_PASSO);
 }
 
+/**
+ * O ensaio de emergência foi feito nesta passagem pelo tutorial.
+ *
+ * Espelhado no `sessionStorage` como o passo, e pelo mesmo motivo: o passo de
+ * emergência vem DEPOIS das missões que saem desta rota, e um F5 (ou a volta
+ * de uma tela real) remontava o wizard com `ensaiou = false` — e a conclusão
+ * gravava `ensaiouEmergencia: false` para um paciente que tinha ensaiado.
+ */
+export function guardarEnsaio(): void {
+  escrever(CHAVE_ENSAIO, '1');
+}
+
+export function ensaioGuardado(): boolean {
+  return ler(CHAVE_ENSAIO) === '1';
+}
+
 /** Esquece tudo. Chamado ao sair do tutorial, por conclusão ou por "Pular". */
 export function limparMissoes(): void {
   escrever(CHAVE_ATIVA, null);
   escrever(CHAVE_CUMPRIDAS, null);
   escrever(CHAVE_PASSO, null);
+  escrever(CHAVE_ENSAIO, null);
 }

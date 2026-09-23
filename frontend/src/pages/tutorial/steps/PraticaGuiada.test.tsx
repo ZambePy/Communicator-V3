@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import i18n from '../../../i18n';
@@ -11,10 +11,11 @@ import { PraticaGuiada, ALVOS_DA_PRATICA, vereditoDoTempo } from './PraticaGuiad
 // muitas vezes com uma doença que piora. Um tutorial que diz "tente de novo"
 // nessa situação é uma barreira — e o paciente não tem como discordar dele.
 //
-// O alvo é um `<button>` comum de propósito: o `GazeContext` já sintetiza o
-// clique após o dwell configurado. Reimplementar a contagem aqui criaria um
-// segundo dwell que divergiria do real no primeiro ajuste, e a prática
-// ensinaria um tempo que não é o do app.
+// O clique vem do `GazeContext`, que já sintetiza o clique após o dwell
+// configurado. Reimplementar a contagem aqui criaria um segundo dwell que
+// divergiria do real no primeiro ajuste, e a prática ensinaria um tempo que
+// não é o do app. O veredito só mede do INÍCIO do dwell (a classe `gaze-hover`
+// que o contexto põe no alvo) até o clique — nunca o tempo de leitura.
 // -----------------------------------------------------------------------------
 
 beforeEach(async () => {
@@ -102,5 +103,51 @@ describe('a sugestão de ajuste', () => {
     montar({ aoSugerirAjuste });
     fireEvent.click(alvo());
     expect(aoSugerirAjuste).not.toHaveBeenCalled();
+  });
+});
+
+describe('o veredito mede o dwell, não a leitura', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('clique sem o olhar ter pousado (mouse, ou leitura longa) não vira "segurou demais"', () => {
+    vi.useFakeTimers();
+    montar();
+    // Dois minutos lendo a instrução antes de olhar para o alvo.
+    act(() => void vi.advanceTimersByTime(120_000));
+    fireEvent.click(alvo());
+    expect(screen.queryByText(/segurou mais/i)).toBeNull();
+    expect(screen.getByText('Registrado.')).toBeInTheDocument();
+  });
+
+  it('conta do instante em que o olhar pousa no alvo', async () => {
+    vi.useFakeTimers();
+    montar({ dwellMs: 1000 });
+    act(() => void vi.advanceTimersByTime(60_000)); // leitura: não conta
+    // O GazeContext põe `gaze-hover` quando o olhar entra no alvo.
+    act(() => alvo().classList.add('gaze-hover'));
+    // O MutationObserver entrega em microtask.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => void vi.advanceTimersByTime(1100));
+    fireEvent.click(alvo());
+    expect(screen.getByText(/Bom\./)).toBeInTheDocument();
+  });
+
+  it('"Ajustar o tempo" é um alvo de olhar de 76 px', async () => {
+    vi.useFakeTimers();
+    const aoSugerirAjuste = vi.fn();
+    montar({ dwellMs: 1000, aoSugerirAjuste });
+    act(() => alvo().classList.add('gaze-hover'));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => void vi.advanceTimersByTime(5000)); // 5× o dwell: lento
+    fireEvent.click(alvo());
+    const ajustar = screen.getByRole('button', { name: /ajustar o tempo/i });
+    expect(ajustar.className).toContain('gaze-button');
+    expect(ajustar.style.height).toBe('76px');
+    fireEvent.click(ajustar);
+    expect(aoSugerirAjuste).toHaveBeenCalled();
   });
 });

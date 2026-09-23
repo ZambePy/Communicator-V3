@@ -1,22 +1,26 @@
-import { useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Field } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
-import { requestPasswordReset } from '@/services/api'
+import { AUTH_REDIRECT, requestPasswordReset } from '@/services/api'
 import { isEmail } from '@/utils/format'
+import { validar } from '@/utils/validation'
+import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
+
+const RULES: Rules<{ email: string }> = { email: validar.email }
 import './checkout.css'
 
 /**
- * Para onde o link do e-mail leva. É a origem em que o site está rodando
- * (localhost em desenvolvimento, o domínio em produção), e cada uma delas
- * precisa estar em Authentication > URL Configuration > Redirect URLs no
- * painel do Supabase — ver README, "Recuperação de senha".
+ * Para onde o link do e-mail leva: /nova-senha na origem pública do site
+ * (VITE_SITE_URL), não na da aba atual — o link pode ser aberto em outro
+ * aparelho. A URL precisa estar em Authentication > URL Configuration >
+ * Redirect URLs no painel do Supabase.
  */
 export function urlDeNovaSenha(): string {
-  return `${window.location.origin}/nova-senha`
+  return AUTH_REDIRECT.novaSenha
 }
 
 export default function RecuperarSenha() {
@@ -24,15 +28,14 @@ export default function RecuperarSenha() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [enviado, setEnviado] = useState(false)
+  const values = useMemo(() => ({ email }), [email])
+  const v = useFormValidation(values, RULES)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
-
-    if (!isEmail(email)) {
-      setError('Informe um e-mail válido.')
-      return
-    }
+    v.touch('email')
+    if (!v.isValid()) return
 
     setLoading(true)
     try {
@@ -85,12 +88,22 @@ export default function RecuperarSenha() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onBlur={v.bind('email').onBlur}
+                  error={v.errorOf('email') ?? error ?? undefined}
+                  valid={isEmail(email)}
                   autoComplete="email"
+                  inputMode="email"
                   placeholder="voce@exemplo.com.br"
-                  error={error ?? undefined}
+                  required
                 />
 
-                <Button type="submit" full size="lg" loading={loading}>
+                <Button
+                  type="submit"
+                  full
+                  size="lg"
+                  loading={loading}
+                  disabled={!v.isValid() || loading}
+                >
                   {loading ? 'Enviando…' : 'Enviar link'}
                 </Button>
               </form>

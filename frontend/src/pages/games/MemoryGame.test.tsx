@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
+import i18n from '../../i18n';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
@@ -28,6 +29,11 @@ function estado(): { pares: number; jogadas: number } {
 /** Carta pelo número exibido no aria-label, independente de estar aberta. */
 const carta = (n: number) => screen.getByLabelText(new RegExp(`^Carta ${n}[,:]`));
 
+// Os rótulos vêm do i18n: sem idioma carregado, `t()` devolveria a chave.
+beforeAll(async () => {
+  await i18n.changeLanguage('pt-BR');
+});
+
 describe('MemoryGame — Jogo da Memória', () => {
   beforeEach(() => {
     // Embaralhamento determinístico: com todos os pesos iguais o `sort` é
@@ -44,7 +50,7 @@ describe('MemoryGame — Jogo da Memória', () => {
   it('mostra 12 cartas escondidas numa grade 4×3', () => {
     renderizar();
     expect(screen.getAllByLabelText(/^Carta \d+, escondida$/).length).toBe(12);
-    expect(screen.getByLabelText('Voltar para Ajuda e Lazer')).toBeInTheDocument();
+    expect(screen.getByLabelText('Voltar para Lazer e bem-estar')).toBeInTheDocument();
   });
 
   it('vira a carta olhada e conta a jogada só ao virar a segunda', () => {

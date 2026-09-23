@@ -167,10 +167,17 @@ describe('EXPERIMENT (snapshot)', () => {
 // comentário de `ExperimentConfig`; mudar o default exige mudar o motivo.
 // -----------------------------------------------------------------------------
 describe('defaults decididos', () => {
-  it('compensações geométricas ligadas: pose, translação lateral e referência lenta', () => {
+  it('compensações geométricas ligadas (pose, translação) contra a referência FIXA da calibração', () => {
     expect(DEFAULTS.geometricPoseCompensation).toBe(true);
     expect(DEFAULTS.lateralTranslationCompensation).toBe(true);
-    expect(DEFAULTS.referenciaLenta).toBe(true);
+    // A referência lenta (EMA) desfazia uma compensação certa: na gravação de
+    // 23/09/2026 ela absorveu 43–48 % de um giro real de cabeça em ~35 s, e o
+    // miolo foi de 67 px (referência fixa) para 88 px. Ver o comentário da flag.
+    expect(DEFAULTS.referenciaLenta).toBe(false);
+  });
+
+  it('correção local dos cantos ligada', () => {
+    expect(DEFAULTS.correcaoLocal).toBe(true);
   });
 
   it('estabilizador de fixação ON; suavização do L2CS na fixação ON', () => {
@@ -180,8 +187,13 @@ describe('defaults decididos', () => {
     expect(DEFAULTS.filterMode).toBe('oneEuro');
   });
 
-  it('normalizarRollNoCrop OFF — o checkpoint Gaze360 não foi treinado com roll cancelado', () => {
-    expect(DEFAULTS.normalizarRollNoCrop).toBe(false);
+  it('normalizarRollNoCrop ON — rosto nivelado está dentro da distribuição do Gaze360 e a saída é contra-rotacionada', () => {
+    // Era OFF por cautela ("só ganha se for a mesma normalização do treino").
+    // O Gaze360 tem cabeças em toda inclinação, inclusive nivelada; a rede não
+    // vê nada fora do treino, e `roll.ts` desfaz a rotação no vetor 3D. Sem
+    // isto, cada grau de cabeça inclinada virava erro de olhar. Ver a doc da
+    // flag para a medição que ainda falta em vídeo real.
+    expect(DEFAULTS.normalizarRollNoCrop).toBe(true);
   });
 
   it('blocoL2csCompleto OFF — as 7 dims mudam o FEATURE_VECTOR_ID e invalidam perfis', () => {

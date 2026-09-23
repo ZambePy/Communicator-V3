@@ -27,6 +27,18 @@ reinterpretadas**: continuam válidas no pipeline em que foram feitas, e o
 baseline novo não as substitui — ele é uma linha nova, contra a qual as
 próximas rodadas passam a ser julgadas.
 
+**Revisão de 2026-09-23 — cantos calibrados.** O protocolo do teste continua
+o mesmo, mas o que ele mede nos cantos mudou: a calibração padrão passou de 9
+para **13 alvos** (a grade 3×3 + os quatro cantos da tela a 5 %, os mesmos
+lugares de B1–B4), com uma **correção local** ajustada nesses cantos, e a
+referência geométrica deixou de ser uma média móvel (`referenciaLenta`
+desligada). Consequências para quem lê relatórios: `meanErrorEdge` de antes e
+de depois desta data **não são comparáveis** (antes media extrapolação; agora,
+o canto calibrado — §2 e §6), e os números novos desta revisão vêm de
+**replay offline** de uma gravação (§14.5), não de uma sessão ao vivo. O
+baseline ao vivo continua sendo o de 2026-09-20 (§14.4) até a próxima rodada
+limpa com o pipeline novo.
+
 ---
 
 ## 1. O que é medido
@@ -86,10 +98,20 @@ Roda automaticamente ao fim de cada calibração, e sob demanda em
 **Configurações → Testar precisão**.
 
 **Pontos.** 13 alvos: grade 3×3 em 25/50/75 % da tela e 4 alvos de borda em
-5/95 %. Deliberadamente disjunta da grade de calibração (~17/83 %) — validar
-nas posições do treino mediria memorização. Coincidências vão para
-`result.validationOverlap` (tolerância 2 % por eixo; o centro pertence às duas
-por convenção).
+5/95 %. A grade P1–P9 é deliberadamente disjunta da grade de calibração
+(~17/83 %) — validar nas posições do treino mediria memorização. Coincidências
+vão para `result.validationOverlap` (tolerância 2 % por eixo; o centro
+pertence às duas por convenção).
+
+**Desde 2026-09-23, B1–B4 coincidem com alvos de calibração.** A calibração
+padrão ganhou os quatro cantos da tela a 5 % (§6), exatamente onde ficam
+B1–B4. Os quatro passam a aparecer em `validationOverlap` e o console registra
+isso como informação, não como aviso: ali o teste mede **a acurácia no canto
+calibrado** — a pessoa volta a olhar o canto um ou dois minutos depois do
+treino, que é o que o botão de canto da interface sente —, não mais a
+extrapolação do modelo. Sobreposição em P1–P9 continua sendo defeito (aviso no
+console). Na calibração rápida (4 alvos) os cantos não são calibrados e B1–B4
+voltam a medir extrapolação.
 
 **Ordem sorteada, com semente registrada.** Os 13 alvos são embaralhados
 (`embaralharComSemente`, xorshift32). Em ordem fixa a pessoa antecipa o alvo e
@@ -124,7 +146,9 @@ calibração usam o mesmo desenho.
 As bordas ficam fora da acurácia porque sofrem duas distorções opostas
 (softClamp e geometria plana); `meanErrorEdge` existe separado e é a métrica
 menos confiável do relatório. Nyström et al. (2013) e Feit et al. (2017)
-relatam o mesmo padrão em rastreadores IR.
+relatam o mesmo padrão em rastreadores IR. Desde 2026-09-23 ela mede o canto
+calibrado (acima): compare `meanErrorEdge` só entre rodadas do mesmo lado
+dessa data.
 
 **Duas fontes de amostra.** O núcleo alimenta o teste com a predição **bruta**
 (antes do filtro) e a **filtrada** (o que o cursor mostra). Acurácia e precisão
@@ -685,13 +709,45 @@ preso em `true`, sumindo com o painel de preflight pelo resto da sessão.
 
 ## 6. Calibração
 
-- 9 alvos (completo) ou 4 (rápido), em ordem embaralhada pela UI, posicionados
-  pelo orçamento de excentricidade (`MAX_ECCENTRICITY_DEG = 16`, que na tela de
-  referência põe a grade em ~17/83 %). A ordem da calibração é sorteada mas
-  **não tem semente registrada** — só o teste de precisão tem.
+- **13 alvos** no perfil padrão (desde 2026-09-23; antes eram 9): a grade 3×3
+  posicionada pelo orçamento de excentricidade (`MAX_ECCENTRICITY_DEG = 16`,
+  que na tela de referência põe a grade em ~17/83 % na horizontal e até
+  y = 0,8375 embaixo) **mais os quatro cantos da tela a 5 %**
+  (`INSET_CANTOS_PADRAO`), fora do orçamento de propósito — o orçamento segue
+  decidindo a grade interna, que é o que segura o ganho do modelo no miolo.
+  **4 alvos** na calibração rápida (só os cantos da grade: os cantos da tela
+  ficam sem calibrar). Ordem embaralhada pela UI, mas **sem semente
+  registrada** — só o teste de precisão tem.
 - Cada alvo descarta os primeiros 600 ms (`CALIBRATION_ACCLIMATION_MS`) e
-  coleta de 1680 ms (centro) a 2800 ms (canto). Na grade real, ~2,3 s no centro
-  e ~3,0 s nos cantos, ~26 s no total.
+  coleta até `1680 + d·1120` ms, com `d` a distância ao centro normalizada (0 no
+  centro, 1 no canto geométrico): 1680 ms no centro, ~2690 ms nos cantos a 5 %.
+  É teto, não duração fixa — o ponto fecha quando o olhar estabiliza. No pior
+  caso, os 13 alvos somam ~39 s na tela de referência, dentro do teto de fadiga
+  de 40 s que `calibration.janelaDoPonto.test.ts` segura.
+- Os quatro cantos entram no Ridge como qualquer alvo e, além disso, alimentam
+  a **correção local** (`src/correcaoLocal.ts`): o resíduo médio de cada canto
+  (alvo − predição média, depois das compensações de cabeça) é interpolado por
+  um processo gaussiano de média zero — núcleo RBF com ℓ = 0,10 da tela, ruído
+  σ² = 0,10 —, ancorado em resíduo zero nos 9 alvos da grade, onde o modelo
+  global já é o ajuste. Longe dos cantos a correção some (no centro da tela,
+  < 0,01 px). Resíduo acima de 0,25 da tela é tratado como fixação ruim: o
+  canto é descartado e vira âncora. A correção roda em `mapGaze` depois das
+  compensações e antes da correção por dwell, e viaja no perfil salvo.
+  `?cantos=0` desliga (o Ridge continua com os 13 alvos).
+- Os cantos ficam **fora** do diagnóstico da grade (`gridDiagnosis`), do pedido
+  de reforço e da detecção de pontos instáveis: esses três existem para medir
+  generalização no miolo, e um canto a 5 % da borda é outra população.
+- **Referência geométrica fixa** (desde 2026-09-23): as compensações de pose e
+  de translação medem o Δ contra o instante da calibração. A média móvel de
+  τ = 30 s (`referenciaLenta`) ficou desligada por padrão porque, na gravação
+  da §14.5, absorveu 43–48 % de uma rotação real de cabeça — a compensação
+  passava a corrigir metade do movimento. `?refLenta=1` religa.
+- O **reajuste rápido** (2 s olhando o centro, oferecido nos avisos de
+  distância e de postura) não refaz a calibração nem as referências: mede o
+  desvio do cursor no centro e o desconta como deslocamento da correção por
+  dwell (até 8 % da tela; acima disso o reajuste não é aplicado e o app pede
+  nova calibração). Uma rodada de teste feita depois de um reajuste é do mesmo
+  modelo, com esse deslocamento aplicado — registre que ele houve.
 - **Não há mais gates de amostra.** Quadro com imagem ruim (olho escuro,
   estourado, borrado, pálpebra semifechada) e amostra com bloco L2CS zerado
   (leitura obsoleta ou implausível) **entram no treino**. Os critérios
@@ -1015,13 +1071,16 @@ trás — **não são reanalisáveis**.
 | 2026-09-06 20:36 | deriva T+1 min | 87 px | 2,19° | 53,1 px | linha adiada (§4.5) |
 | 2026-09-06 20:45 | deriva T+10 min | 152 px | 3,87° | 30,7 px | linha adiada (§4.5) |
 | 2026-09-20 11:23 | **baseline, pipeline `irisAbs`** | **56 px** | **1,40°** | 38,1 px | 🏆 `accuracy-report-1789914216975.json` — menor erro medido; detalhe na §14.4 |
+| 2026-09-22 19:16 | calibração de 9 pontos, referência lenta | 62 px | 1,58° | 48,6 px | `accuracy-report-1790115416496.json` — cantos (B1–B4) em **215 px**; `loo` 91 px |
+| 2026-09-22 22:34 | calibração de 9 pontos, referência lenta, **sessão gravada** | 83 px | 2,09° | 30,0 px | `accuracy-report-1790127248014.json` — cantos em **208 px**; a gravação desta sessão é a base do replay da §14.5 |
 
 ⚠️ As duas de 2026-09-05 são de um esquema anterior ao `/2` e de um protocolo
 anterior a este documento (janela útil ~800 ms, ordem fixa, sem BCEA, sem
 fração de amostras válidas). Valem como ordem de grandeza, não para comparação
 ponto a ponto.
 
-O detalhamento de M1 está na §4.1; o do baseline de 2026-09-20, na §14.4.
+O detalhamento de M1 está na §4.1; o do baseline de 2026-09-20, na §14.4; o
+das duas sessões de 2026-09-22 e do que se mudou a partir delas, na §14.5.
 
 ### 14.2 Medição preliminar de deriva *(linha adiada)*
 
@@ -1189,6 +1248,87 @@ precisão é medida. É hipótese, não conclusão — nada aqui a testa.
 5. **`explainedFraction` 0,39.** O resto do erro não é um mapa afim coerente;
    recalibrar não deve levar muito além disso.
 
+### 14.5 Cantos — 2026-09-23 *(replay offline, não é medição ao vivo)*
+
+**O problema, medido.** As duas sessões de 22/09 (§14.1) repetiram o padrão
+que a pessoa relatava: miolo razoável, cantos ruins — `meanErrorEdge` de 215 e
+208 px, contra 62 e 83 px no interior. O canto é onde a interface põe botões
+(Emergência no alto à direita, voltar no alto à esquerda), e com a calibração
+de 9 pontos ele era **extrapolação**: a grade terminava em ~17/83 % na
+horizontal e em y = 0,8375 embaixo.
+
+**Método.** A segunda sessão foi gravada (gravador de sessão, 22:34, óculos,
+cabeça parada, ~63 cm medidos). O replay (`src/testUtils/replayDeGravacao.ts`,
+§15) passa essa gravação pelo `calibration.ts` de verdade — mesmas features,
+mesmos alvos, mesma sequência de chamadas do engine — e mede o erro de
+`mapGaze` nos alvos do teste. Antes de medir qualquer variante, o replay foi
+validado contra o próprio app: com a configuração gravada, a diferença para a
+predição que o app registrou (`preFilter`) tem mediana de **5,7 px**. O replay
+não refaz MediaPipe, L2CS nem filtros; o número comparável é o erro de
+`mapGaze`, antes do One Euro.
+
+**O que a gravação mostrou.** Duas causas, independentes:
+
+1. **A referência lenta comia a compensação.** A média móvel de τ = 30 s
+   absorveu 43–48 % de uma rotação real de cabeça durante a sessão: medida
+   contra uma referência que andava junto, a compensação de pose corrigia só
+   metade do movimento. Com a referência fixa no instante da calibração, o
+   miolo cai de 87,9 para 67,1 px sem mexer em mais nada.
+2. **Os cantos não tinham dado.** Mesmo com a referência fixa, os cantos
+   ficam em 188,8 px: é o polinômio extrapolando além da grade, e a linha de
+   baixo ainda sofre com a pálpebra.
+
+**Variantes** (erro médio de `mapGaze`, px, na tela de referência; interno =
+P1–P9, cantos = B1–B4):
+
+| variante | interno | cantos | B1 | B2 | B3 | B4 |
+|---|---|---|---|---|---|---|
+| 9 pontos, referência lenta — **o app gravado** | 87,9 | 201,6 | 206 | 110 | 216 | 274 |
+| 9 pontos, referência fixa | 67,1 | 188,8 | 161 | 110 | 169 | 315 |
+| 13 pontos, referência lenta, sem correção local | 71,8 | 107,7 | 105 | 51 | 133 | 141 |
+| 13 pontos, referência fixa, sem correção local | 66,9 | 102,1 | 70 | 43 | 117 | 178 |
+| **13 pontos, referência fixa + correção local (padrão novo)** | **64,2** | **40,2** | 57 | 26 | 35 | 43 |
+
+Na geometria de referência, 1° ≈ 38,5 px: 64 px ≈ 1,7° e 40 px ≈ 1,0°. Os três
+defaults novos (§6) saíram desta tabela: `referenciaLenta: false`, a calibração
+de 13 alvos e `correcaoLocal: true`.
+
+**Ressalvas — e elas mudam o número que se deve esperar:**
+
+1. **O protocolo dos cantos é otimista.** A gravação não tem calibração de 13
+   pontos. Para simulá-la, a primeira metade de cada fixação de canto do TESTE
+   entra como ponto de calibração e só a segunda metade é avaliada — o canto é
+   "revisto" segundos depois, com a mesma pose, e não minutos depois, como
+   numa sessão real. Os 40 px são um **limite inferior**. A expectativa
+   honesta para uma sessão ao vivo é **40–110 px nos cantos**: 102 px é o que
+   os 13 pontos entregam sem a correção local, e a correção só pode ajudar
+   onde o resíduo do canto se repete.
+2. **O miolo não mudou de verdade entre as três últimas linhas.** 64,2 × 66,9 ×
+   71,8 px com N = 1 estão dentro da variação de uma sessão para outra. O que a
+   tabela sustenta no miolo é a referência fixa (87,9 → 67,1), não a correção.
+3. **Uma gravação, uma pessoa, uma sessão** (§3.5). O efeito da referência
+   lenta depende de quanto a cabeça gira durante a sessão; numa sessão em que
+   ela não gira, as duas referências dão o mesmo resultado.
+4. **Sem filtro nem dwell.** O teste de precisão também mede antes do filtro,
+   então a comparação é justa com o relatório — mas o que o dwell sente depende
+   do One Euro e do estabilizador, que o replay não roda.
+5. **`geometry.assumed: true`** nas duas sessões de 22/09, como no baseline:
+   os graus acima são da geometria padrão (23,6", 60 cm), que é a da bancada.
+
+**O que falta, e é o que fecha esta seção:** uma sessão ao vivo limpa com os
+defaults novos (13 pontos, referência fixa, correção local), com
+`&diagonal=23.6`, e uma réplica. Até lá o baseline ao vivo segue sendo o da
+§14.4, e o `meanErrorEdge` da próxima rodada **não** se compara com os 215 e
+208 px de 22/09 (§2: agora o canto é calibrado).
+
+Reproduzir (a gravação não vai para o repositório — é o rosto de alguém, em
+números):
+
+```bash
+IRISFLOW_GRAVACAO=/caminho/irisflow-recording-2026-09-23T01-34-11-376Z.jsonl \
+  npx vitest run src/replayDeGravacao.test.ts
+```
+
 ---
 
 ## 15. Harness sintético
@@ -1202,6 +1342,19 @@ têm sentido relativos ao baseline. Para regenerar, com revisão do diff:
 ```bash
 IRISFLOW_WRITE_BASELINE=1 npx vitest run src/testUtils/writeBaseline.test.ts
 ```
+
+**Replay de gravação real** (`src/testUtils/replayDeGravacao.ts`, desde
+2026-09-23). É o outro lado: em vez de trajetórias sintéticas, uma gravação do
+gravador de sessão (Configurações → Gravador de sessão, na área do cuidador)
+passa pelo `calibration.ts` de verdade, com relógio falso do Vitest, e o
+replay mede o erro de `mapGaze` nos alvos do teste de precisão gravado. Serve
+para comparar variantes do núcleo (flags do `EXPERIMENT`, perfil de
+calibração) sobre os MESMOS olhos. Antes de confiar numa comparação, confira a
+linha "o app gravado": a diferença para o `preFilter` registrado tem de ficar
+em poucos px — se não ficar, o replay não está reproduzindo o app e nenhuma
+variante vale. O teste (`src/replayDeGravacao.test.ts`) só roda com
+`IRISFLOW_GRAVACAO` apontando para o arquivo; sem ela, fica pulado no
+`npm test`. Uso na §14.5.
 
 ---
 

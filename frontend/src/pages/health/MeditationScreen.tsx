@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Pause, Play, RotateCcw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { ArrowLeft, Pause, Play, RotateCcw, CheckCircle2 } from 'lucide-react';
 import { GazeButton } from '../../components/ui/GazeButton';
+import { getSharedAudioContext } from '../../utils/emergencyAudio';
 
 /**
  * MEDITAÇÃO VISUAL — respiração guiada por um círculo que cresce e encolhe.
@@ -25,8 +27,43 @@ const DURACAO_DA_FASE_MS = 4000;
 
 const SEQUENCIA: Fase[] = ['Inale', 'Segure', 'Exale'];
 
+/**
+ * Durações que a pessoa escolhe, em minutos.
+ *
+ * Sem fim a sessão só acabava quando alguém pausava — e quem está de olhos
+ * semicerrados respirando não está olhando para o botão. Com um fim marcado o
+ * app diz "acabou" e a pessoa não precisa vigiar o relógio.
+ */
+export const DURACOES_MIN = [2, 5] as const;
+
+/** Um toque suave de duas notas ao terminar. Silencioso se não houver áudio. */
+function sinalDeFim(): void {
+  try {
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') void ctx.resume();
+    const t0 = ctx.currentTime;
+    [523.25, 783.99].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, t0 + i * 0.35);
+      gain.gain.setValueAtTime(0.0001, t0 + i * 0.35);
+      gain.gain.exponentialRampToValueAtTime(0.2, t0 + i * 0.35 + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + i * 0.35 + 0.6);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0 + i * 0.35);
+      osc.stop(t0 + i * 0.35 + 0.65);
+    });
+  } catch {
+    /* sem áudio: o aviso visual basta */
+  }
+}
+
 export const MeditationScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [ativa, setAtiva] = useState(false);
   /**
    * Fonte única de verdade: quantas fases já passaram desde o início.
@@ -37,11 +74,23 @@ export const MeditationScreen: React.FC = () => {
    * ciclos por volta.
    */
   const [fasesDecorridas, setFasesDecorridas] = useState(0);
+  const [duracaoMin, setDuracaoMin] = useState<(typeof DURACOES_MIN)[number]>(DURACOES_MIN[0]);
+  const [concluida, setConcluida] = useState(false);
   const intervalRef = useRef<number | null>(null);
 
   const indiceDaFase = fasesDecorridas % SEQUENCIA.length;
   const ciclos = Math.floor(fasesDecorridas / SEQUENCIA.length);
   const fase = SEQUENCIA[indiceDaFase];
+  const fasesDaSessao = Math.round((duracaoMin * 60_000) / DURACAO_DA_FASE_MS);
+
+  // Fim da sessão: para sozinha, avisa na tela e com um toque. Derivado do
+  // contador de fases, que é a fonte única.
+  useEffect(() => {
+    if (!ativa || fasesDecorridas < fasesDaSessao) return;
+    setAtiva(false);
+    setConcluida(true);
+    sinalDeFim();
+  }, [ativa, fasesDecorridas, fasesDaSessao]);
 
   useEffect(() => {
     if (!ativa) return;
@@ -65,7 +114,14 @@ export const MeditationScreen: React.FC = () => {
   const reiniciar = useCallback(() => {
     setAtiva(false);
     setFasesDecorridas(0);
+    setConcluida(false);
   }, []);
+
+  const iniciarOuPausar = useCallback(() => {
+    setConcluida(false);
+    setFasesDecorridas((n) => (n >= fasesDaSessao ? 0 : n));
+    setAtiva((a) => !a);
+  }, [fasesDaSessao]);
 
   // O círculo está grande durante "Inale" e "Segure" (o ar já entrou) e volta
   // ao tamanho normal em "Exale".
@@ -76,8 +132,11 @@ export const MeditationScreen: React.FC = () => {
       role="main"
       aria-labelledby="meditation-title"
       style={{
-        minHeight: '100vh',
-        width: '100vw',
+        // Altura fixa com rolagem própria: era `minHeight: 100vh` e, a 768 p,
+        // quem rolava era o documento (o conteúdo passava sob a Emergência).
+        height: '100dvh',
+        overflowY: 'auto',
+        width: '100%',
         boxSizing: 'border-box',
         background:
           'radial-gradient(circle at 50% 40%, rgba(217,70,239,0.14), transparent 60%), var(--color-bg-base)',
@@ -89,7 +148,10 @@ export const MeditationScreen: React.FC = () => {
         fontFamily: "'Inter', system-ui, sans-serif",
       }}
     >
-      <header style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', width: '100%' }}>
+      <header
+        className="reserva-emergencia"
+        style={{ '--reserva-margem': '3rem', display: 'flex', alignItems: 'center', gap: '1.5rem', width: '100%' }}
+      >
         <GazeButton
           onClick={() => navigate('/games')}
           width={200}
@@ -101,7 +163,7 @@ export const MeditationScreen: React.FC = () => {
             border: '2px solid var(--color-card-border)',
             boxShadow: '0 6px 20px var(--color-card-shadow)',
           }}
-          aria-label="Voltar para Ajuda e Lazer"
+          aria-label={t('lazer.voltarAria')}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', fontSize: '1.3rem', fontWeight: 800 }}>
             <ArrowLeft size={28} /> Voltar
@@ -137,6 +199,38 @@ export const MeditationScreen: React.FC = () => {
           Ciclos completos: {ciclos}
         </div>
       </header>
+
+      {/* Duração: dois alvos grandes, escolha antes ou durante. */}
+      <div
+        role="radiogroup"
+        aria-label="Duração da sessão"
+        style={{ display: 'flex', gap: '1.5rem', marginTop: '1.5rem', flexWrap: 'wrap', justifyContent: 'center' }}
+      >
+        {DURACOES_MIN.map((min) => (
+          <GazeButton
+            key={min}
+            role="radio"
+            aria-checked={duracaoMin === min}
+            aria-label={`Sessão de ${min} minutos`}
+            onClick={() => {
+              setDuracaoMin(min);
+              setConcluida(false);
+            }}
+            width={220}
+            height={76}
+            style={{
+              borderRadius: '1.5rem',
+              background: duracaoMin === min ? 'var(--color-primary)' : 'var(--color-card-bg)',
+              color: duracaoMin === min ? '#ffffff' : 'var(--color-text-base)',
+              border: duracaoMin === min ? '3px solid var(--color-primary)' : '2px solid var(--color-card-border)',
+              fontSize: '1.2rem',
+              fontWeight: 800,
+            }}
+          >
+            {min} min
+          </GazeButton>
+        ))}
+      </div>
 
       <div
         style={{
@@ -182,13 +276,36 @@ export const MeditationScreen: React.FC = () => {
               textShadow: '0 2px 6px rgba(0,0,0,0.3)',
             }}
           >
-            {ativa ? fase : 'Pronto'}
+            {ativa ? fase : concluida ? 'Fim' : 'Pronto'}
           </div>
         </div>
 
+        {concluida && (
+          <div
+            role="status"
+            aria-live="polite"
+            data-no-dwell="true"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              padding: '1rem 1.5rem',
+              borderRadius: '1.25rem',
+              background: 'var(--tint-ok-bg)',
+              border: '2px solid var(--tint-ok-border)',
+              color: 'var(--tint-ok-text)',
+              fontSize: '1.25rem',
+              fontWeight: 800,
+            }}
+          >
+            <CheckCircle2 size={28} aria-hidden="true" />
+            Sessão de {duracaoMin} minutos concluída. Respire no seu ritmo.
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
           <GazeButton
-            onClick={() => setAtiva((a) => !a)}
+            onClick={iniciarOuPausar}
             width={300}
             height={88}
             aria-pressed={ativa}

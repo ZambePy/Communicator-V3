@@ -34,8 +34,8 @@
  * na matriz que nove alvos precisam determinar.
  *
  * Por isso `lineares` deixa posições escolhidas FORA dos termos quadráticos,
- * mantendo-as no bloco linear. Com as duas dims angulares fora, 6 dims viram
- * 16 em vez de 27.
+ * mantendo-as no bloco linear. Com as duas dims angulares fora, 4 dims viram
+ * 7 em vez de 14 (e 6 viram 16 em vez de 27).
  *
  * Sem `lineares` o comportamento é idêntico ao histórico, bit a bit — a
  * ordem das colunas é a mesma, o que importa porque perfis salvos carregam

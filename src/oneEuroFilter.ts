@@ -84,6 +84,10 @@ export class OneEuroFilter {
   public setBeta(beta: number): void {
     this.beta_ = beta;
   }
+  public setDcutoff(dcutoff: number): void {
+    if (dcutoff <= 0) throw new Error("dcutoff should be >0");
+    this.dcutoff = dcutoff;
+  }
   public reset(): void {
     this.x = null;
     this.dx = null;
@@ -184,17 +188,42 @@ export interface FilterConfig {
   /** Constante de tempo em segundos — quanto tempo o cursor leva para
    *  acomodar, que é o que o cuidador percebe. */
   tauSec: number;
+  /**
+   * Corte do passa-baixa da DERIVADA, em Hz (o `dcutoff` do One Euro).
+   * Ausente = 1,0 Hz, o default de Casiez et al. (CHI 2012). Ver
+   * `DCUTOFF_V2_HZ` para o valor dos presets v2.
+   */
+  dcutoff?: number;
 }
+
+/**
+ * `dcutoff` dos presets v2: 2,0 Hz (era o default de 1,0 Hz).
+ *
+ * O `dcutoff` não suaviza a POSIÇÃO — ele suaviza a estimativa de velocidade
+ * que decide quando o filtro "solta" (`cutoff = mincutoff + beta·|ẋ|`). A 1 Hz
+ * essa estimativa tem constante de tempo de 160 ms: no começo de uma sacada o
+ * filtro ainda acha que o olho está parado e segura o cursor. Simulando a
+ * cadeia real (One Euro v2 → estabilizador de fixação → seguidor de cursor)
+ * com ruído colorido do tamanho medido nas gravações (σ ≈ 25 px, ρ = 0,9 por
+ * quadro, 30 Hz), 1 → 2 Hz reduz o t90 da sacada de ~93 → ~70 ms (400 px),
+ * ~155 → ~120 ms (150 px, vizinho de tecla) e ~55 → ~33 ms (800 px), com o
+ * desvio-padrão na fixação inalterado (14 → 15 px) e o tremor quadro a quadro
+ * subindo ~1 px. Acima de 2 Hz o ganho de latência estabiliza e o tremor
+ * continua subindo — por isso 2 e não 3.
+ */
+export const DCUTOFF_V2_HZ = 2.0;
 
 /** Monta um preset já com `alphaAt30` e `tauSec` derivados do mincutoff. */
 function preset(
   mincutoff: number,
   beta: number,
   filterInNormalizedSpace: boolean,
+  dcutoff: number = 1.0,
 ): FilterConfig {
   return {
     mincutoff,
     beta,
+    dcutoff,
     filterInNormalizedSpace,
     alphaAt30: alphaFromCutoff(mincutoff, 30),
     tauSec: tauFromCutoff(mincutoff),
@@ -233,9 +262,9 @@ export const FILTER_PRESETS_V2: Record<FilterPresetV2, FilterConfig> = {
   //
   // Um viés residual de 40 px converge em ~1 s. Os betas (2,5/5/12) são
   // provisórios até haver medição comparativa com as outras cadeias.
-  'estavel-v2':    preset(0.30, 2.5,  true),
-  'balanceado-v2': preset(0.50, 5.0,  true),
-  'responsivo-v2': preset(1.00, 12.0, true),
+  'estavel-v2':    preset(0.30, 2.5,  true, DCUTOFF_V2_HZ),
+  'balanceado-v2': preset(0.50, 5.0,  true, DCUTOFF_V2_HZ),
+  'responsivo-v2': preset(1.00, 12.0, true, DCUTOFF_V2_HZ),
 };
 
 export class OneEuroFilter2D {
@@ -257,11 +286,15 @@ export class OneEuroFilter2D {
   // Muta os parâmetros das instâncias existentes em vez de recriá-las —
   // preserva `x`, `dx`, `lasttime` e o estado filtrado acumulado. Sem isto,
   // trocar preset em uso zera o estado e o cursor salta.
-  public setParams(mincutoff: number, beta_: number): void {
+  public setParams(mincutoff: number, beta_: number, dcutoff?: number): void {
     this.filterX.setMincutoff(mincutoff);
     this.filterX.setBeta(beta_);
     this.filterY.setMincutoff(mincutoff);
     this.filterY.setBeta(beta_);
+    if (dcutoff !== undefined) {
+      this.filterX.setDcutoff(dcutoff);
+      this.filterY.setDcutoff(dcutoff);
+    }
   }
 
   public reset(): void {

@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
+import i18n from '../i18n';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
@@ -24,6 +25,11 @@ function pontosNoPlacar(): number {
   return m ? Number(m[1]) : NaN;
 }
 
+// Os rótulos vêm do i18n: sem idioma carregado, `t()` devolveria a chave.
+beforeAll(async () => {
+  await i18n.changeLanguage('pt-BR');
+});
+
 describe('BubblePopGame — Estoura Bolhas', () => {
   beforeEach(() => {
     // Janela folgada: com 1024×768 o sorteio por rejeição às vezes não acha
@@ -39,7 +45,7 @@ describe('BubblePopGame — Estoura Bolhas', () => {
   it('nasce com bolhas acionáveis e um caminho de saída visível', () => {
     renderizar();
     expect(bolhas().length).toBeGreaterThan(0);
-    expect(screen.getByLabelText('Voltar para Ajuda e Lazer')).toBeInTheDocument();
+    expect(screen.getByLabelText('Voltar para Lazer e bem-estar')).toBeInTheDocument();
   });
 
   it('só pontua quando uma bolha é estourada', () => {

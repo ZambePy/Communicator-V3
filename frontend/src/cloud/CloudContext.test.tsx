@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import { _limparOuvintes, emitirFalaDoPaciente, emitirPedidoDeAjuda } from './eventos';
+import { definirModoApresentacao } from '../services/apresentacao';
 
 // ---------- dublês ----------
 vi.mock('./config', () => ({
@@ -27,10 +28,13 @@ vi.mock('./supabaseClient', () => ({
   supabase: () => ({ from, channel: () => canal, removeChannel }),
 }));
 const setFilterPreset = vi.fn();
+/** Preset que o engine diz estar em vigor (formato do engine, com sufixo -v2). */
+const diag = { preset: 'responsivo-v2' as string | null };
 vi.mock('../context/GazeContext', () => ({
   useGaze: () => ({
     state: 'tracking', cameraError: null, getCameraStream: () => ({}), setFilterPreset,
     calibration: { isCalibrated: () => true },
+    getDiagnostics: () => ({ filtro: { preset: diag.preset } }),
   }),
 }));
 const updateSettings = vi.fn();
@@ -63,6 +67,7 @@ const Sonda: React.FC = () => {
       <span data-testid="vinculo">{c.vinculo?.beneficiary_name ?? '-'}</span>
       <span data-testid="banner">{c.mensagemNaTela?.text ?? '-'}</span>
       <span data-testid="nao-faladas">{c.naoFaladas}</span>
+      <span data-testid="reconhecimento">{c.reconhecimento ? `${c.reconhecimento.id}@${c.reconhecimento.acknowledged_at}` : '-'}</span>
     </div>
   );
 };
@@ -89,6 +94,7 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     localStorage.clear();
     _limparOuvintes();
     realtime.handlers = {};
+    diag.preset = 'responsivo-v2';
     licencaMock.status = 'none';
     licencaMock.license = null;
     licencaMock.reverificar = vi.fn();
@@ -108,6 +114,7 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    definirModoApresentacao(false);
     acoes = null;
   });
 
@@ -124,7 +131,17 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     expect(abertura).toBeDefined();
     expect(abertura._chave).toBe('CHAVE-SECRETA');
     expect(abertura.session.dwell_ms).toBe(1500);
+    // O preset REAL do engine ('responsivo-v2' → 'responsivo'), não 'balanceado' fixo.
+    expect(abertura.session.filter_preset).toBe('responsivo');
     expect(realtime.handlers.messages).toBeDefined();
+    expect(realtime.handlers.help_requests).toBeDefined();
+  });
+
+  it('sem preset no engine (cadeia Kalman) a sessão abre com balanceado', async () => {
+    diag.preset = null;
+    await montarComLicencaAtiva();
+    const abertura = chamadas(fetchMock).find((c) => c.action === 'session.upsert');
+    expect(abertura.session.filter_preset).toBe('balanceado');
   });
 
   it('fala e socorro do paciente viram message.send e help.create com a sessão', async () => {
@@ -139,6 +156,26 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     const feitas = chamadas(fetchMock);
     expect(feitas).toContainEqual(expect.objectContaining({ action: 'message.send', text: 'Estou com sede', kind: 'frase', _chave: 'CHAVE-SECRETA' }));
     expect(feitas).toContainEqual(expect.objectContaining({ action: 'help.create', kind: 'emergencia', message: 'Dor', session_id: 'sess-1' }));
+  });
+
+  it('pedirAjuda passa pelo barramento: vira help.create com a sessão, e o modo apresentação corta', async () => {
+    await montarComLicencaAtiva();
+    fetchMock.mockClear();
+    definirModoApresentacao(true);
+    await act(async () => {
+      await acoes!.pedirAjuda('emergencia', 'Demonstração');
+      await Promise.resolve();
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(chamadas(fetchMock).find((c) => c.action === 'help.create')).toBeUndefined();
+
+    definirModoApresentacao(false);
+    await act(async () => {
+      await acoes!.pedirAjuda('ajuda', 'Preciso de ajuda');
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(chamadas(fetchMock)).toContainEqual(expect.objectContaining({ action: 'help.create', kind: 'ajuda', message: 'Preciso de ajuda', session_id: 'sess-1', _chave: 'CHAVE-SECRETA' })));
+    expect(chamadas(fetchMock).filter((c) => c.action === 'help.create')).toHaveLength(1);
   });
 
   it('mensagem do cuidador chega pelo realtime, é falada UMA vez, aparece na tela e é marcada como falada', async () => {
@@ -157,13 +194,60 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     await waitFor(() => expect(screen.getByTestId('nao-faladas').textContent).toBe('0'));
   });
 
-  it('ajuste remoto: tempo de fixação em ms e preset -v2', async () => {
+  it('ajuste remoto: tempo de fixação em ms, preset -v2 e a sessão aberta é atualizada', async () => {
     await montarComLicencaAtiva();
+    fetchMock.mockClear();
     await act(async () => {
       realtime.handlers.patient_settings({ new: { beneficiary_id: 'ben-1', dwell_ms: 800, filter_preset: 'estavel', updated_at: 't1' } });
     });
     expect(updateSettings).toHaveBeenCalledWith({ dwellMs: 800 });
     expect(setFilterPreset).toHaveBeenCalledWith('estavel-v2');
+    // O registro da sessão passa a dizer o que valeu de fato.
+    await waitFor(() => expect(chamadas(fetchMock)).toContainEqual(expect.objectContaining({ action: 'session.upsert', session: { id: 'sess-1', dwell_ms: 800, filter_preset: 'estavel' } })));
+  });
+
+  it('ajuste remoto PARCIAL (só contato/prazo, dwell e preset nulos): nada é aplicado por cima do local', async () => {
+    await montarComLicencaAtiva();
+    updateSettings.mockClear();
+    setFilterPreset.mockClear();
+    fetchMock.mockClear();
+    await act(async () => {
+      realtime.handlers.patient_settings({ new: { beneficiary_id: 'ben-1', dwell_ms: null, filter_preset: null, emergency_timeout_s: 90, updated_at: 't2' } });
+    });
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(setFilterPreset).not.toHaveBeenCalled();
+    expect(chamadas(fetchMock).find((c) => c.action === 'session.upsert')).toBeUndefined();
+    expect(acoes?.ajustesRemotos?.emergency_timeout_s).toBe(90);
+  });
+
+  it('confirmação do cuidador (UPDATE em help_requests com acknowledged_at) vira `reconhecimento`', async () => {
+    await montarComLicencaAtiva();
+    const linha = { id: 'hr-7', beneficiary_id: 'ben-1', kind: 'emergencia', message: 'Dor', created_at: '2026-09-10T15:00:00Z', acknowledged_at: '2026-09-10T15:00:20Z', acknowledged_by: 'u1', escalated_at: null, resolved_at: null };
+    await act(async () => {
+      // UPDATE sem acknowledged_at (ex.: escalonamento) não conta.
+      realtime.handlers.help_requests({ new: { ...linha, acknowledged_at: null, escalated_at: '2026-09-10T15:01:00Z' } });
+    });
+    expect(screen.getByTestId('reconhecimento').textContent).toBe('-');
+    await act(async () => {
+      realtime.handlers.help_requests({ new: linha });
+      // Aviso de postura reconhecido não é resposta a socorro.
+      realtime.handlers.help_requests({ new: { ...linha, id: 'hr-8', kind: 'postura' } });
+    });
+    expect(screen.getByTestId('reconhecimento').textContent).toBe('hr-7@2026-09-10T15:00:20Z');
+  });
+
+  it('só fala real conta em utterances/chars: "Estou bem" (kind sistema) não entra no session.end', async () => {
+    const r = await montarComLicencaAtiva();
+    await act(async () => {
+      emitirFalaDoPaciente('Estou com sede', 'frase');
+      emitirFalaDoPaciente('Estou bem', 'sistema');
+      await Promise.resolve();
+    });
+    fetchMock.mockClear();
+    licencaMock.status = 'none';
+    licencaMock.license = null;
+    r.rerender(<CloudProvider><Sonda /></CloudProvider>);
+    await waitFor(() => expect(chamadas(fetchMock)).toContainEqual(expect.objectContaining({ action: 'session.end', session_id: 'sess-1', utterances: 1, chars_typed: 'Estou com sede'.length })));
   });
 
   it('chave recusada (computador desvinculado): fecha tudo e pede reverificação da licença', async () => {

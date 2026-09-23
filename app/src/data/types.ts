@@ -2,7 +2,7 @@
  * Modelo de domínio do app do cuidador.
  *
  * As entidades Profile, Beneficiary, Subscription e Plan espelham o schema do site
- * (`../supabase/schema.sql`: public.profiles, public.beneficiaries, public.subscriptions,
+ * (`../supabase/migrations/20260923022346_schema_base.sql`: public.profiles, public.beneficiaries, public.subscriptions,
  * public.plans). As demais entidades são criadas por `../supabase/migrations/`.
  */
 
@@ -11,7 +11,7 @@ export type Condition = 'ela' | 'tetraplegia' | 'pc' | 'avc' | 'distrofia' | 'ou
 export type DesktopOS = 'windows' | 'macos' | 'linux' | 'nao-sei';
 export type SubscriptionStatus = 'avaliacao' | 'ativa' | 'cancelada' | 'inadimplente' | 'encerrada';
 /**
- * `beta` é o plano do programa beta fechado (`../docs/BETA.md`): R$ 0, sem cobrança,
+ * `beta` é o plano do programa beta fechado (README da raiz, seção "Conta IrisFlow e nuvem"): R$ 0, sem cobrança,
  * assinatura 'ativa' com `next_charge_at` = fim da beta ("acesso até").
  */
 export type PlanId = 'essencial' | 'completo' | 'voz' | 'beta' | string;
@@ -44,7 +44,7 @@ export interface Plan {
   name: string;
   price_brl: number;
   trial_days: number;
-  /** false = não pode ser contratado (todos durante a beta). Coluna da migração 20260915. */
+  /** false = não pode ser contratado (todos durante a beta). Coluna da migração 20260923022616_beta. */
   purchasable?: boolean;
 }
 
@@ -136,7 +136,7 @@ export interface Session {
   chars_typed: number;
   help_requests: number;
   modules_used: string[];
-  // Preenchidos pelo desktop ao fim do teste de precisão (migração 20260908).
+  // Preenchidos pelo desktop ao fim do teste de precisão (migração 20260923022507_integracao_ecossistema).
   precision_px: number | null;
   precision_deg: number | null;
   hit_rate_100px: number | null;
@@ -153,12 +153,24 @@ export interface HelpRequest {
   session_id: string | null;
   kind: HelpKind;
   message: string;
+  /**
+   * Quando o paciente pediu. Um pedido que esperou na fila offline do desktop
+   * chega depois com o horário real: a Edge Function desconta da hora do
+   * servidor o atraso medido no computador (até 24 h), o que também anula um
+   * relógio errado no PC.
+   */
   created_at: string;
+  /**
+   * Quando o servidor recebeu o pedido. É daqui que conta o prazo de
+   * escalonamento — um pedido atrasado não é escalado no mesmo minuto em que
+   * chega. Ausente nos bancos sem a coluna: aí vale `created_at`.
+   */
+  received_at?: string | null;
   acknowledged_at: string | null;
   /**
    * Gravado pelo SERVIDOR (função agendada no Supabase, roda a cada minuto): para
    * `emergencia`/`ajuda` sem reconhecimento nem resolução, quando
-   * `created_at + patient_settings.emergency_timeout_s` (padrão 45 s) já passou,
+   * `received_at + patient_settings.emergency_timeout_s` (padrão 45 s) já passou,
    * ele grava `escalated_at = now()`, insere uma mensagem de sistema na conversa
    * e reenvia o push para TODOS os celulares do cuidador.
    *
@@ -196,12 +208,18 @@ export interface EmergencyContact {
   phone: string;
 }
 
+/**
+ * Ajuste remoto. Os campos de rastreamento são `| null` de propósito: "não
+ * definido pelo cuidador" (o computador segue com o valor local) é diferente
+ * de "1500 ms". Hoje o banco ainda preenche defaults NOT NULL; a migração
+ * proposta no relatório torna essas colunas nulas por padrão.
+ */
 export interface PatientSettings {
   beneficiary_id: string;
-  dwell_ms: DwellMs;
-  filter_preset: FilterPreset;
-  keyboard_layout: KeyboardLayout;
-  sensitivity: number; // 1..10
+  dwell_ms: DwellMs | null;
+  filter_preset: FilterPreset | null;
+  keyboard_layout: KeyboardLayout | null;
+  sensitivity: number | null; // 1..10
   voice: string;
   emergency_timeout_s: number;
   emergency_contacts: EmergencyContact[];
@@ -221,11 +239,10 @@ export interface RealtimeHandlers {
 }
 
 /**
- * Contrato único da camada de dados. Implementado por MockProvider (demo) e SupabaseProvider (produção).
+ * Contrato único da camada de dados, implementado por SupabaseProvider. Os testes
+ * substituem o cliente Supabase (ou este contrato inteiro) por falsos locais ao teste.
  */
 export interface DataProvider {
-  readonly kind: 'mock' | 'supabase';
-
   // auth
   getUser(): Promise<AuthUser | null>;
   signIn(email: string, password: string): Promise<AuthUser>;
@@ -270,18 +287,40 @@ export interface DataProvider {
   deleteQuickPhrase(id: string): Promise<void>;
 
   // ajuste remoto de parâmetros
-  getSettings(beneficiaryId: string): Promise<PatientSettings>;
-  /**
-   * Garante que exista a linha em `patient_settings` (upsert com os valores atuais da tela).
-   * Sem ela, o `voice.status` da Edge Function responde `stored: false` e o rótulo da voz
-   * escolhida no computador do paciente se perde.
-   */
-  ensureSettings(beneficiaryId: string, current?: Partial<PatientSettings>): Promise<PatientSettings>;
+  /** `null` enquanto o cuidador nunca salvou um ajuste (sem linha em `patient_settings`). */
+  getSettings(beneficiaryId: string): Promise<PatientSettings | null>;
+  /** Upsert parcial: só os campos do `patch` são gravados; a linha nasce na primeira gravação. */
   updateSettings(beneficiaryId: string, patch: Partial<PatientSettings>): Promise<PatientSettings>;
 
   // tempo real
   subscribe(beneficiaryId: string, handlers: RealtimeHandlers): () => void;
 
   // push
+  /** Rejeita quando o token não foi gravado (sem sessão, RLS, rede). */
   registerPushToken(token: string): Promise<void>;
+}
+
+/**
+ * Sessão "ao vivo" de verdade: não encerrada E com o computador dela dando
+ * heartbeat há menos de 90 s (`devices.last_seen_at`; o desktop bate a cada
+ * 30 s). `sessions` não tem coluna de heartbeat própria — `updated_at` só
+ * muda em calibração e encerramento —, então a vida da sessão é a do
+ * dispositivo. Uma linha `active` cujo computador sumiu (queda de energia,
+ * fechamento sem `pagehide`) é órfã: não conta como sessão nem em relatório.
+ */
+export function isSessionLive(session: Session | null | undefined, devices: Device[], now = Date.now()): boolean {
+  if (!session || session.status === 'ended') return false;
+  const device = devices.find((d) => d.id === session.device_id);
+  if (!device || device.revoked_at) return false;
+  return now - new Date(device.last_seen_at).getTime() < 90_000;
+}
+
+/** Postura só é um dado quando o desktop mediu algo (o banco tem default 0/'nenhum'). */
+export function hasPostureData(s: Pick<Session, 'posture_drift_px' | 'drift_kind'>): boolean {
+  return s.posture_drift_px > 0 || s.drift_kind !== 'nenhum';
+}
+
+/** Fadiga depende da taxa de piscadas; sem ela o rótulo 'ok' é só o default do banco. */
+export function hasFatigueData(s: Pick<Session, 'blink_rate_bpm' | 'fatigue'>): boolean {
+  return s.blink_rate_bpm != null || s.fatigue !== 'ok';
 }

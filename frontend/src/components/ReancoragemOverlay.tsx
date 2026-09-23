@@ -14,13 +14,28 @@ import React, { useEffect, useState } from 'react';
  * cabe em 2 segundos e os nove pontos não — e é por isso que ele aparece como
  * botão num aviso, e não como uma tela à parte que interrompe a conversa.
  *
- * Deliberadamente sem botão de cancelar: 2 s é menos tempo do que levaria para
+ * Sem botão de cancelar próprio: 2 s é menos tempo do que levaria para
  * encontrar o botão com o olhar, e um cancelamento no meio produziria uma
- * coleta parcial — que é pior que nenhuma.
+ * coleta parcial — que é pior que nenhuma. A ÚNICA saída no meio é a
+ * EMERGÊNCIA: o `EmergencyProvider` põe o botão dela por cima deste overlay
+ * (`Z_DO_REAJUSTE`), e escolhê-la descarta a coleta e segue o fluxo normal de
+ * socorro. O alvo fica no centro exato (é o que o engine pressupõe) e a
+ * Emergência no canto — o teste (`ReancoragemOverlay.emergencia.test.tsx`)
+ * confere que um nunca cobre o outro, da menor janela (1024 px) ao 4K.
  */
 
 /** Duração padrão do reajuste, em ms. A mesma que o engine acumula. */
 export const DURACAO_DO_REAJUSTE_MS = 2000;
+
+/**
+ * Camada do overlay: acima de todo o app (inclusive do aviso de rastreamento,
+ * 1000000, e da confirmação de Emergência, 999999) — com UMA exceção: o botão
+ * de Emergência, que durante o reajuste sobe para `Z_DO_REAJUSTE + 1`.
+ */
+export const Z_DO_REAJUSTE = 1000001;
+
+/** Lado do alvo (o SVG do anel), em px. Centrado na horizontal pelo flex. */
+export const LADO_DO_ALVO_PX = 120;
 
 export interface Props {
   /** Duração da coleta que está acontecendo no engine, só para animar o anel. */
@@ -48,28 +63,30 @@ export const ReancoragemOverlay: React.FC<Props> = ({ duracaoMs = DURACAO_DO_REA
   const circunferencia = 2 * Math.PI * raio;
 
   return (
+    // Não é `aria-modal`: a Emergência continua acessível por cima dele — para
+    // o leitor de tela e para o teclado, não só para o olhar e o mouse.
     <div
       role="dialog"
-      aria-modal="true"
       aria-label="Reajuste rápido: olhe o ponto no centro da tela"
       data-testid="reancoragem-overlay"
       data-no-dwell="true"
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 1000001,
+        zIndex: Z_DO_REAJUSTE,
         background: '#000',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
         gap: '2.2rem',
-        // Sem `pointerEvents: none`: durante a coleta nada mais na tela deve
-        // receber clique ou dwell — um clique acidental aqui viraria uma ação
-        // na tela de baixo, que a pessoa nem está vendo.
+        // Sem `pointerEvents: none`: durante a coleta nada da tela de baixo
+        // deve receber clique ou dwell — um clique acidental aqui viraria uma
+        // ação numa tela que a pessoa nem está vendo. A Emergência não é "a
+        // tela de baixo": ela fica acima deste overlay.
       }}
     >
-      <svg width={120} height={120} viewBox="0 0 120 120" aria-hidden="true">
+      <svg width={LADO_DO_ALVO_PX} height={LADO_DO_ALVO_PX} viewBox="0 0 120 120" aria-hidden="true">
         <circle cx={60} cy={60} r={raio} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={6} />
         <circle
           cx={60}

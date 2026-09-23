@@ -1,9 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import i18n from '../../i18n';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import type { GazeSample } from '@tracker/tracker/engine';
 import { DrawingGame } from './DrawingGame';
+import { lerAlbum } from '../entertainment/album';
 
 // Guarda o callback registrado pela tela para simular amostras do olhar.
 const gaze = vi.hoisted(() => ({
@@ -34,6 +36,11 @@ const renderizar = () =>
       <DrawingGame />
     </BrowserRouter>
   );
+
+// Os rótulos vêm do i18n: sem idioma carregado, `t()` devolveria a chave.
+beforeAll(async () => {
+  await i18n.changeLanguage('pt-BR');
+});
 
 describe('DrawingGame — Desenho com Olhar', () => {
   beforeEach(() => {
@@ -84,7 +91,7 @@ describe('DrawingGame — Desenho com Olhar', () => {
     expect(screen.getByLabelText('Cor Verde')).toBeInTheDocument();
     expect(screen.getByLabelText('Cor Amarelo')).toBeInTheDocument();
     expect(screen.getByLabelText('Apagar todo o desenho')).toBeInTheDocument();
-    expect(screen.getByLabelText('Voltar para Ajuda e Lazer')).toBeInTheDocument();
+    expect(screen.getByLabelText('Voltar para Lazer e bem-estar')).toBeInTheDocument();
 
     // A cor selecionada muda de fato.
     expect(screen.getByLabelText('Cor Azul')).toHaveAttribute('aria-checked', 'true');
@@ -115,4 +122,38 @@ describe('DrawingGame — Desenho com Olhar', () => {
       fireEvent.mouseUp(canvas);
     }).not.toThrow();
   }, 15000);
+
+  it('guarda o desenho no MESMO álbum das fotos, rotulado como desenho', () => {
+    // jsdom não tem canvas: `toDataURL` e `getContext` são simulados aqui.
+    const toDataURL = vi
+      .spyOn(HTMLCanvasElement.prototype, 'toDataURL')
+      .mockReturnValue('data:image/jpeg;base64,DESENHO');
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      fillRect: vi.fn(),
+      drawImage: vi.fn(),
+      clearRect: vi.fn(),
+      getImageData: vi.fn(),
+      putImageData: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    try {
+      renderizar();
+      const canvas = screen.getByLabelText('Área de desenho') as HTMLCanvasElement;
+      canvas.width = 800;
+      canvas.height = 600;
+      const guardar = screen.getByLabelText('Guardar o desenho no álbum');
+      expect(guardar.className).toContain('gaze-button');
+      fireEvent.click(guardar);
+
+      expect(toDataURL).toHaveBeenCalledWith('image/jpeg', 0.7);
+      const album = lerAlbum();
+      expect(album).toHaveLength(1);
+      expect(album[0]).toEqual(
+        expect.objectContaining({ dataUrl: 'data:image/jpeg;base64,DESENHO', filter: 'Desenho' })
+      );
+      expect(screen.getByText('Guardado no álbum')).toBeInTheDocument();
+    } finally {
+      toDataURL.mockRestore();
+      getContext.mockRestore();
+    }
+  });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import React from 'react';
@@ -12,6 +12,7 @@ import {
   MOCK_NETWORK_KEY,
 } from '../../services/license';
 import type { LicenseService } from '../../services/license';
+import { cloudConfig } from '../../cloud/config';
 
 // -----------------------------------------------------------------------------
 // Esta é a tela que mais gera suporte se for mal feita. Antes ela aceitava
@@ -97,7 +98,17 @@ describe('cada recusa tem a sua saída', () => {
     preencher(CONTAS_DE_TESTE.semPlano, SENHA_DE_TESTE);
     enviar();
 
-    await waitFor(() => expect(screen.getByText(/irisflow\.com\.br/i)).toBeInTheDocument());
+    // O endereço é o site configurado no build (VITE_SITE_URL) ou o oficial —
+    // nunca um domínio cravado que a IrisFlow talvez nem tenha.
+    await waitFor(() => expect(screen.getByText(`${cloudConfig.siteUrl}/conta`)).toBeInTheDocument());
+  });
+
+  it('esqueci a senha leva à página que existe no site configurado', async () => {
+    montar();
+    preencher(CONTAS_DE_TESTE.ativa, 'errada');
+    enviar();
+    const link = await screen.findByRole('link', { name: /esqueci minha senha/i });
+    expect(link).toHaveAttribute('href', `${cloudConfig.siteUrl}/recuperar-senha`);
   });
 
   it('já ativa em outro PC: leva à tela de ativação para transferir', async () => {
@@ -174,11 +185,31 @@ describe('criar conta', () => {
     expect(screen.getByRole('link', { name: /criar no site/i })).toBeInTheDocument();
   });
 
+  it('o link é a página de cadastro do site configurado', () => {
+    montar();
+    expect(screen.getByRole('link', { name: /criar no site/i })).toHaveAttribute(
+      'href',
+      `${cloudConfig.siteUrl}/cadastro`
+    );
+  });
+
   it('Modo Desenvolvedor liga o atalho e abre o menu sem licença nem calibração', async () => {
     montar();
     fireEvent.click(screen.getByRole('button', { name: /modo desenvolvedor/i }));
     await waitFor(() => expect(screen.getByTestId('rota').textContent).toBe('/menu'));
     expect(sessionStorage.getItem('irisflow_dev_mode')).toBe('true');
     sessionStorage.removeItem('irisflow_dev_mode');
+  });
+
+  it('no build de produção (o do instalador) o Modo Desenvolvedor não existe', () => {
+    // Ele pula licença, termo, perfil e calibração: no app instalado seria a
+    // porta para usar o produto sem assinatura.
+    vi.stubEnv('DEV', false);
+    try {
+      montar();
+      expect(screen.queryByRole('button', { name: /modo desenvolvedor/i })).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

@@ -1,0 +1,67 @@
+.portrait {
+  --portrait: 180px;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--portrait);
+  height: var(--portrait);
+  border-radius: 50%;
+  padding: 5px;
+  isolation: isolate;
+  transition: transform var(--dur) var(--ease-spring);
+}
+
+/* Anel em gradiente (azul → teal) que gira devagar quando o cartão
+   recebe o ponteiro. */
+.portrait__ring {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 50%;
+  background: conic-gradient(from 210deg, var(--blue-400), var(--teal-300), var(--blue-300), var(--blue-400));
+  opacity: 0.9;
+}
+
+.portrait__pic,
+.portrait__pic img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 30%;
+}
+
+.portrait__pic img {
+  border: 4px solid var(--bg);
+  background: var(--surface-2);
+}
+
+.member:hover .portrait,
+.team-strip__item:hover .portrait,
+.portrait:hover {
+  transform: translateY(-4px) rotate(-2.5deg) scale(1.03);
+}
+
+.member:hover .portrait__ring,
+.team-strip__item:hover .portrait__ring {
+  animation: portrait-spin 6s linear infinite;
+}
+
+@keyframes portrait-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portrait,
+  .member:hover .portrait,
+  .team-strip__item:hover .portrait {
+    transform: none;
+  }
+  .portrait__ring {
+    animation: none !important;
+  }
+}

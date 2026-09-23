@@ -6,6 +6,7 @@ import type {
   Plan,
   VerifyResult,
 } from './types';
+import { cloudConfig } from '../../cloud/config';
 
 /**
  * Serviço de licença simulado.
@@ -57,7 +58,8 @@ export const MOCK_NETWORK_KEY = 'irisflow_mock_network';
 
 export type MockNetwork = 'online' | 'offline' | 'down';
 
-export const MANAGE_URL = 'https://irisflow.com.br/conta/assinatura';
+/** Página da conta no site — o mesmo destino do serviço real (`supabaseLicenseService`). */
+export const MANAGE_URL = `${cloudConfig.siteUrl}/conta`;
 
 const TENTATIVAS_ATE_BLOQUEAR = 5;
 const ESPERA_APOS_BLOQUEIO_S = 60;

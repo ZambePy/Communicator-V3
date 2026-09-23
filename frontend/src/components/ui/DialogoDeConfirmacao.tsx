@@ -73,7 +73,9 @@ export const DialogoDeConfirmacao: React.FC<Props> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 2147482500,
+        // Abaixo do botão de Emergência (99990) e do alarme (999999): um
+        // diálogo aberto não pode tirar do paciente o pedido de socorro.
+        zIndex: 99985,
         background: 'rgba(15,23,42,0.55)',
         display: 'flex',
         alignItems: 'center',

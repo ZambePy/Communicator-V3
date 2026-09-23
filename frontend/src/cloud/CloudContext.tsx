@@ -28,13 +28,13 @@ import { cloudConfig, nuvemConfigurada } from './config';
 import { cofre, CHAVES, infoDoApp } from './armazenamento';
 import { supabase } from './supabaseClient';
 import { DesktopSync } from './desktopSync';
-import { ouvir, emitirFalaDoPaciente, type EventoDoPaciente } from './eventos';
+import { ouvir, emitirFalaDoPaciente, emitirPedidoDeAjuda, type EventoDoPaciente } from './eventos';
 import { camposDeCalibracao, resumoDoRelatorio } from './sessao';
 import { falarComVozDoSistema } from '../services/voz/sistema';
 import { assinarEstadoDaVoz, estadoDaVoz, vozClonadaPronta } from '../services/voz';
 import { montarRelatorio } from '../services/diagnostico/relatorioDeSuporte';
 import { instalarRelatosAutomaticos, registrarEnviador } from '../services/diagnostico/relatosAutomaticos';
-import type { HelpKind, Message, MessageKind, PatientSettings, QuickPhrase, VinculoLocal } from './types';
+import type { FilterPresetRemoto, HelpKind, HelpRequestRemoto, Message, MessageKind, PatientSettings, QuickPhrase, ReconhecimentoDoCuidador, VinculoLocal } from './types';
 
 export interface CloudState {
   /** Há URL e chave do Supabase. Falso = app 100% local, como sempre. */
@@ -52,6 +52,12 @@ export interface CloudState {
   frasesRemotas: QuickPhrase[];
   realtime: 'conectado' | 'desconectado' | 'indisponivel';
   filaPendente: number;
+  /**
+   * Última confirmação do cuidador que chegou (realtime UPDATE em
+   * `help_requests` com `acknowledged_at`). Fecha o ciclo do socorro do lado
+   * do paciente: a tela de emergência mostra e fala quando o cuidador viu.
+   */
+  reconhecimento: ReconhecimentoDoCuidador | null;
 }
 
 export interface CloudActions {
@@ -79,6 +85,7 @@ const estadoInicial: CloudState = {
   frasesRemotas: [],
   realtime: 'indisponivel',
   filaPendente: 0,
+  reconhecimento: null,
 };
 
 const acoesInertes: CloudActions = {
@@ -100,6 +107,17 @@ const dwellRemotoParaLocal = (ms: number) => limitarDwellMs(ms);
 /** O banco só aceita 800/1500/2500 em `sessions.dwell_ms`: arredonda para o degrau mais próximo. */
 const dwellLocalParaRemoto = (ms: number): 800 | 1500 | 2500 =>
   ms <= 1150 ? 800 : ms <= 2000 ? 1500 : 2500;
+/**
+ * Preset REAL em vigor, no vocabulário do banco. O engine trabalha com
+ * `estavel-v2`/`balanceado-v2`/`responsivo-v2` (ou `null` quando a cadeia
+ * Kalman governa e os presets não se aplicam). Antes `session.upsert`
+ * mandava 'balanceado' fixo e o relatório do cuidador mentia a suavização.
+ */
+const PRESETS_REMOTOS: readonly FilterPresetRemoto[] = ['estavel', 'balanceado', 'responsivo'];
+export function presetLocalParaRemoto(preset: string | null | undefined, aplicadoRemotamente: string | null): FilterPresetRemoto {
+  const base = (preset ?? aplicadoRemotamente ?? 'balanceado').replace(/-v\d+$/, '');
+  return (PRESETS_REMOTOS as readonly string[]).includes(base) ? (base as FilterPresetRemoto) : 'balanceado';
+}
 const MENSAGEM_NA_TELA_MS = 15_000;
 const POLL_MS = 20_000;
 
@@ -160,24 +178,51 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   syncRef.current = sync;
 
   // ---------- helpers ----------
+  /** Preset em vigor, no vocabulário do banco (engine → remoto → 'balanceado'). */
+  const presetAtual = useCallback((): FilterPresetRemoto => {
+    let doEngine: string | null = null;
+    try { doEngine = gazeRef.current.getDiagnostics?.()?.filtro.preset ?? null; } catch { /* engine ainda não montou */ }
+    return presetLocalParaRemoto(doEngine, presetAplicadoRef.current);
+  }, []);
+
+  /**
+   * A sessão aberta guarda dwell e preset "usados"; quando um ajuste remoto
+   * os muda no meio da sessão, o registro é atualizado (upsert com id) para o
+   * relatório do cuidador refletir o que valeu de fato.
+   */
+  const atualizarSessao = useCallback((campos: { dwell_ms?: 800 | 1500 | 2500; filter_preset?: FilterPresetRemoto }) => {
+    const id = sessaoIdRef.current;
+    if (!id || !vinculoRef.current) return;
+    void sync.enviar({ action: 'session.upsert', session: { id, ...campos } });
+  }, [sync]);
+
   const aplicarAjustesRemotos = useCallback((a: PatientSettings | null) => {
     if (!a) return;
     patch({ ajustesRemotos: a });
     if (ajustesAplicadosRef.current === a.updated_at) return;
     ajustesAplicadosRef.current = a.updated_at;
-    const dwell = dwellRemotoParaLocal(Number(a.dwell_ms));
-    if (Number.isFinite(dwell) && dwell !== settingsRef.current.dwellMs) {
-      console.log(`[cloud] ajuste remoto: tempo de fixação → ${dwell} ms`);
-      updateSettings({ dwellMs: dwell });
+    // Só o que veio PREENCHIDO. Nulo/ausente = "o cuidador não definiu" e o
+    // valor local fica — a linha pode ter nascido de um ajuste de outro campo
+    // (contato de emergência, prazo) e não pode arrastar dwell/preset junto.
+    const mudou: { dwell_ms?: 800 | 1500 | 2500; filter_preset?: FilterPresetRemoto } = {};
+    if (a.dwell_ms != null) {
+      const dwell = dwellRemotoParaLocal(Number(a.dwell_ms));
+      if (Number.isFinite(dwell) && dwell !== settingsRef.current.dwellMs) {
+        console.log(`[cloud] ajuste remoto: tempo de fixação → ${dwell} ms`);
+        updateSettings({ dwellMs: dwell });
+        mudou.dwell_ms = dwellLocalParaRemoto(dwell);
+      }
     }
     // Os presets de produção são os "-v2" (em graus); os v1 filtram em px com
     // τ de vários segundos e deixariam o cursor inutilizável.
-    if (a.filter_preset && a.filter_preset !== presetAplicadoRef.current) {
+    if (a.filter_preset != null && a.filter_preset !== presetAplicadoRef.current) {
       presetAplicadoRef.current = a.filter_preset;
       console.log(`[cloud] ajuste remoto: suavização → ${a.filter_preset}`);
       try { gazeRef.current.setFilterPreset(`${a.filter_preset}-v2`); } catch (e) { console.warn('[cloud] preset não aplicado', e); }
+      mudou.filter_preset = a.filter_preset;
     }
-  }, [patch, updateSettings]);
+    if (Object.keys(mudou).length) atualizarSessao(mudou);
+  }, [patch, updateSettings, atualizarSessao]);
 
   const mostrarNaTela = useCallback((m: Message) => {
     patch({ mensagemNaTela: m });
@@ -252,7 +297,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         status: 'active',
         started_at: new Date().toISOString(),
         dwell_ms: dwellLocalParaRemoto(s.dwellMs),
-        filter_preset: 'balanceado',
+        filter_preset: presetAtual(),
         app_version: appVersion,
         modules_used: [],
       },
@@ -261,7 +306,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       sessaoIdRef.current = r.id;
       patch({ sessaoId: r.id });
     }
-  }, [sync, patch]);
+  }, [sync, patch, presetAtual]);
 
   const encerrarSessao = useCallback(async () => {
     const id = sessaoIdRef.current;
@@ -292,6 +337,17 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       .on('postgres_changes', { event: '*', schema: 'public', table: 'quick_phrases', filter }, () => {
         void carregarAjustes();
       })
+      // Confirmação do cuidador ("Estou indo!" no app grava `acknowledged_at`).
+      // Só socorro/ajuda: avisos de postura/fadiga não têm um paciente
+      // esperando resposta. A tabela tem REPLICA IDENTITY FULL, então `p.new`
+      // traz a linha inteira no UPDATE.
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'help_requests', filter }, (p) => {
+        const h = p.new as Partial<HelpRequestRemoto>;
+        if (!h || !h.id || !h.acknowledged_at || !h.kind) return;
+        if (h.kind !== 'emergencia' && h.kind !== 'ajuda') return;
+        const novo: ReconhecimentoDoCuidador = { id: h.id, kind: h.kind, created_at: h.created_at ?? '', acknowledged_at: h.acknowledged_at, resolved_at: h.resolved_at ?? null };
+        patch((s) => (s.reconhecimento && s.reconhecimento.id === novo.id && s.reconhecimento.resolved_at === novo.resolved_at ? {} : { reconhecimento: novo }));
+      })
       .subscribe((status) => {
         realtimeRef.current = status === 'SUBSCRIBED' ? 'conectado' : 'desconectado';
         patch({ realtime: realtimeRef.current });
@@ -313,7 +369,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (canalRef.current) { void supabase().removeChannel(canalRef.current); canalRef.current = null; }
     await encerrarSessao();
     vinculoRef.current = null;
-    patch({ vinculo: null, realtime: 'indisponivel', mensagens: [], naoFaladas: 0, mensagemNaTela: null });
+    patch({ vinculo: null, realtime: 'indisponivel', mensagens: [], naoFaladas: 0, mensagemNaTela: null, reconhecimento: null });
   }, [encerrarSessao, patch]);
 
   // ---------- segue a licença ----------
@@ -438,8 +494,13 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const c = contadoresRef.current;
       switch (e.tipo) {
         case 'fala': {
-          c.frases++;
-          c.caracteres += e.texto.length;
+          // Só fala REAL conta como frase vocalizada: 'sistema' ("Estou bem",
+          // escalonamento local) é sinal, não comunicação, e inflava o
+          // contador do relatório do cuidador.
+          if (e.kind !== 'sistema') {
+            c.frases++;
+            c.caracteres += e.texto.length;
+          }
           const local: Message = {
             id: `local-${Date.now()}`, beneficiary_id: vinculoRef.current?.beneficiary_id ?? '',
             sender: 'paciente', kind: e.kind, text: e.texto, created_at: new Date().toISOString(), read_at: null, spoken: true,
@@ -475,14 +536,17 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [sync, patch]);
 
   // ---------- ações ----------
-  // Passa pelo barramento como qualquer tela: um único caminho de saída.
+  // Passam pelo barramento como qualquer tela: um único caminho de saída, e é
+  // nele que o modo apresentação corta o envio (ver eventos.ts). Chamar
+  // `sync.enviar` direto daqui mandaria um socorro de verdade no meio de uma
+  // demonstração.
   const enviarFalaDoPaciente = useCallback(async (texto: string, kind: MessageKind = 'texto') => {
     emitirFalaDoPaciente(texto, kind);
   }, []);
 
   const pedirAjuda = useCallback(async (kind: HelpKind, mensagem: string) => {
-    await sync.enviar({ action: 'help.create', kind, message: mensagem, session_id: sessaoIdRef.current });
-  }, [sync]);
+    emitirPedidoDeAjuda(kind, mensagem);
+  }, []);
 
   const repetirUltimaMensagem = useCallback(() => {
     const m = ultimaDoCuidadorRef.current;

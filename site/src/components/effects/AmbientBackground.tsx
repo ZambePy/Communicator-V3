@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useLowPower } from '@/hooks/useReducedMotion'
 import './ambient.css'
 
 type Props = {
@@ -12,14 +13,22 @@ type Props = {
 }
 
 /**
- * Movimento ambiente de fundo: gradientes líquidos em morphing,
- * partículas à deriva e uma linha de varredura sutil. É puramente
- * decorativo, e por isso sai marcado como aria-hidden.
+ * Movimento ambiente de fundo: um gradiente em morphing, partículas à
+ * deriva e uma linha de varredura sutil. É puramente decorativo, e por
+ * isso sai marcado como aria-hidden.
+ *
+ * Custo: cada blob com blur de 72 px é uma camada cara para compor. Em
+ * máquinas modestas (≤ 4 núcleos), telas estreitas ou com movimento
+ * reduzido, o componente entra em modo leve: só o gradiente estático e
+ * um blob, sem partículas nem varredura.
  */
-export function AmbientBackground({ particles = 26, scan = true, light = false }: Props) {
+export function AmbientBackground({ particles = 18, scan = true, light = false }: Props) {
+  const lite = useLowPower()
+  const count = lite ? 0 : particles
+
   const dots = useMemo(
     () =>
-      Array.from({ length: particles }, (_, i) => ({
+      Array.from({ length: count }, (_, i) => ({
         id: i,
         left: Math.random() * 100,
         top: Math.random() * 100,
@@ -31,38 +40,42 @@ export function AmbientBackground({ particles = 26, scan = true, light = false }
         opacity: 0.18 + Math.random() * 0.42,
         teal: Math.random() > 0.65,
       })),
-    [particles],
+    [count],
   )
 
   return (
-    <div className={`ambient${light ? ' ambient--light' : ''}`} aria-hidden="true">
+    <div
+      className={`ambient${light ? ' ambient--light' : ''}${lite ? ' ambient--lite' : ''}`}
+      aria-hidden="true"
+    >
       <div className="ambient__mesh" />
       <span className="ambient__blob ambient__blob--a anim-blob" />
-      <span className="ambient__blob ambient__blob--b anim-blob" />
-      <span className="ambient__blob ambient__blob--c anim-blob" />
+      {!lite && <span className="ambient__blob ambient__blob--b anim-blob" />}
       <div className="ambient__grid" />
-      {scan && !light && <span className="ambient__scan" />}
-      <div className="ambient__particles">
-        {dots.map((d) => (
-          <span
-            key={d.id}
-            className={`ambient__dot${d.teal ? ' ambient__dot--teal' : ''}`}
-            style={
-              {
-                left: `${d.left}%`,
-                top: `${d.top}%`,
-                width: d.size,
-                height: d.size,
-                '--p-dx': d.dx,
-                '--p-dy': d.dy,
-                '--p-opacity': d.opacity,
-                animationDuration: `${d.duration}s`,
-                animationDelay: `${d.delay}s`,
-              } as React.CSSProperties
-            }
-          />
-        ))}
-      </div>
+      {scan && !light && !lite && <span className="ambient__scan" />}
+      {dots.length > 0 && (
+        <div className="ambient__particles">
+          {dots.map((d) => (
+            <span
+              key={d.id}
+              className={`ambient__dot${d.teal ? ' ambient__dot--teal' : ''}`}
+              style={
+                {
+                  left: `${d.left}%`,
+                  top: `${d.top}%`,
+                  width: d.size,
+                  height: d.size,
+                  '--p-dx': d.dx,
+                  '--p-dy': d.dy,
+                  '--p-opacity': d.opacity,
+                  animationDuration: `${d.duration}s`,
+                  animationDelay: `${d.delay}s`,
+                } as React.CSSProperties
+              }
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -215,3 +215,54 @@ describe('o botão de reajuste rápido', () => {
     expect(screen.queryByRole('button', { name: /reajustar/i })).toBeNull();
   });
 });
+
+// -----------------------------------------------------------------------------
+// O vigia de recalibração existia no engine e ninguém o mostrava. Aqui: o
+// veredicto chega à tela com os dois botões, cada um chama o que deve, e a
+// precedência põe distância e postura (2 s) antes dos nove pontos.
+// -----------------------------------------------------------------------------
+describe('o aviso do vigia de recalibração', () => {
+  it('aparece com "Calibrar de novo" e "Agora não", e cada botão chama o seu callback', () => {
+    const onRecalibrar = vi.fn();
+    const onDispensar = vi.fn();
+    render(
+      <GazeStatusBanner
+        {...semProblemas}
+        avisoDeRecalibracao="bcea"
+        onRecalibrar={onRecalibrar}
+        onDispensarRecalibracao={onDispensar}
+      />
+    );
+    expect(screen.getByText(/mira piorou/i)).toBeInTheDocument();
+    expect(screen.getByText(/tremendo/)).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('recalibrar-agora'));
+    expect(onRecalibrar).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('recalibrar-depois'));
+    expect(onDispensar).toHaveBeenCalledTimes(1);
+  });
+
+  it('o motivo "vies" tem o próprio texto', () => {
+    render(<GazeStatusBanner {...semProblemas} avisoDeRecalibracao="vies" onRecalibrar={() => {}} />);
+    expect(screen.getByText(/mesmo lado/)).toBeInTheDocument();
+  });
+
+  it('distância e postura vêm ANTES: o reajuste de 2 s é a saída mais barata', () => {
+    render(
+      <GazeStatusBanner
+        {...semProblemas}
+        distanceAdvice={mensagemPara('perto')}
+        avisoDeRecalibracao="bcea"
+        onReancorar={() => {}}
+        onRecalibrar={() => {}}
+      />
+    );
+    expect(screen.getAllByTestId('gaze-status-banner')).toHaveLength(1);
+    expect(screen.queryByTestId('recalibrar-agora')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /reajustar/i })).toBeInTheDocument();
+  });
+
+  it('sem motivo, nada aparece', () => {
+    render(<GazeStatusBanner {...semProblemas} avisoDeRecalibracao={null} onRecalibrar={() => {}} />);
+    expect(screen.queryByTestId('gaze-status-banner')).not.toBeInTheDocument();
+  });
+});

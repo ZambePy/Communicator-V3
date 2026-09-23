@@ -13,6 +13,7 @@
 import type { RidgeModel } from './ridge';
 import type { Pose } from './poseCompensation';
 import type { CentroFacial } from './translationCompensation';
+import type { CorrecaoLocal } from './correcaoLocal';
 
 /**
  * Estado de referência da calibração.
@@ -45,6 +46,9 @@ export interface CalibrationReferenceState {
   /** Viewport em px CSS em que o modelo foi treinado. O detector de resize
    *  compara contra ele. Ausente em perfis anteriores. */
   viewport?: { w: number; h: number } | null;
+  /** Correção local dos cantos (`correcaoLocal.ts`), ajustada no treino junto
+   *  com o modelo. Ausente em perfis anteriores a ela: vale o modelo global. */
+  correcaoLocal?: CorrecaoLocal | null;
 }
 
 // Categorias observáveis pelo cuidador. `oculos_progressivo` é registrado

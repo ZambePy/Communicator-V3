@@ -3,35 +3,71 @@
     "name": "IrisFlow Cuidador",
     "slug": "irisflow-cuidador",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "irisflow",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "backgroundColor": "#1B54A8",
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1B54A8"
+    "backgroundColor": "#091B33",
+    "primaryColor": "#1B54A8",
+    "description": "App do cuidador da IrisFlow: conversa com o paciente, alertas de ajuda e emergência, relatórios de uso e ajustes remotos do computador.",
+    "updates": {
+      "url": "https://u.expo.dev/SEU-PROJECT-ID",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "br.com.irisflow.cuidador",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "CFBundleDevelopmentRegion": "pt-BR",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
     "android": {
       "package": "br.com.irisflow.cuidador",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#FFFFFF"
+        "monochromeImage": "./assets/images/adaptive-icon-monochrome.png",
+        "backgroundColor": "#091B33"
       },
-      "edgeToEdgeEnabled": true,
-      "permissions": ["VIBRATE", "RECEIVE_BOOT_COMPLETED"]
-    },
-    "androidNavigationBar": {
-      "visible": "sticky-immersive"
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ],
+      "blockedPermissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.READ_CONTACTS",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.CALL_PHONE",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_FULL_SCREEN_INTENT"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -40,23 +76,44 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
       [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 180,
+          "imageWidth": 160,
           "resizeMode": "contain",
-          "backgroundColor": "#1B54A8",
-          "dark": { "backgroundColor": "#091B33" }
+          "backgroundColor": "#091B33"
         }
       ],
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/adaptive-icon.png",
+          "icon": "./assets/images/notification-icon.png",
           "color": "#1B54A8",
           "defaultChannel": "emergencia"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "organization": "irisflow",
+          "project": "irisflow-cuidador"
         }
       ]
     ],
@@ -64,7 +121,13 @@
       "typedRoutes": true
     },
     "extra": {
-      "eas": { "projectId": "" }
+      "privacyPolicyUrl": "https://irisflow.pages.dev/privacidade",
+      "termsUrl": "https://irisflow.pages.dev/termos",
+      "accountDeletionUrl": "https://irisflow.pages.dev/privacidade#direitos",
+      "supportEmail": "irisflowteam@gmail.com",
+      "eas": {
+        "projectId": ""
+      }
     }
   }
 }

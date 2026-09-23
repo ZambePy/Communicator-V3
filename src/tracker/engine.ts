@@ -18,6 +18,7 @@ import { EyeQualityAnalyzer } from '../qualityAnalyzer';
 import { createL2CSClient, type L2CSClient } from '../l2cs/client';
 import type { FichaDoModelo } from '../l2cs/proveniencia';
 import { desfazerRollNoOlhar } from '../l2cs/roll';
+import { suavizarRoll, type EstadoDoRoll } from '../l2cs/rollSuave';
 import { criarContextoDoOlho, recortarOlhoParaTensor } from '../olho/recorte';
 import { criarRamoOcularOnnx, ramoOcularNulo, type RamoOcular, type SaidasDoRamoOcular } from '../olho/ramoOcular';
 import { createCropContext, cropFaceToTensor, type CropContext } from '../l2cs/crop';
@@ -400,6 +401,16 @@ export interface EngineDiagnostics {
   };
 }
 
+/** Resultado do reajuste rápido (`reancorarReferencias`). */
+export interface ResultadoDoReajuste {
+  /** Quadros válidos colhidos (0 quando cancelado ou abandonado). */
+  amostras: number;
+  /** A correção de deriva foi aplicada? */
+  aplicado: boolean;
+  /** Viés medido no centro, em px; `null` sem amostras suficientes. */
+  desvioPx: number | null;
+}
+
 export interface GazeEngine {
   start(video: HTMLVideoElement): Promise<void>;
   stop(): void;
@@ -433,16 +444,23 @@ export interface GazeEngine {
   onL2CSStatusChange(cb: (status: L2CSStatus) => void): () => void;
   getDiagnostics(): EngineDiagnostics;
   /**
-   * Reancora as referências geométricas SEM retreinar o Ridge.
+   * Reajuste rápido: correção de DERIVA pelo centro, SEM retreinar o Ridge e
+   * sem trocar as referências geométricas da calibração.
    *
-   * Durante `duracaoMs` (padrão 2000) acumula os quadros válidos com a pessoa
-   * olhando o CENTRO da tela; ao fim, a mediana da distância câmera→rosto vira
-   * a base da correção aditiva (`calibrationCameraDistanceCm`) e pose/centro
-   * recomeçam a referência lenta. Resolve com a distância adotada (0 quando
-   * não medida) e quantas amostras entraram; com menos que o mínimo, nada é
-   * alterado e `amostras` diz quantas houve.
+   * Durante `duracaoMs` (padrão 2000) acumula, dos quadros válidos com a pessoa
+   * olhando o CENTRO da tela, a predição antes da correção por dwell; ao fim, a
+   * diferença entre o centro e a mediana dela vira o deslocamento da correção
+   * de deriva (`calibration.corrigirDerivaNoCentro`). Resolve com quantas
+   * amostras entraram, se a correção foi aplicada e o viés medido em px; com
+   * menos que o mínimo, nada é alterado.
    */
-  reancorarReferencias(opts?: { duracaoMs?: number }): Promise<{ distanciaCm: number; amostras: number }>;
+  reancorarReferencias(opts?: { duracaoMs?: number }): Promise<ResultadoDoReajuste>;
+  /**
+   * Encerra o reajuste em curso SEM aplicar o que ele colheu (a promessa
+   * resolve com `amostras: 0`). É a porta da Emergência: quem desvia o olhar
+   * para ela durante o reajuste não está olhando o centro.
+   */
+  cancelarReancoragem(): void;
   /**
    * Os nove pontos são necessários? Compara BCEA e viés recentes com os do
    * último teste de precisão salvo. Sem teste salvo, `precisa: false`.
@@ -525,7 +543,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   let activeConfig = activePreset.endsWith('-v2')
     ? FILTER_PRESETS_V2[activePreset as FilterPresetV2]
     : FILTER_PRESETS[activePreset as FilterPreset];
-  const oneEuro = new OneEuroFilter2D(60, activeConfig.mincutoff, activeConfig.beta);
+  const oneEuro = new OneEuroFilter2D(60, activeConfig.mincutoff, activeConfig.beta, activeConfig.dcutoff ?? 1.0);
 
   // Cadeia alternativa de filtragem (Kalman / Kalman+EMA), selecionada por
   // `EXPERIMENT.filterMode`. O One Euro NÃO passa pela cadeia: fica no caminho
@@ -547,8 +565,14 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
    * dizia "ligado" num build de produção em que o estágio nunca rodava.
    */
   let estabilizadorOneEuro: EstabilizadorDeFixacao | null = null;
-  /** Roll do último quadro com rosto, para o crop do próximo (sprint S6). */
+  /**
+   * Roll do último quadro com rosto, SUAVIZADO (`rollSuave.ts`), para o crop
+   * do próximo (sprint S6). O mesmo valor vai para a contra-rotação da saída,
+   * então o atraso do EMA não cria erro geométrico — só tira o tremor de
+   * quadro que a rede transformaria em ruído de olhar.
+   */
   let ultimoRollRad: number | null = null;
+  let rollSuavizado: EstadoDoRoll | null = null;
   /** Pose do quadro ANTERIOR, em graus. A do quadro corrente só é calculada
    *  mais adiante, e a régua da íris precisa saber, antes disso, se a cabeça
    *  está frontal — de perfil a íris projetada encolhe e a medida mente. */
@@ -558,8 +582,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   const medidorDeEscala = new MedidorDeEscalaFacial();
   /** Roll passado ao recorte da última submissão ao L2CS; `null` sem normalização. */
   let rollDaSubmissao: number | null = null;
-  // Projeta a posição pelo Kalman durante a piscada, em vez de congelar. Só
-  // tem efeito quando há Kalman — nunca no modo `'oneEuro'`.
+  // Hold de piscada: roda NOS DOIS modos. Com Kalman, projeta a posição pelo
+  // modelo de velocidade constante; sem Kalman (`'oneEuro'`, o padrão), só a
+  // máquina de estados vale — congela a última posição e, passado o teto de
+  // 2 s, marca a amostra como degradada. Ver o ramo da piscada mais abaixo.
   const blinkHold = new BlinkHold();
   // Contraluz é propriedade do POSTO de uso, não do instante: ela muda quando
   // alguém abre uma cortina, não entre dois quadros. Por isso o medidor tem
@@ -764,6 +790,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     ultimoFiltroSec = null;
     // Roll de um rosto que já não está lá não descreve o rosto que voltar.
     ultimoRollRad = null;
+    rollSuavizado = null;
     rollDaSubmissao = null;
     estabilizadorOneEuro?.reset();
     // Encerra qualquer episódio de hold em curso. O `predict` nunca é chamado
@@ -1053,6 +1080,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         // O roll pertencia ao rosto que sumiu; aplicá-lo ao rosto que voltar
         // rotacionaria o recorte pela inclinação de outro instante.
         ultimoRollRad = null;
+        rollSuavizado = null;
         // Mesmo motivo do roll: a pose pertencia ao rosto que sumiu. Mantê-la
         // faria a régua da íris aceitar como "frontal" o rosto que voltar de
         // perfil, e a íris projetada de perfil mede menos do que é.
@@ -1366,7 +1394,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           if (face) {
             diagPose = { yaw: face.yaw, pitch: face.pitch, roll: face.roll };
             // Guardado para o recorte do PRÓXIMO quadro normalizar o roll.
-            if (Number.isFinite(face.roll)) ultimoRollRad = face.roll;
+            if (Number.isFinite(face.roll)) {
+              rollSuavizado = suavizarRoll(rollSuavizado, face.roll, startTimeMs);
+              ultimoRollRad = rollSuavizado.valor;
+            }
             const GRAUS = 180 / Math.PI;
             if (Number.isFinite(face.yaw)) ultimoYawDeg = face.yaw * GRAUS;
             if (Number.isFinite(face.pitch)) ultimoPitchDeg = face.pitch * GRAUS;
@@ -1418,6 +1449,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           stageTimer.begin(STAGE.predict);
           const calibrated = calibration.mapGaze(featuresLeft, featuresRight, perEyeWeight);
           stageTimer.end(STAGE.predict);
+          // Reajuste rápido: o que ele mede é a predição ANTES da correção por
+          // dwell, com a pessoa olhando o centro.
+          if (reancoragem && quadroValido && calibrated) {
+            reancoragem.acumulador.adicionarPredicao(calibration.getUltimaPredicaoSemCorrecao());
+          }
           if (calibrated) {
             targetX = calibrated.x;
             targetY = calibrated.y;
@@ -1920,11 +1956,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       activeConfig = isV2
         ? FILTER_PRESETS_V2[preset as FilterPresetV2]
         : FILTER_PRESETS[preset as FilterPreset];
-      oneEuro.setParams(activeConfig.mincutoff, activeConfig.beta);
+      oneEuro.setParams(activeConfig.mincutoff, activeConfig.beta, activeConfig.dcutoff ?? 1.0);
       if (oldConfig && oldConfig.filterInNormalizedSpace !== activeConfig.filterInNormalizedSpace) {
         oneEuro.reset();
       }
-      console.log(`[IrisFlow] filtro → ${preset} (mincutoff=${activeConfig.mincutoff}, beta=${activeConfig.beta}, normalized=${activeConfig.filterInNormalizedSpace})`);
+      console.log(`[IrisFlow] filtro → ${preset} (mincutoff=${activeConfig.mincutoff}, beta=${activeConfig.beta}, dcutoff=${activeConfig.dcutoff ?? 1.0}, normalized=${activeConfig.filterInNormalizedSpace})`);
     },
 
     getL2CSStatus(): L2CSStatus {
@@ -1939,7 +1975,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       return () => { l2csStatusSubscribers.delete(cb); };
     },
 
-    reancorarReferencias(opts?: { duracaoMs?: number }): Promise<{ distanciaCm: number; amostras: number }> {
+    reancorarReferencias(opts?: { duracaoMs?: number }): Promise<ResultadoDoReajuste> {
       const duracaoMs = opts?.duracaoMs && opts.duracaoMs > 0 ? opts.duracaoMs : REANCORAGEM_PADRAO_MS;
       // Uma reancoragem por vez: a segunda chamada encerra a primeira já.
       reancoragem?.concluir();
@@ -1952,11 +1988,14 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           clearTimeout(timer);
           if (reancoragem?.acumulador === acumulador) reancoragem = null;
           const r = acumulador.resultado();
-          if (aplicar && r.suficiente) calibration.reancorarReferencias(r);
-          resolve({
-            distanciaCm: aplicar && r.suficiente && r.distanciaCm !== null ? r.distanciaCm : 0,
-            amostras: aplicar ? r.amostras : 0,
-          });
+          let aplicado = false;
+          let desvioPx: number | null = null;
+          if (aplicar && r.suficiente) {
+            const c = calibration.corrigirDerivaNoCentro(r.predicao);
+            aplicado = c.aplicado;
+            desvioPx = c.desvioPx;
+          }
+          resolve({ amostras: aplicar ? r.amostras : 0, aplicado, desvioPx });
         };
         const concluir = () => encerrar(true);
         const timer = setTimeout(concluir, duracaoMs);
@@ -1964,10 +2003,15 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       });
     },
 
+    cancelarReancoragem(): void {
+      abandonarReancoragem();
+    },
+
     precisaDeRecalibracao(): VeredictoDeRecalibracao {
       // Viés recente = o deslocamento que a correção por dwell acumulou, em px.
       // É a medida mais honesta do viés em uso: cada dwell concluído num alvo
-      // isolado é um rótulo de graça, e o deslocamento é a média deles.
+      // isolado é um rótulo de graça; o deslocamento é um integrador (ganho
+      // 0,05, meia-vida de 10 min) sobre os resíduos deles, não uma média.
       const e = estadoDaCorrecao();
       const vw = typeof document !== 'undefined' ? document.documentElement.clientWidth : 0;
       const vh = typeof document !== 'undefined' ? document.documentElement.clientHeight : 0;

@@ -2,8 +2,9 @@
 //
 // O vetor completo por olho tem 37 dimensões de geometria (offset da íris,
 // contorno, cantos, pose da cabeça, interações) mais o bloco angular do L2CS
-// quando o engine o passa. O modelo só vê a projeção no conjunto ativo — as 4
-// dimensões destiladas de íris e as 2 angulares de 1ª ordem do L2CS. O resto
+// quando o engine o passa. O modelo só vê a projeção no conjunto ativo — no
+// default (`irisAbs+l2cs`), as 2 dimensões de íris (offsetX/offsetY) e as 2
+// angulares de 1ª ordem do L2CS: 4 dims, que a expansão parcial leva a 7. O resto
 // existe porque a telemetria grava o vetor inteiro e porque as medições
 // offline podem projetar outros conjuntos sobre a mesma gravação.
 
@@ -214,15 +215,23 @@ export class BlinkDetector {
     const duracaoMs = this.earBaixoDesdeMs === null ? 0 : nowMs - this.earBaixoDesdeMs;
 
     // PÁLPEBRA BAIXA, não piscada. Ver `PISCADA_MAX_MS`: passado o teto
-    // fisiológico, a leitura passa a alimentar o histórico de repouso para o
-    // limiar poder descer. Sem isto o detector se tranca — a leitura baixa é
-    // classificada como piscada, por ser piscada não entra no histórico, e o
-    // limiar nunca acompanha a pálpebra que desceu.
+    // fisiológico, uma leitura ACIMA do piso (`EAR_THR_MIN`) não é olho
+    // fechado — é pálpebra que desceu (olhar para baixo) ou, com óculos, a
+    // armação/reflexo deslocando o landmark da pálpebra (olhar para cima).
     //
-    // Continua sendo piscada NESTE quadro: quem decide é o limiar já
-    // adaptado, no quadro seguinte. Se o olho estiver de fato fechado o EAR
-    // fica abaixo do piso (`EAR_THR_MIN`) e a adaptação não muda nada.
-    const palpebraBaixa = blink && duracaoMs > PISCADA_MAX_MS;
+    // Ela SAI da piscada já neste quadro e alimenta o histórico, para o limiar
+    // descer até ela. A versão anterior continuava chamando o quadro de
+    // piscada e esperava o limiar adaptado decidir; com um histórico de 50
+    // quadros, isso levava 1,1–1,7 s (EAR de 0,31 caindo para 0,22–0,15) de
+    // cursor congelado — exatamente os congelamentos de 0,7–1,1 s medidos na
+    // gravação de 22/09 (sessão com óculos, olhando para o topo da tela).
+    // Agora o congelamento tem teto no fisiológico: `PISCADA_MAX_MS`.
+    //
+    // Olho de fato fechado continua piscada, por mais que dure: o EAR fica
+    // abaixo do piso e esta condição não se aplica. O piso é o que separa os
+    // dois casos — o mesmo critério de antes, só aplicado sem atraso.
+    const palpebraBaixa = blink && duracaoMs > PISCADA_MAX_MS && ear >= this.thrMin;
+    if (palpebraBaixa) blink = false;
 
     // Ptose severa: olho aberto abaixo do limiar absoluto. Sem esta guarda o
     // bootstrap trava — todo quadro vira piscada e o histórico nunca enche.
@@ -252,7 +261,7 @@ export class BlinkDetector {
     }
     this.wasBlinking = blink;
 
-    if (!blink || palpebraBaixa) {
+    if (!blink) {
       this.nonBlinkHistory.push(ear);
       if (this.nonBlinkHistory.length > this.histLen) this.nonBlinkHistory.shift();
     }
@@ -324,7 +333,8 @@ export function getRecentBlinkRatePerMinute(windowMs: number = 60000): number {
 //   [25..36] interações pose × offset
 //   [37..43] bloco L2CS — só quando o engine passa gaze
 //
-// O modelo usa `irisCore` (+ as duas dims angulares do L2CS). Medido em
+// O modelo usa `irisAbs` por default (+ as duas dims angulares do L2CS);
+// `irisCore` é a variante com `dimsDaIris: 'relativas'`. Medido em
 // gravações reais: 9 alvos não determinam 45 parâmetros por olho, e as
 // dimensões extras dão ao Ridge liberdade para memorizar aglomerados
 // (140 px com 12 dims contra 322 px com 44). A pose fica fora do vetor de

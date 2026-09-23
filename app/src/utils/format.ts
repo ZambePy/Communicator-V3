@@ -42,6 +42,11 @@ export function formatDuration(min: number) {
   return m ? `${h} h ${m} min` : `${h} h`;
 }
 
+/** Número com vírgula decimal (pt-BR), ex.: `decimal(0.955, 2)` → "0,96". */
+export function decimal(v: number, casas = 1) {
+  return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+
 export function brl(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 }

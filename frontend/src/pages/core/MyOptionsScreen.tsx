@@ -5,6 +5,8 @@ import { Heart, Plus, Trash2, Volume2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeButton } from '../../components/ui/GazeButton';
+import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { EstadoVazio } from '../../components/ui/EstadoDaTela';
 
 interface Favorite {
   id: string;
@@ -54,79 +56,48 @@ export const MyOptionsScreen: React.FC = () => {
   };
 
   return (
-    <GazePageLayout showBack={true} backRoute="/menu">
+    <GazePageLayout
+      showBack={true}
+      backRoute="/menu"
+      titulo="Minhas Opções"
+      subtitulo="Frases favoritas — olhe em Falar para dizer uma delas"
+    >
       <div
         style={{
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
           width: '100%',
+          maxWidth: 'min(1200px, 100%)',
+          margin: '0 auto',
           boxSizing: 'border-box',
-          gap: '2rem',
+          gap: 'var(--space-5)',
         }}
       >
-        <div style={{ textAlign: 'center' }}>
-          <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--color-text-base)', margin: '0 0 0.5rem 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
-            <Heart color="#e11d48" fill="#e11d48" size={36} /> Minhas Opções — Favoritos
-          </h1>
-          <p style={{ fontSize: '1.2rem', color: 'var(--color-text-base)', opacity: 0.7, margin: 0 }}>
-            Gerencie e selecione suas frases favoritas
-          </p>
-        </div>
-
         {/* Adicionar frase (Operado por cuidador com mouse/teclado) */}
-        <section
-          aria-labelledby="add-fav"
-          style={{
-            background: 'var(--color-card-bg)',
-            padding: '1.5rem',
-            borderRadius: '1.5rem',
-            border: '2px solid var(--color-card-border)',
-          }}
-        >
-          <h2 id="add-fav" style={{ fontSize: '1.25rem', color: 'var(--color-text-base)', margin: '0 0 1rem 0', fontWeight: 700 }}>
-            Adicionar frase favorita (Cuidador)
+        <section aria-labelledby="add-fav" className="surface" style={{ padding: 'var(--space-5)' }}>
+          <h2 id="add-fav" className="t-h3" style={{ color: 'var(--color-text-base)', margin: '0 0 0.25rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Heart color="var(--color-danger)" fill="var(--color-danger)" size={20} aria-hidden="true" />
+            Adicionar frase favorita
           </h2>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <p className="t-caption" style={{ margin: '0 0 1rem 0' }}>
+            Para o cuidador, com mouse e teclado. A frase entra na lista abaixo, pronta para o olhar.
+          </p>
+          <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
             <input
               id="fav-input"
               type="text"
+              className="campo"
               value={newText}
               onChange={(e) => setNewText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addFavorite()}
               placeholder="Ex.: Quero um copo de água"
               aria-label="Nova frase favorita"
-              style={{
-                flex: 1,
-                minWidth: 200,
-                padding: '0.75rem 1.25rem',
-                borderRadius: '1rem',
-                border: '2px solid var(--color-card-border)',
-                fontSize: '1.1rem',
-                background: 'var(--color-bg-base)',
-                color: 'var(--color-text-base)',
-                outline: 'none',
-              }}
+              style={{ flex: 1, minWidth: 200, width: 'auto' }}
             />
-            <button
-              onClick={addFavorite}
-              disabled={!newText.trim()}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: newText.trim() ? '#1B54A8' : 'rgba(255,255,255,0.05)',
-                color: newText.trim() ? 'white' : 'rgba(255,255,255,0.2)',
-                border: '1px solid var(--color-card-border)',
-                borderRadius: '1rem',
-                fontWeight: 700,
-                fontSize: '1.1rem',
-                cursor: newText.trim() ? 'pointer' : 'not-allowed',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-              }}
-            >
-              <Plus size={18} /> Adicionar
-            </button>
+            <PrimaryButton onClick={addFavorite} disabled={!newText.trim()}>
+              <Plus size={18} aria-hidden="true" /> Adicionar
+            </PrimaryButton>
           </div>
         </section>
 
@@ -141,27 +112,18 @@ export const MyOptionsScreen: React.FC = () => {
         >
           <h2
             id="fav-list-title"
-            style={{ fontSize: '1.35rem', color: 'var(--color-text-base)', margin: '0 0 1rem 0.5rem', fontWeight: 700 }}
+            className="t-overline"
+            style={{ margin: '0 0 0.75rem 0.5rem' }}
           >
             Seus favoritos ({favorites.length})
           </h2>
 
           {favorites.length === 0 ? (
-            <p
-              role="status"
-              style={{
-                padding: '3rem 2rem',
-                background: 'var(--color-card-bg)',
-                borderRadius: '1.5rem',
-                color: 'var(--color-text-base)',
-                opacity: 0.8,
-                textAlign: 'center',
-                fontSize: '1.25rem',
-                border: '2px solid var(--color-card-border)',
-              }}
-            >
-              Nenhum favorito ainda. Adicione a primeira frase acima.
-            </p>
+            <EstadoVazio
+              titulo="Nenhum favorito ainda"
+              texto="Adicione a primeira frase acima e ela aparece aqui, pronta para o olhar."
+              icone={<Heart size={30} />}
+            />
           ) : (
             <ul
               style={{
@@ -178,35 +140,40 @@ export const MyOptionsScreen: React.FC = () => {
               {favorites.map((fav) => (
                 <li
                   key={fav.id}
+                  className="surface"
                   style={{
-                    background: 'var(--color-card-bg)',
-                    padding: '1rem 1.5rem',
-                    borderRadius: '1.5rem',
-                    border: '2px solid var(--color-card-border)',
+                    padding: '0.75rem 0.75rem 0.75rem 1.5rem',
                     display: 'flex',
-                    gap: '1rem',
+                    gap: 'var(--space-4)',
                     alignItems: 'center',
                   }}
                 >
-                  <span style={{ flex: 1, fontSize: '1.4rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
+                  <span
+                    style={{
+                      flex: 1,
+                      fontFamily: 'var(--font-display)',
+                      fontSize: '1.45rem',
+                      fontWeight: 800,
+                      letterSpacing: '-0.015em',
+                      color: 'var(--color-text-base)',
+                    }}
+                  >
                     {fav.text}
                   </span>
 
-                  {/* Falar - GazeButton */}
+                  {/* Falar - GazeButton. 230×96: era 180×60, abaixo do alvo
+                      mínimo de 5°. Sem `isolado`: o item de baixo é vizinho. */}
                   <GazeButton
                     onClick={() => speak(fav.text)}
-                    style={{
-                      width: '180px',
-                      height: '60px',
-                      background: 'rgba(27, 84, 168, 0.05)',
-                      border: '2px solid rgba(27, 84, 168, 0.3)',
-                      borderRadius: '1rem',
-                      color: '#1B54A8',
-                    }}
+                    variante="primaria"
+                    width={230}
+                    height={96}
+                    noWarn
+                    style={{ borderRadius: 'var(--radius-md)' }}
+                    aria-label={`Falar: ${fav.text}`}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.2rem', fontWeight: 800 }}>
-                      <Volume2 size={22} /> Falar
-                    </div>
+                    <Volume2 size={26} aria-hidden="true" />
+                    <span style={{ fontSize: '1.3rem', fontWeight: 800 }}>Falar</span>
                   </GazeButton>
 
                   {/* Remover - Botão comum (Cuidador) */}
@@ -214,19 +181,17 @@ export const MyOptionsScreen: React.FC = () => {
                     type="button"
                     onClick={() => removeFavorite(fav.id)}
                     aria-label={`Remover favorito: ${fav.text}`}
+                    data-no-dwell="true"
+                    className="btn btn--ghost"
                     style={{
-                      background: 'rgba(239, 68, 68, 0.05)',
-                      color: '#dc2626',
-                      border: '1px solid rgba(239, 68, 68, 0.2)',
+                      color: 'var(--tint-danger-text)',
+                      borderColor: 'var(--tint-danger-border)',
+                      background: 'var(--tint-danger-bg)',
                       padding: '0.75rem',
-                      borderRadius: '1rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      minHeight: 48,
                     }}
                   >
-                    <Trash2 size={20} />
+                    <Trash2 size={20} aria-hidden="true" />
                   </button>
                 </li>
               ))}

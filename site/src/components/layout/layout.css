@@ -32,3 +32,9 @@
   margin-bottom: 0;
   max-width: 68ch;
 }
+
+/* O esqueleto de rota fica abaixo do cabeçalho fixo e ocupa a dobra. */
+.route-fallback {
+  min-height: 100vh;
+  padding-top: calc(var(--header-h) + var(--sp-7));
+}

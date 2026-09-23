@@ -74,7 +74,7 @@ export const InitialSplash: React.FC = () => {
       aria-labelledby="splash-title"
       style={{
         minHeight: '100vh',
-        background: 'var(--color-bg-base)',
+        background: 'var(--page-bg)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -102,16 +102,14 @@ export const InitialSplash: React.FC = () => {
             style={{
               width: 300,
               height: 'auto',
-              filter: 'drop-shadow(0 20px 40px rgba(27,84,168,0.12))',
+              filter: 'drop-shadow(0 20px 40px rgba(27,84,168,0.18))',
             }}
             onError={() => setLogoQuebrada(true)}
           />
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: '#1B54A8' }}>
-            <Eye size={44} color="#1B54A8" aria-hidden="true" />
-            <span style={{ fontSize: '2.75rem', fontWeight: 900, letterSpacing: '0.02em' }}>
-              IrisFlow Communicator
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--color-primary)' }}>
+            <Eye size={44} aria-hidden="true" />
+            <span className="t-display">IrisFlow Communicator</span>
           </div>
         )}
 
@@ -140,53 +138,61 @@ export const InitialSplash: React.FC = () => {
               width: 220,
               height: 4,
               borderRadius: 999,
-              background: 'rgba(27,84,168,0.12)',
+              background: 'var(--color-card-border)',
               overflow: 'hidden',
               position: 'relative',
             }}
           >
             <div
+              className="splash-barra"
               style={{
                 position: 'absolute',
                 inset: 0,
                 width: '40%',
                 borderRadius: 999,
-                background: 'linear-gradient(90deg, #1B54A8, #2563eb)',
-                animation: 'splashSlide 1.2s ease-in-out infinite',
+                background: 'linear-gradient(90deg, var(--color-primary), var(--color-teal))',
               }}
             />
           </div>
-          <span style={{ fontSize: '1rem', fontWeight: 700, color: '#1B54A8', opacity: 0.9 }}>
+          <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
             {t('onboarding.splash.verifying')}
           </span>
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={entrarEmModoDev}
-        style={{
-          position: 'absolute',
-          bottom: '1.5rem',
-          right: '1.5rem',
-          background: 'transparent',
-          border: '1px solid rgba(27,84,168,0.25)',
-          color: '#3b82f6',
-          padding: '0.5rem 1.1rem',
-          borderRadius: '999px',
-          fontSize: '0.8rem',
-          fontWeight: 700,
-          cursor: 'pointer',
-          opacity: 0.65,
-          zIndex: 20,
-        }}
-      >
-        {t('onboarding.splash.devMode')}
-      </button>
+      {/* Só no build de desenvolvimento: no instalador o atalho pularia
+          licença, termo, perfil e calibração (ver `devMode.ts`). */}
+      {import.meta.env.DEV && (
+        <button
+          type="button"
+          onClick={entrarEmModoDev}
+          style={{
+            position: 'absolute',
+            bottom: '1.5rem',
+            right: '1.5rem',
+            background: 'transparent',
+            border: '1px solid var(--color-card-border)',
+            color: 'var(--color-text-muted)',
+            padding: '0.5rem 1.1rem',
+            borderRadius: 'var(--radius-pill)',
+            fontSize: '0.8rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            opacity: 0.7,
+            zIndex: 20,
+          }}
+        >
+          {t('onboarding.splash.devMode')}
+        </button>
+      )}
 
       <style>{`@keyframes splashSlide {
         0% { transform: translateX(-100%); }
         100% { transform: translateX(250%); }
+      }
+      .splash-barra { animation: splashSlide 1.2s ease-in-out infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        .splash-barra { animation: none; width: 100%; opacity: 0.6; }
       }`}</style>
     </main>
   );

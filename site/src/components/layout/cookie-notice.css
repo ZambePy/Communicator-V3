@@ -1,0 +1,97 @@
+.cookie-notice {
+  position: fixed;
+  z-index: 120;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  animation: fade-up 420ms var(--ease-out) both;
+}
+
+.cookie-notice__inner {
+  pointer-events: auto;
+  max-width: 980px;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: rgba(14, 32, 56, 0.97);
+  box-shadow: var(--shadow-lg);
+}
+
+.cookie-notice__title {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  margin: 0 0 var(--sp-1);
+}
+
+.cookie-notice__text p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.cookie-notice__link {
+  color: var(--ok);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cookie-notice__actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex: none;
+}
+
+.cookie-notice__btn {
+  padding: 0.7rem 1.2rem;
+  font-size: 0.95rem;
+}
+
+.cookie-notice__short {
+  display: none;
+}
+
+/* No celular o aviso fica compacto (≈ 150 px) para não cobrir a chamada
+   principal do hero: texto curto e os dois botões lado a lado. */
+@media (max-width: 720px) {
+  .cookie-notice {
+    padding: var(--sp-2) var(--sp-2) calc(var(--sp-2) + env(safe-area-inset-bottom, 0px));
+  }
+  .cookie-notice__inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+    border-radius: var(--r-md);
+  }
+  /* O título continua rotulando a região para leitores de tela. */
+  .cookie-notice__title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .cookie-notice__text p {
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+  .cookie-notice__long {
+    display: none;
+  }
+  .cookie-notice__short {
+    display: inline;
+  }
+  .cookie-notice__btn {
+    flex: 1 1 auto;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.86rem;
+  }
+}

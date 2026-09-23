@@ -4,9 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { Mail, Lock, LogIn, AlertCircle, ExternalLink, Wrench } from 'lucide-react';
 import { setDevMode } from '../../devMode';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { ProgressoDoOnboarding } from '../../components/ui/ProgressoDoOnboarding';
 import { useLicense } from '../../context/LicenseContext';
 import { MANAGE_URL } from '../../services/license';
 import type { LoginFailure } from '../../services/license';
+import { cloudConfig } from '../../cloud/config';
 
 /**
  * Login / ativação.
@@ -20,9 +22,13 @@ import type { LoginFailure } from '../../services/license';
  * suporte que a tela existe para evitar.
  */
 
-const SITE = 'https://irisflow.com.br';
-const RECUPERAR_URL = `${SITE}/conta/recuperar`;
-const CRIAR_CONTA_URL = `${SITE}/assinar`;
+// Endereço do site: `VITE_SITE_URL` do build (o domínio próprio, quando
+// existir) ou o site oficial — `cloudConfig.siteUrl`. As rotas são as do site
+// (`site/src/routes.ts`). O processo principal libera exatamente esse host
+// para abrir no navegador do sistema (`src/electronSecurity.ts`).
+const SITE = cloudConfig.siteUrl;
+const RECUPERAR_URL = `${SITE}/recuperar-senha`;
+const CRIAR_CONTA_URL = `${SITE}/cadastro`;
 
 export const LoginScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -90,19 +96,21 @@ export const LoginScreen: React.FC = () => {
       style={{
         minHeight: '100vh',
         background: 'var(--settings-bg)',
+        backgroundImage: 'var(--page-bg)',
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
+        gap: '1.5rem',
         padding: '2rem',
       }}
     >
+      <ProgressoDoOnboarding atual="conta" style={{ maxWidth: 470 }} />
       <div
-        className="glass-card animate-scale-in"
+        className="surface surface--elevated animate-scale-in"
         style={{
-          background: 'var(--color-card-bg)',
           padding: '2.75rem 2.5rem',
-          borderRadius: '2rem',
-          boxShadow: '0 20px 40px -10px rgba(27,84,168,0.12)',
+          borderRadius: 'var(--radius-xl)',
           width: '100%',
           maxWidth: 470,
           display: 'flex',
@@ -126,25 +134,10 @@ export const LoginScreen: React.FC = () => {
             style={{ width: 130, height: 'auto' }}
             onError={(e) => (e.currentTarget.style.display = 'none')}
           />
-          <h1
-            id="login-title"
-            style={{
-              fontSize: '1.75rem',
-              fontWeight: 800,
-              margin: 0,
-              color: 'var(--color-text-base)',
-            }}
-          >
+          <h1 id="login-title" className="t-h1" style={{ margin: 0, color: 'var(--color-text-base)' }}>
             {t('login.title')}
           </h1>
-          <p
-            style={{
-              margin: 0,
-              fontSize: '0.98rem',
-              opacity: 0.78,
-              color: 'var(--color-text-base)',
-            }}
-          >
+          <p className="t-body" style={{ margin: 0, color: 'var(--color-text-muted)' }}>
             {t('login.subtitle')}
           </p>
         </div>
@@ -157,7 +150,7 @@ export const LoginScreen: React.FC = () => {
           <Campo
             id="login-email"
             rotulo={t('login.email')}
-            icone={<Mail color="#64748b" size={19} aria-hidden="true" />}
+            icone={<Mail color="var(--color-text-faint)" size={19} aria-hidden="true" />}
             tipo="email"
             valor={email}
             aoMudar={setEmail}
@@ -167,7 +160,7 @@ export const LoginScreen: React.FC = () => {
           <Campo
             id="login-password"
             rotulo={t('login.password')}
-            icone={<Lock color="#64748b" size={19} aria-hidden="true" />}
+            icone={<Lock color="var(--color-text-faint)" size={19} aria-hidden="true" />}
             tipo="password"
             valor={senha}
             aoMudar={setSenha}
@@ -194,7 +187,7 @@ export const LoginScreen: React.FC = () => {
               <span style={{ display: 'flex', alignItems: 'flex-start', gap: '0.55rem' }}>
                 <AlertCircle
                   size={18}
-                  color="#dc2626"
+                  color="var(--color-danger)"
                   style={{ flexShrink: 0, marginTop: 1 }}
                   aria-hidden="true"
                 />
@@ -252,33 +245,36 @@ export const LoginScreen: React.FC = () => {
 
         {/* Modo Desenvolvedor: o mesmo atalho do splash. Pula licença, termo,
             perfil e calibração e abre o menu para inspecionar o produto com
-            mouse — o cursor de olhar e o dwell ficam desligados. Fica discreto
-            de propósito: é ferramenta de quem desenvolve, não do cuidador. */}
-        <button
-          type="button"
-          onClick={() => {
-            setDevMode(true);
-            navigate('/menu', { replace: true });
-          }}
-          aria-label={t('login.devMode')}
-          style={{
-            alignSelf: 'center',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            background: 'transparent',
-            border: '1px solid var(--color-card-border)',
-            color: 'var(--color-text-base)',
-            padding: '0.4rem 0.9rem',
-            borderRadius: '999px',
-            fontSize: '0.78rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            opacity: 0.55,
-          }}
-        >
-          <Wrench size={14} aria-hidden="true" /> {t('login.devMode')}
-        </button>
+            mouse — o cursor de olhar e o dwell ficam desligados. É ferramenta
+            de quem desenvolve: só existe no build de desenvolvimento, nunca no
+            instalador (ver `devMode.ts`). */}
+        {import.meta.env.DEV && (
+          <button
+            type="button"
+            onClick={() => {
+              setDevMode(true);
+              navigate('/menu', { replace: true });
+            }}
+            aria-label={t('login.devMode')}
+            style={{
+              alignSelf: 'center',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              background: 'transparent',
+              border: '1px solid var(--color-card-border)',
+              color: 'var(--color-text-base)',
+              padding: '0.4rem 0.9rem',
+              borderRadius: '999px',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              opacity: 0.55,
+            }}
+          >
+            <Wrench size={14} aria-hidden="true" /> {t('login.devMode')}
+          </button>
+        )}
       </div>
     </main>
   );
@@ -287,11 +283,13 @@ export const LoginScreen: React.FC = () => {
 /**
  * Link para o site.
  *
- * ⚠️ O processo principal do Electron nega toda abertura de janela
- * (`setWindowOpenHandler` → `deny`), então este link **não abre nada** no app
- * empacotado. Por isso a URL aparece como texto selecionável ao lado: sem ela
- * o cuidador clicaria num botão morto e ficaria travado. A correção definitiva
- * é `shell.openExternal` no `electron/main.ts` — fora do escopo do Bloco 1.
+ * No app empacotado nenhuma janela nova abre dentro do Electron: o processo
+ * principal entrega o `target="_blank"` ao navegador do sistema
+ * (`shell.openExternal`) quando o endereço é HTTPS de um host permitido —
+ * o site da IrisFlow e o `VITE_SITE_URL` do build (`permitirAberturaExterna`
+ * em src/electronSecurity.ts); fora da lista, o clique não faz nada. Com
+ * `mostrarUrl`, a URL aparece também como texto selecionável, para quem
+ * prefere abrir em outro aparelho.
  */
 const LinkExterno: React.FC<{ href: string; rotulo: string; mostrarUrl?: boolean }> = ({
   href,
@@ -307,7 +305,7 @@ const LinkExterno: React.FC<{ href: string; rotulo: string; mostrarUrl?: boolean
         display: 'inline-flex',
         alignItems: 'center',
         gap: '0.35rem',
-        color: '#1B54A8',
+        color: 'var(--color-primary)',
         fontWeight: 700,
         fontSize: '0.9rem',
       }}
@@ -318,8 +316,8 @@ const LinkExterno: React.FC<{ href: string; rotulo: string; mostrarUrl?: boolean
       <code
         style={{
           fontSize: '0.8rem',
-          color: '#475569',
-          background: 'rgba(15,23,42,0.05)',
+          color: 'var(--color-text-muted)',
+          background: 'var(--color-bg-sunken)',
           padding: '0.3rem 0.5rem',
           borderRadius: '0.4rem',
           userSelect: 'all',

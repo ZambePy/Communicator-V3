@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { AccountProvider, useAccount, type Account, type BetaProfile } from './AccountContext'
+import { RASCUNHO_KEY, salvarRascunhoBeta } from '../lib/rascunhoBeta'
 
 /* ============================================================
    O AccountContext precisa distinguir duas falhas ao reler a conta:
@@ -15,7 +16,7 @@ import { AccountProvider, useAccount, type Account, type BetaProfile } from './A
    expulsava o usuário do painel. Estes testes seguram esse contrato.
    ============================================================ */
 
-const { supabaseFake, fetchAccount, signUpBeta } = vi.hoisted(() => {
+const { supabaseFake, fetchAccount, signUpBeta, apiSignIn, apiSignOut } = vi.hoisted(() => {
   const supabaseFake = {
     auth: {
       // sessão sempre presente: quem decide o resto é fetchAccount
@@ -25,7 +26,9 @@ const { supabaseFake, fetchAccount, signUpBeta } = vi.hoisted(() => {
   }
   const fetchAccount = vi.fn<() => Promise<Account | null>>()
   const signUpBeta = vi.fn<(p: BetaProfile, senha: string) => Promise<Account>>()
-  return { supabaseFake, fetchAccount, signUpBeta }
+  const apiSignIn = vi.fn<(email: string, senha: string) => Promise<void>>()
+  const apiSignOut = vi.fn<() => Promise<void>>()
+  return { supabaseFake, fetchAccount, signUpBeta, apiSignIn, apiSignOut }
 })
 
 vi.mock('../lib/supabase', async (importOriginal) => {
@@ -38,7 +41,7 @@ vi.mock('../services/api', async (importOriginal) => {
   // ehErroDeAutenticacao e ApiError são os de verdade: o teste é sobre a
   // classificação real, não sobre um dublê dela.
   const real = await importOriginal<typeof import('../services/api')>()
-  return { ...real, fetchAccount, signUpBeta }
+  return { ...real, fetchAccount, signUpBeta, signIn: apiSignIn, signOut: apiSignOut }
 })
 
 const conta: Account = {
@@ -77,6 +80,7 @@ async function montarComContaCarregada() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.localStorage.clear()
 })
 
 describe('AccountContext.refresh', () => {
@@ -208,5 +212,76 @@ describe('AccountContext.registerBeta', () => {
 
     expect(result.current.account).toBeNull()
     expect(result.current.authenticated).toBe(false)
+  })
+
+  it('inscrição concluída apaga o rascunho guardado enquanto o e-mail era confirmado', async () => {
+    salvarRascunhoBeta('maria@exemplo.com.br', { userName: 'João', os: 'windows' })
+    supabaseFake.auth.getSession.mockResolvedValueOnce({ data: { session: null } } as never)
+    signUpBeta.mockResolvedValueOnce(contaBeta)
+
+    const { result } = renderHook(() => useAccount(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(async () => {
+      await result.current.registerBeta(perfilBeta, 'segredo123')
+    })
+
+    expect(window.localStorage.getItem(RASCUNHO_KEY)).toBeNull()
+  })
+})
+
+/* ---------------- entrar e sair ---------------- */
+
+describe('AccountContext.signIn / signOut', () => {
+  it('conta sem inscrição concluída: a sessão fica marcada, para /conta levar a /beta e não a /entrar', async () => {
+    supabaseFake.auth.getSession.mockResolvedValueOnce({ data: { session: null } } as never)
+    const { result } = renderHook(() => useAccount(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.authenticated).toBe(false)
+
+    apiSignIn.mockResolvedValueOnce()
+    fetchAccount.mockResolvedValueOnce(null) // sem assinatura: acabou de confirmar o e-mail
+    await act(() => result.current.signIn('maria@exemplo.com.br', 'segredo123'))
+
+    expect(apiSignIn).toHaveBeenCalledWith('maria@exemplo.com.br', 'segredo123')
+    expect(result.current.authenticated).toBe(true)
+    expect(result.current.account).toBeNull()
+    expect(result.current.sessionError).toBeNull()
+  })
+
+  it('falha de rede logo depois do login não vira "senha errada": a sessão fica e o motivo vai para sessionError', async () => {
+    supabaseFake.auth.getSession.mockResolvedValueOnce({ data: { session: null } } as never)
+    const { result } = renderHook(() => useAccount(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    apiSignIn.mockResolvedValueOnce()
+    fetchAccount.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await act(() => result.current.signIn('maria@exemplo.com.br', 'segredo123'))
+
+    expect(result.current.authenticated).toBe(true)
+    expect(result.current.sessionError).toBe('Failed to fetch')
+  })
+
+  it('login recusado propaga o erro e não marca sessão', async () => {
+    supabaseFake.auth.getSession.mockResolvedValueOnce({ data: { session: null } } as never)
+    const { result } = renderHook(() => useAccount(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    apiSignIn.mockRejectedValueOnce(new Error('E-mail ou senha incorretos.'))
+    await expect(act(() => result.current.signIn('maria@exemplo.com.br', 'errada'))).rejects.toThrow(
+      'incorretos',
+    )
+    expect(result.current.authenticated).toBe(false)
+    expect(fetchAccount).not.toHaveBeenCalled()
+  })
+
+  it('sair apaga o rascunho de inscrição deste navegador', async () => {
+    const { result } = await montarComContaCarregada()
+    salvarRascunhoBeta('maria@exemplo.com.br', { userName: 'João' })
+
+    apiSignOut.mockResolvedValueOnce()
+    await act(() => result.current.signOut())
+
+    expect(result.current.authenticated).toBe(false)
+    expect(window.localStorage.getItem(RASCUNHO_KEY)).toBeNull()
   })
 })

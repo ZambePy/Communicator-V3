@@ -107,3 +107,14 @@ describe('VigiaDeRecalibracao — BCEA das fixações recentes', () => {
     expect(v.fixacoesMedidas).toBe(0);
   });
 });
+
+describe('fração do teto da correção — independente da referência', () => {
+  it('sem teste de precisão salvo, a correção esgotada AINDA acusa (o comentário prometia; o código não cumpria)', () => {
+    expect(avaliarNecessidadeDeRecalibracao({ bceaPx2: null, viesPx: null, fracaoDoTeto: 0.95 }, null))
+      .toEqual({ precisa: true, motivo: 'vies' });
+  });
+  it('abaixo da fração, sem referência, continua "não sei"', () => {
+    expect(avaliarNecessidadeDeRecalibracao({ bceaPx2: 1e6, viesPx: 500, fracaoDoTeto: 0.5 }, null))
+      .toEqual({ precisa: false, motivo: null });
+  });
+});

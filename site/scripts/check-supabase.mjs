@@ -1,11 +1,12 @@
 /**
- * Verificação da conexão com o Supabase.
+ * Verificação da conexão com o Supabase (e dos instaladores no GitHub).
  *
  *   npm run check
  *
- * Lê o .env.local, bate no projeto e diz o que está pronto e o que
- * falta. Não escreve nada no banco: só consultas de leitura e a
- * configuração pública de autenticação.
+ * Lê o .env.local (ou o .env), bate no projeto e diz o que está pronto e
+ * o que falta. Não escreve nada no banco: só consultas de leitura e a
+ * configuração pública de autenticação. O esquema vem das migrações de
+ * ../supabase/migrations/ (README da raiz, seção "Supabase (supabase/)").
  */
 
 import { readFileSync, existsSync } from 'node:fs'
@@ -18,6 +19,8 @@ const cor = (c, t) => `\x1b[${c}m${t}\x1b[0m`
 const ok = (t) => console.log(`${cor(32, '  ok  ')} ${t}`)
 const falha = (t) => console.log(`${cor(31, ' falha')} ${t}`)
 const aviso = (t) => console.log(`${cor(33, ' aviso')} ${t}`)
+/** O que a chave anônima não consegue conferir, mas precisa estar certo no painel. */
+const info = (t) => console.log(`${cor(36, '  info')} ${t}`)
 const titulo = (t) => console.log(`\n${cor(1, t)}`)
 
 let problemas = 0
@@ -52,13 +55,13 @@ const env = lerEnv()
 const url = env.VITE_SUPABASE_URL
 const chave = env.VITE_SUPABASE_ANON_KEY
 
-if (!existsSync(resolve(RAIZ, '.env.local'))) {
-  falha('.env.local não existe. Rode: cp .env.example .env.local')
+if (!existsSync(resolve(RAIZ, '.env.local')) && !existsSync(resolve(RAIZ, '.env'))) {
+  falha('Nem .env.local nem .env existem. Rode: cp .env.example .env.local')
   process.exit(1)
 }
 
 if (!url) {
-  falha('VITE_SUPABASE_URL vazia no .env.local')
+  falha('VITE_SUPABASE_URL vazia no .env.local / .env')
 } else if (/\/rest\/v1/.test(url)) {
   registrar(
     true,
@@ -72,7 +75,7 @@ if (!url) {
 }
 
 if (!chave) {
-  falha('VITE_SUPABASE_ANON_KEY vazia no .env.local')
+  falha('VITE_SUPABASE_ANON_KEY vazia no .env.local / .env')
 } else if (chave.includes('service_role')) {
   falha('VITE_SUPABASE_ANON_KEY parece ser a service_role. NUNCA use ela aqui: ela ignora a RLS e iria para o bundle público.')
 } else {
@@ -131,30 +134,75 @@ if (encerrar) {
 /* ---------- 3. o esquema foi aplicado ---------- */
 titulo('3. Esquema')
 
+// As migrações de ../supabase/migrations/ entram na ordem do nome; a base
+// (planos, perfis, assinaturas, RLS, RPCs do site) é a
+// 20260923022346_schema_base.sql.
+const MIGRACOES =
+  'Aplique as migrações de supabase/migrations/ na ordem do nome ' +
+  '(`supabase db push` com o projeto vinculado, ou cada arquivo no SQL Editor).'
+
 const planos = await pedir('/rest/v1/plans?select=id,name,price_brl,trial_days')
 if (planos.status === 404 || planos.corpo?.code === '42P01') {
-  registrar(true, 'tabela `plans` não existe. Rode supabase/schema.sql no SQL Editor.')
+  registrar(true, `tabela \`plans\` não existe. ${MIGRACOES}`)
 } else if (planos.status !== 200) {
   registrar(true, `leitura de \`plans\` falhou: ${JSON.stringify(planos.corpo)}`)
 } else if (!Array.isArray(planos.corpo) || planos.corpo.length === 0) {
-  registrar(true, '`plans` existe mas está vazia. O INSERT do fim do schema.sql não rodou.')
+  registrar(
+    true,
+    '`plans` existe mas está vazia: o INSERT do fim de 20260923022346_schema_base.sql não rodou.',
+  )
 } else {
   const p = planos.corpo[0]
   ok(`plano encontrado: ${p.name}, R$ ${p.price_brl}, ${p.trial_days} dias de avaliação`)
 }
 
-const releases = await pedir('/rest/v1/app_releases?select=os,download_url')
-if (releases.status === 200 && Array.isArray(releases.corpo)) {
-  const semUrl = releases.corpo.filter((r) => r.download_url === '#').length
-  if (releases.corpo.length === 0) {
-    aviso('`app_releases` vazia: os botões de download ficam sem destino.')
-  } else if (semUrl > 0) {
-    aviso(`${semUrl} de ${releases.corpo.length} instaladores ainda com URL '#'.`)
+/* ---------- 3b. instaladores (GitHub Releases) ----------
+   Os botões de download do site não leem o banco: vêm do último release
+   do GitHub (src/lib/releases.ts), e só os sistemas de
+   VITE_RELEASES_AVAILABLE ganham botão. Aqui se confere se o release tem
+   o arquivo de cada sistema liberado. Nada disto derruba a verificação:
+   a API pública do GitHub tem limite de 60 pedidos por hora por IP. */
+titulo('3b. Instaladores (GitHub Releases)')
+
+// Os mesmos padrões de src/lib/releases.ts (DEFAULT_RELEASES_REPO e DEFAULT_AVAILABLE).
+const repoCru = (env.VITE_RELEASES_REPO ?? '').trim()
+const repoMatch = repoCru.match(/^(?:https?:\/\/github\.com\/)?([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i)
+const repo = repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : 'ZambePy/Blinkv1'
+const liberados = new Set()
+for (const parte of (env.VITE_RELEASES_AVAILABLE ?? '').toLowerCase().split(/[\s,;]+/)) {
+  if (parte === 'windows' || parte === 'win') liberados.add('windows')
+  else if (parte === 'macos' || parte === 'mac' || parte === 'osx') liberados.add('macos')
+  else if (parte === 'linux') liberados.add('linux')
+}
+if (liberados.size === 0) liberados.add('windows')
+
+const EXTENSOES = { windows: ['.exe'], macos: ['.dmg'], linux: ['.appimage', '.deb'] }
+try {
+  const r = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+    headers: { Accept: 'application/vnd.github+json' },
+  })
+  if (r.status === 404) {
+    aviso(`${repo}: nenhum release publicado. Os botões de download mostram "Em breve".`)
+  } else if (r.status === 403 || r.status === 429) {
+    aviso('a API do GitHub recusou agora (limite de pedidos). Tente de novo mais tarde.')
+  } else if (!r.ok) {
+    aviso(`a API do GitHub respondeu HTTP ${r.status} para ${repo}.`)
   } else {
-    ok('instaladores com URL publicada')
+    const release = await r.json()
+    const nomes = (release.assets ?? []).map((a) => String(a.name ?? '').toLowerCase())
+    const tem = (os) => nomes.some((n) => EXTENSOES[os].some((e) => n.endsWith(e)))
+    ok(`${repo}: último release ${release.tag_name ?? '(sem tag)'}`)
+    for (const os of ['windows', 'macos', 'linux']) {
+      if (liberados.has(os) && tem(os)) ok(`${os}: liberado e com instalador no release`)
+      else if (liberados.has(os)) {
+        aviso(`${os}: liberado em VITE_RELEASES_AVAILABLE, mas sem instalador no release (o botão mostra "Em breve").`)
+      } else if (tem(os)) {
+        info(`${os}: o release tem o arquivo, mas o sistema não está em VITE_RELEASES_AVAILABLE — o site segue dizendo "em preparação".`)
+      }
+    }
   }
-} else {
-  registrar(true, 'tabela `app_releases` inacessível')
+} catch (e) {
+  aviso(`não foi possível consultar o GitHub (${e.message}).`)
 }
 
 /* ---------- 4. RLS ---------- */
@@ -167,7 +215,8 @@ if (perfis.status === 200 && Array.isArray(perfis.corpo) && perfis.corpo.length 
   registrar(
     true,
     `GRAVE: a chave anônima leu ${perfis.corpo.length} linha(s) de \`profiles\`. ` +
-      'A RLS não está ativa. Rode a seção 14 do schema.sql.',
+      'A RLS não está ativa. Rode de novo a seção 14 de ' +
+      'supabase/migrations/20260923022346_schema_base.sql.',
   )
 } else if (perfis.status === 200) {
   ok('`profiles` não devolve nada para a chave anônima, como esperado')
@@ -197,29 +246,40 @@ if (conf.status !== 200 || typeof conf.corpo !== 'object') {
   }
 
   // Na mesma tela do painel ficam dois interruptores, um logo abaixo do
-  // outro. Desligar o de cima tira o login por senha do ar; o que
-  // precisa ser desligado é o de baixo.
+  // outro: "Enable Email provider" (o de cima) precisa estar ligado; o de
+  // baixo, "Confirm email", pode ficar como preferir (ver abaixo).
   if (conf.corpo.external?.email === false) {
     registrar(
       true,
       'O provedor de e-mail está DESLIGADO. Sem ele não há login por senha. ' +
         'Ligue "Enable Email provider" em Authentication > Sign In / Providers > Email ' +
-        '(o interruptor de cima) e desligue apenas "Confirm email" (o de baixo).',
+        '(o interruptor de cima).',
     )
   } else {
     ok('provedor de e-mail e senha ativo')
   }
 
-  // mailer_autoconfirm true = "Confirm email" desligado
-  if (conf.corpo.mailer_autoconfirm === true) {
-    ok('"Confirm email" desligado: o cadastro segue direto para o checkout')
-  } else {
-    registrar(
-      true,
-      '"Confirm email" LIGADO. O signUp não devolve sessão e o cadastro para antes do ' +
-        'checkout. Desligue em Authentication > Sign In / Providers > Email.',
-    )
-  }
+  // mailer_autoconfirm true = "Confirm email" desligado. Os dois modos
+  // funcionam no site: desligado, a inscrição da beta segue direto; ligado,
+  // o link do e-mail volta para /entrar e a inscrição é concluída na /beta.
+  ok(
+    conf.corpo.mailer_autoconfirm === true
+      ? '"Confirm email" desligado: a inscrição da beta segue direto'
+      : '"Confirm email" ligado: a inscrição termina depois do clique no link do e-mail',
+  )
+
+  // Valem nos dois modos (a recuperação de senha sempre manda e-mail), e a
+  // chave anônima não consegue ler nenhum dos dois.
+  info(
+    'Authentication > URL Configuration: Site URL = a origem do site, e Redirect URLs com ' +
+      '<site>/entrar e <site>/nova-senha (o "esqueci a senha" do site e o do app do cuidador ' +
+      'levam para /nova-senha).',
+  )
+  info(
+    'Authentication > Emails: sem SMTP próprio, o servidor padrão do Supabase tem limite ' +
+      'baixo de envio e só entrega para endereços da equipe do projeto — isso vale para a ' +
+      'confirmação de cadastro e para a recuperação de senha.',
+  )
 }
 
 /* ---------- 6. funções ---------- */
@@ -235,7 +295,10 @@ const rpc = await fetch(`${base}/rest/v1/rpc/request_cancellation`, {
 const rpcCorpo = await rpc.json().catch(() => ({}))
 
 if (rpc.status === 404) {
-  registrar(true, '`request_cancellation` não existe. O schema.sql não rodou até o fim.')
+  registrar(
+    true,
+    '`request_cancellation` não existe: 20260923022346_schema_base.sql não rodou até o fim.',
+  )
 } else if (rpcCorpo?.message?.includes('autenticado') || rpc.status === 401 || rpc.status === 403) {
   ok('as funções existem e recusam chamada sem autenticação')
 } else {
@@ -245,7 +308,7 @@ if (rpc.status === 404) {
 /* ---------- resultado ---------- */
 console.log()
 if (problemas === 0) {
-  console.log(cor(32, 'Tudo pronto. Rode `npm run dev` e crie uma conta em /cadastro.'))
+  console.log(cor(32, 'Tudo pronto. Rode `npm run dev` e faça uma inscrição em /beta.'))
 } else {
   console.log(cor(31, `${problemas} item(ns) para resolver antes de testar o fluxo.`))
   process.exitCode = 1

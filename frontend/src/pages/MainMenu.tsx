@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   MessageSquare,
   Keyboard,
@@ -10,12 +11,21 @@ import {
   Moon,
   Mic,
   Accessibility,
+  GraduationCap,
+  ArrowRight,
 } from 'lucide-react';
 import { useCloud } from '../cloud/CloudContext';
 import { GazePageLayout } from '../components/ui/GazePageLayout';
 import { GazeGrid } from '../components/ui/GazeGrid';
 import { GazeButton } from '../components/ui/GazeButton';
 import { EstadoDaSessao } from '../components/ui/EstadoDaSessao';
+import { aoMudarMissao, passoGuardado } from './tutorial/missao';
+import {
+  PASSOS_DO_TUTORIAL,
+  ehPassoDoTutorial,
+  indiceDoPassoDoTutorial,
+  type PassoDoTutorial,
+} from './tutorial/passos';
 
 /**
  * Menu principal: nove cartões em grade 3×3, cada um com um selo circular
@@ -27,32 +37,57 @@ import { EstadoDaSessao } from '../components/ui/EstadoDaSessao';
  */
 
 interface AppModule {
+  /** Também é a chave em `menu.modulos.*` do i18n. */
   id: string;
-  title: string;
   icon: React.ReactNode;
   /** Cor do selo circular atrás do ícone. */
   badge: string;
   route: string;
-  description: string;
 }
 
 const ICONE = 46;
 
+// Título e descrição vêm do i18n (`menu.modulos.<id>`): o menu ficava em
+// português fixo enquanto o resto do app trocava de idioma.
 const MODULES: AppModule[] = [
-  { id: 'communication', title: 'Comunicação', icon: <MessageSquare size={ICONE} />, badge: '#FF8A8A', route: '/phrases', description: 'Frases rápidas e pictogramas' },
-  { id: 'keyboard', title: 'Teclado Virtual', icon: <Keyboard size={ICONE} />, badge: '#6EE7A0', route: '/keyboard', description: 'Digite livremente' },
-  { id: 'computer', title: 'Computador', icon: <Monitor size={ICONE} />, badge: '#C4A5F5', route: '/virtual-mouse', description: 'Mouse virtual e sistema' },
-  { id: 'settings', title: 'Configurações', icon: <Settings size={ICONE} />, badge: '#FBBF5B', route: '/settings', description: 'Ajustes e calibração' },
-  { id: 'leisure', title: 'Ajuda e Lazer', icon: <Gamepad2 size={ICONE} />, badge: '#7DB4F5', route: '/games', description: 'Câmera, fotos e jogos' },
-  { id: 'conversation', title: 'Conversa', icon: <MessageCircle size={ICONE} />, badge: '#67E0E0', route: '/conversation', description: 'Mensagens do cuidador' },
-  { id: 'rest', title: 'Modo Descanso', icon: <Moon size={ICONE} />, badge: '#C89BF7', route: '/rest', description: 'Pausar tela e descansar olhar' },
-  { id: 'voice', title: 'Controle de Voz', icon: <Mic size={ICONE} />, badge: '#5EEAD4', route: '/voice', description: 'Comandos por voz' },
-  { id: 'accessibility', title: 'Acessibilidade', icon: <Accessibility size={ICONE} />, badge: '#6CB6F5', route: '/accessibility', description: 'Recursos inclusivos' },
+  { id: 'communication', icon: <MessageSquare size={ICONE} />, badge: '#FF8A8A', route: '/phrases' },
+  { id: 'keyboard', icon: <Keyboard size={ICONE} />, badge: '#6EE7A0', route: '/keyboard' },
+  { id: 'computer', icon: <Monitor size={ICONE} />, badge: '#C4A5F5', route: '/virtual-mouse' },
+  { id: 'settings', icon: <Settings size={ICONE} />, badge: '#FBBF5B', route: '/settings' },
+  { id: 'leisure', icon: <Gamepad2 size={ICONE} />, badge: '#7DB4F5', route: '/games' },
+  { id: 'conversation', icon: <MessageCircle size={ICONE} />, badge: '#67E0E0', route: '/conversation' },
+  { id: 'rest', icon: <Moon size={ICONE} />, badge: '#C89BF7', route: '/rest' },
+  { id: 'voice', icon: <Mic size={ICONE} />, badge: '#5EEAD4', route: '/voice' },
+  { id: 'accessibility', icon: <Accessibility size={ICONE} />, badge: '#6CB6F5', route: '/accessibility' },
 ];
 
+/**
+ * Passo do tutorial em curso nesta sessão, ou `null`.
+ *
+ * O passo só existe no `sessionStorage` entre a entrada no tutorial e a saída
+ * dele (conclusão ou "Pular", que chamam `limparMissoes`). Então "há passo
+ * guardado" É "há um tutorial pela metade" — inclusive quando é um tutorial
+ * já concluído sendo refeito, que precisa da mesma volta.
+ */
+function passoDoTutorialEmCurso(): PassoDoTutorial | null {
+  const p = passoGuardado();
+  return ehPassoDoTutorial(p) ? p : null;
+}
+
 export const MainMenu: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { naoFaladas } = useCloud();
+
+  // Volta ao tutorial pelo olhar. As missões mandam a pessoa para as telas
+  // reais, e as saídas próprias dessas telas levam ao menu — sem este cartão,
+  // quem chegava aqui no meio do tutorial ficava fora dele sem caminho de
+  // volta que não fosse o cuidador.
+  const [passoPendente, setPassoPendente] = useState(passoDoTutorialEmCurso);
+  useEffect(() => {
+    setPassoPendente(passoDoTutorialEmCurso());
+    return aoMudarMissao(() => setPassoPendente(passoDoTutorialEmCurso()));
+  }, []);
 
   return (
     <GazePageLayout showBack={false}>
@@ -70,6 +105,40 @@ export const MainMenu: React.FC = () => {
             esta e a tela do paciente, e enche-la de informacao atrapalha
             justamente quem ela existe para servir. */}
         <EstadoDaSessao />
+
+        {passoPendente !== null && (
+          <GazeButton
+            onClick={() => navigate('/tutorial')}
+            height={84}
+            isolado
+            aria-label={t('menu.continuarTutorial.title')}
+            style={{
+              width: '100%',
+              maxWidth: 'min(1600px, 92%)',
+              margin: '0 auto 1rem auto',
+              borderRadius: '1.25rem',
+              background: 'var(--tint-info-bg)',
+              border: '2px solid var(--tint-info-border)',
+              color: 'var(--tint-info-text)',
+              padding: '0 1.5rem',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '100%' }}>
+              <GraduationCap size={30} aria-hidden="true" style={{ flexShrink: 0 }} />
+              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, textAlign: 'left' }}>
+                <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{t('menu.continuarTutorial.title')}</span>
+                <span style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 600 }}>
+                  {t('menu.continuarTutorial.lead', {
+                    n: indiceDoPassoDoTutorial(passoPendente) + 1,
+                    total: PASSOS_DO_TUTORIAL.length,
+                    passo: t(`tutorial.steps.${passoPendente}`),
+                  })}
+                </span>
+              </span>
+              <ArrowRight size={26} aria-hidden="true" style={{ flexShrink: 0 }} />
+            </span>
+          </GazeButton>
+        )}
 
         {/*
           A largura máxima era um número fixo, e desperdiçava 544 px em 1920 —
@@ -91,7 +160,10 @@ export const MainMenu: React.FC = () => {
               <GazeButton
                 key={module.id}
                 onClick={() => navigate(module.route)}
-                aria-label={`${module.title}: ${module.description}`}
+                aria-label={t('menu.abrirAria', {
+                  title: t(`menu.modulos.${module.id}.title`),
+                  description: t(`menu.modulos.${module.id}.description`),
+                })}
                 style={{
                   height: '100%',
                   borderRadius: '1.6rem',
@@ -134,7 +206,7 @@ export const MainMenu: React.FC = () => {
                     {module.id === 'conversation' && naoFaladas > 0 && (
                       <span
                         aria-hidden="false"
-                        aria-label={`${naoFaladas} mensagens novas`}
+                        aria-label={t('menu.novasMensagens', { n: naoFaladas })}
                         style={{
                           position: 'absolute', top: -6, right: -10, minWidth: 30, height: 30, padding: '0 8px',
                           borderRadius: 15, background: '#dc2626', color: '#fff', fontSize: '1rem', fontWeight: 900,
@@ -155,7 +227,7 @@ export const MainMenu: React.FC = () => {
                       lineHeight: 1.15,
                     }}
                   >
-                    {module.title}
+                    {t(`menu.modulos.${module.id}.title`)}
                   </div>
                   <div
                     style={{
@@ -166,7 +238,7 @@ export const MainMenu: React.FC = () => {
                       color: 'var(--color-text-base)',
                     }}
                   >
-                    {module.description}
+                    {t(`menu.modulos.${module.id}.description`)}
                   </div>
                 </div>
               </GazeButton>

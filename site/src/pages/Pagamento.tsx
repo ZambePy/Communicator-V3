@@ -133,44 +133,43 @@ export default function Pagamento() {
 
         <Reveal anim="up" delay={200}>
           <div className="flow__card panel">
-            <div className="notice">
-              <span className="notice__icon">
-                <Icon name="info" size={20} />
-              </span>
-              <p>
-                <strong>Ambiente de demonstração.</strong> Este projeto foi entregue sem gateway
-                de pagamento, então <strong>nenhum número de cartão completo é processado ou
-                armazenado</strong> e nenhuma cobrança é feita: o número e o código de segurança
-                não saem desta tela. O que <em>é</em> gravado na sua conta, no banco de dados:{' '}
-                <strong>o nome do titular, a bandeira e os quatro últimos dígitos</strong>, que
-                depois aparecem no painel. Por isso, use dados de teste — cartão{' '}
-                <code>4111 1111 1111 1111</code> e um nome fictício no lugar do seu.
-              </p>
-            </div>
+            {import.meta.env.DEV && (
+              <div className="notice">
+                <span className="notice__icon">
+                  <Icon name="info" size={20} />
+                </span>
+                <p>
+                  <strong>[dev] Sem gateway de pagamento.</strong> Nenhum número de cartão
+                  completo é processado ou armazenado e nenhuma cobrança é feita; só ficam o nome
+                  do titular, a bandeira e os quatro últimos dígitos. Use dados de teste — cartão{' '}
+                  <code>4111 1111 1111 1111</code>.
+                </p>
+              </div>
+            )}
 
             <form onSubmit={submit} noValidate>
-              <div
-                className="methods"
-                role="radiogroup"
-                aria-label="Escolha a forma de pagamento"
-              >
+              {/* Rádios nativos, visualmente escondidos: as setas do teclado
+                  trocam a opção e o leitor de tela anuncia "1 de 3". */}
+              <fieldset className="methods">
+                <legend className="sr-only">Escolha a forma de pagamento</legend>
                 {METHODS.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={method === m.id}
-                    className={`method${method === m.id ? ' is-on' : ''}`}
-                    onClick={() => setMethod(m.id)}
-                  >
+                  <label key={m.id} className={`method${method === m.id ? ' is-on' : ''}`}>
+                    <input
+                      type="radio"
+                      name="metodo"
+                      value={m.id}
+                      className="method__input"
+                      checked={method === m.id}
+                      onChange={() => setMethod(m.id)}
+                    />
                     <span className="method__icon">
                       <Icon name={m.icon} size={22} />
                     </span>
                     <span className="method__name">{m.name}</span>
                     <span className="method__note">{m.note}</span>
-                  </button>
+                  </label>
                 ))}
-              </div>
+              </fieldset>
 
               {method === 'cartao' && (
                 <div className="flow__fieldset" key="cartao">
@@ -262,9 +261,8 @@ export default function Pagamento() {
                       vencimento em três dias. O acesso continua ativo enquanto o pagamento não
                       vence.
                     </p>
-                    <code className="pix__code">
-                      00020126_codigo_de_demonstracao_sem_gateway_conectado_5204000053039865802BR
-                    </code>
+                    {/* O código Pix de verdade só existe quando o gateway gera a cobrança;
+                        ele vai no e-mail, e nenhum código de exemplo aparece aqui. */}
                   </div>
                 </div>
               )}

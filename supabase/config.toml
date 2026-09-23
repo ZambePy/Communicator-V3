@@ -1,0 +1,19 @@
+# Configuração local do Supabase CLI para este repositório.
+#
+# `project_id` só identifica o ambiente local (`supabase start`, `db reset`):
+# dá nome aos containers desta máquina. O CLI recusa um config.toml sem ele.
+# Não tem relação com o projeto em produção — esse é escolhido por
+# `supabase link --project-ref <ref>`.
+#
+# Seed: `supabase db reset` (local) aplica supabase/migrations/ em ordem e
+# depois roda supabase/seed.sql, que é o caminho padrão do CLI. `db push` não
+# roda o seed no projeto remoto (só com --include-seed, que não usamos).
+project_id = "irisflow"
+
+# `desktop-sync` NÃO exige o JWT do Supabase: quem chama é o app desktop do
+# paciente, autenticado pela chave do computador (`x-device-key`, gerada por
+# pair_device()). Com verify_jwt ligado (padrão), o gateway devolveria 401
+# antes de a função rodar. O desktop também manda o JWT anônimo por segurança,
+# mas esta linha garante que a função funcione de qualquer jeito.
+[functions.desktop-sync]
+verify_jwt = false

@@ -66,6 +66,6 @@
     },
     "usoComercial": "proibido",
     "contrato": null,
-    "notas": "Pesos da beta. Servem para medir e comparar na bancada; NÃO podem sair num release. O V2 substitui por modelo treinado em base licenciada (ver docs/GATE-V2.md). `sha256` está nulo porque o ONNX não é versionado: preencha com o hash que o worker imprime no console ([L2CS] meta sem sha256; o arquivo carregado tem …) e o preflight passa a conferir."
+    "notas": "Pesos da beta. Servem para medir e comparar na bancada; NÃO podem sair num release. O V2 substitui por modelo treinado em base licenciada (ver README da raiz, seções \"Modelos\" e \"Pendências e riscos\"). `sha256` está nulo porque o ONNX não é versionado: preencha com o hash que o worker imprime no console ([L2CS] meta sem sha256; o arquivo carregado tem …) e o preflight passa a conferir."
   }
 }

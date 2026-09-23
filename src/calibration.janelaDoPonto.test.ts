@@ -5,7 +5,7 @@ import {
   janelaUtilDoPonto,
   medianaDeDistancias,
 } from './calibration';
-import { getCollectionMsForPoint } from './calibration';
+import { alvosDeCalibracao, currentCalibrationGeometry, getCollectionMsForPoint } from './calibration';
 
 // Tempo de cada ponto de calibração: a janela de acomodação (400 ms) é SOMADA
 // ao tempo de coleta útil, não subtraída dele; e a distância de referência do
@@ -45,6 +45,19 @@ describe('a acomodação é somada ao tempo do ponto', () => {
     ] as const;
     const totalMs = pontos.reduce(
       (s, [x, y]) => s + duracaoTotalDoPonto(getCollectionMsForPoint(x, y)),
+      0,
+    );
+    expect(totalMs / 1000).toBeLessThan(40);
+  });
+
+  it('a calibração de 13 pontos (grade + 4 cantos da tela) cabe no mesmo teto, no pior caso', () => {
+    // Pior caso = todo ponto indo até o teto da janela, sem fechar cedo por
+    // estabilidade. Na tela de referência dá ~39 s; na prática os pontos
+    // fecham antes, quando o olhar para.
+    const alvos = alvosDeCalibracao(currentCalibrationGeometry({ screenWidthPx: 1920, screenHeightPx: 1080 }), { perfil: 'padrao' });
+    expect(alvos).toHaveLength(13);
+    const totalMs = alvos.reduce(
+      (s, a) => s + duracaoTotalDoPonto(getCollectionMsForPoint(a.x, a.y, 'padrao')),
       0,
     );
     expect(totalMs / 1000).toBeLessThan(40);

@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import Animated, { Easing, useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Text } from './Text';
-import { useTheme } from '@/theme';
+import { motion, sizes, useTheme } from '@/theme';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -13,39 +13,56 @@ interface Props {
   size?: number;
   stroke?: number;
   color?: string;
+  trackColor?: string;
   label?: string;
   caption?: string;
+  /** Texto dos rótulos sobre fundo escuro. */
+  onDark?: boolean;
+  /** Lido pelo leitor de tela, ex.: "Acerto de 96 por cento". */
+  accessibilityLabel?: string;
 }
 
-/** Anel de progresso animado (SVG) para métricas como taxa de acerto e progresso da sessão. */
-export function ProgressRing({ value, size = 84, stroke = 9, color, label, caption }: Props) {
-  const { colors } = useTheme();
+/** Anel de progresso (SVG) para taxas como o acerto em alvo. Sem animação com "reduzir movimento". */
+export function ProgressRing({ value, size = sizes.ring.md, stroke = sizes.ringStroke.md, color, trackColor, label, caption, onDark, accessibilityLabel }: Props) {
+  const { colors, reduceMotion } = useTheme();
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
-  const progress = useSharedValue(0);
+  const alvo = Math.max(0, Math.min(1, value));
+  const progress = useSharedValue(reduceMotion ? alvo : 0);
 
   useEffect(() => {
-    progress.value = withTiming(Math.max(0, Math.min(1, value)), { duration: 1100, easing: Easing.out(Easing.cubic) });
-  }, [value, progress]);
+    progress.value = reduceMotion ? alvo : withTiming(alvo, { duration: motion.duration.slow * 2.5, easing: Easing.out(Easing.cubic) });
+  }, [alvo, progress, reduceMotion]);
 
   const animatedProps = useAnimatedProps(() => ({ strokeDashoffset: c * (1 - progress.value) }));
 
   return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Svg width={size} height={size} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
-        <Circle cx={size / 2} cy={size / 2} r={r} stroke={colors.surfaceAlt} strokeWidth={stroke} fill="none" />
+    <View
+      style={[styles.wrap, { width: size, height: size }]}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={accessibilityLabel ?? [label, caption].filter(Boolean).join(' ')}
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(alvo * 100) }}
+    >
+      <Svg width={size} height={size} style={[StyleSheet.absoluteFill, styles.rotate]}>
+        <Circle cx={size / 2} cy={size / 2} r={r} stroke={trackColor ?? (onDark ? colors.onDarkFill : colors.surfaceAlt)} strokeWidth={stroke} fill="none" />
         <AnimatedCircle cx={size / 2} cy={size / 2} r={r} stroke={color ?? colors.accent} strokeWidth={stroke} fill="none" strokeLinecap="round" strokeDasharray={`${c} ${c}`} animatedProps={animatedProps} />
       </Svg>
-      {label && (
-        <Text variant="h3" weight="bold" style={{ fontSize: size * 0.22, lineHeight: size * 0.26 }}>
+      {label ? (
+        <Text variant="h3" weight="bold" tone={onDark ? 'onDark' : 'default'} maxFontSizeMultiplier={1.2}>
           {label}
         </Text>
-      )}
-      {caption && (
-        <Text variant="caption" tone="muted" style={{ fontSize: Math.max(10, size * 0.12), lineHeight: size * 0.15 }}>
+      ) : null}
+      {caption ? (
+        <Text variant="caption" tone={onDark ? 'onDarkMuted' : 'muted'} maxFontSizeMultiplier={1.1}>
           {caption}
         </Text>
-      )}
+      ) : null}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  wrap: { alignItems: 'center', justifyContent: 'center' },
+  rotate: { transform: [{ rotate: '-90deg' }] },
+});

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Monitor, AlertCircle } from 'lucide-react';
+import { Monitor, AlertCircle, CreditCard } from 'lucide-react';
+import { PrimaryButton } from '../../../components/ui/PrimaryButton';
+import { MedicaoPorCartao } from './MedicaoPorCartao';
 import { Semaforo } from '../../../components/ui/Semaforo';
 import { Cabecalho } from './EscolhaDaCamera';
 
@@ -15,6 +17,12 @@ import { Cabecalho } from './EscolhaDaCamera';
  * Daí a regra dura: **quando o EDID não responde, o campo fica vazio.**
  * Preencher 24" "porque a maioria é 24" seria pior do que não ter tela nenhuma,
  * porque cria confiança onde não há informação.
+ *
+ * O passo é OPCIONAL (o "Concluir" nunca trava aqui): deixar em branco mantém
+ * o valor que já estava nas configurações, e a origem continua dizendo que
+ * ninguém mediu. Para quem não tem fita métrica, "Medir com um cartão" deriva
+ * a diagonal de um cartão padrão encostado na tela (ver `medidaPorCartao.ts`)
+ * e preenche ESTE campo — a mesma entrada da digitação, com origem manual.
  */
 
 /** Faixa plausível de monitor de mesa. Fora disso é engano de digitação. */
@@ -25,6 +33,11 @@ export interface VerificacaoDoMonitorProps {
   /** Diagonal lida do EDID, em polegadas. `null` = o sistema não informou. */
   diagonalDoEdid: number | null;
   aoMudar: (polegadas: number | null, origem: 'edid' | 'manual') => void;
+  /**
+   * Valor que fica valendo se o campo ficar em branco (o que já está nas
+   * configurações). Só para dizer ao cuidador o que acontece se ele pular.
+   */
+  diagonalAtual?: number;
 }
 
 /** Aceita vírgula: é como se digita decimal em português. */
@@ -40,10 +53,12 @@ function analisar(texto: string): number | null {
 export const VerificacaoDoMonitor: React.FC<VerificacaoDoMonitorProps> = ({
   diagonalDoEdid,
   aoMudar,
+  diagonalAtual,
 }) => {
   const { t } = useTranslation();
   const [texto, setTexto] = useState(diagonalDoEdid !== null ? String(diagonalDoEdid) : '');
   const [tocado, setTocado] = useState(false);
+  const [medindoComCartao, setMedindoComCartao] = useState(false);
 
   const valor = analisar(texto);
   const origem: 'edid' | 'manual' = tocado || diagonalDoEdid === null ? 'manual' : 'edid';
@@ -133,6 +148,42 @@ export const VerificacaoDoMonitor: React.FC<VerificacaoDoMonitorProps> = ({
           </div>
         )}
       </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        <PrimaryButton
+          type="button"
+          variant="secondary"
+          onClick={() => setMedindoComCartao(true)}
+          style={{ alignSelf: 'flex-start', minHeight: 56 }}
+        >
+          <CreditCard size={18} aria-hidden="true" /> Medir com um cartão
+        </PrimaryButton>
+        <span style={{ fontSize: '0.88rem', lineHeight: 1.5, opacity: 0.8, color: 'var(--color-text-base)' }}>
+          Sem fita métrica? Um cartão de crédito ou documento no tamanho padrão encostado na tela
+          basta.
+        </span>
+      </div>
+
+      <p
+        data-testid="monitor-opcional"
+        style={{ margin: 0, fontSize: '0.9rem', lineHeight: 1.5, opacity: 0.85, color: 'var(--color-text-base)' }}
+      >
+        Este passo é opcional.{' '}
+        {diagonalAtual !== undefined
+          ? `Se ficar em branco, o IrisFlow continua usando ${String(diagonalAtual).replace('.', ',')} polegadas.`
+          : 'Se ficar em branco, o IrisFlow mantém o valor atual.'}
+      </p>
+
+      {medindoComCartao && (
+        <MedicaoPorCartao
+          aoCancelar={() => setMedindoComCartao(false)}
+          aoUsar={(pol) => {
+            setTocado(true);
+            setTexto(String(pol));
+            setMedindoComCartao(false);
+          }}
+        />
+      )}
     </div>
   );
 };

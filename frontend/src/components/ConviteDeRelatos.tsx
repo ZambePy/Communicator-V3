@@ -48,7 +48,9 @@ export const ConviteDeRelatos: React.FC = () => {
         position: 'fixed',
         right: 24,
         bottom: 24,
-        zIndex: 2147482000,
+        // Abaixo da Emergência e do alarme dela (era 2147482000, por cima
+        // de tudo — inclusive da confirmação de socorro).
+        zIndex: 99975,
         width: 420,
         maxWidth: 'calc(100vw - 48px)',
         padding: '1.25rem 1.4rem',

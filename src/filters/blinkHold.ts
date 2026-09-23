@@ -2,9 +2,12 @@
 //
 // Durante uma piscada não há íris para medir. Descartar o quadro deixa o
 // cursor onde estava — e se a piscada acontece no meio de uma sacada, ele
-// trava no meio do caminho e depois salta. Congelar na posição PREDITA pelo
-// Kalman usa o modelo de velocidade constante como melhor estimativa de onde
-// o olho está enquanto ninguém consegue medir.
+// trava no meio do caminho e depois salta. Com a cadeia Kalman, congelar na
+// posição PREDITA usa o modelo de velocidade constante como melhor estimativa
+// de onde o olho está enquanto ninguém consegue medir. Sem Kalman (One Euro,
+// o padrão) o `predict` chega com `ready: false`, `posicao` sai `null` e o
+// que vale é a MÁQUINA DE ESTADOS: a última posição fica, e o teto abaixo
+// continua separando piscada de olho fechado.
 //
 // O teto de 2 s separa "piscada" (100–400 ms) de "olho fechado". Continuar
 // projetando velocidade constante por dez segundos mandaria o cursor para

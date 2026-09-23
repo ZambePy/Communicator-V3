@@ -96,7 +96,12 @@ export const QuickPhrasesScreen: React.FC = () => {
   const totalPages = Math.ceil(PHRASES.length / itemsPerPage);
 
   return (
-    <GazePageLayout showBack={true} backRoute="/menu">
+    <GazePageLayout
+      showBack={true}
+      backRoute="/menu"
+      titulo="Frases Rápidas"
+      subtitulo={`Página ${currentPage + 1} de ${totalPages} · Olhe para selecionar`}
+    >
       <div
         style={{
           display: 'flex',
@@ -108,14 +113,6 @@ export const QuickPhrasesScreen: React.FC = () => {
       >
         <FaixaDeMissao missao="comunicacao" instrucao={t('tutorial.comunicacao.missao')} />
         <DicaContextual id="comunicacao" />
-        <div style={{ marginBottom: '2.5rem', textAlign: 'center' }}>
-          <h1 style={{ fontSize: '2.75rem', fontWeight: 800, color: 'var(--color-text-base)', margin: '0 0 0.5rem 0' }}>
-            Frases Rápidas
-          </h1>
-          <p style={{ fontSize: '1.25rem', color: 'var(--color-text-base)', opacity: 0.7, margin: 0, fontWeight: 500 }}>
-            Página {currentPage + 1} de {totalPages} — Olhe para selecionar
-          </p>
-        </div>
 
         <div style={{ flex: 1, minHeight: 0 }}>
           <GazeGrid columns={3} rows={2}>
@@ -123,12 +120,7 @@ export const QuickPhrasesScreen: React.FC = () => {
               <GazeButton
                 key={phrase.id}
                 onClick={() => handleSpeak(phrase.text)}
-                style={{
-                  height: '100%',
-                  borderRadius: '2rem',
-                  background: 'var(--color-card-bg)',
-                  border: '2px solid var(--color-card-border)',
-                }}
+                style={{ height: '100%', borderRadius: 'var(--radius-xl)' }}
               >
                 <div 
                   style={{ 
@@ -142,20 +134,30 @@ export const QuickPhrasesScreen: React.FC = () => {
                   }}
                 >
                   <div
+                    aria-hidden="true"
                     style={{
                       background: phrase.bg,
-                      padding: '1rem',
-                      borderRadius: '1.5rem',
+                      padding: '0.9rem',
+                      borderRadius: 'var(--radius-lg)',
                       color: phrase.iconColor,
-                      marginBottom: '1rem',
+                      marginBottom: '0.9rem',
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <phrase.Icon size={56} strokeWidth={1.5} />
+                    <phrase.Icon size={52} strokeWidth={1.6} />
                   </div>
-                  <span style={{ fontSize: '1.4rem', fontWeight: 700, lineHeight: 1.3, color: 'var(--color-text-base)' }}>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 'clamp(1.25rem, 2vh, 1.55rem)',
+                      fontWeight: 800,
+                      letterSpacing: '-0.015em',
+                      lineHeight: 1.25,
+                      color: 'var(--color-text-base)',
+                    }}
+                  >
                     {phrase.text}
                   </span>
                 </div>
@@ -168,17 +170,19 @@ export const QuickPhrasesScreen: React.FC = () => {
                 onClick={() => setCurrentPage(1)}
                 style={{
                   height: '100%',
-                  borderRadius: '2rem',
-                  border: '2px solid rgba(27, 84, 168, 0.3)',
-                  background: 'rgba(27, 84, 168, 0.05)',
+                  borderRadius: 'var(--radius-xl)',
+                  border: '2px dashed var(--state-hover-border)',
+                  background: 'var(--state-active-bg)',
+                  color: 'var(--color-primary)',
                 }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%' }}>
-                  <div style={{ color: '#1B54A8', marginBottom: '0.75rem' }}>
-                    <ChevronRight size={56} />
-                  </div>
-                  <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#1B54A8' }}>
-                    Mais Frases
+                  <ChevronRight size={56} aria-hidden="true" style={{ marginBottom: '0.5rem' }} />
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.015em' }}>
+                    Mais frases
+                  </span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 600, opacity: 0.8, marginTop: '0.25rem' }}>
+                    página 2 de {totalPages}
                   </span>
                 </div>
               </GazeButton>
@@ -187,31 +191,31 @@ export const QuickPhrasesScreen: React.FC = () => {
                 onClick={() => setCurrentPage(0)}
                 style={{
                   height: '100%',
-                  borderRadius: '2rem',
-                  border: '2px solid rgba(27, 84, 168, 0.3)',
-                  background: 'rgba(27, 84, 168, 0.05)',
+                  borderRadius: 'var(--radius-xl)',
+                  border: '2px dashed var(--state-hover-border)',
+                  background: 'var(--state-active-bg)',
+                  color: 'var(--color-primary)',
                 }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%' }}>
-                  <div style={{ color: '#1B54A8', marginBottom: '0.75rem' }}>
-                    <ChevronLeft size={56} />
-                  </div>
-                  <span style={{ fontSize: '1.6rem', fontWeight: 800, color: '#1B54A8' }}>
-                    Voltar Página
+                  <ChevronLeft size={56} aria-hidden="true" style={{ marginBottom: '0.5rem' }} />
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.015em' }}>
+                    Primeira página
+                  </span>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 600, opacity: 0.8, marginTop: '0.25rem' }}>
+                    página 1 de {totalPages}
                   </span>
                 </div>
               </GazeButton>
             )}
 
-            {/* Placeholders desabilitados se for página 1 para manter grade 3x2 consistente */}
+            {/* Células vazias na última página: ocupam a grade 3×2 sem oferecer
+                alvo nem desenhar quase nada — um cartão "desabilitado" com
+                traço no meio parecia botão quebrado. */}
             {currentPage === 1 && (
               <>
-                <GazeButton disabled style={{ height: '100%', borderRadius: '2rem', opacity: 0.2 }}>
-                  <span style={{ color: 'rgba(255,255,255,0.1)' }}>-</span>
-                </GazeButton>
-                <GazeButton disabled style={{ height: '100%', borderRadius: '2rem', opacity: 0.2 }}>
-                  <span style={{ color: 'rgba(255,255,255,0.1)' }}>-</span>
-                </GazeButton>
+                <div aria-hidden="true" style={{ borderRadius: 'var(--radius-xl)', border: '2px dashed var(--color-card-border)', opacity: 0.5 }} />
+                <div aria-hidden="true" style={{ borderRadius: 'var(--radius-xl)', border: '2px dashed var(--color-card-border)', opacity: 0.5 }} />
               </>
             )}
           </GazeGrid>

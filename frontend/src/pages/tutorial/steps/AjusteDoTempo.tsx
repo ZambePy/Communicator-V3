@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Target, Check } from 'lucide-react';
 import { ControleDeDwell } from '../../../components/ui/ControleDeDwell';
+import { GazeButton } from '../../../components/ui/GazeButton';
 
 /**
  * Ajuste do tempo de permanência, com teste ao lado.
@@ -73,39 +74,48 @@ export const AjusteDoTempo: React.FC<{
           border: '1px solid var(--color-card-border)',
         }}
       >
-        <button
+        {/* GazeButton isolado de 200 px, e não um `<button>` de 150: este é o
+            alvo em que a pessoa SENTE o tempo escolhido, e 150 px fica abaixo
+            do mínimo de 5° — o dwell zerava com o jitter antes de fechar, e a
+            tela parecia não responder ao tempo que acabou de ser ajustado. */}
+        <GazeButton
           type="button"
           aria-label={t('tutorial.ajuste.alvo')}
           onClick={testar}
+          width={200}
+          height={200}
+          isolado
           style={{
-            width: 150,
-            height: 150,
             borderRadius: '50%',
             border: `4px solid ${feito ? 'var(--tint-ok-text)' : 'var(--color-primary)'}`,
             background: feito ? 'var(--tint-ok-bg)' : 'var(--tint-info-bg)',
             color: 'var(--color-text-base)',
             fontSize: '1rem',
             fontWeight: 800,
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.4rem',
           }}
         >
-          {feito ? (
-            <>
-              <Check size={36} color="var(--tint-ok-text)" aria-hidden="true" />
-              {t('tutorial.ajuste.feito')}
-            </>
-          ) : (
-            <>
-              <Target size={36} color="var(--color-primary)" aria-hidden="true" />
-              {t('tutorial.ajuste.alvo')}
-            </>
-          )}
-        </button>
+          <span
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.4rem',
+            }}
+          >
+            {feito ? (
+              <>
+                <Check size={36} color="var(--tint-ok-text)" aria-hidden="true" />
+                {t('tutorial.ajuste.feito')}
+              </>
+            ) : (
+              <>
+                <Target size={36} color="var(--color-primary)" aria-hidden="true" />
+                {t('tutorial.ajuste.alvo')}
+              </>
+            )}
+          </span>
+        </GazeButton>
       </div>
     </div>
   );

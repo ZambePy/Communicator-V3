@@ -52,10 +52,10 @@ describe('os três estados', () => {
     expect(r.mensagem).not.toMatch(/afaste|aproxime|volte/i);
   });
 
-  it('o texto diz que a correção continua e oferece a reancoragem', () => {
+  it('o texto diz que a correção continua e oferece o reajuste', () => {
     for (const e of ['perto', 'longe'] as const) {
       expect(mensagemPara(e)).toMatch(/correção automática/i);
-      expect(mensagemPara(e)).toMatch(/reancore/i);
+      expect(mensagemPara(e)).toMatch(/reajuste olhando o centro/i);
     }
   });
 

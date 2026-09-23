@@ -3,7 +3,7 @@ import type { AccuracyResult, RunMeta } from '@tracker/accuracy';
 import { camposDeCalibracao, resumoDoRelatorio } from './sessao';
 
 // O que vai para o app do cuidador é um resumo: os nomes daqui são o contrato
-// com `AccuracySummary` em irisflow-cuidador/src/data/types.ts.
+// com `AccuracySummary` em app/src/data/types.ts.
 
 const resultado = {
   meanError: 61.26, medianError: 55.1, p90Error: 98.4, meanErrorX: 40, meanErrorY: 35,

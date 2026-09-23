@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useReducedMotion } from '@/hooks/useReducedMotion'
 import './typography.css'
 
 type Props = {
@@ -18,8 +19,11 @@ export function Typewriter({ phrases, typeMs = 62, eraseMs = 28, holdMs = 1900 }
   const [index, setIndex] = useState(0)
   const [text, setText] = useState('')
   const [erasing, setErasing] = useState(false)
+  const reduced = useReducedMotion()
 
   useEffect(() => {
+    // Com movimento reduzido, nada de letra a letra: a frase inteira, parada.
+    if (reduced) return
     const full = phrases[index % phrases.length]
 
     if (!erasing && text === full) {
@@ -41,12 +45,18 @@ export function Typewriter({ phrases, typeMs = 62, eraseMs = 28, holdMs = 1900 }
     )
 
     return () => window.clearTimeout(t)
-  }, [text, erasing, index, phrases, typeMs, eraseMs, holdMs])
+  }, [text, erasing, index, phrases, typeMs, eraseMs, holdMs, reduced])
 
+  const full = phrases[index % phrases.length]
+
+  /* O texto que muda a cada 62 ms fica fora da árvore de acessibilidade
+     (um aria-live aqui faria o leitor de tela soletrar sem parar); a frase
+     completa vai num sr-only, uma vez. */
   return (
     <span className="typewriter">
-      <span aria-live="polite">{text}</span>
-      <span className="typewriter__caret" aria-hidden="true" />
+      <span className="sr-only">{full}</span>
+      <span aria-hidden="true">{reduced ? full : text}</span>
+      {!reduced && <span className="typewriter__caret" aria-hidden="true" />}
     </span>
   )
 }

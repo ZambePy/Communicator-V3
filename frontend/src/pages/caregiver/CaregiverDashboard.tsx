@@ -91,9 +91,9 @@ export const CaregiverDashboard: React.FC = () => {
       {/* Bloco de Boas-vindas e Guia do Cuidador */}
       <div
         style={{
-          background: 'linear-gradient(135deg, #1e293b, #0f172a)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '1.5rem',
+          background: 'linear-gradient(135deg, var(--color-bg-elevated), var(--color-bg-base))',
+          border: '1px solid var(--color-card-border)',
+          borderRadius: 'var(--radius-lg)',
           padding: '2rem',
           marginBottom: '2rem',
           display: 'flex',
@@ -104,10 +104,10 @@ export const CaregiverDashboard: React.FC = () => {
         }}
       >
         <div>
-          <h3 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f8fafc', margin: '0 0 0.5rem 0' }}>
+          <h3 className="t-h2" style={{ color: 'var(--color-text-base)', margin: '0 0 0.5rem 0' }}>
             Olá, Cuidador!
           </h3>
-          <p style={{ fontSize: '1.05rem', color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
+          <p style={{ fontSize: '1.05rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.5 }}>
             Certifique-se de que a câmera esteja bem posicionada e o ambiente iluminado para manter o rastreamento ocular calibrado.
           </p>
         </div>
@@ -115,16 +115,16 @@ export const CaregiverDashboard: React.FC = () => {
           onClick={() => navigate('/caregiver/guide?from=/caregiver')}
           style={{
             padding: '0.85rem 1.75rem',
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: '1.5px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '1rem',
-            color: '#f8fafc',
+            background: 'var(--state-active-bg)',
+            border: '1.5px solid var(--state-hover-border)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--color-text-base)',
             fontSize: '1rem',
             fontWeight: 700,
             cursor: 'pointer',
             transition: 'background 0.2s',
           }}
-          {...hoverAndFocusBackground('rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.15)')}
+          {...hoverAndFocusBackground('var(--state-active-bg)', 'var(--color-primary-light)')}
         >
           Ler Guia do Cuidador
         </button>
@@ -140,21 +140,21 @@ export const CaregiverDashboard: React.FC = () => {
         <section
           aria-labelledby="tasks-title"
           style={{
-            background: '#1e293b',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'var(--color-card-bg)',
+            border: '1px solid var(--color-card-border)',
             padding: '2rem',
-            borderRadius: '2rem',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+            borderRadius: 'var(--radius-xl)',
+            boxShadow: 'var(--shadow-1)',
           }}
         >
           <h2
             id="tasks-title"
+            className="t-h2"
             style={{
-              fontSize: '1.5rem',
               display: 'flex',
               alignItems: 'center',
               gap: '0.75rem',
-              color: '#f8fafc',
+              color: 'var(--color-text-base)',
               marginTop: 0,
             }}
           >
@@ -185,19 +185,19 @@ export const CaregiverDashboard: React.FC = () => {
                     padding: '1.25rem',
                     borderRadius: '1rem',
                     border: 'none',
-                    background: task.done ? 'rgba(34, 197, 94, 0.1)' : '#334155',
+                    background: task.done ? 'var(--tint-ok-bg)' : 'var(--color-bg-sunken)',
                     cursor: 'pointer',
                     transition: 'all 0.2s',
-                    boxShadow: task.done ? 'inset 0 0 0 2px #22c55e' : 'none',
+                    boxShadow: task.done ? 'inset 0 0 0 2px var(--color-ok)' : 'none',
                     width: '100%',
                     textAlign: 'left',
-                    color: task.done ? '#4ade80' : '#cbd5e1',
+                    color: task.done ? 'var(--tint-ok-text)' : 'var(--color-text-base)',
                   }}
                 >
                   {task.done ? (
-                    <CheckCircle2 size={32} color="#22c55e" aria-hidden="true" />
+                    <CheckCircle2 size={32} color="var(--color-ok)" aria-hidden="true" />
                   ) : (
-                    <Circle size={32} color="#64748b" aria-hidden="true" />
+                    <Circle size={32} color="var(--color-text-faint)" aria-hidden="true" />
                   )}
                   <span
                     style={{
@@ -217,33 +217,33 @@ export const CaregiverDashboard: React.FC = () => {
         <section
           aria-labelledby="diary-title"
           style={{
-            background: '#1e293b',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'var(--color-card-bg)',
+            border: '1px solid var(--color-card-border)',
             padding: '2rem',
-            borderRadius: '2rem',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+            borderRadius: 'var(--radius-xl)',
+            boxShadow: 'var(--shadow-1)',
           }}
         >
           <h2
             id="diary-title"
+            className="t-h2"
             style={{
-              fontSize: '1.5rem',
               display: 'flex',
               alignItems: 'center',
               gap: '0.75rem',
-              color: '#f8fafc',
+              color: 'var(--color-text-base)',
               marginTop: 0,
             }}
           >
-            <HeartPulse color="#f87171" aria-hidden="true" /> Registro de Sintomas
+            <HeartPulse color="var(--color-danger)" aria-hidden="true" /> Registro de Sintomas
           </h2>
 
           <div style={{ marginTop: '2rem' }}>
             <label
               htmlFor="pain-slider"
-              style={{ fontSize: '1.15rem', fontWeight: 600, color: '#cbd5e1' }}
+              style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--color-text-muted)' }}
             >
-              Nível de Dor Atual: <strong style={{ color: '#f87171' }}>{painLevel}</strong>
+              Nível de Dor Atual: <strong style={{ color: 'var(--color-danger)' }}>{painLevel}</strong>
             </label>
             <input
               id="pain-slider"
@@ -262,7 +262,7 @@ export const CaregiverDashboard: React.FC = () => {
                 display: 'flex',
                 justifyContent: 'space-between',
                 marginTop: '0.5rem',
-                color: '#64748b',
+                color: 'var(--color-text-faint)',
               }}
             >
               <span>0 (Sem dor)</span>
@@ -275,7 +275,7 @@ export const CaregiverDashboard: React.FC = () => {
               style={{
                 fontSize: '1.15rem',
                 fontWeight: 600,
-                color: '#cbd5e1',
+                color: 'var(--color-text-muted)',
                 marginBottom: '0.75rem',
               }}
             >
@@ -294,18 +294,18 @@ export const CaregiverDashboard: React.FC = () => {
                 style={{
                   flex: 1,
                   padding: '1.5rem',
-                  background: mood === 'bad' ? 'rgba(239, 68, 68, 0.15)' : '#334155',
-                  border: mood === 'bad' ? '2px solid #ef4444' : '2px solid transparent',
+                  background: mood === 'bad' ? 'var(--tint-danger-bg)' : 'var(--color-bg-sunken)',
+                  border: mood === 'bad' ? '2px solid var(--color-danger)' : '2px solid transparent',
                   borderRadius: '1rem',
                   cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   gap: '0.5rem',
-                  color: '#fca5a5',
+                  color: 'var(--tint-danger-text)',
                 }}
               >
-                <Frown size={48} color="#ef4444" aria-hidden="true" />
+                <Frown size={48} color="var(--color-danger)" aria-hidden="true" />
                 <span style={{ fontWeight: 700 }}>Mal</span>
               </button>
               <button
@@ -316,18 +316,18 @@ export const CaregiverDashboard: React.FC = () => {
                 style={{
                   flex: 1,
                   padding: '1.5rem',
-                  background: mood === 'good' ? 'rgba(34, 197, 94, 0.15)' : '#334155',
-                  border: mood === 'good' ? '2px solid #22c55e' : '2px solid transparent',
+                  background: mood === 'good' ? 'var(--tint-ok-bg)' : 'var(--color-bg-sunken)',
+                  border: mood === 'good' ? '2px solid var(--color-ok)' : '2px solid transparent',
                   borderRadius: '1rem',
                   cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   gap: '0.5rem',
-                  color: '#86efac',
+                  color: 'var(--tint-ok-text)',
                 }}
               >
-                <Smile size={48} color="#22c55e" aria-hidden="true" />
+                <Smile size={48} color="var(--color-ok)" aria-hidden="true" />
                 <span style={{ fontWeight: 700 }}>Bem</span>
               </button>
             </div>
@@ -341,21 +341,21 @@ export const CaregiverDashboard: React.FC = () => {
               width: '100%',
               padding: '1.25rem',
               marginTop: '2rem',
-              background: '#1B54A8',
-              color: 'white',
+              background: 'var(--color-primary-fill)',
+              color: 'var(--color-primary-contrast)',
               border: 'none',
-              borderRadius: '1rem',
+              borderRadius: 'var(--radius-md)',
               fontSize: '1.15rem',
               fontWeight: 700,
               cursor: 'pointer',
-              boxShadow: '0 4px 15px rgba(27,84,168,0.3)',
+              boxShadow: 'var(--shadow-1)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '0.5rem',
               transition: 'background 0.2s',
             }}
-            {...hoverAndFocusBackground('#1B54A8', '#2563eb')}
+            {...hoverAndFocusBackground('var(--color-primary-fill)', 'var(--color-primary-dark)')}
           >
             <Save size={20} aria-hidden="true" /> Salvar Diário
           </button>
@@ -365,17 +365,17 @@ export const CaregiverDashboard: React.FC = () => {
           <section
             aria-labelledby="history-title"
             style={{
-              background: '#1e293b',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'var(--color-card-bg)',
+              border: '1px solid var(--color-card-border)',
               padding: '2rem',
-              borderRadius: '2rem',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+              borderRadius: 'var(--radius-xl)',
+              boxShadow: 'var(--shadow-1)',
               gridColumn: '1 / -1',
             }}
           >
             <h2
               id="history-title"
-              style={{ fontSize: '1.35rem', color: '#f8fafc', marginTop: 0, marginBottom: '1rem', fontWeight: 700 }}
+              style={{ fontSize: '1.35rem', color: 'var(--color-text-base)', marginTop: 0, marginBottom: '1rem', fontWeight: 700 }}
             >
               Histórico recente ({entries.length})
             </h2>
@@ -393,18 +393,18 @@ export const CaregiverDashboard: React.FC = () => {
                   key={e.timestamp}
                   style={{
                     padding: '1rem',
-                    background: '#334155',
+                    background: 'var(--color-bg-sunken)',
                     borderRadius: '0.75rem',
                     fontSize: '0.95rem',
-                    color: '#cbd5e1',
+                    color: 'var(--color-text-muted)',
                   }}
                 >
-                  <div style={{ fontWeight: 700, color: '#f8fafc', marginBottom: '0.25rem' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--color-text-base)', marginBottom: '0.25rem' }}>
                     {new Date(e.timestamp).toLocaleString('pt-BR')}
                   </div>
                   <div>
-                    Dor: <strong style={{ color: '#f87171' }}>{e.painLevel}/10</strong> · Humor:{' '}
-                    <strong style={{ color: e.mood === 'good' ? '#86efac' : '#fca5a5' }}>
+                    Dor: <strong style={{ color: 'var(--color-danger)' }}>{e.painLevel}/10</strong> · Humor:{' '}
+                    <strong style={{ color: e.mood === 'good' ? 'var(--tint-ok-text)' : 'var(--tint-danger-text)' }}>
                       {e.mood === 'good' ? 'Bem' : e.mood === 'bad' ? 'Mal' : 'não registrado'}
                     </strong>
                   </div>

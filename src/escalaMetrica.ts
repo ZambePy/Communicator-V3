@@ -1,10 +1,12 @@
 // Escala métrica pela íris: quantos centímetros vale um pixel de vídeo.
 //
-// Tudo o que o pipeline calcula em centímetros — distância até a tela,
-// deslocamento lateral do tronco (`translationCompensation`), compensação de
-// pose — depende de uma medida real do rosto para converter pixel em cm. Hoje
-// essa medida é a distância cantal, fixada em 9,0 cm para todo mundo
-// (`anthropometry.ts`).
+// O deslocamento lateral do tronco (`translationCompensation`) converte pixel
+// de vídeo em cm por uma medida real do rosto — e é o ÚNICO consumidor da
+// medida daqui. A estimativa de distância câmera→rosto (`setupReadiness.ts`,
+// que alimenta a compensação de distância) ainda usa a constante genérica de
+// 9,0 cm (`anthropometry.ts`); a compensação de pose não usa cantal nenhuma
+// (usa a distância de tela configurada). Unificar é trabalho da compensação
+// 6DoF.
 //
 // O problema é a variação entre pessoas. A distância cantal externa de um
 // adulto varia com sexo, etnia e idade numa faixa da ordem de ±10 %; usar 9,0

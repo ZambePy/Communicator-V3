@@ -65,6 +65,18 @@ export function janelaParaSobreposicao(p: Ponto, quadro: QuadroDeTela): Ponto {
   return { x: tela.x - quadro.monitor.x, y: tela.y - quadro.monitor.y };
 }
 
+/**
+ * px CSS da sobreposição → px CSS da janela do app. Inversa exata de
+ * `janelaParaSobreposicao` fora da faixa em que aquela prende ao monitor —
+ * e é só fora dela que o ponto vai virar rótulo da correção por dwell, porque
+ * um alvo da barra nunca fica além da borda do monitor. Sem clamp de
+ * propósito: prender aqui esconderia um erro de quadro em vez de deixá-lo
+ * aparecer no rótulo (que a correção, com seu teto de salto, recusa).
+ */
+export function sobreposicaoParaJanela(p: Ponto, quadro: QuadroDeTela): Ponto {
+  return { x: p.x + quadro.monitor.x - quadro.janela.x, y: p.y + quadro.monitor.y - quadro.janela.y };
+}
+
 /** px CSS da sobreposição → DIP da tela virtual, preso ao monitor. */
 export function sobreposicaoParaTela(p: Ponto, quadro: QuadroDeTela): Ponto {
   return prenderNoRetangulo(

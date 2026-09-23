@@ -8,17 +8,57 @@
                          mas funcional em uma interface operada por
                          fixação ocular"
 
-   O tema padrão e claro, como manda o plano. As faixas escuras —
-   hero, chamada final e rodape — recebem a classe .on-dark, que
-   apenas redefine os mesmos tokens dentro daquela subarvore. Assim
-   nenhum componente precisa saber em que fundo esta.
+   O site tem um único tema: o azul-marinho da identidade. As faixas
+   de destaque — hero, chamada final e rodapé — recebem a classe
+   .on-dark, que troca as superfícies sólidas por vidro translúcido
+   dentro daquela subárvore. Nenhum componente precisa saber em que
+   fundo está.
    ============================================================ */
 
-/* Sem webfont de display. O arquivo Boldonse-Regular.ttf nunca esteve no
-   repositório: o @font-face que apontava para /fonts/ dava 404 em toda
-   página, a fonte caía no fallback do mesmo jeito e ainda sobrava o FOUT.
-   Numa página comercial isso não se paga. A pilha abaixo usa fontes de
-   sistema com boa presença de título, sem nenhum byte baixado. */
+/* Fonte de display: Sora (SIL OFL 1.1, self-hosted em public/fonts, só
+   os pesos 600 e 700, latin + latin-ext), para títulos e números grandes.
+   Boldonse fica exclusivamente no logotipo (já rasterizado no PNG). O
+   corpo usa a pilha do sistema: texto nítido e nenhum byte a mais. */
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/sora-latin-ext-600-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/sora-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/sora-latin-ext-700-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/sora-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
 
 :root {
   /* --- marca (fixas, não mudam com o fundo) --- */
@@ -31,46 +71,52 @@
   --navy-deep: #061223;
   --teal: #00a693;
   --teal-600: #018476;
+  --teal-700: #016f63;
   --teal-300: #3fd6c2;
 
-  /* --- superfícies: tema claro institucional --- */
-  --bg: #ffffff;
-  --bg-soft: #f2f6fc;
-  --surface: #ffffff;
-  --surface-2: #f4f7fc;
-  --surface-3: #e9f0fa;
-  --line: rgba(11, 27, 58, 0.13);
-  --line-strong: rgba(11, 27, 58, 0.26);
+  /* --- superfícies: tema único, azul-marinho da identidade ---
+     O site tem um tema só (escuro). Não existe modo claro, alternador
+     nem preferência guardada: as superfícies são sólidas para que os
+     cartões se separem do fundo com elevação definida. */
+  color-scheme: dark;
+
+  --bg: #061223;
+  --bg-soft: #0a1a30;
+  --surface: #0e2038;
+  --surface-2: #132844;
+  --surface-3: #1a3252;
+  --line: rgba(174, 201, 240, 0.16);
+  --line-strong: rgba(174, 201, 240, 0.3);
 
   /* --- texto --- */
-  --text: #0b1b3a;
-  --text-soft: #3b4c69;
-  --text-dim: #5d6d88;
+  --text: #f2f6fd;
+  --text-soft: #c3d2e8;
+  --text-dim: #93a7c4;
 
-  /* --- acento: a cor que "fala" sobre o fundo atual --- */
-  --accent: var(--blue);
-  --accent-soft: rgba(27, 84, 168, 0.09);
-  --accent-line: rgba(27, 84, 168, 0.28);
-  --ok: var(--teal-600);
-  --ok-soft: rgba(0, 166, 147, 0.1);
-  --ok-line: rgba(0, 166, 147, 0.32);
+  /* --- acento: a cor que "fala" sobre o fundo --- */
+  --accent: var(--blue-300);
+  --accent-soft: rgba(143, 180, 240, 0.12);
+  --accent-line: rgba(143, 180, 240, 0.3);
+  --ok: var(--teal-300);
+  --ok-soft: rgba(63, 214, 194, 0.12);
+  --ok-line: rgba(63, 214, 194, 0.32);
 
   /* --- estados --- */
-  --warn: #946409;
-  --warn-soft: rgba(198, 141, 24, 0.1);
-  --warn-line: rgba(198, 141, 24, 0.3);
-  --danger: #c8262b;
-  --danger-soft: rgba(200, 38, 43, 0.08);
-  --danger-line: rgba(200, 38, 43, 0.26);
+  --warn: #f0c46b;
+  --warn-soft: rgba(240, 196, 107, 0.1);
+  --warn-line: rgba(240, 196, 107, 0.3);
+  --danger: #ff9a9d;
+  --danger-soft: rgba(255, 154, 157, 0.1);
+  --danger-line: rgba(255, 154, 157, 0.28);
 
   /* --- profundidade --- */
-  --shadow-sm: 0 1px 3px rgba(11, 27, 58, 0.07);
-  --shadow-md: 0 10px 30px rgba(11, 27, 58, 0.09);
-  --shadow-lg: 0 26px 64px rgba(11, 27, 58, 0.14);
-  --glow: 0 12px 34px rgba(27, 84, 168, 0.24);
+  --shadow-sm: 0 2px 10px rgba(2, 7, 16, 0.4);
+  --shadow-md: 0 14px 40px rgba(2, 7, 16, 0.5);
+  --shadow-lg: 0 30px 78px rgba(2, 7, 16, 0.6);
+  --glow: 0 14px 40px rgba(27, 84, 168, 0.5);
 
   /* --- tipografia --- */
-  --font-display: 'Segoe UI Variable Display', 'Segoe UI', Inter, system-ui,
+  --font-display: 'Sora', 'Segoe UI Variable Display', 'Segoe UI', system-ui,
     -apple-system, sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
     Arial, sans-serif;
@@ -83,6 +129,8 @@
   --fs-lead: clamp(1.05rem, 1.45vw, 1.28rem);
   --fs-body: 1.0625rem;
   --fs-sm: 0.95rem;
+  /* menor corpo permitido no site: 12 px em 16 px de base */
+  --fs-min: 0.75rem;
 
   /* --- espaçamento --- */
   --sp-1: 0.25rem;
@@ -114,67 +162,6 @@
   --container: 1160px;
   --container-narrow: 760px;
   --header-h: 78px;
-}
-
-/* ============================================================
-   Modo escuro (preferência do usuário).
-
-   O tema claro segue sendo o padrão. Quando data-theme="dark" esta
-   no <html>, as superfícies e o texto do site inteiro passam para a
-   paleta escura — as mesmas cores já usadas nas faixas .on-dark,
-   agora aplicadas a toda a arvore. As cores de marca continuam fixas.
-
-   Ao contrario das faixas .on-dark (que usam branco translúcido sobre
-   um fundo escuro), aqui as superfícies são solidas: sobre uma página
-   escura, cartoes precisam de elevacao definida para se separarem do
-   fundo.
-   ============================================================ */
-:root[data-theme='dark'] {
-  color-scheme: dark;
-
-  --bg: #061223;
-  --bg-soft: #0a1a30;
-  --surface: #0e2038;
-  --surface-2: #132844;
-  --surface-3: #1a3252;
-  --line: rgba(174, 201, 240, 0.16);
-  --line-strong: rgba(174, 201, 240, 0.3);
-
-  --text: #f2f6fd;
-  --text-soft: #c3d2e8;
-  --text-dim: #93a7c4;
-
-  --accent: var(--blue-300);
-  --accent-soft: rgba(143, 180, 240, 0.12);
-  --accent-line: rgba(143, 180, 240, 0.3);
-  --ok: var(--teal-300);
-  --ok-soft: rgba(63, 214, 194, 0.12);
-  --ok-line: rgba(63, 214, 194, 0.32);
-
-  --warn: #f0c46b;
-  --warn-soft: rgba(240, 196, 107, 0.1);
-  --warn-line: rgba(240, 196, 107, 0.3);
-  --danger: #ff9a9d;
-  --danger-soft: rgba(255, 154, 157, 0.1);
-  --danger-line: rgba(255, 154, 157, 0.28);
-
-  --shadow-sm: 0 2px 10px rgba(2, 7, 16, 0.4);
-  --shadow-md: 0 14px 40px rgba(2, 7, 16, 0.5);
-  --shadow-lg: 0 30px 78px rgba(2, 7, 16, 0.6);
-  --glow: 0 14px 40px rgba(27, 84, 168, 0.5);
-}
-
-/* A palavra destacada em títulos usa o mesmo gradiente das faixas escuras. */
-:root[data-theme='dark'] .accent-text {
-  background-image: linear-gradient(96deg, var(--blue-300), var(--teal-300));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-/* Foco visível: no escuro o azul institucional some no fundo; usa teal. */
-:root[data-theme='dark'] :focus-visible {
-  outline-color: var(--teal-300);
 }
 
 /* ============================================================
@@ -215,4 +202,11 @@
 
   color: var(--text);
   background: var(--bg);
+}
+
+/* Cabeçalho mais baixo no celular: sobra altura para a chamada do hero. */
+@media (max-width: 720px) {
+  :root {
+    --header-h: 64px;
+  }
 }

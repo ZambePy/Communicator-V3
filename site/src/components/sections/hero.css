@@ -1,71 +1,40 @@
 .hero {
   position: relative;
-  min-height: 100vh;
+  /* Nunca mais alto que a janela: a chamada principal precisa caber na
+     primeira dobra também em 1280 × 720 e 1366 × 768. */
+  min-height: min(100vh, 880px);
+  min-height: min(100svh, 880px);
   display: flex;
   align-items: center;
   /* O cabeçalho e transparente e flutua sobre esta faixa, então a
      altura dele entra no respiro superior. */
-  padding-block: calc(var(--header-h) + var(--sp-6)) var(--sp-9);
+  padding-block: calc(var(--header-h) + var(--sp-5)) var(--sp-8);
   overflow: hidden;
 }
 
 .hero__inner {
   position: relative;
   z-index: 2;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-8);
   align-items: center;
-  text-align: center;
-  max-width: 900px;
 }
 
-.hero__logo {
-  margin-bottom: var(--sp-4);
+.hero__copy {
+  max-width: 600px;
 }
 
-.hero__tagline {
-  font-family: var(--font-display);
-  font-size: clamp(1.05rem, 2vw, 1.5rem);
-  color: var(--text-soft);
-  letter-spacing: 0.02em;
-  margin: 0 0 var(--sp-6);
-  position: relative;
-  padding-bottom: var(--sp-5);
-}
-
-/* Filete que se desenha sob a assinatura, separando marca e mensagem. */
-.hero__tagline::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  translate: -50% 0;
-  width: 74px;
-  height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--blue-400), var(--teal-300));
-  transform-origin: center;
-  animation: hero-rule 900ms var(--ease-out) 500ms both;
-}
-
-@keyframes hero-rule {
-  from {
-    transform: scaleX(0);
-    opacity: 0;
-  }
-  to {
-    transform: scaleX(1);
-    opacity: 1;
-  }
+.hero__eyebrow {
+  color: var(--ok);
 }
 
 .hero__title {
-  font-size: var(--fs-display);
-  line-height: 1.16;
-  margin-bottom: var(--sp-5);
-  /* As quebras são feitas a mão no JSX; limitar a largura aqui
-     provocaria uma segunda quebra automática dentro da máscara. */
-  max-width: 100%;
+  font-size: clamp(2rem, 3.2vw, 2.85rem);
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  margin-bottom: var(--sp-4);
+  max-width: 21ch;
 }
 
 .hero__title-mask {
@@ -81,55 +50,63 @@
 }
 
 .hero__lead {
-  max-width: 62ch;
+  max-width: 50ch;
   margin-bottom: var(--sp-5);
-}
-
-/* Eco visual do campo de texto do produto. */
-.hero__say {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--sp-4) var(--sp-5);
-  margin-bottom: var(--sp-6);
-  border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--teal);
-  background: var(--surface-2);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  min-width: min(430px, 100%);
-  text-align: left;
-}
-
-.hero__say-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.hero__say-text {
-  margin: 0;
-  font-size: 1.28rem;
-  font-weight: 500;
-  color: var(--text);
-  min-height: 1.6em;
 }
 
 .hero__actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-3);
-  justify-content: center;
-  margin-bottom: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+
+/* A frase de privacidade, em uma linha, com o cadeado: é o argumento
+   que a família mais pergunta e por isso não fica escondido no FAQ. */
+.hero__privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--ok-line);
+  background: var(--ok-soft);
+  color: var(--text);
+  font-size: 0.98rem;
+  line-height: 1.5;
+  max-width: 54ch;
+}
+
+.hero__privacy .icon {
+  color: var(--ok);
+  margin-top: 3px;
 }
 
 .hero__fine {
   font-size: 0.9rem;
   color: var(--text-dim);
   margin: 0;
+}
+
+.hero__mock {
+  position: relative;
+}
+
+/* Em telas largas a ilustração avança um pouco sobre a margem da página:
+   a tela do monitor é uma captura real do app e fica mais legível. */
+@media (min-width: 1024px) {
+  .hero__mock {
+    margin-right: calc(-1 * clamp(0px, (100vw - var(--container)) / 2, 48px));
+  }
+}
+
+.hero__mock-caption {
+  margin: var(--sp-2) auto 0;
+  max-width: 420px;
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--text-dim);
 }
 
 .hero__scroll {
@@ -151,18 +128,60 @@
 }
 
 .hero__scroll-text {
-  font-size: 0.7rem;
+  font-size: var(--fs-min);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 1023px) {
   .hero {
     min-height: auto;
-    padding-block: calc(var(--header-h) + var(--sp-5)) var(--sp-8);
+    padding-block: calc(var(--header-h) + var(--sp-6)) var(--sp-8);
+  }
+  .hero__inner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-7);
+  }
+  .hero__copy {
+    max-width: 640px;
+  }
+  .hero__title {
+    max-width: 22ch;
   }
   .hero__scroll {
     display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .hero {
+    padding-block: calc(var(--header-h) + var(--sp-4)) var(--sp-7);
+  }
+  .hero__inner {
+    gap: var(--sp-6);
+  }
+  .hero__eyebrow {
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+  }
+  .hero__title {
+    font-size: clamp(1.6rem, 7vw, 2.05rem);
+    margin-bottom: var(--sp-3);
+  }
+  .hero__lead {
+    font-size: 1rem;
+    line-height: 1.55;
+    margin-bottom: var(--sp-4);
+  }
+  .hero__actions {
+    gap: var(--sp-2);
+  }
+  .hero__actions .btn {
+    flex: 1 1 100%;
+    padding-block: 0.9rem;
+  }
+  .hero__privacy {
+    font-size: 0.92rem;
   }
 }

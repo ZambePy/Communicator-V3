@@ -1,8 +1,7 @@
 import { AnimatedHeadline } from '@/components/effects/AnimatedHeadline'
 import { Counter } from '@/components/effects/Counter'
 import { Reveal } from '@/components/effects/Reveal'
-import { Parallax } from '@/components/effects/Parallax'
-import { PROBLEM } from '@/data/content'
+import { PROBLEM, BETA } from '@/data/content'
 import { usePlans } from '@/hooks/usePlans'
 import './problem.css'
 
@@ -29,15 +28,6 @@ export function ProblemSection() {
           <p className="lead problem__lead">{PROBLEM.lead}</p>
         </Reveal>
 
-        <ul className="problem__conditions">
-          {PROBLEM.conditions.map((c, i) => (
-            <Reveal key={c.name} anim="up" delay={200 + i * 90} as="li">
-              <h3>{c.name}</h3>
-              <p>{c.text}</p>
-            </Reveal>
-          ))}
-        </ul>
-
         <Reveal anim="up" delay={220}>
           <p className="lead problem__why">{PROBLEM.why}</p>
         </Reveal>
@@ -59,8 +49,8 @@ export function ProblemSection() {
           <p className="problem__note">{PROBLEM.note}</p>
         </Reveal>
 
-        <Parallax speed={-0.05}>
-          <div className="problem__contrast">
+        {/* Sem parallax aqui: é conteúdo, e o deslocamento invadia a nota acima. */}
+        <div className="problem__contrast">
             <Reveal anim="right" delay={120}>
               <div className="contrast-card contrast-card--them">
                 <span className="contrast-card__label">{PROBLEM.contrast.them.label}</span>
@@ -78,12 +68,15 @@ export function ProblemSection() {
             <Reveal anim="left" delay={120}>
               <div className="contrast-card contrast-card--us">
                 <span className="contrast-card__label">{PROBLEM.contrast.us.label}</span>
-                <span className="contrast-card__price">A partir de R$ {cheapest.price} por mês</span>
+                <span className="contrast-card__price">
+                  {BETA.ativo
+                    ? `Grátis na beta; depois, a partir de R$ ${cheapest.price} por mês (previsto)`
+                    : `A partir de R$ ${cheapest.price} por mês`}
+                </span>
                 <p>{PROBLEM.contrast.us.detail}</p>
               </div>
             </Reveal>
-          </div>
-        </Parallax>
+        </div>
       </div>
     </section>
   )

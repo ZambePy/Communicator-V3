@@ -1,17 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, Sparkles, Image as ImageIcon, Download, Check, RefreshCw, ArrowLeft, Clock } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Camera, Sparkles, Image as ImageIcon, Check, RefreshCw, ArrowLeft, Clock, AlertTriangle } from 'lucide-react';
 import { GazeButton } from '../../components/ui/GazeButton';
 import { getSharedAudioContext } from '../../utils/emergencyAudio';
-
-export interface CapturedPhoto {
-  id: string;
-  dataUrl: string;
-  timestamp: number;
-  filter: string;
-}
-
-const STORAGE_KEY = 'irisflow_captured_photos';
+import { canvasParaAlbum, lerAlbum, salvarNoAlbum } from './album';
 
 const FILTERS = [
   { id: 'none', name: 'Normal', css: 'none' },
@@ -23,6 +16,7 @@ const FILTERS = [
 
 export const PhotoCaptureScreen: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   /** Contagem regressiva da foto. Ver o comentário em `handleStartCapture`. */
   const contagemRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -32,29 +26,25 @@ export const PhotoCaptureScreen: React.FC = () => {
 
   const [, setStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  /** O obturador foi acionado antes de a câmera mostrar a primeira imagem. */
+  const [avisoSemImagem, setAvisoSemImagem] = useState(false);
   const [filterIndex, setFilterIndex] = useState(0);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [timerSeconds, setTimerSeconds] = useState<number>(3); // 3s padrão
   const [isFlashing, setIsFlashing] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
+  /** A mesma foto, já no tamanho do álbum (ver `album.ts`). */
+  const [fotoParaAlbum, setFotoParaAlbum] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  /** Falha ao guardar, dita na tela: cota cheia ou storage indisponível. */
+  const [erroAoSalvar, setErroAoSalvar] = useState<'cheio' | 'indisponivel' | null>(null);
   const [photoCount, setPhotoCount] = useState(0);
 
   const currentFilter = FILTERS[filterIndex];
 
   // Carrega contagem de fotos salvas
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setPhotoCount(parsed.length);
-        }
-      }
-    } catch {
-      // Ignora erro de parse
-    }
+    setPhotoCount(lerAlbum().length);
   }, []);
 
   // Inicializa a câmera
@@ -175,37 +165,24 @@ export const PhotoCaptureScreen: React.FC = () => {
 
   // Executa o disparo da foto
   const captureFrame = useCallback(() => {
+    // Sem imagem da câmera não há foto. Antes esta função desenhava uma "foto"
+    // de demonstração (um degradê escrito "Foto IrisFlow Capturada!") e a
+    // oferecia para o álbum: o paciente guardava como lembrança uma imagem que
+    // não é dele. Agora a tela diz o que houve e nada é inventado — nem o
+    // flash e o som do obturador, que anunciariam uma foto que não existe.
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      setAvisoSemImagem(true);
+      return;
+    }
+    setAvisoSemImagem(false);
+
     setIsFlashing(true);
     playSound('shutter');
 
     setTimeout(() => {
       setIsFlashing(false);
     }, 250);
-
-    const video = videoRef.current;
-    if (!video || !video.videoWidth || !video.videoHeight) {
-      // Cria imagem de demonstração caso câmera esteja em fallback
-      const canvas = document.createElement('canvas');
-      canvas.width = 1280;
-      canvas.height = 720;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        const grad = ctx.createLinearGradient(0, 0, 1280, 720);
-        grad.addColorStop(0, '#1b54a8');
-        grad.addColorStop(0.5, '#3b82f6');
-        grad.addColorStop(1, '#143e80');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 1280, 720);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 48px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('📸 Foto IrisFlow Capturada!', 640, 360);
-        ctx.font = '32px Inter, sans-serif';
-        ctx.fillText(new Date().toLocaleTimeString(), 640, 420);
-        setPreviewPhoto(canvas.toDataURL('image/jpeg', 0.92));
-      }
-      return;
-    }
 
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
@@ -222,9 +199,14 @@ export const PhotoCaptureScreen: React.FC = () => {
       }
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // A prévia fica na resolução da câmera (é o que a pessoa vê agora); o
+      // que vai para o álbum é a versão reduzida — ver o cabeçalho de
+      // `album.ts` para o porquê do tamanho.
       const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
       setPreviewPhoto(dataUrl);
+      setFotoParaAlbum(canvasParaAlbum(canvas));
       setSavedSuccess(false);
+      setErroAoSalvar(null);
     }
   }, [currentFilter, playSound]);
 
@@ -261,46 +243,26 @@ export const PhotoCaptureScreen: React.FC = () => {
     }, 1000);
   }, [countdown, timerSeconds, playSound, captureFrame]);
 
-  // Salvar foto no localStorage / Álbum
+  // Salvar foto no álbum (localStorage). A versão reduzida; se por algum
+  // motivo ela não existir, vai a prévia mesmo — foto grande é melhor que foto
+  // nenhuma.
   const handleSavePhoto = useCallback(() => {
-    if (!previewPhoto) return;
-
-    try {
-      const newPhoto: CapturedPhoto = {
-        id: `photo_${Date.now()}`,
-        dataUrl: previewPhoto,
-        timestamp: Date.now(),
-        filter: currentFilter.name,
-      };
-
-      const existing = localStorage.getItem(STORAGE_KEY);
-      let list: CapturedPhoto[] = [];
-      if (existing) {
-        list = JSON.parse(existing);
-      }
-      list.unshift(newPhoto);
-      // Mantém as 40 fotos mais recentes
-      if (list.length > 40) list = list.slice(0, 40);
-
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-      setPhotoCount(list.length);
+    const foto = fotoParaAlbum ?? previewPhoto;
+    if (!foto) return;
+    const r = salvarNoAlbum(foto, currentFilter.name);
+    if (r.ok) {
+      setPhotoCount(r.total);
       setSavedSuccess(true);
+      setErroAoSalvar(null);
       playSound('success');
-    } catch (e) {
-      console.error('Falha ao salvar foto no álbum:', e);
+    } else {
+      setErroAoSalvar(r.motivo);
     }
-  }, [previewPhoto, currentFilter, playSound]);
+  }, [fotoParaAlbum, previewPhoto, currentFilter, playSound]);
 
-  // Baixar foto como JPG
-  const handleDownloadPhoto = useCallback(() => {
-    if (!previewPhoto) return;
-    const a = document.createElement('a');
-    a.href = previewPhoto;
-    a.download = `irisflow_foto_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }, [previewPhoto]);
+  // Não há "Baixar arquivo" para o paciente: abre o diálogo nativo de salvar,
+  // que o olhar não fecha — e o Electron bloqueia a navegação. A foto fica no
+  // álbum; quem quiser o arquivo é o cuidador, com o mouse, e isso não é aqui.
 
   // Alterna filtro
   const handleCycleFilter = useCallback(() => {
@@ -317,8 +279,8 @@ export const PhotoCaptureScreen: React.FC = () => {
       role="main"
       aria-labelledby="camera-title"
       style={{
-        minHeight: '100vh',
-        width: '100vw',
+        height: '100dvh',
+        width: '100%',
         background: 'var(--color-bg-base)',
         color: 'var(--color-text-base)',
         display: 'flex',
@@ -347,7 +309,9 @@ export const PhotoCaptureScreen: React.FC = () => {
 
       {/* Cabeçalho */}
       <header
+        className="reserva-emergencia"
         style={{
+          '--reserva-margem': '2.5rem',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -366,7 +330,7 @@ export const PhotoCaptureScreen: React.FC = () => {
               border: '2px solid var(--color-card-border)',
               background: 'var(--color-card-bg)',
             }}
-            aria-label="Voltar para Ajuda e Lazer"
+            aria-label={t('lazer.voltarAria')}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.35rem', fontWeight: 800 }}>
               <ArrowLeft size={28} /> Voltar
@@ -468,9 +432,10 @@ export const PhotoCaptureScreen: React.FC = () => {
               }}
             >
               <Camera size={64} color="#f59e0b" />
-              <h2 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0 }}>Modo Demonstração Ativo</h2>
+              <h2 style={{ fontSize: '1.6rem', fontWeight: 700, margin: 0 }}>Câmera indisponível</h2>
               <p style={{ fontSize: '1.1rem', opacity: 0.8, maxWidth: '400px' }}>
-                {cameraError} Você ainda pode tirar fotos no modo ilustrado!
+                {cameraError} Sem a imagem da câmera não dá para tirar foto. Feche outros
+                programas que estejam usando a câmera e abra esta tela de novo.
               </p>
             </div>
           ) : (
@@ -488,6 +453,29 @@ export const PhotoCaptureScreen: React.FC = () => {
                 transition: 'filter 0.3s ease',
               }}
             />
+          )}
+
+          {avisoSemImagem && !cameraError && (
+            <p
+              role="status"
+              style={{
+                position: 'absolute',
+                bottom: '1.25rem',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                margin: 0,
+                padding: '0.6rem 1.1rem',
+                borderRadius: '1rem',
+                background: 'rgba(9, 13, 22, 0.85)',
+                color: '#e2e8f0',
+                fontSize: '1.05rem',
+                fontWeight: 600,
+                textAlign: 'center',
+                zIndex: 2,
+              }}
+            >
+              A câmera ainda não mostrou imagem. Tente de novo em um instante.
+            </p>
           )}
 
           {/* Moldura de Foco / Guia Visual */}
@@ -592,7 +580,9 @@ export const PhotoCaptureScreen: React.FC = () => {
           {/* Botão Gigante de Disparo (Tirar Foto) */}
           <GazeButton
             onClick={handleStartCapture}
-            disabled={countdown !== null}
+            // Sem câmera não há o que fotografar: o botão fica inerte (e fora do
+            // dwell) em vez de disparar um obturador que não produz foto.
+            disabled={countdown !== null || cameraError !== null}
             style={{
               flex: 2,
               minHeight: '160px',
@@ -727,11 +717,15 @@ export const PhotoCaptureScreen: React.FC = () => {
             inset: 0,
             background: 'rgba(2, 6, 23, 0.88)',
             backdropFilter: 'blur(16px)',
-            zIndex: 99990,
+            // Abaixo da Emergência (99990), que continua acionável por cima.
+            zIndex: 99985,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '2.5rem',
+            // O topo livre até abaixo da Emergência: o cartão centralizado
+            // chegava ao canto superior direito com fotos altas.
+            padding: 'var(--reserva-emergencia-y) 2.5rem 2.5rem',
+            overflowY: 'auto',
             animation: 'fadeIn 0.3s ease-out both',
           }}
         >
@@ -789,11 +783,37 @@ export const PhotoCaptureScreen: React.FC = () => {
               />
             </div>
 
+            {erroAoSalvar && (
+              <div
+                role="alert"
+                data-no-dwell="true"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '1rem 1.25rem',
+                  borderRadius: '1.25rem',
+                  background: 'var(--tint-warn-bg)',
+                  border: '2px solid var(--tint-warn-border)',
+                  color: 'var(--color-text-base)',
+                  fontSize: '1.1rem',
+                  fontWeight: 700,
+                }}
+              >
+                <AlertTriangle size={26} aria-hidden="true" style={{ flexShrink: 0 }} />
+                {erroAoSalvar === 'cheio'
+                  ? 'Álbum cheio — apague fotos antigas na Galeria para guardar esta.'
+                  : 'Não foi possível guardar a foto neste computador.'}
+              </div>
+            )}
+
             {/* Botões de Ação Ampliados */}
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
+                gridTemplateColumns: 'repeat(2, 1fr)',
                 gap: '1.5rem',
                 width: '100%',
               }}
@@ -820,30 +840,13 @@ export const PhotoCaptureScreen: React.FC = () => {
                 </div>
               </GazeButton>
 
-              {/* Baixar Arquivo */}
-              <GazeButton
-                onClick={handleDownloadPhoto}
-                style={{
-                  height: '84px',
-                  borderRadius: '1.75rem',
-                  background: 'linear-gradient(135deg, #059669, #047857)',
-                  color: '#ffffff',
-                  border: '2px solid rgba(255,255,255,0.3)',
-                  boxShadow: '0 8px 24px rgba(5,150,105,0.3)',
-                }}
-                aria-label="Baixar foto para o computador"
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '1.35rem', fontWeight: 800 }}>
-                  <Download size={32} />
-                  <span>Baixar Arquivo</span>
-                </div>
-              </GazeButton>
-
               {/* Tirar Outra Foto */}
               <GazeButton
                 onClick={() => {
                   setPreviewPhoto(null);
+                  setFotoParaAlbum(null);
                   setSavedSuccess(false);
+                  setErroAoSalvar(null);
                 }}
                 style={{
                   height: '84px',

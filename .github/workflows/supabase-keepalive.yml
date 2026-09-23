@@ -1,0 +1,66 @@
+name: Supabase keepalive
+
+# O plano gratuito do Supabase PAUSA o projeto depois de 7 dias sem uso
+# (README, "Hospedagem e publicação"). Na beta, uma semana sem ninguém logar é
+# possível — e aí o site, o app desktop e o app do cuidador param juntos até
+# alguém entrar no painel e reativar o projeto.
+#
+# Este workflow faz uma leitura barata na API REST a cada 3 dias (uma linha
+# de `beta_program`, tabela que o site já lê anonimamente). Custo: segundos de
+# runner e uma consulta.
+#
+# SEGREDOS (Settings → Secrets and variables → Actions → Secrets):
+#   SUPABASE_URL       https://<ref>.supabase.co
+#   SUPABASE_ANON_KEY  a chave "anon public" (é pública; está no bundle do site)
+# Sem eles o workflow FALHA (vermelho), de propósito: terminar verde sem ter
+# consultado nada daria a impressão de que o projeto está protegido da pausa.
+# Os nomes não aparecem como `secrets.X` aqui (o passo recebe
+# `toJSON(secrets)` e lê só os dois), então a extensão do VS Code não acusa
+# "Context access might be invalid" antes de você criá-los.
+#
+# ATENÇÃO: em repositório PÚBLICO, o GitHub desativa sozinho os workflows
+# agendados depois de 60 dias sem nenhuma atividade no repositório (e avisa
+# por e-mail). Aí o keepalive para de rodar e o Supabase volta a pausar após 7
+# dias. Se a beta ficar parada tanto tempo, reative em Actions → Supabase
+# keepalive → Enable workflow (ou faça qualquer commit).
+
+on:
+  schedule:
+    # 09:17 UTC a cada 3 dias (minuto "quebrado": no minuto 0 a fila do GitHub
+    # atrasa agendamentos).
+    - cron: '17 9 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    name: Consulta leve no Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ler uma linha de beta_program
+        env:
+          SEGREDOS_JSON: ${{ toJSON(secrets) }}
+        shell: bash
+        run: |
+          url="$(printf '%s' "$SEGREDOS_JSON" | jq -r '.SUPABASE_URL // empty')"
+          chave="$(printf '%s' "$SEGREDOS_JSON" | jq -r '.SUPABASE_ANON_KEY // empty')"
+          unset SEGREDOS_JSON
+          if [ -z "$url" ] || [ -z "$chave" ]; then
+            echo "::error::Faltam os segredos SUPABASE_URL e/ou SUPABASE_ANON_KEY: sem eles o keepalive não consulta nada e o Supabase gratuito pausa após 7 dias sem uso. Crie-os em Settings → Secrets and variables → Actions (README, 'Hospedagem e publicação')."
+            exit 1
+          fi
+          echo "::add-mask::$chave"
+          url="${url%/}"
+          codigo="$(curl -sS -o resposta.json -w '%{http_code}' --max-time 30 \
+            -H "apikey: $chave" -H "Authorization: Bearer $chave" \
+            "$url/rest/v1/beta_program?select=*&limit=1")" || codigo="000"
+          echo "HTTP $codigo"
+          if [ "$codigo" != "200" ]; then
+            echo "::error::Supabase respondeu $codigo. Se for 5xx/000, o projeto pode já estar pausado: Dashboard → Restore project."
+            head -c 300 resposta.json 2>/dev/null || true
+            exit 1
+          fi
+          echo "ok — projeto ativo"

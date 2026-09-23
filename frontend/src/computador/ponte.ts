@@ -1,4 +1,4 @@
-import type { AmostraDeOlhar, CapacidadesDoSistema, MotivoDeSaida } from '@tracker/computador/protocolo';
+import type { AmostraDeOlhar, CapacidadesDoSistema, MotivoDeSaida, SelecaoDaSobreposicao } from '@tracker/computador/protocolo';
 
 /** `window.irisflowSystem.desktop`, exposto pelo preload do Electron. */
 export interface PonteDoModoComputador {
@@ -7,6 +7,12 @@ export interface PonteDoModoComputador {
   parar: () => Promise<void>;
   olhar: (amostra: AmostraDeOlhar) => void;
   onParou: (cb: (motivo: MotivoDeSaida) => void) => () => void;
+  /**
+   * Dwell concluído num alvo da sobreposição, já em px da janela do app.
+   * Opcional porque um preload antigo pode não expor; sem ele a correção por
+   * dwell simplesmente não aprende no Modo Computador (como era).
+   */
+  onSelecao?: (cb: (s: SelecaoDaSobreposicao) => void) => () => void;
 }
 
 /** `null` fora do Electron (navegador puro): a tela explica em vez de falhar. */

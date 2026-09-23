@@ -7,7 +7,10 @@ import { Field, SelectField, CheckField } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { useAccount, type Profile } from '@/context/AccountContext'
-import { isCPF, isEmail, isPhone, maskCPF, maskPhone } from '@/utils/format'
+import { maskCPF, maskPhone, osLabel } from '@/utils/format'
+import { SENHA_MINIMA, validar } from '@/utils/validation'
+import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
+import { PasswordStrength } from '@/components/ui/PasswordStrength'
 import { TRIAL_DAYS } from '@/data/content'
 import { usePlans } from '@/hooks/usePlans'
 import './checkout.css'
@@ -33,10 +36,25 @@ const EMPTY: Form = {
   passwordConfirm: '',
 }
 
-/** Mesmo mínimo exigido pelo Supabase Auth por padrão. */
-const SENHA_MINIMA = 8
+const RULES: Rules<Form> = {
+  buyerName: validar.nomeCompleto,
+  email: validar.email,
+  phone: validar.telefone,
+  document: validar.cpf,
+  password: validar.senha,
+  passwordConfirm: (v, all) => validar.confirmacao(v, all.password),
+  userName: (v) => (v.trim().length < 3 ? 'Informe o nome de quem vai usar (ao menos 3 letras).' : undefined),
+  relation: (v) => validar.escolha(v, 'Selecione a relação com o usuário.'),
+  condition: (v) => validar.escolha(v, 'Selecione a condição principal.'),
+  os: (v) => validar.escolha(v, 'Selecione o sistema operacional do computador.'),
+  terms: validar.aceite,
+}
 
-type Errors = Partial<Record<keyof Form, string>>
+const STEP_FIELDS: (keyof Form)[][] = [
+  ['buyerName', 'email', 'phone', 'document', 'password', 'passwordConfirm'],
+  ['userName', 'relation', 'condition', 'os'],
+  ['terms'],
+]
 
 export default function Cadastro() {
   const [step, setStep] = useState(0)
@@ -46,7 +64,12 @@ export default function Cadastro() {
   const cardRef = useRef<HTMLDivElement>(null)
   const rolarParaOFormulario = () =>
     cardRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-  const [errors, setErrors] = useState<Errors>({})
+  const v = useFormValidation(form, RULES)
+  const errors = Object.fromEntries(
+    (Object.keys(RULES) as (keyof Form)[]).map((k) => [k, v.errorOf(k)]),
+  ) as Partial<Record<keyof Form, string>>
+  const blur = (key: keyof Form) => () => v.touch(key)
+  const stepValid = v.isValid(STEP_FIELDS[step])
   const [saving, setSaving] = useState(false)
   const [falha, setFalha] = useState<string | null>(null)
   const { register } = useAccount()
@@ -57,49 +80,27 @@ export default function Cadastro() {
   // Nome e preço são os da tabela `plans` (usePlans), os mesmos que a
   // complete_registration vai gravar na assinatura.
   const { getPlan } = usePlans()
-  const plan = getPlan(params.get('plano'))
+  const requested = getPlan(params.get('plano'))
+  // Um plano que o banco marcou como não contratável (ex.: Voz, ainda em
+  // validação) não pode ser assinado pela URL: cai no recomendado.
+  const plan = requested.purchasable === false ? getPlan(null) : requested
+  const planoTrocado = requested.id !== plan.id
 
   const set =
     (key: keyof Form, mask?: (v: string) => string) =>
     (e: { target: { value: string } }) => {
       const value = mask ? mask(e.target.value) : e.target.value
       setForm((f) => ({ ...f, [key]: value }))
-      setErrors((prev) => ({ ...prev, [key]: undefined }))
     }
 
   const toggle = (key: keyof Form) => (e: { target: { checked: boolean } }) => {
     setForm((f) => ({ ...f, [key]: e.target.checked }))
-    setErrors((prev) => ({ ...prev, [key]: undefined }))
+    v.touch(key)
   }
 
   const validateStep = (s: number) => {
-    const next: Errors = {}
-
-    if (s === 0) {
-      if (form.buyerName.trim().split(' ').length < 2)
-        next.buyerName = 'Informe nome e sobrenome.'
-      if (!isEmail(form.email)) next.email = 'Informe um e-mail válido.'
-      if (!isPhone(form.phone)) next.phone = 'Informe um telefone com DDD.'
-      if (!isCPF(form.document)) next.document = 'CPF inválido. Confira os dígitos.'
-      if (form.password.length < SENHA_MINIMA)
-        next.password = `A senha precisa ter ao menos ${SENHA_MINIMA} caracteres.`
-      if (form.passwordConfirm !== form.password)
-        next.passwordConfirm = 'As duas senhas precisam ser iguais.'
-    }
-
-    if (s === 1) {
-      if (form.userName.trim().length < 3) next.userName = 'Informe o nome de quem vai usar.'
-      if (!form.relation) next.relation = 'Selecione a relação com o usuário.'
-      if (!form.condition) next.condition = 'Selecione a condição principal.'
-      if (!form.os) next.os = 'Selecione o sistema operacional do computador.'
-    }
-
-    if (s === 2) {
-      if (!form.terms) next.terms = 'É preciso aceitar os termos para continuar.'
-    }
-
-    setErrors(next)
-    return Object.keys(next).length === 0
+    v.touch(...STEP_FIELDS[s])
+    return v.isValid(STEP_FIELDS[s])
   }
 
   const next = () => {
@@ -171,6 +172,18 @@ export default function Cadastro() {
               </div>
             )}
 
+            {planoTrocado && (
+              <div className="notice" role="status">
+                <span className="notice__icon">
+                  <Icon name="info" size={20} />
+                </span>
+                <p>
+                  O plano {requested.name} ainda não está em comercialização. Seguimos com o
+                  plano {plan.name}; dá para mudar depois pelo painel.
+                </p>
+              </div>
+            )}
+
             <Stepper steps={STEPS} current={step} />
 
             <form onSubmit={submit} noValidate>
@@ -188,6 +201,7 @@ export default function Cadastro() {
                     label="Nome completo"
                     value={form.buyerName}
                     onChange={set('buyerName')}
+                    onBlur={blur('buyerName')}
                     error={errors.buyerName}
                     autoComplete="name"
                     placeholder="Maria Aparecida Souza"
@@ -199,6 +213,7 @@ export default function Cadastro() {
                       type="email"
                       value={form.email}
                       onChange={set('email')}
+                    onBlur={blur('email')}
                       error={errors.email}
                       autoComplete="email"
                       placeholder="voce@exemplo.com.br"
@@ -209,6 +224,7 @@ export default function Cadastro() {
                       type="tel"
                       value={form.phone}
                       onChange={set('phone', maskPhone)}
+                    onBlur={blur('phone')}
                       error={errors.phone}
                       autoComplete="tel"
                       placeholder="(11) 90000-0000"
@@ -220,6 +236,7 @@ export default function Cadastro() {
                     label="CPF"
                     value={form.document}
                     onChange={set('document', maskCPF)}
+                    onBlur={blur('document')}
                     error={errors.document}
                     placeholder="000.000.000-00"
                     inputMode="numeric"
@@ -232,21 +249,25 @@ export default function Cadastro() {
                       type="password"
                       value={form.password}
                       onChange={set('password')}
+                    onBlur={blur('password')}
                       error={errors.password}
                       autoComplete="new-password"
                       placeholder="••••••••"
                       hint={`Ao menos ${SENHA_MINIMA} caracteres. É com ela que vocês entram depois.`}
+                      describedById="cadastro-senha-forca"
                     />
                     <Field
                       label="Confirmar senha"
                       type="password"
                       value={form.passwordConfirm}
                       onChange={set('passwordConfirm')}
+                    onBlur={blur('passwordConfirm')}
                       error={errors.passwordConfirm}
                       autoComplete="new-password"
                       placeholder="••••••••"
                     />
                   </div>
+                  <PasswordStrength value={form.password} id="cadastro-senha-forca" />
                 </fieldset>
               )}
 
@@ -264,6 +285,7 @@ export default function Cadastro() {
                     label="Nome da pessoa que vai usar"
                     value={form.userName}
                     onChange={set('userName')}
+                    onBlur={blur('userName')}
                     error={errors.userName}
                     placeholder="Como ela gosta de ser chamada"
                   />
@@ -273,6 +295,7 @@ export default function Cadastro() {
                       label="Sua relação com ela"
                       value={form.relation}
                       onChange={set('relation')}
+                    onBlur={blur('relation')}
                       error={errors.relation}
                     >
                       <option value="">Selecione…</option>
@@ -289,6 +312,7 @@ export default function Cadastro() {
                       label="Condição principal"
                       value={form.condition}
                       onChange={set('condition')}
+                    onBlur={blur('condition')}
                       error={errors.condition}
                     >
                       <option value="">Selecione…</option>
@@ -306,6 +330,7 @@ export default function Cadastro() {
                     label="Sistema do computador onde a IrisFlow será instalada"
                     value={form.os}
                     onChange={set('os')}
+                    onBlur={blur('os')}
                     error={errors.os}
                     hint="Uma webcam comum já basta. Não é preciso comprar câmera."
                   >
@@ -364,7 +389,7 @@ export default function Cadastro() {
                     </div>
                     <div>
                       <dt>Sistema</dt>
-                      <dd style={{ textTransform: 'capitalize' }}>{form.os}</dd>
+                      <dd>{osLabel(form.os)}</dd>
                     </div>
                     <div>
                       <dt>Plano</dt>
@@ -418,11 +443,11 @@ export default function Cadastro() {
                 )}
 
                 {step < STEPS.length - 1 ? (
-                  <Button type="button" onClick={next}>
+                  <Button type="button" onClick={next} disabled={!stepValid}>
                     Continuar
                   </Button>
                 ) : (
-                  <Button type="submit" loading={saving}>
+                  <Button type="submit" loading={saving} disabled={!stepValid || saving}>
                     {saving ? 'Criando conta…' : 'Criar conta e começar'}
                   </Button>
                 )}

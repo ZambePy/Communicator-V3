@@ -1,52 +1,88 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
-import { Button, Card, DemoBanner, EmptyState, GradientHeader, ListRow, MetricTile, ProgressRing, Screen, SectionTitle, Shimmer, Text } from '@/components';
+import { Card, EmptyState, ListRow, MetricTile, ProgressRing, Screen, ScreenHeader, SectionTitle, Shimmer, Text } from '@/components';
 import { useData } from '@/data/DataContext';
-import { Session } from '@/data/types';
+import { hasFatigueData, Session } from '@/data/types';
 import { useApp } from '@/store/AppProvider';
-import { radius, spacing, useTheme } from '@/theme';
-import { dateShort, durationMin, fatigueLabel, formatDuration } from '@/utils/format';
+import { motion, opacity, radius, sizes, spacing, useTheme } from '@/theme';
+import { mensagemDeErro } from '@/utils/errors';
+import { dateShort, durationMin, fatigueLabel, firstName, formatDuration } from '@/utils/format';
+
+type Dia = { label: string; nomeCompleto: string; utterances: number; minutes: number; isToday: boolean };
 
 export default function Relatorios() {
   const { colors } = useTheme();
   const router = useRouter();
   const data = useData();
-  const { patient, can, plan, session, isDemo } = useApp();
+  const { patient, can, plan, session } = useApp();
   const [sessions, setSessions] = useState<Session[] | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   const allowed = can('relatorios');
+  const nome = patient ? firstName(patient.user_name) : 'o paciente';
+
+  const carregar = useCallback(async () => {
+    if (!patient || !allowed) return;
+    try {
+      const s = await data.listSessions(patient.id, 30);
+      setSessions(s);
+      setErro(null);
+    } catch (e) {
+      // Sem isto o esqueleto ficava para sempre: a rejeição não era tratada.
+      setErro(mensagemDeErro(e, 'Não foi possível carregar as sessões.'));
+      setSessions((atual) => atual ?? []);
+    }
+  }, [data, patient, allowed]);
 
   useEffect(() => {
-    if (!patient || !allowed) return;
-    let alive = true;
-    data.listSessions(patient.id, 30).then((s) => alive && setSessions(s));
-    return () => {
-      alive = false;
-    };
-  }, [data, patient, allowed, session?.utterances]);
+    void carregar();
+  }, [carregar, session?.utterances, tentativa]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await carregar();
+    setRefreshing(false);
+  }, [carregar]);
+
+  /**
+   * Sessões que CONTAM: encerradas, ou a única ao vivo de verdade (`session`
+   * do AppProvider, que exige heartbeat do computador). Uma linha `active`
+   * órfã — computador que caiu sem encerrar — teria duração "até agora" e
+   * inflaria horas de uso; ela fica na lista marcada, fora dos totais.
+   */
+  const orfa = useCallback((s: Session) => s.status !== 'ended' && s.id !== session?.id, [session?.id]);
+  const validas = useMemo(() => (sessions ?? []).filter((s) => !orfa(s)), [sessions, orfa]);
+  /** "Últimos 7 dias" de verdade: só o que começou nos últimos 7 dias, não as 30 sessões carregadas. */
+  const ultimos7 = useMemo(() => {
+    const limite = Date.now() - 7 * 86_400_000;
+    return validas.filter((s) => new Date(s.started_at).getTime() >= limite);
+  }, [validas]);
 
   const week = useMemo(() => {
-    const days: { label: string; utterances: number; minutes: number; isToday: boolean }[] = [];
+    const days: Dia[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const key = d.toDateString();
-      const ofDay = (sessions ?? []).filter((s) => new Date(s.started_at).toDateString() === key);
+      const ofDay = ultimos7.filter((s) => new Date(s.started_at).toDateString() === key);
       days.push({
         label: d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''),
+        nomeCompleto: d.toLocaleDateString('pt-BR', { weekday: 'long' }),
         utterances: ofDay.reduce((a, s) => a + s.utterances, 0),
         minutes: ofDay.reduce((a, s) => a + durationMin(s), 0),
         isToday: i === 0,
       });
     }
     return days;
-  }, [sessions]);
+  }, [ultimos7]);
 
   const totals = useMemo(() => {
-    const s = sessions ?? [];
+    const s = ultimos7;
     const errs = s.map((x) => x.calibration_error_px).filter((x): x is number => x !== null);
     const hits = s.map((x) => x.hit_rate_150px).filter((x): x is number => x !== null);
     return {
@@ -56,128 +92,122 @@ export default function Relatorios() {
       avgHit: hits.length ? hits.reduce((a, b) => a + b, 0) / hits.length : null,
       help: s.reduce((a, x) => a + x.help_requests, 0),
     };
-  }, [sessions]);
+  }, [ultimos7]);
 
   return (
-    <Screen padded={false}>
-      <GradientHeader overlap={50}>
-        <Text variant="label" style={{ color: 'rgba(255,255,255,0.75)' }}>
-          {patient?.user_name ?? 'Paciente'}
-        </Text>
-        <Text variant="h1" tone="onPrimary">
-          Relatórios
-        </Text>
-        <Text variant="bodySmall" style={{ color: 'rgba(255,255,255,0.8)', marginTop: 4 }}>
-          Só métricas agregadas — nenhuma imagem sai do computador.
-        </Text>
-      </GradientHeader>
+    <Screen refreshing={refreshing} onRefresh={allowed ? onRefresh : undefined}>
+      <ScreenHeader eyebrow={patient?.user_name} title="Relatórios" />
 
-      <View style={{ paddingHorizontal: spacing.xl, marginTop: -36 }}>
-        {isDemo && <DemoBanner text="Modo demonstração — sessões e métricas simuladas, não são de um paciente real." style={{ marginBottom: spacing.md }} />}
-
-        {!allowed ? (
+      {!allowed ? (
+        <Card>
+          <EmptyState
+            icon="lock-closed-outline"
+            title="Relatórios fazem parte do plano Completo"
+            body={`Seu plano atual é o ${plan?.name ?? 'Essencial'}. O Completo inclui o histórico de uso e os relatórios de sessão para a família.`}
+            action={{ label: 'Ver planos', icon: 'sparkles-outline', onPress: () => router.push('/assinatura') }}
+            compact
+          />
+        </Card>
+      ) : sessions === null ? (
+        <Card>
+          <Shimmer height={spacing.xl} width="40%" />
+          <Shimmer height={sizes.chart} style={styles.gapTop} />
+        </Card>
+      ) : sessions.length === 0 ? (
+        <Card>
+          {erro ? (
+            <EmptyState icon="cloud-offline-outline" title="Não foi possível carregar" body={erro} action={{ label: 'Tentar de novo', icon: 'refresh', onPress: () => setTentativa((n) => n + 1) }} compact />
+          ) : (
+            <EmptyState icon="stats-chart-outline" title="Ainda sem sessões" body={`Quando ${nome} usar o IrisFlow no computador, o resumo de cada dia aparece aqui.`} compact />
+          )}
+        </Card>
+      ) : (
+        <>
           <Card index={0}>
-            <View style={{ alignItems: 'center', paddingVertical: spacing.md }}>
-              <View style={[styles.lock, { backgroundColor: colors.primaryTint }]}>
-                <Ionicons name="lock-closed" size={28} color={colors.primary} />
+            <View style={styles.summary}>
+              <View style={styles.flex}>
+                <Text variant="caption" tone="muted">
+                  Últimos 7 dias
+                </Text>
+                <Text variant="display" accessibilityLabel={`${totals.utterances} frases nos últimos 7 dias`}>
+                  {totals.utterances}
+                </Text>
+                <Text variant="bodySmall" tone="muted">
+                  frases · {formatDuration(totals.minutes)} de uso
+                </Text>
               </View>
-              <Text variant="h3" center style={{ marginTop: spacing.md }}>
-                Relatórios de sessão fazem parte do plano Completo
-              </Text>
-              <Text variant="bodySmall" tone="muted" center style={{ marginTop: spacing.sm }}>
-                Seu plano atual é o {plan?.name ?? 'Essencial'}. O Completo inclui histórico de uso, relatórios de sessão para a família, assistente de conversação e Lazer e Bem-estar.
-              </Text>
-              <Button title="Ver planos" variant="primary" icon="sparkles-outline" onPress={() => router.push('/assinatura')} style={{ marginTop: spacing.lg, alignSelf: 'stretch' }} />
+              <ProgressRing value={totals.avgHit ?? 0} label={totals.avgHit != null ? `${Math.round(totals.avgHit * 100)}%` : '—'} caption="acerto" accessibilityLabel={totals.avgHit != null ? `Acerto médio de ${Math.round(totals.avgHit * 100)} por cento` : 'Acerto médio ainda sem dados'} />
             </View>
+            <WeekChart days={week} />
           </Card>
-        ) : sessions === null ? (
-          <Card index={0}>
-            <Shimmer height={20} style={{ width: '40%' }} />
-            <Shimmer height={120} style={{ marginTop: spacing.md }} />
-          </Card>
-        ) : sessions.length === 0 ? (
-          <Card index={0}>
-            <EmptyState icon="stats-chart-outline" title="Ainda sem sessões" body="Assim que o paciente usar o IrisFlow Communicator, a sessão aparece aqui com precisão, postura, fadiga e módulos usados." />
-          </Card>
-        ) : (
-          <>
-            <Card index={0}>
-              <View style={styles.rowBetween}>
-                <View>
-                  <Text variant="label" tone="muted">
-                    Últimos 7 dias
-                  </Text>
-                  <Text variant="h2">{totals.utterances} frases</Text>
-                  <Text variant="caption" tone="muted">
-                    {formatDuration(totals.minutes)} de uso
-                  </Text>
-                </View>
-                <ProgressRing value={totals.avgHit ?? 0} label={totals.avgHit ? `${Math.round(totals.avgHit * 100)}%` : '—'} caption="acerto médio" size={78} />
-              </View>
-              <WeekChart days={week} />
-            </Card>
 
-            <View style={styles.tiles}>
-              <MetricTile index={1} icon="locate-outline" label="erro médio de calibração" value={totals.avgErr ? `${totals.avgErr} px` : '—'} hint="referência: 57 px (1920×1080)" tone="primary" />
-              <MetricTile index={2} icon="hand-left-outline" label="pedidos de ajuda" value={String(totals.help)} tone={totals.help > 2 ? 'warning' : 'accent'} />
-            </View>
+          <View style={styles.tiles}>
+            <MetricTile index={1} icon="locate-outline" label="erro médio de calibração" value={totals.avgErr != null ? `${totals.avgErr} px` : '—'} hint="referência: 57 px" tone="primary" />
+            <MetricTile index={2} icon="hand-left-outline" label="pedidos de ajuda" value={String(totals.help)} tone={totals.help > 2 ? 'warning' : 'accent'} />
+          </View>
 
-            <SectionTitle title="Sessões" />
-            <Card index={3} padding={spacing.sm}>
-              {sessions.map((s, i) => (
-                <ListRow
-                  key={s.id}
-                  icon={s.status === 'ended' ? 'time-outline' : 'radio-button-on'}
-                  title={`${dateShort(s.started_at)} · ${formatDuration(durationMin(s))}`}
-                  subtitle={`${s.utterances} frases · ${s.calibration_error_px ?? '—'} px · ${fatigueLabel[s.fatigue]}`}
-                  tone={s.status !== 'ended' ? 'accent' : s.fatigue === 'alta' || s.drift_kind === 'erratico' ? 'warning' : 'primary'}
-                  onPress={() => router.push({ pathname: '/sessao/[id]', params: { id: s.id } })}
-                  last={i === sessions.length - 1}
-                />
-              ))}
-            </Card>
-            <Text variant="caption" tone="muted" center style={{ marginTop: spacing.lg, paddingHorizontal: spacing.md }}>
-              Cada relatório registra as condições de captura junto com o erro — tela, câmera, distância, iluminação, lentes e postura — para que os números sejam comparáveis entre sessões.
+          {erro ? <Text variant="caption" tone="danger" style={styles.gapTop}>{erro}</Text> : null}
+
+          <SectionTitle title="Sessões" />
+          <Card index={3} padding={0}>
+            {sessions.map((s, i) => (
+              <ListRow
+                key={s.id}
+                icon={orfa(s) ? 'help-circle-outline' : s.status === 'ended' ? 'time-outline' : 'radio-button-on'}
+                title={orfa(s) ? `${dateShort(s.started_at)} · interrompida` : `${dateShort(s.started_at)} · ${formatDuration(durationMin(s))}`}
+                subtitle={orfa(s) ? 'O computador parou sem encerrar — fora dos totais' : `${s.utterances} frases${s.calibration_error_px != null ? ` · ${Math.round(s.calibration_error_px)} px` : ''}${hasFatigueData(s) ? ` · ${fatigueLabel[s.fatigue]}` : ''}`}
+                tone={orfa(s) ? 'muted' : s.status !== 'ended' ? 'accent' : s.fatigue === 'alta' || s.drift_kind === 'erratico' ? 'warning' : 'primary'}
+                onPress={() => router.push({ pathname: '/sessao/[id]', params: { id: s.id } })}
+                last={i === sessions.length - 1}
+              />
+            ))}
+          </Card>
+          <View style={styles.privacy}>
+            <Ionicons name="shield-checkmark-outline" size={sizes.icon.sm} color={colors.textMuted} />
+            <Text variant="caption" tone="muted" style={styles.flexShrink}>
+              Só números agregados — nenhuma imagem sai do computador.
             </Text>
-          </>
-        )}
-      </View>
+          </View>
+        </>
+      )}
     </Screen>
   );
 }
 
-function WeekChart({ days }: { days: { label: string; utterances: number; minutes: number; isToday: boolean }[] }) {
+function WeekChart({ days }: { days: Dia[] }) {
   const max = Math.max(1, ...days.map((d) => d.utterances));
+  const resumo = days.map((d) => `${d.nomeCompleto}: ${d.utterances} frases`).join('; ');
   return (
-    <View style={{ marginTop: spacing.lg }}>
+    <View style={styles.chartWrap} accessible accessibilityRole="image" accessibilityLabel={`Frases por dia. ${resumo}.`}>
       <View style={styles.chart}>
         {days.map((d, i) => (
           <Bar key={i} index={i} ratio={d.utterances / max} label={d.label} value={d.utterances} today={d.isToday} />
         ))}
       </View>
-      <Text variant="caption" tone="muted" style={{ marginTop: spacing.sm }}>
-        Frases vocalizadas por dia
+      <Text variant="caption" tone="muted" style={styles.chartCaption}>
+        Frases faladas por dia
       </Text>
     </View>
   );
 }
 
 function Bar({ ratio, label, value, today, index }: { ratio: number; label: string; value: number; today: boolean; index: number }) {
-  const { colors } = useTheme();
-  const h = useSharedValue(0);
+  const { colors, reduceMotion } = useTheme();
+  const alvo = Math.max(spacing.xs, ratio * sizes.chart);
+  const h = useSharedValue(reduceMotion ? alvo : 0);
   useEffect(() => {
-    h.value = withDelay(index * 60, withTiming(Math.max(4, ratio * 96), { duration: 700, easing: Easing.out(Easing.cubic) }));
-  }, [ratio, index, h]);
+    h.value = reduceMotion ? alvo : withDelay(index * motion.stagger, withTiming(alvo, { duration: motion.duration.slow * 1.6, easing: Easing.out(Easing.cubic) }));
+  }, [alvo, index, h, reduceMotion]);
   const st = useAnimatedStyle(() => ({ height: h.value }));
   return (
     <View style={styles.barCol}>
-      <Text variant="caption" tone="muted" style={{ fontSize: 11, lineHeight: 14 }}>
+      <Text variant="caption" tone="muted" maxFontSizeMultiplier={1.2}>
         {value || ''}
       </Text>
-      <View style={{ height: 96, justifyContent: 'flex-end', alignSelf: 'stretch' }}>
-        <Animated.View style={[styles.bar, { backgroundColor: today ? colors.accent : colors.primary, opacity: value === 0 ? 0.25 : 1 }, st]} />
+      <View style={styles.barTrack}>
+        <Animated.View style={[styles.bar, { backgroundColor: today ? colors.chartToday : colors.chartBar, opacity: value === 0 ? opacity.faint : 1 }, st]} />
       </View>
-      <Text variant="caption" tone={today ? 'accent' : 'muted'} weight={today ? 'bold' : 'medium'} style={{ fontSize: 11, lineHeight: 14 }}>
+      <Text variant="caption" tone={today ? 'accent' : 'muted'} weight={today ? 'bold' : 'medium'} maxFontSizeMultiplier={1.2}>
         {label}
       </Text>
     </View>
@@ -185,10 +215,16 @@ function Bar({ ratio, label, value, today, index }: { ratio: number; label: stri
 }
 
 const styles = StyleSheet.create({
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  tiles: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg },
-  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, height: 140 },
-  barCol: { flex: 1, alignItems: 'center', gap: 4 },
-  bar: { alignSelf: 'stretch', borderRadius: 6 },
-  lock: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
+  flex: { flex: 1 },
+  flexShrink: { flexShrink: 1 },
+  gapTop: { marginTop: spacing.md },
+  summary: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.md },
+  chartWrap: { marginTop: spacing.xl },
+  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  chartCaption: { marginTop: spacing.sm },
+  barCol: { flex: 1, alignItems: 'center', gap: spacing.xs },
+  barTrack: { height: sizes.chart, justifyContent: 'flex-end', alignSelf: 'stretch' },
+  bar: { alignSelf: 'stretch', borderRadius: radius.xs },
+  privacy: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.xl },
 });

@@ -3,13 +3,17 @@ import { definirEmergenciaAtiva } from '../../services/estadoDeEmergencia';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertOctagon, HeartPulse, ShieldAlert, Thermometer, Wind } from 'lucide-react';
-import { api } from '../../utils/api';
-import { emitirFalaDoPaciente, emitirPedidoDeAjuda } from '../../cloud/eventos';
-import { useAuth } from '../../context/AuthContext';
+import { emitirPedidoDeAjuda } from '../../cloud/eventos';
+import { useCloud } from '../../cloud/CloudContext';
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeButton } from '../../components/ui/GazeButton';
 import { GazeGrid } from '../../components/ui/GazeGrid';
 import { playTone, getSharedAudioContext } from '../../utils/emergencyAudio';
+
+/** Prazo local quando não há ajuste remoto (`patient_settings.emergency_timeout_s`). */
+const PRAZO_PADRAO_S = 15;
+
+const horaCurta = (iso: string) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
 const EMERGENCIES = [
   { id: 'pain', labelKey: 'emergency.items.pain', icon: HeartPulse },
@@ -22,9 +26,16 @@ export const EmergencyEscalation: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { t } = useTranslation();
-  const { currentProfile } = useAuth();
+  const { ajustesRemotos, reconhecimento } = useCloud();
   const [triggered, setTriggered] = useState<string | null>(null);
+  const [triggeredAt, setTriggeredAt] = useState<number | null>(null);
   const [escalated, setEscalated] = useState(false);
+  /** Horário em que o cuidador confirmou ESTE pedido (chegou pelo realtime). */
+  const [vistoEm, setVistoEm] = useState<string | null>(null);
+
+  // Prazo de escalonamento: o mesmo que o cuidador configurou no app (e que
+  // o cron do servidor usa), com 15 s de reserva quando não há ajuste.
+  const prazoS = ajustesRemotos?.emergency_timeout_s ?? PRAZO_PADRAO_S;
 
   // Enquanto esta tela está aberta, há uma emergência em curso — e a correção
   // por dwell (sprint S3) não pode aprender aqui. O `EmergencyContext` só
@@ -38,7 +49,9 @@ export const EmergencyEscalation: React.FC = () => {
 
   const triggerAlert = (_id: string, label: string) => {
     setTriggered(label);
+    setTriggeredAt(Date.now());
     setEscalated(false);
+    setVistoEm(null);
 
     // Som de bip forte inicial.
     //
@@ -72,10 +85,9 @@ export const EmergencyEscalation: React.FC = () => {
       window.speechSynthesis.speak(u);
     }
 
-    api.sendHelpAlert(currentProfile?.id ?? 'anon', 'high').catch((e) => {
-      console.warn('Falha ao enviar alerta de emergência ao backend:', e);
-    });
     // Celular do cuidador: tela de emergência + push (Edge Function desktop-sync).
+    // É o único envio: o barramento respeita o modo apresentação e, com o
+    // computador vinculado, a fila offline.
     emitirPedidoDeAjuda('emergencia', label);
   };
 
@@ -88,26 +100,47 @@ export const EmergencyEscalation: React.FC = () => {
     }
   }, [searchParams, t, triggered]);
 
-  // Timer de Escalonamento de Emergência (15s se o cuidador não responder)
+  // Confirmação do cuidador chegou (UPDATE em help_requests com
+  // acknowledged_at, via CloudContext). Só vale se for posterior ao disparo
+  // desta tela — um reconhecimento antigo não é resposta a este pedido.
   useEffect(() => {
-    if (!triggered || escalated) return;
+    if (!triggered || !triggeredAt || !reconhecimento) return;
+    const quando = new Date(reconhecimento.acknowledged_at).getTime();
+    // Tolerância de 60 s para relógios desalinhados entre PC e servidor.
+    if (!Number.isFinite(quando) || quando < triggeredAt - 60_000) return;
+    if (vistoEm === reconhecimento.acknowledged_at) return;
+    setVistoEm(reconhecimento.acknowledged_at);
+    if ('speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(`Seu cuidador viu o pedido às ${horaCurta(reconhecimento.acknowledged_at)}.`);
+      u.lang = 'pt-BR';
+      u.rate = 0.95;
+      u.volume = 1.0;
+      window.speechSynthesis.speak(u);
+    }
+  }, [reconhecimento, triggered, triggeredAt, vistoEm]);
 
-    const timer = setTimeout(() => {
-      setEscalated(true);
-      api.sendHelpAlert(currentProfile?.id ?? 'anon', 'critical').catch((e) => {
-        console.warn('Falha ao enviar alerta de escalonamento:', e);
-      });
-      // Um segundo pedido inflaria o contador da sessão; o escalonamento vai
-      // como mensagem de sistema na conversa.
-      emitirFalaDoPaciente(`Alerta escalado: ${triggered} sem resposta em 15 s`, 'sistema');
-    }, 15000);
+  // Timer de escalonamento LOCAL (`prazoS`, o mesmo do cuidador). Cancelado
+  // quando o cuidador confirma antes do prazo.
+  //
+  // Quem escalona de verdade é o SERVIDOR: o pg_cron `escalar_pedidos_de_ajuda`
+  // (a cada minuto) marca `escalated_at`, grava UMA mensagem de sistema na
+  // conversa e reenvia o push — e faz isso mesmo com este computador
+  // desligado, que é o caso que importa. Este timer só liga o alarme local e
+  // muda a tela. Ele NÃO grava mais a própria mensagem "Alerta escalado" na
+  // conversa: eram duas mensagens de sistema por escalonamento (uma daqui,
+  // outra do servidor), com prazos e textos diferentes.
+  useEffect(() => {
+    if (!triggered || escalated || vistoEm) return;
+
+    const timer = setTimeout(() => setEscalated(true), prazoS * 1000);
 
     return () => clearTimeout(timer);
-  }, [triggered, escalated, currentProfile]);
+  }, [triggered, escalated, vistoEm, prazoS]);
 
-  // Alarme contínuo de Escalonamento Crítico
+  // Alarme contínuo de Escalonamento Crítico — para quando o cuidador confirma.
   useEffect(() => {
-    if (!escalated) return;
+    if (!escalated || vistoEm) return;
 
     // Bip estridente a cada 2 s, pelo contexto de áudio COMPARTILHADO.
     //
@@ -145,7 +178,7 @@ export const EmergencyEscalation: React.FC = () => {
         window.speechSynthesis.cancel();
       }
     };
-  }, [escalated]);
+  }, [escalated, vistoEm]);
 
   return (
     <GazePageLayout showBack={true} backRoute="/menu">
@@ -188,27 +221,31 @@ export const EmergencyEscalation: React.FC = () => {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              animation: escalated ? 'pulseBgEscalated 0.5s infinite alternate' : 'pulseBg 1s infinite',
+              animation: vistoEm ? 'none' : escalated ? 'pulseBgEscalated 0.5s infinite alternate' : 'pulseBg 1s infinite',
               borderRadius: '2rem',
-              border: escalated ? '6px dashed #b91c1c' : '3px solid #dc2626',
-              background: escalated ? 'rgba(239, 68, 68, 0.15)' : 'rgba(220, 38, 38, 0.05)',
+              border: vistoEm ? '3px solid #16a34a' : escalated ? '6px dashed #b91c1c' : '3px solid #dc2626',
+              background: vistoEm ? 'rgba(22, 163, 74, 0.08)' : escalated ? 'rgba(239, 68, 68, 0.15)' : 'rgba(220, 38, 38, 0.05)',
               padding: '2rem',
             }}
           >
-            <AlertOctagon size={100} color="#dc2626" aria-hidden="true" style={{ animation: escalated ? 'shake 0.3s infinite' : 'none' }} />
+            <AlertOctagon size={100} color={vistoEm ? '#16a34a' : '#dc2626'} aria-hidden="true" style={{ animation: escalated && !vistoEm ? 'shake 0.3s infinite' : 'none' }} />
             <h2 style={{ fontSize: '3rem', color: '#dc2626', textAlign: 'center', marginTop: '1.5rem', fontWeight: 800 }}>
-              {escalated ? 'ALERTA ESCALADO' : t('emergency.alertSent')}
+              {vistoEm ? 'SEU CUIDADOR VIU' : escalated ? 'ALERTA ESCALADO' : t('emergency.alertSent')}
             </h2>
             <p style={{ fontSize: '1.75rem', color: '#991b1b', textAlign: 'center', marginTop: '0.5rem', fontWeight: 600 }}>
-              {escalated
-                ? 'Sinais críticos enviados repetidamente! Aguarde socorro imediato.'
-                : t('emergency.waiting', { label: triggered })}
+              {vistoEm
+                ? `Seu cuidador viu o pedido às ${horaCurta(vistoEm)}. Ajuda a caminho.`
+                : escalated
+                  ? 'Ninguém confirmou ainda. O alarme continua tocando neste computador.'
+                  : t('emergency.waiting', { label: triggered })}
             </p>
 
             <GazeButton
               onClick={() => {
                 setTriggered(null);
+                setTriggeredAt(null);
                 setEscalated(false);
+                setVistoEm(null);
                 navigate('/menu');
               }}
               style={{

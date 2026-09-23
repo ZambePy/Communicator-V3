@@ -10,31 +10,102 @@
     "backAria": "Voltar para a tela anterior"
   },
   "menu": {
-    "tabs": {
-      "communication": "Comunicação",
-      "care": "Cuidados",
-      "leisure": "Lazer",
-      "system": "Sistema"
+    "modulos": {
+      "communication": {
+        "title": "Comunicação",
+        "description": "Frases rápidas e pictogramas"
+      },
+      "keyboard": {
+        "title": "Teclado Virtual",
+        "description": "Digite livremente"
+      },
+      "computer": {
+        "title": "Computador",
+        "description": "Mouse virtual e sistema"
+      },
+      "settings": {
+        "title": "Configurações",
+        "description": "Ajustes e calibração"
+      },
+      "leisure": {
+        "title": "Lazer e bem-estar",
+        "description": "Jogos, fotos, leituras e descanso"
+      },
+      "conversation": {
+        "title": "Conversa",
+        "description": "Mensagens do cuidador"
+      },
+      "rest": {
+        "title": "Modo Descanso",
+        "description": "Pausar tela e descansar olhar"
+      },
+      "voice": {
+        "title": "Controle de Voz",
+        "description": "Comandos por voz"
+      },
+      "accessibility": {
+        "title": "Acessibilidade",
+        "description": "Recursos inclusivos"
+      }
     },
-    "items": {
-      "emergency": "Urgência\nMédica",
-      "pictograms": "Pictogramas\n(CAA)",
-      "phrases": "Frases\nRápidas",
-      "keyboard": "Teclado\nVirtual",
-      "options": "Minhas\nOpções",
-      "caregiver": "Painel do\nCuidador",
-      "meditation": "Meditação\nGuiada",
-      "iamok": "Aviso:\nEstou Bem",
-      "games": "Mini-Jogos",
-      "drawing": "Desenho\nLivre",
-      "gallery": "Galeria\nde Fotos",
-      "news": "Jornal\ndo Dia",
-      "settings": "Configuração\nGeral",
-      "virtualMouse": "Mouse\nVirtual (PC)"
+    "abrirAria": "{{title}}: {{description}}",
+    "novasMensagens": "{{n}} mensagens novas",
+    "continuarTutorial": {
+      "title": "Continuar o tutorial",
+      "lead": "Você parou no passo {{n}} de {{total}}: {{passo}}"
+    }
+  },
+  "lazer": {
+    "title": "Lazer e bem-estar",
+    "subtitle": "Jogos, fotos, leituras e descanso — tudo pelo olhar",
+    "voltar": "Voltar",
+    "voltarMenuAria": "Voltar ao menu principal",
+    "voltarAria": "Voltar para Lazer e bem-estar",
+    "abrirAria": "Abrir {{title}} — {{subtitle}}",
+    "secoes": {
+      "fotos": "Fotos e memórias",
+      "jogos": "Jogos com o olhar",
+      "bemEstar": "Bem-estar"
     },
-    "openItem": "Abrir {{item}}",
-    "skipToContent": "Pular para o conteúdo principal",
-    "tabsAriaLabel": "Categorias do menu"
+    "itens": {
+      "foto": {
+        "title": "Tirar Foto",
+        "subtitle": "Câmera divertida e memórias",
+        "badge": "Novo ✨"
+      },
+      "galeria": {
+        "title": "Galeria de Fotos",
+        "subtitle": "Álbum e recordações salvas"
+      },
+      "bolhas": {
+        "title": "Estoura Bolhas",
+        "subtitle": "Treino de fixação ocular"
+      },
+      "memoria": {
+        "title": "Jogo da Memória",
+        "subtitle": "Treino cognitivo e atenção"
+      },
+      "alvo": {
+        "title": "Siga o Alvo",
+        "subtitle": "Precisão e tempo de fixação"
+      },
+      "desenho": {
+        "title": "Desenho com Olhar",
+        "subtitle": "Expressão artística livre"
+      },
+      "leituras": {
+        "title": "Leituras",
+        "subtitle": "Textos lidos em voz alta"
+      },
+      "meditacao": {
+        "title": "Meditação",
+        "subtitle": "Respiração guiada e relaxamento"
+      },
+      "descanso": {
+        "title": "Descanso",
+        "subtitle": "Tela calma para descansar o olhar"
+      }
+    }
   },
   "settings": {
     "title": "Configurações",
@@ -305,6 +376,15 @@
     "next": "Continuar",
     "finish": "Concluir",
     "skip": "Pular o tutorial",
+    "faixa": {
+      "voltar": "Voltar ao tutorial",
+      "feito": "Feito — voltar ao tutorial",
+      "cumprida": "Missão cumprida. Pode voltar ao tutorial quando quiser."
+    },
+    "semCalibracao": {
+      "texto": "O olhar ainda não foi calibrado, então olhar para os alvos não vai clicar. Calibre primeiro para fazer o tutorial pelo olhar.",
+      "ir": "Calibrar o olhar"
+    },
     "steps": {
       "oQueEDwell": "O clique",
       "pratica": "Prática",

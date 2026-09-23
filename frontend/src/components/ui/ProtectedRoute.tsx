@@ -43,8 +43,8 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'var(--color-bg-base)',
-          color: '#1B54A8',
+          background: 'var(--page-bg)',
+          color: 'var(--color-text-muted)',
           fontSize: '1.1rem',
           fontWeight: 700,
         }}

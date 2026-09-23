@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { TrendingDown, Info } from 'lucide-react';
 import { getClinicalData } from '../../utils/clinicalLogger';
+import { BackButton } from '../../components/ui/BackButton';
 
 /**
  * Histórico de precisão do paciente.
@@ -45,8 +46,9 @@ export const HistoricoDeSessoes: React.FC = () => {
       }}
     >
       <div
-        className="glass-card"
+        className="glass-card coluna-livre-da-emergencia"
         style={{
+          '--coluna-largura': '620px',
           width: '100%',
           maxWidth: 620,
           height: 'fit-content',
@@ -59,21 +61,26 @@ export const HistoricoDeSessoes: React.FC = () => {
           gap: '1.2rem',
         }}
       >
-        <h1
-          id="historico-title"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.6rem',
-            margin: 0,
-            fontSize: '1.3rem',
-            fontWeight: 800,
-            color: 'var(--color-text-base)',
-          }}
-        >
-          <TrendingDown size={20} color="var(--color-primary)" aria-hidden="true" />
-          {t('historico.title')}
-        </h1>
+        {/* Não havia saída desta tela: sem Voltar, quem chegava aqui pelo
+            olhar (Conta → Histórico) só saía pela Emergência. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <BackButton to="/conta" />
+          <h1
+            id="historico-title"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.6rem',
+              margin: 0,
+              fontSize: '1.3rem',
+              fontWeight: 800,
+              color: 'var(--color-text-base)',
+            }}
+          >
+            <TrendingDown size={20} color="var(--color-primary)" aria-hidden="true" />
+            {t('historico.title')}
+          </h1>
+        </div>
 
         {medicoes.length === 0 && (
           <p style={{ margin: 0, opacity: 0.8, color: 'var(--color-text-base)' }}>

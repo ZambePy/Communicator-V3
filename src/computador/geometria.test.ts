@@ -10,8 +10,7 @@ import {
   regiaoDaLupa,
   lupaParaTela,
   prenderNoRetangulo,
-  type QuadroDeTela,
-} from './geometria';
+  type QuadroDeTela, sobreposicaoParaJanela } from './geometria';
 
 const monitorPrimario: QuadroDeTela = {
   janela: { x: 0, y: 0, width: 1536, height: 864 },
@@ -167,5 +166,25 @@ describe('clamp na borda — suave (app) × duro (Modo Computador)', () => {
     expect(clampNaBorda(1, 'duro', { margemPx: 40, tamanhoPx: W })).toBeCloseTo(1 - MARGEM_DURA_MAX_PX / W, 12);
     expect(clampDuro(1, -5, W)).toBe(1);
     expect(clampDuro(0.7, 2, 0)).toBe(0.7);
+  });
+});
+
+describe('sobreposicaoParaJanela', () => {
+  const quadro = {
+    janela: { x: 120, y: 80, width: 1600, height: 900 },
+    monitor: { x: 0, y: 0, width: 1920, height: 1080 },
+    escala: 1.25,
+  };
+  it('desfaz janelaParaSobreposicao em qualquer ponto que não foi preso ao monitor', () => {
+    for (const p of [{ x: 0, y: 0 }, { x: 800, y: 450 }, { x: 1599, y: 899 }]) {
+      const ida = janelaParaSobreposicao(p, quadro);
+      const volta = sobreposicaoParaJanela(ida, quadro);
+      expect(volta).toEqual(p);
+    }
+  });
+  it('com o monitor deslocado na tela virtual (segundo monitor) a inversa continua exata', () => {
+    const q2 = { ...quadro, monitor: { x: 1920, y: -200, width: 1920, height: 1080 }, janela: { x: 2000, y: -100, width: 1600, height: 900 } };
+    const p = { x: 300, y: 200 };
+    expect(sobreposicaoParaJanela(janelaParaSobreposicao(p, q2), q2)).toEqual(p);
   });
 });

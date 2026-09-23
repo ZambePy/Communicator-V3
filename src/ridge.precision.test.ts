@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { trainRidgeModel, predictRidge } from './ridge';
 import { StandardScaler } from './scaler';
-import { CALIBRATION_TARGETS_FULL, CALIBRATION_TARGETS_QUICK } from './calibration';
+import { CALIBRATION_TARGETS_FULL, INSET_CANTOS_PADRAO, CALIBRATION_TARGETS_QUICK } from './calibration';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -240,10 +240,16 @@ describe('Ridge precision — edges vs center', () => {
 // cabeçalho de `computeCalibrationTargets` em calibration.ts. Estes testes
 // afirmam as invariantes da grade.
 describe('Calibration targets — grade 3×3 dentro do orçamento angular', () => {
-  it('FULL cobre 3 posições distintas por eixo, simétricas em X e assimétricas em Y', () => {
-    expect(CALIBRATION_TARGETS_FULL).toHaveLength(9);
-    const xs = [...new Set(CALIBRATION_TARGETS_FULL.map(t => t.x))].sort((a, b) => a - b);
-    const ys = [...new Set(CALIBRATION_TARGETS_FULL.map(t => t.y))].sort((a, b) => a - b);
+  it('FULL = grade 3×3 (3 posições por eixo, simétricas em X e assimétricas em Y) + os 4 cantos da tela', () => {
+    expect(CALIBRATION_TARGETS_FULL).toHaveLength(13);
+    const lo = INSET_CANTOS_PADRAO;
+    const hi = 1 - INSET_CANTOS_PADRAO;
+    const ehCanto = (t: { x: number; y: number }) => (t.x === lo || t.x === hi) && (t.y === lo || t.y === hi);
+    expect(CALIBRATION_TARGETS_FULL.filter(ehCanto)).toHaveLength(4);
+    const grade = CALIBRATION_TARGETS_FULL.filter((t) => !ehCanto(t));
+    expect(grade).toHaveLength(9);
+    const xs = [...new Set(grade.map(t => t.x))].sort((a, b) => a - b);
+    const ys = [...new Set(grade.map(t => t.y))].sort((a, b) => a - b);
     expect(xs).toHaveLength(3);
     expect(ys).toHaveLength(3);
     expect(xs[1]).toBeCloseTo(0.5, 10);

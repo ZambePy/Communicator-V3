@@ -1,25 +1,45 @@
 /**
- * Atualização automática.
+ * Atualização automática (electron-updater, provedor GitHub Releases).
  *
  * Sem isto, cada correção era "baixe o instalador de novo, clique em 'executar
  * assim mesmo' no SmartScreen, reinstale" — e uma família não faz isso duas
  * vezes. Na beta os bugs VÃO aparecer; o mecanismo de entregar a correção é
  * mais importante que a correção.
  *
- * Onde o app procura a versão nova é decidido FORA do código, de propósito:
+ * DE ONDE VEM A VERSÃO NOVA: do GitHub Releases do repositório de releases
+ * escolhido NO EMPACOTAMENTO — `electron/package-app.mjs` usa
+ * `IRISFLOW_RELEASES_REPO` (dono/repo) > `GITHUB_REPOSITORY` (o repositório do
+ * workflow) > `build.publish` do package.json, e o electron-builder grava o
+ * endereço em `resources/app-update.yml`, que o electron-updater lê. Este
+ * arquivo não tem nome de repositório nenhum: trocar o repositório (código
+ * privado, instaladores num repositório público só de releases) é trocar a
+ * variável `IRISFLOW_RELEASES_REPO` do GitHub Actions (release.yml).
+ * Nada de servidor próprio nem de token no app: o repositório de releases é
+ * PÚBLICO (um privado exigiria embutir um token no instalador — nunca), e o
+ * `latest.yml` / `latest-mac.yml` / `latest-linux.yml` sobem junto com os
+ * instaladores.
  *
- *   - no app empacotado, em `resources/atualizacao.json` (`{ "url": ... }`),
- *     escrito por `package-app.mjs` a partir da variável IRISFLOW_UPDATE_URL
- *     no momento do empacotamento;
- *   - em desenvolvimento, na própria variável de ambiente.
+ * `IRISFLOW_UPDATE_URL` (variável de AMBIENTE, opcional) ainda troca o
+ * provedor por um "generic" — serve para testar uma versão num servidor local
+ * sem publicar release. Ninguém precisa defini-la.
  *
- * Sem endereço, o módulo não faz nada e diz isso no log. O servidor esperado
- * é o "generic" do electron-updater: um diretório HTTP com `latest.yml` e o
- * instalador — qualquer hospedagem estática serve, inclusive um bucket.
+ * CANAL: beta. As versões são `X.Y.Z-beta.N`; com versão pré-lançamento o
+ * electron-updater aceita pré-lançamentos (`allowPrerelease`), e o
+ * `latest*.yml` é sempre gerado com esse nome (`detectUpdateChannel: false`),
+ * então quem está na beta recebe a próxima beta e, depois, a 1.0 estável.
  *
- * Política: baixa sozinho, NUNCA reinicia sozinho. Reiniciar no meio de uma
- * frase de quem se comunica por fixação ocular é perder a frase. A instalação
- * acontece quando o cuidador aceita, ou ao fechar o app.
+ * POLÍTICA: verifica 45 s depois de abrir e a cada 4 h; baixa em segundo
+ * plano; NUNCA reinicia sozinho. Reiniciar no meio de uma frase de quem se
+ * comunica por fixação ocular é perder a frase. A instalação acontece quando
+ * o cuidador aceita ("Reiniciar agora") ou, se ele escolher "Depois", ao
+ * fechar o app (`autoInstallOnAppQuit`).
+ *
+ * LIMITES CONHECIDOS (o estado mostra, o app segue):
+ *   - macOS sem assinatura Developer ID: o Squirrel.Mac recusa instalar. O
+ *     download acontece e a instalação falha com erro no estado; quem usa Mac
+ *     baixa o .dmg novo pelo site até haver certificado.
+ *   - Linux .deb/.rpm: o electron-updater instala pelo gerenciador de pacotes
+ *     e pede a senha de administrador ao fechar. O AppImage atualiza sozinho.
  */
 
 import { app, ipcMain, type BrowserWindow } from 'electron';
@@ -41,20 +61,22 @@ export const CANAIS_ATUALIZACAO = {
   verificar: 'irisflow:atualizacao-verificar',
 } as const;
 
-/** Entre verificações. Seis horas: quem deixa o app aberto o dia inteiro vê a versão nova no mesmo dia. */
-const INTERVALO_MS = 6 * 3600_000;
+/** Primeira verificação depois da abertura: câmera e motor sobem primeiro. */
+const PRIMEIRA_VERIFICACAO_MS = 45_000;
+/** Entre verificações. Quem deixa o app aberto o dia inteiro vê a versão nova no mesmo dia. */
+const INTERVALO_MS = 4 * 3600_000;
 
-function lerUrl(): string | null {
-  const daVariavel = process.env.IRISFLOW_UPDATE_URL?.trim();
-  if (daVariavel) return daVariavel;
-  if (!app.isPackaged) return null;
-  try {
-    const arquivo = path.join(process.resourcesPath, 'atualizacao.json');
-    const cfg = JSON.parse(fs.readFileSync(arquivo, 'utf-8')) as { url?: unknown };
-    return typeof cfg.url === 'string' && cfg.url.trim() ? cfg.url.trim() : null;
-  } catch {
-    return null;
+function motivoParaDesligar(): string | null {
+  if (!app.isPackaged) return 'desenvolvimento (não há app empacotado para atualizar)';
+  if (process.env.IRISFLOW_UPDATE_URL?.trim()) return null;
+  // Sem app-update.yml (build `--dir`, empacotamento sem `publish`) o
+  // electron-updater lança ENOENT a cada verificação. Diz uma vez e para.
+  const yml = path.join(process.resourcesPath, 'app-update.yml');
+  if (!fs.existsSync(yml)) return 'este build não tem resources/app-update.yml (gerado sem configuração de publicação)';
+  if (process.platform === 'linux' && !process.env.APPIMAGE && !fs.existsSync(path.join(process.resourcesPath, 'package-type'))) {
+    return 'Linux fora de AppImage/.deb/.rpm: atualize pelo site';
   }
+  return null;
 }
 
 export function registrarAtualizacao(janela: () => BrowserWindow | null): void {
@@ -73,48 +95,86 @@ export function registrarAtualizacao(janela: () => BrowserWindow | null): void {
 
   ipcMain.handle(CANAIS_ATUALIZACAO.estado, (e) => (daJanela(e) ? estado : null));
 
-  const url = lerUrl();
-  if (!url) {
-    publicar({ fase: 'inativa', motivo: 'sem endereço de atualização (IRISFLOW_UPDATE_URL / resources/atualizacao.json)' });
-    console.log('[atualizacao] desligada:', (estado as { motivo: string }).motivo);
-    ipcMain.handle(CANAIS_ATUALIZACAO.instalar, () => false);
-    ipcMain.handle(CANAIS_ATUALIZACAO.verificar, () => false);
-    return;
-  }
-  if (!app.isPackaged) {
-    // Em desenvolvimento o updater não tem o que atualizar (não há app.asar),
-    // e o electron-updater lança ao tentar. Registra o endereço e para.
-    publicar({ fase: 'inativa', motivo: `desenvolvimento (endereço configurado: ${url})` });
+  const desligada = motivoParaDesligar();
+  if (desligada) {
+    publicar({ fase: 'inativa', motivo: desligada });
+    console.log('[atualizacao] desligada:', desligada);
     ipcMain.handle(CANAIS_ATUALIZACAO.instalar, () => false);
     ipcMain.handle(CANAIS_ATUALIZACAO.verificar, () => false);
     return;
   }
 
   // Import tardio: o módulo é pesado e só faz sentido empacotado.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { autoUpdater } = require('electron-updater') as typeof import('electron-updater');
+  let autoUpdater: typeof import('electron-updater').autoUpdater;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    autoUpdater = (require('electron-updater') as typeof import('electron-updater')).autoUpdater;
+  } catch (erro) {
+    console.warn('[atualizacao] electron-updater não carregou:', erro);
+    publicar({ fase: 'inativa', motivo: 'módulo de atualização ausente neste build' });
+    ipcMain.handle(CANAIS_ATUALIZACAO.instalar, () => false);
+    ipcMain.handle(CANAIS_ATUALIZACAO.verificar, () => false);
+    return;
+  }
 
-  autoUpdater.setFeedURL({ provider: 'generic', url });
+  const urlDeTeste = process.env.IRISFLOW_UPDATE_URL?.trim();
+  if (urlDeTeste) autoUpdater.setFeedURL({ provider: 'generic', url: urlDeTeste });
+
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  // `allowPrerelease` fica no PADRÃO do electron-updater: verdadeiro só quando a
+  // versão instalada é pré-lançamento (X.Y.Z-beta.N). Forçá-lo em `true` só
+  // mudaria as instalações ESTÁVEIS, e para pior: com ele, o provedor GitHub de
+  // uma versão estável pega a PRIMEIRA entrada do feed releases.atom, seja qual
+  // for — inclusive o release que guarda os pesos do L2CS (tag `0.0.0-modelos`,
+  // sem instalador nem latest*.yml, quando mora no repositório de releases) —,
+  // e a verificação falha até sair outra versão (conferido no GitHubProvider do
+  // electron-updater 6.8.9). No padrão, a versão estável consulta
+  // /releases/latest, que ignora pré-lançamentos; a beta lê o feed e pula as
+  // tags que não são semver ou são de outro canal. Como o release.yml publica
+  // as versões do app como release NORMAL, as duas as encontram.
+  // NÃO se define `channel`: no electron-updater isso liga `allowDowngrade`, e
+  // um downgrade silencioso é justamente o que não se quer.
+  autoUpdater.allowDowngrade = false;
+  // Os erros vão para o nosso log (diagnostico.ts intercepta console.warn);
+  // o logger do electron-updater despejaria o release inteiro no console.
   autoUpdater.logger = null;
 
-  autoUpdater.on('checking-for-update', () => publicar({ fase: 'verificando' }));
-  autoUpdater.on('update-not-available', (info) => publicar({ fase: 'em_dia', versao: info.version }));
+  let verificando = false;
+  autoUpdater.on('checking-for-update', () => {
+    // Uma atualização já baixada não "desbaixa" numa nova verificação.
+    if (estado.fase !== 'pronta') publicar({ fase: 'verificando' });
+  });
+  autoUpdater.on('update-not-available', (info) => {
+    if (estado.fase !== 'pronta') publicar({ fase: 'em_dia', versao: info.version });
+  });
   autoUpdater.on('update-available', (info) => publicar({ fase: 'baixando', versao: info.version, progresso: 0 }));
   autoUpdater.on('download-progress', (p) => {
-    if (estado.fase === 'baixando') publicar({ ...estado, progresso: Math.round(p.percent) });
+    const progresso = Math.max(0, Math.min(100, Math.round(p.percent)));
+    // Um evento de progresso por ponto percentual basta para a faixa.
+    if (estado.fase === 'baixando' && progresso !== estado.progresso) publicar({ ...estado, progresso });
   });
-  autoUpdater.on('update-downloaded', (info) => publicar({ fase: 'pronta', versao: info.version }));
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log(`[atualizacao] versão ${info.version} baixada; instala ao reiniciar ou ao fechar`);
+    publicar({ fase: 'pronta', versao: info.version });
+  });
   autoUpdater.on('error', (err) => {
     // Erro de atualização nunca pode parecer erro do app: fica no log e no
-    // estado, e o app segue funcionando com a versão que tem.
-    console.warn('[atualizacao] falha:', err?.message ?? err);
-    publicar({ fase: 'erro', mensagem: String(err?.message ?? err).slice(0, 200) });
+    // estado (a UI só mostra em Ajustes), e o app segue com a versão que tem.
+    const mensagem = String(err?.message ?? err).split('\n')[0].slice(0, 200);
+    console.warn('[atualizacao] falha:', mensagem);
+    if (estado.fase !== 'pronta') publicar({ fase: 'erro', mensagem });
   });
 
   const verificar = () => {
-    autoUpdater.checkForUpdates().catch(() => undefined);
+    if (verificando || estado.fase === 'pronta' || estado.fase === 'baixando') return;
+    verificando = true;
+    autoUpdater.checkForUpdates()
+      .catch(() => {
+        // O electron-updater já emitiu `error` (registrado acima); aqui só
+        // não deixa a promessa rejeitada virar `unhandledRejection`.
+      })
+      .finally(() => { verificando = false; });
   };
 
   ipcMain.handle(CANAIS_ATUALIZACAO.verificar, (e) => {
@@ -125,14 +185,19 @@ export function registrarAtualizacao(janela: () => BrowserWindow | null): void {
   ipcMain.handle(CANAIS_ATUALIZACAO.instalar, (e) => {
     if (!daJanela(e) || estado.fase !== 'pronta') return false;
     // `isSilent=false, isForceRunAfter=true`: instala e reabre. Só chega aqui
-    // por decisão do cuidador na tela.
-    setImmediate(() => autoUpdater.quitAndInstall(false, true));
+    // por decisão do cuidador na tela ("Reiniciar agora").
+    setImmediate(() => {
+      try {
+        autoUpdater.quitAndInstall(false, true);
+      } catch (erro) {
+        console.warn('[atualizacao] quitAndInstall falhou:', erro);
+        publicar({ fase: 'erro', mensagem: 'não foi possível reiniciar para instalar; a versão nova entra ao fechar o app' });
+      }
+    });
     return true;
   });
 
-  // Primeira verificação um pouco depois da abertura: a câmera e o motor
-  // estão subindo, e disputar rede/CPU nesse momento atrasa o que importa.
-  setTimeout(verificar, 20_000).unref();
+  setTimeout(verificar, PRIMEIRA_VERIFICACAO_MS).unref();
   setInterval(verificar, INTERVALO_MS).unref();
-  console.log('[atualizacao] ligada:', url);
+  console.log(`[atualizacao] ligada (${urlDeTeste ? `servidor de teste ${urlDeTeste}` : 'GitHub Releases'}), versão atual ${app.getVersion()}`);
 }

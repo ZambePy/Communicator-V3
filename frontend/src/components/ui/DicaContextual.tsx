@@ -38,7 +38,7 @@ export const DicaContextual: React.FC<{ id: IdDaDica }> = ({ id }) => {
         alignItems: 'center',
         gap: '1rem',
         padding: '0.75rem 0.75rem 0.75rem 1.25rem',
-        borderRadius: '1.25rem',
+        borderRadius: 'var(--radius-lg)',
         background: 'var(--tint-info-bg)',
         border: '1px solid var(--tint-info-border)',
         marginBottom: '1rem',
@@ -66,7 +66,7 @@ export const DicaContextual: React.FC<{ id: IdDaDica }> = ({ id }) => {
         height={64}
         width={150}
         isolado
-        style={{ borderRadius: '1rem', fontSize: '1.05rem', flexShrink: 0 }}
+        style={{ borderRadius: 'var(--radius-md)', fontSize: '1.05rem', flexShrink: 0 }}
       >
         {t('dicas.entendi')}
       </GazeButton>

@@ -94,21 +94,136 @@ body,
     color 0.4s ease;
 }
 
-/* Variáveis base (light mode) — disponíveis como CSS custom properties normais */
+/* ────────────────────────────────────────────────────────────────────────────
+ * SISTEMA VISUAL — tokens.
+ *
+ * Direção: Apple / Linear / Headspace / Duolingo. Sóbrio, espaçoso, tipografia
+ * forte; efeito só quando comunica ESTADO. Tudo abaixo é custom property
+ * normal (fora do `@theme`) para valer em `style={{}}` e em CSS puro.
+ *
+ * Identidade: azul #1B54A8 · teal #00A693 · navy #091B33. O tema ESCURO é o
+ * padrão; o claro é a variante.
+ * ──────────────────────────────────────────────────────────────────────────── */
 :root {
   /* Diz ao navegador em que paleta desenhar o que ele mesmo pinta: caixa de
      senha, seletor de arquivo, barra de rolagem, autofill. Sem isto o Chromium
      assume claro e mistura controles brancos com o tema escuro do app. */
   color-scheme: light;
 
-  --color-bg-base: #f8fafc;
+  /* ── Marca ─────────────────────────────────────────────────────────────── */
+  --color-brand: #1b54a8;
+  --color-teal: #00a693;
+  --color-navy: #091b33;
+
+  /* ── Tipografia ────────────────────────────────────────────────────────── */
+  /* Display: a família do sistema, pesada e com tracking negativo. Boldonse
+     (a marca) continua disponível em `.font-display` para o wordmark. */
+  --font-display: system-ui, -apple-system, 'Segoe UI Variable Display', 'Segoe UI', Roboto,
+    'Helvetica Neue', sans-serif;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: 'Cascadia Mono', 'Consolas', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --text-display: clamp(2.4rem, 1.6rem + 2.2vw, 3.5rem);
+  --text-h1: clamp(1.7rem, 1.3rem + 1vw, 2.25rem);
+  --text-h2: 1.375rem;
+  --text-h3: 1.125rem;
+  --text-body: 1.0625rem;
+  --text-body-lg: 1.25rem;
+  --text-caption: 0.875rem;
+
+  --leading-tight: 1.1;
+  --leading-snug: 1.25;
+  --leading-body: 1.55;
+  --tracking-display: -0.025em;
+  --tracking-h1: -0.02em;
+  --tracking-caps: 0.08em;
+
+  /* ── Espaçamento (escala de 4) ─────────────────────────────────────────── */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 2.5rem;
+  --space-8: 3rem;
+  --space-9: 4rem;
+
+  /* ── Moldura da página e botão de Emergência ──────────────────────────────
+     O botão de Emergência é `position: fixed` e global (EmergencyProvider):
+     ele não ocupa espaço no fluxo de nenhuma tela. Por isso a sua PEGADA é um
+     contrato em variáveis, lido pelos dois lados — o botão se posiciona por
+     elas e os cabeçalhos/faixas do topo reservam o espaço por elas. Antes,
+     cada tela desenhava o próprio cabeçalho com margens próprias, e botões
+     como "Voltar ao tutorial" e "Galeria (0)" caíam em cima da Emergência. */
+  --pagina-margem-x: clamp(1rem, 2.5vw, 3rem);
+  --pagina-margem-topo: clamp(1rem, 2.5vh, 2rem);
+  --emergencia-largura: 200px;
+  --emergencia-altura: 64px;
+  --emergencia-folga: 16px;
+  --emergencia-direita: var(--pagina-margem-x);
+  /* Centralizado na linha do cabeçalho canônico (Voltar de 96 px). */
+  --emergencia-topo: calc(var(--pagina-margem-topo) + 16px);
+  /* Faixa, a partir da borda DIREITA da janela, que nada no topo pode ocupar. */
+  --reserva-emergencia-x: calc(
+    var(--emergencia-direita) + var(--emergencia-largura) + var(--emergencia-folga)
+  );
+  /* Altura, a partir do TOPO da janela, abaixo da qual a faixa direita é livre. */
+  --reserva-emergencia-y: calc(
+    var(--emergencia-topo) + var(--emergencia-altura) + var(--emergencia-folga)
+  );
+
+  /* ── Raios ─────────────────────────────────────────────────────────────── */
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-xl: 2rem;
+  --radius-pill: 999px;
+
+  /* ── Superfícies (tema claro) ──────────────────────────────────────────── */
+  --color-bg-base: #f5f7fb;
+  --color-bg-elevated: #ffffff;
+  --color-bg-sunken: #eaeff7;
   --color-text-base: #0f172a;
-  --color-card-bg: rgba(255, 255, 255, 0.82);
-  --color-card-border: rgba(255, 255, 255, 0.9);
-  --color-card-shadow: rgba(27, 84, 168, 0.08);
+  --color-text-muted: #475569;
+  --color-text-faint: #64748b;
+  --color-card-bg: rgba(255, 255, 255, 0.86);
+  --color-card-border: rgba(15, 23, 42, 0.1);
+  --color-card-shadow: rgba(27, 84, 168, 0.1);
   --color-primary: #1b54a8;
+  /* Preenchimento de botão primário: texto branco por cima passa AA nos dois
+     temas (no escuro, o azul de TEXTO é mais claro que o de FUNDO). */
+  --color-primary-fill: #1b54a8;
+  --color-primary-dark: #143e80;
   --color-primary-light: #e8f0fb;
+  --color-primary-contrast: #ffffff;
+  --color-accent: #f0a030;
+
+  /* Fundo com profundidade: dois halos muito suaves (azul e teal) por trás do
+     conteúdo, sem imagem. É o "chão" de todas as telas do paciente. */
+  --page-bg:
+    radial-gradient(60% 45% at 8% 0%, rgba(27, 84, 168, 0.1) 0%, transparent 60%),
+    radial-gradient(45% 40% at 100% 100%, rgba(0, 166, 147, 0.09) 0%, transparent 60%),
+    var(--color-bg-base);
   --settings-bg: linear-gradient(160deg, #f0f4ff 0%, #e8f0fb 50%, #f1f5f9 100%);
+
+  /* ── Sombras em 3 níveis ───────────────────────────────────────────────── */
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05), 0 2px 8px rgba(27, 84, 168, 0.06);
+  --shadow-2: 0 4px 12px rgba(15, 23, 42, 0.07), 0 10px 28px -8px rgba(27, 84, 168, 0.16);
+  --shadow-3: 0 12px 32px -6px rgba(15, 23, 42, 0.16), 0 24px 56px -16px rgba(27, 84, 168, 0.24);
+
+  /* ── Estados ───────────────────────────────────────────────────────────── */
+  --state-hover-border: rgba(27, 84, 168, 0.55);
+  --state-hover-ring: 0 0 0 4px rgba(27, 84, 168, 0.16);
+  --state-focus-ring: 0 0 0 3px var(--color-bg-base), 0 0 0 6px var(--color-primary);
+  --state-active-bg: rgba(27, 84, 168, 0.1);
+  --state-disabled-opacity: 0.55;
+  --state-degraded: #d97706;
+  --state-degraded-bg: rgba(217, 119, 6, 0.12);
+  --state-emergency: #dc2626;
+  --state-emergency-bg: rgba(220, 38, 38, 0.08);
+  --state-ok: #0f9a89;
+  --state-ok-bg: rgba(0, 166, 147, 0.12);
 
   /* Caixas de estado (sucesso / atencao / erro / informacao).
      Existem como token porque as tintas claras que estavam cravadas nas telas
@@ -130,28 +245,52 @@ body,
   --field-bg: #ffffff;
   --field-border: #cbd5e1;
 
-  /* Texto secundario e cores SOLIDAS de estado (icones, selos, barras).
-     As tintas acima sao caixas; estas sao a cor em si, para nao espalhar
-     mais um `#16a34a` ou `#64748b` literal por tela. */
-  --color-text-muted: #475569;
+  /* Cores SOLIDAS de estado (icones, selos, barras). As tintas acima sao
+     caixas; estas sao a cor em si. */
   --color-ok: #16a34a;
   --color-warn: #d97706;
   --color-danger: #dc2626;
-  --color-accent: #f0a030;
 }
 
-/* Modo escuro (via classe no html) */
+/* Modo escuro (via classe no html) — o padrão. Navy da identidade como chão. */
 html.dark {
   color-scheme: dark;
 
-  --color-bg-base: #0f172a;
-  --color-text-base: #f8fafc;
-  --color-card-bg: rgba(30, 41, 59, 0.9);
-  --color-card-border: rgba(255, 255, 255, 0.12);
-  --color-card-shadow: rgba(0, 0, 0, 0.4);
-  --color-primary-light: #1e293b;
-  --color-primary: #3b82f6;
-  --settings-bg: linear-gradient(160deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  --color-bg-base: #0b182d;
+  --color-bg-elevated: #14243d;
+  --color-bg-sunken: #071224;
+  --color-text-base: #f4f7fb;
+  --color-text-muted: #9fb0c8;
+  --color-text-faint: #7d8ea8;
+  --color-card-bg: rgba(20, 36, 61, 0.88);
+  --color-card-border: rgba(255, 255, 255, 0.11);
+  --color-card-shadow: rgba(0, 0, 0, 0.45);
+  --color-primary: #5b95f5;
+  --color-primary-fill: #2563eb;
+  --color-primary-dark: #1d4ed8;
+  --color-primary-light: #16294a;
+  --color-primary-contrast: #ffffff;
+  --color-accent: #f0a030;
+
+  --page-bg:
+    radial-gradient(60% 45% at 8% 0%, rgba(91, 149, 245, 0.16) 0%, transparent 60%),
+    radial-gradient(45% 40% at 100% 100%, rgba(0, 166, 147, 0.13) 0%, transparent 60%),
+    var(--color-bg-base);
+  --settings-bg: linear-gradient(160deg, #0b182d 0%, #14243d 50%, #0b182d 100%);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.32), 0 12px 28px -8px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 12px 32px -6px rgba(0, 0, 0, 0.5), 0 24px 56px -16px rgba(0, 0, 0, 0.65);
+
+  --state-hover-border: rgba(91, 149, 245, 0.7);
+  --state-hover-ring: 0 0 0 4px rgba(91, 149, 245, 0.22);
+  --state-active-bg: rgba(91, 149, 245, 0.16);
+  --state-degraded: #fbbf24;
+  --state-degraded-bg: rgba(251, 191, 36, 0.14);
+  --state-emergency: #f87171;
+  --state-emergency-bg: rgba(248, 113, 113, 0.12);
+  --state-ok: #2dd4bf;
+  --state-ok-bg: rgba(45, 212, 191, 0.14);
 
   /* Mesmas familias de cor, rebaixadas: fundo translucido sobre o card escuro
      e texto claro o bastante para contraste AA. */
@@ -164,18 +303,75 @@ html.dark {
   --tint-danger-bg: rgba(220, 38, 38, 0.16);
   --tint-danger-border: rgba(248, 113, 113, 0.35);
   --tint-danger-text: #fca5a5;
-  --tint-info-bg: rgba(59, 130, 246, 0.14);
+  --tint-info-bg: rgba(91, 149, 245, 0.14);
   --tint-info-border: rgba(96, 165, 250, 0.35);
-  --tint-info-text: #93c5fd;
+  --tint-info-text: #a5c4fb;
 
-  --field-bg: rgba(15, 23, 42, 0.6);
+  --field-bg: rgba(7, 18, 36, 0.6);
   --field-border: rgba(148, 163, 184, 0.28);
 
-  --color-text-muted: #94a3b8;
   --color-ok: #4ade80;
   --color-warn: #fbbf24;
   --color-danger: #f87171;
-  --color-accent: #f0a030;
+}
+
+/* ── Escala tipográfica como classes ─────────────────────────────────────── */
+.t-display {
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  font-weight: 800;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-display);
+}
+.t-h1 {
+  font-family: var(--font-display);
+  font-size: var(--text-h1);
+  font-weight: 800;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-h1);
+}
+.t-h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-h2);
+  font-weight: 800;
+  line-height: var(--leading-snug);
+  letter-spacing: -0.01em;
+}
+.t-h3 {
+  font-size: var(--text-h3);
+  font-weight: 700;
+  line-height: var(--leading-snug);
+}
+.t-body {
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+}
+.t-body-lg {
+  font-size: var(--text-body-lg);
+  line-height: var(--leading-body);
+}
+.t-caption {
+  font-size: var(--text-caption);
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+.t-overline {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* ── Superfícies ─────────────────────────────────────────────────────────── */
+.surface {
+  background: var(--color-card-bg);
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+.surface--elevated {
+  box-shadow: var(--shadow-2);
 }
 
 /* Glassmorphism utilitário refinado */
@@ -204,8 +400,8 @@ html.dark {
 }
 
 .glass-card:hover {
-  border-color: rgba(27, 84, 168, 0.5);
-  box-shadow: 0 12px 32px -8px rgba(27, 84, 168, 0.2);
+  border-color: var(--state-hover-border);
+  box-shadow: var(--shadow-2);
   transform: translateY(-3px);
 }
 
@@ -299,11 +495,11 @@ html.dark {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--color-card-border);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--color-text-faint);
 }
 
 /* Animações utilitárias */
@@ -325,7 +521,7 @@ html.dark {
   outline: none;
 }
 :focus-visible {
-  outline: 3px solid #1b54a8;
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
   border-radius: 6px;
 }
@@ -338,9 +534,9 @@ select:focus-visible,
 [role='radio']:focus-visible,
 [role='switch']:focus-visible,
 [role='tab']:focus-visible {
-  outline: 3px solid #1b54a8;
+  outline: 3px solid var(--color-primary);
   outline-offset: 3px;
-  box-shadow: 0 0 0 6px rgba(27, 84, 168, 0.15);
+  box-shadow: var(--state-hover-ring);
 }
 
 /* Screen-reader only */
@@ -361,7 +557,7 @@ select:focus-visible,
   position: absolute;
   top: -100px;
   left: 0;
-  background: #1b54a8;
+  background: var(--color-primary-fill);
   color: white;
   padding: 0.75rem 1.5rem;
   z-index: 9999;
@@ -408,10 +604,13 @@ select:focus-visible,
 /* Gaze feedback - aplicado dinamicamente pelo GazeContext ao hitTarget.
    O alvo observado cresce um pouco e ganha elevação: a resposta acontece
    ANTES da confirmação por dwell, e é ela que diz "estou vendo você olhar". */
-.gaze-hover {
+/* Alvos que NÃO são `.gaze-button` (botões comuns, links, cartões). O
+   GazeButton tem o próprio bloco, mais abaixo. `!important` porque muitos
+   alvos carregam borda e sombra em `style={{}}`, que ganharia da classe. */
+.gaze-hover:not(.gaze-button) {
   transform: scale(1.04) !important;
-  box-shadow: 0 12px 32px rgba(27, 84, 168, 0.25) !important;
-  border-color: #1b54a8 !important;
+  box-shadow: var(--state-hover-ring), var(--shadow-2) !important;
+  border-color: var(--color-primary) !important;
   z-index: 50;
   position: relative;
   /* LISTA EXPLÍCITA, nunca `all`.
@@ -806,7 +1005,16 @@ select:focus-visible,
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Design System de Interação Ocular — Componentes Canônicos (Sprint B1)
+ * Design System de Interação Ocular — GazeButton
+ *
+ * Cinco estados, cada um dizendo uma coisa:
+ *   repouso        — superfície calma, sombra de nível 1.
+ *   gaze-hover     — "estou vendo você olhar": borda azul, anel de dwell que
+ *                    enche, leve preenchimento que acompanha o progresso.
+ *   gaze-selecionado — "confirmado": um pulso ÚNICO e curto (≤ 300 ms).
+ *   desabilitado   — inerte, ainda legível.
+ *   isolado        — igual ao repouso; só a zona invisível muda.
+ * Variantes: secundária (padrão), primária, perigo, emergência.
  * ──────────────────────────────────────────────────────────────────────────── */
 
 .gaze-button {
@@ -815,13 +1023,15 @@ select:focus-visible,
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  border-radius: 1.5rem;
+  border-radius: var(--radius-lg);
   border: 2px solid var(--color-card-border);
   background: var(--color-card-bg);
   color: var(--color-text-base);
+  box-shadow: var(--shadow-1);
   font-family: inherit;
   font-weight: 700;
   font-size: 1.25rem;
+  letter-spacing: -0.01em;
   cursor: pointer;
   transition:
     transform 0.15s cubic-bezier(0.16, 1, 0.3, 1),
@@ -829,30 +1039,40 @@ select:focus-visible,
     box-shadow 0.15s;
 }
 
-/* 1. Entrada: contorno destacado */
-.gaze-button.gaze-hover {
-  border-color: var(--color-primary, #1b54a8);
-  box-shadow: 0 0 0 4px rgba(27, 84, 168, 0.2);
-  transform: scale(1.02);
+/* Preenchimento que acompanha o dwell. Só `opacity` muda a cada amostra —
+   o compositor resolve sozinho, sem repintar o botão inteiro. */
+.gaze-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--color-primary);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.gaze-button.gaze-hover::before {
+  opacity: calc(var(--gaze-dwell-progress, 0) * 0.14);
 }
 
-/* 2. Área de acionamento 1.2x */
-/*
- * Zona de acerto ampliada do botão.
+/* 1. Olhar em cima: contorno azul + anel externo. `!important` pela mesma
+   razão do bloco genérico: borda e sombra costumam vir em `style={{}}`. */
+.gaze-button.gaze-hover {
+  border-color: var(--color-primary) !important;
+  box-shadow:
+    var(--state-hover-ring),
+    var(--shadow-2) !important;
+  transform: scale(1.02) !important;
+  z-index: 50;
+}
+
+/* 2. Área de acionamento ampliada.
  *
  * A extensão existe porque o cursor de gaze tem jitter: sem ela, um tremor de
  * poucos pixels na borda do botão faz `elementFromPoint` devolver o container
- * e o dwell zera.
- *
- * ⚠️ A versão anterior usava `-10%` em todos os lados, o que estende a área
- * POR CIMA dos vizinhos. Onde o espaçamento entre botões for menor que 20% da
- * altura — o caso do teclado ocular — `elementFromPoint` passa a devolver o
- * botão ERRADO, e o paciente clica numa tecla que não estava olhando.
- *
- * A extensão agora é em pixels e limitada a metade do menor espaçamento usado
- * na UI (`--gaze-grid-gap`, 24px), com teto de 12px. Assim duas zonas vizinhas
- * se encostam no máximo, nunca se sobrepõem.
- */
+ * e o dwell zera. Em pixels e limitada a metade do menor espaçamento usado na
+ * UI (`--gaze-grid-gap`, 24px), com teto de 12px: duas zonas vizinhas se
+ * encostam no máximo, nunca se sobrepõem. */
 .gaze-button-hit-area {
   position: absolute;
   --gaze-hit-inset: min(12px, calc(var(--gaze-grid-gap, 24px) / 2));
@@ -865,11 +1085,9 @@ select:focus-visible,
   pointer-events: auto; /* Garante que o hover seja disparado nessa zona maior */
 }
 
-/*
- * Alvo isolado (`isolado` no GazeButton): a zona cresce até o alvo mínimo de
+/* Alvo isolado (`isolado` no GazeButton): a zona cresce até o alvo mínimo de
  * 5°, por eixo, com valores calculados pelo componente. Só para botões sem
- * vizinho acionável — o "Voltar" do cabeçalho é o caso.
- */
+ * vizinho acionável — o "Voltar" do cabeçalho é o caso. */
 .gaze-button.gaze-button--isolado .gaze-button-hit-area {
   top: calc(-1 * var(--gaze-hit-inset-y, var(--gaze-hit-inset)));
   bottom: calc(-1 * var(--gaze-hit-inset-y, var(--gaze-hit-inset)));
@@ -885,16 +1103,24 @@ select:focus-visible,
   justify-content: center;
   gap: 0.75rem;
   pointer-events: none;
+  min-width: 0;
+}
+/* Ícone + rótulo alinhados pela linha central; o ícone nunca encolhe. */
+.gaze-button-content > svg {
+  flex-shrink: 0;
 }
 
-/* 3. Progresso: anel desenhado por gradiente cônico */
+/* 3. Progresso: anel desenhado por gradiente cônico, na borda do botão. */
 .gaze-button-progress-ring {
   position: absolute;
   inset: -2px;
   border-radius: inherit;
   pointer-events: none;
   border: 4px solid transparent;
-  background: conic-gradient(#1b54a8 calc(var(--gaze-dwell-progress, 0) * 360deg), transparent 0)
+  background: conic-gradient(
+      var(--color-primary) calc(var(--gaze-dwell-progress, 0) * 360deg),
+      transparent 0
+    )
     border-box;
   -webkit-mask:
     linear-gradient(#fff 0 0) padding-box,
@@ -913,20 +1139,107 @@ select:focus-visible,
   opacity: 1;
 }
 
-/* Emergência estilizada */
+/* 4. Confirmação: um pulso só, 280 ms, e o botão volta ao repouso. É o único
+   momento em que o preenchimento vai ao azul cheio. O `.gaze-selecionado`
+   genérico (outline que se expande) continua valendo para alvos que não são
+   `.gaze-button`. */
+.gaze-button.gaze-selecionado {
+  animation: gazeBotaoConfirma 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  outline: none;
+}
+.gaze-button.gaze-selecionado::before {
+  animation: gazeBotaoPreenche 280ms ease-out both;
+}
+@keyframes gazeBotaoConfirma {
+  0% {
+    transform: scale(1.02);
+  }
+  40% {
+    transform: scale(0.97);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes gazeBotaoPreenche {
+  0% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ── Variantes ───────────────────────────────────────────────────────────── */
+
+/* Primária: a ação principal da tela, preenchida. */
+.gaze-button.gaze-button--primaria {
+  background: var(--color-primary-fill);
+  border-color: var(--color-primary-fill);
+  color: var(--color-primary-contrast);
+  box-shadow: var(--shadow-2);
+}
+.gaze-button.gaze-button--primaria::before {
+  background: #ffffff;
+}
+.gaze-button.gaze-button--primaria.gaze-hover {
+  border-color: var(--color-primary-contrast) !important;
+}
+.gaze-button.gaze-button--primaria .gaze-button-progress-ring {
+  background: conic-gradient(
+      var(--color-primary-contrast) calc(var(--gaze-dwell-progress, 0) * 360deg),
+      transparent 0
+    )
+    border-box;
+}
+
+/* Perigo: ação destrutiva reversível (apagar, limpar). Contorno, não
+   preenchimento — vermelho cheio fica reservado à emergência. */
+.gaze-button.gaze-button--perigo {
+  border-color: var(--tint-danger-border);
+  color: var(--tint-danger-text);
+  background: var(--tint-danger-bg);
+}
+.gaze-button.gaze-button--perigo::before,
+.gaze-button.gaze-button--perigo .gaze-button-progress-ring {
+  background: var(--color-danger);
+}
+.gaze-button.gaze-button--perigo .gaze-button-progress-ring {
+  background: conic-gradient(
+      var(--color-danger) calc(var(--gaze-dwell-progress, 0) * 360deg),
+      transparent 0
+    )
+    border-box;
+}
+.gaze-button.gaze-button--perigo.gaze-hover {
+  border-color: var(--color-danger) !important;
+  box-shadow:
+    0 0 0 4px rgba(220, 38, 38, 0.18),
+    var(--shadow-2) !important;
+}
+
+/* Emergência: o único vermelho cheio do app. */
 .gaze-button.emergency {
-  border-color: #ef4444;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.05);
+  border-color: var(--state-emergency);
+  color: var(--state-emergency);
+  background: var(--state-emergency-bg);
+}
+.gaze-button.emergency::before {
+  background: var(--state-emergency);
 }
 .gaze-button.emergency.gaze-hover {
-  border-color: #dc2626;
-  box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.25);
-  background: rgba(239, 68, 68, 0.1);
-  color: #ffffff;
+  border-color: var(--state-emergency) !important;
+  box-shadow:
+    0 0 0 6px rgba(220, 38, 38, 0.25),
+    var(--shadow-2) !important;
+  background: rgba(220, 38, 38, 0.16);
+  color: var(--color-text-base);
 }
 .gaze-button.emergency .gaze-button-progress-ring {
-  background: conic-gradient(#ef4444 calc(var(--gaze-dwell-progress, 0) * 360deg), transparent 0)
+  background: conic-gradient(
+      var(--state-emergency) calc(var(--gaze-dwell-progress, 0) * 360deg),
+      transparent 0
+    )
     border-box;
 }
 
@@ -935,9 +1248,26 @@ select:focus-visible,
 .gaze-button[data-no-dwell='true'] {
   /* 0,55 e não 0,4: sobre o fundo escuro, 0,4 apagava o rótulo junto com o
      botão. Desabilitado precisa parecer inerte, não ilegível. */
-  opacity: 0.55;
+  opacity: var(--state-disabled-opacity);
   cursor: not-allowed;
   pointer-events: none;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gaze-button,
+  .gaze-button.gaze-hover,
+  .gaze-hover:not(.gaze-button) {
+    transform: none !important;
+    transition: none;
+  }
+  .gaze-button.gaze-selecionado,
+  .gaze-button.gaze-selecionado::before {
+    animation: none;
+  }
+  .gaze-button.gaze-selecionado {
+    box-shadow: var(--state-hover-ring);
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -959,6 +1289,7 @@ select:focus-visible,
      sobre o fundo, definida por um fio de contorno em vez de borda pesada. */
   background: var(--kb-key);
   border: 1px solid var(--kb-key-edge);
+  box-shadow: none;
   border-radius: 20px;
   color: var(--kb-glyph);
   padding: 0;
@@ -992,11 +1323,17 @@ select:focus-visible,
   color: var(--kb-glyph);
 }
 
-/* Sem scale nem sombra no hover: a tecla não pode se mexer sob o olhar. */
+/* Sem scale nem sombra no hover: a tecla não pode se mexer sob o olhar.
+   `!important` para vencer o realce genérico do `.gaze-button.gaze-hover`. */
 .kb-key.gaze-hover {
-  box-shadow: none;
-  transform: none;
-  border-color: var(--kb-ember-edge);
+  box-shadow: none !important;
+  transform: none !important;
+  border-color: var(--kb-ember-edge) !important;
+}
+/* O preenchimento azul do GazeButton não entra aqui: a tecla aquece em âmbar. */
+.kb-key::before,
+.kb-nav::before {
+  display: none;
 }
 
 /* O anel cônico canônico não serve aqui — ele vive na borda. */
@@ -1048,6 +1385,36 @@ select:focus-visible,
   opacity: 1;
 }
 
+/* ── Hierarquia das teclas ────────────────────────────────────────────────
+   Letras: superfície padrão, glifo cheio.
+   Falar: a ação que compromete — superfície levemente erguida e fio âmbar,
+          o mesmo sinal de "escreve/compromete" da tecla de palavras.
+   Apagar / Limpar: destrutivas e reversíveis — recuadas (glifo dim), para
+          não disputar com o que escreve.
+   Espaço: neutra.
+   Sugestões (palavra e frase): fio âmbar, herdado do grupo de palavras. */
+.kb-key--falar {
+  background: var(--kb-key-raised, #1b2431);
+  border-color: var(--kb-ember-edge);
+  color: var(--kb-glyph);
+}
+.kb-key--apagar,
+.kb-key--limpar {
+  color: var(--kb-glyph-dim);
+}
+.kb-key--sugestao {
+  border-color: var(--kb-ember-edge);
+}
+.kb-key__etiqueta {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--kb-glyph-dim);
+}
+
 /* Confirmação: a tecla acende por um instante. É o único momento em que a cor
    vai a brilho pleno, e marca a transição gaze → texto escrito. */
 .kb-key--fired {
@@ -1069,6 +1436,7 @@ select:focus-visible,
 .kb-nav {
   background: transparent;
   border: 1px solid var(--kb-key-edge);
+  box-shadow: none;
   border-radius: 20px;
   color: var(--kb-glyph-dim);
   padding: 0;
@@ -1078,9 +1446,9 @@ select:focus-visible,
 }
 
 .kb-nav.gaze-hover {
-  box-shadow: none;
-  transform: none;
-  border-color: var(--kb-ember-edge);
+  box-shadow: none !important;
+  transform: none !important;
+  border-color: var(--kb-ember-edge) !important;
   background: color-mix(
     in oklab,
     transparent,
@@ -1110,6 +1478,76 @@ select:focus-visible,
   opacity: 1;
 }
 
+/* ── Linha de composição ─────────────────────────────────────────────────── */
+.kb-compose {
+  position: relative;
+}
+/* "Falou": um brilho âmbar que nasce na borda e some — uma vez, 700 ms. É a
+   confirmação de que a frase saiu pelo alto-falante. Não se repete e não
+   pulsa: terminou, acabou. */
+.kb-compose--falou {
+  animation: kb-falou 700ms ease-out both;
+}
+@keyframes kb-falou {
+  0% {
+    box-shadow:
+      0 0 0 0 rgba(240, 160, 48, 0.55),
+      inset 0 0 0 2px rgba(240, 160, 48, 0.9);
+  }
+  100% {
+    box-shadow:
+      0 0 0 28px rgba(240, 160, 48, 0),
+      inset 0 0 0 2px rgba(240, 160, 48, 0);
+  }
+}
+/* Ondas de voz: três barras que sobem e descem UMA vez, junto com o brilho. */
+.kb-ondas {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 1.4em;
+  margin-right: 0.6em;
+  opacity: 0;
+}
+.kb-compose--falou .kb-ondas {
+  opacity: 1;
+  animation: kb-ondas-some 700ms ease-out both;
+}
+.kb-ondas > span {
+  width: 6px;
+  height: 30%;
+  border-radius: 3px;
+  background: var(--kb-ember);
+  transform-origin: bottom;
+}
+.kb-compose--falou .kb-ondas > span {
+  animation: kb-onda 700ms ease-in-out both;
+}
+.kb-compose--falou .kb-ondas > span:nth-child(2) {
+  animation-delay: 90ms;
+}
+.kb-compose--falou .kb-ondas > span:nth-child(3) {
+  animation-delay: 180ms;
+}
+@keyframes kb-onda {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(2.6);
+  }
+}
+@keyframes kb-ondas-some {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @keyframes kb-caret-blink {
   50% {
     opacity: 0;
@@ -1133,14 +1571,25 @@ select:focus-visible,
     transition: none;
   }
   .kb-caret,
-  .kb-landing {
+  .kb-landing,
+  .kb-compose--falou,
+  .kb-compose--falou .kb-ondas,
+  .kb-compose--falou .kb-ondas > span {
     animation: none;
+  }
+  .kb-compose--falou {
+    box-shadow: inset 0 0 0 2px rgba(240, 160, 48, 0.9);
   }
 }
 
 /* A marca aparece nos títulos e no wordmark, não no texto que o paciente lê. */
 .font-display {
   font-family: var(--font-family-display);
+}
+/* O wordmark é o recorte NEGATIVO (branco) do logotipo. No tema claro ele
+   sumiria no fundo; invertido, vira a marca escura sem um segundo arquivo. */
+html:not(.dark) .wordmark-negativo {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 /* O autofill do Chromium pinta um fundo azul-claro proprio, com prioridade que
@@ -1308,7 +1757,10 @@ html[data-gaze='degradado'] body::after {
 @keyframes rotaEntra {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px) scale(0.992);
+  }
+  60% {
+    opacity: 1;
   }
   to {
     opacity: 1;
@@ -1317,7 +1769,7 @@ html[data-gaze='degradado'] body::after {
 }
 
 .rota-entrando {
-  animation: rotaEntra 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: rotaEntra 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /*
@@ -1412,4 +1864,433 @@ html.amber-filter::after {
   html.amber-filter::after {
     transition: none;
   }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Cabeçalho canônico das telas do paciente (GazePageLayout).
+ * Voltar quadrado à esquerda · título · zona de descanso · estado da sessão ·
+ * espaço reservado ao botão de emergência (global, à direita).
+ * ──────────────────────────────────────────────────────────────────────────── */
+.gaze-header {
+  position: absolute;
+  top: var(--pagina-margem-topo);
+  left: var(--pagina-margem-x);
+  right: var(--pagina-margem-x);
+  display: flex;
+  align-items: center;
+  gap: clamp(0.75rem, 1.5vw, 1.5rem);
+  z-index: 9990;
+}
+.gaze-header__titulo {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.gaze-header__titulo h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  /* Um degrau abaixo do h1 em telas estreitas: a 1366 px, com a zona de
+     descanso (que não pode encolher abaixo de ~8°), o chip e a reserva da
+     Emergência, sobram ~430 px para o título. */
+  font-size: clamp(1.45rem, 0.9rem + 1.1vw, 2.25rem);
+  font-weight: 800;
+  letter-spacing: var(--tracking-h1);
+  line-height: var(--leading-tight);
+  color: var(--color-text-base);
+  /* Duas linhas antes das reticências. Era uma linha só com `nowrap`: a
+     1366 px "Conversa com o cuidador" virava "Conversa com o cuid…" — o
+     título da tela cortado justamente onde ele diz onde a pessoa está. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  /* O recorte de `overflow: hidden` segue a caixa, e o tracking negativo com
+     peso 800 faz a primeira letra (C, O, A…) passar um pouco da borda
+     esquerda: sem esta folga ela saía com a lateral cortada. */
+  padding-inline: 0.06em;
+  margin-inline: -0.06em;
+}
+.gaze-header__titulo p {
+  margin: 0;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  line-height: 1.3;
+  /* Também até duas linhas (o cabeçalho tem 96 px de altura). */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+/* Título de duas linhas + subtítulo de duas linhas não cabem em 96 px: com
+   subtítulo, o título fica em uma linha e o subtítulo leva a segunda. */
+.gaze-header__titulo h1:has(+ p) {
+  -webkit-line-clamp: 1;
+}
+.gaze-header__descanso {
+  flex: 0 1 min(320px, 34vw);
+  width: min(320px, 34vw);
+  height: 4.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 2px dashed var(--color-card-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-faint);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* Espaço do botão de emergência (fixo, desenhado pelo EmergencyProvider).
+   A borda direita do cabeçalho é `--pagina-margem-x`, a mesma da Emergência,
+   então reservar a largura dela basta. */
+.gaze-header__emergencia {
+  flex: 0 0 var(--emergencia-largura);
+  width: var(--emergencia-largura);
+}
+
+/* ── Reserva da Emergência para cabeçalhos e faixas que NÃO são o canônico ──
+ *
+ * Qualquer linha que fique no topo da tela (y < --reserva-emergencia-y) e vá
+ * até a borda direita recebe esta classe. Ela só vale enquanto o botão está
+ * de fato no canto superior — o EmergencyProvider escreve
+ * `html[data-emergencia='topo']` —, então telas do cuidador (sem Emergência)
+ * e a calibração (Emergência no canto inferior) não perdem espaço.
+ *
+ * `--reserva-margem` é a distância entre a borda direita DO ELEMENTO e a da
+ * janela. O padrão é a margem canônica da página; uma tela com margem
+ * própria declara a dela no `style`. `!important` porque quase todo
+ * cabeçalho do app tem `padding` inline, que venceria a classe.
+ */
+.reserva-emergencia,
+.reserva-emergencia--caixa {
+  --reserva-margem: var(--pagina-margem-x);
+}
+html[data-emergencia='topo'] .reserva-emergencia {
+  padding-right: max(0px, calc(var(--reserva-emergencia-x) - var(--reserva-margem))) !important;
+}
+/* Variante que ENCOLHE a caixa (margem) em vez de recuar o conteúdo
+   (padding): para faixas com fundo próprio, cujo fundo passaria por baixo do
+   botão mesmo com o texto e o alvo já fora dele. */
+html[data-emergencia='topo'] .reserva-emergencia--caixa {
+  margin-right: max(0px, calc(var(--reserva-emergencia-x) - var(--reserva-margem))) !important;
+}
+
+/* Coluna centralizada que começa no topo (tutorial, preparo, conta): em vez
+   de empurrar só a direita — o que descentralizaria a coluna —, a largura
+   máxima desconta a reserva dos DOIS lados. A 1366 px isso não muda nada; a
+   1024 px a coluna estreita ~100 px e deixa de passar sob a Emergência. */
+html[data-emergencia='topo'] .coluna-livre-da-emergencia {
+  max-width: min(
+    var(--coluna-largura, 640px),
+    calc(100vw - 2 * var(--reserva-emergencia-x))
+  ) !important;
+}
+
+/* Indicador de estado da sessão: só lê `html[data-gaze]`, escrito pelo
+   rastreador a cada quadro. Não é alvo. Muda de cor e de texto, nunca de
+   posição — nada aqui pode puxar o olhar. */
+.sessao-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 0.9rem 0 0.75rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-card-border);
+  background: var(--color-card-bg);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color 0.4s ease,
+    color 0.4s ease,
+    border-color 0.4s ease;
+}
+.sessao-chip__ponto {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+  flex-shrink: 0;
+  transition: background-color 0.4s ease;
+}
+.sessao-chip__texto {
+  display: none;
+}
+/* Sem atributo: o rastreador ainda não publicou nada. */
+.sessao-chip__texto--aguardando {
+  display: inline;
+}
+html[data-gaze='ok'] .sessao-chip {
+  color: var(--state-ok);
+  border-color: var(--state-ok-bg);
+  background: var(--state-ok-bg);
+}
+html[data-gaze='ok'] .sessao-chip__ponto {
+  background: var(--state-ok);
+}
+html[data-gaze='perdido'] .sessao-chip,
+html[data-gaze='degradado'] .sessao-chip {
+  color: var(--state-degraded);
+  border-color: var(--state-degraded-bg);
+  background: var(--state-degraded-bg);
+}
+html[data-gaze='perdido'] .sessao-chip__ponto,
+html[data-gaze='degradado'] .sessao-chip__ponto {
+  background: var(--state-degraded);
+}
+html[data-gaze] .sessao-chip__texto--aguardando {
+  display: none;
+}
+html[data-gaze='ok'] .sessao-chip__texto--ok,
+html[data-gaze='perdido'] .sessao-chip__texto--perdido,
+html[data-gaze='degradado'] .sessao-chip__texto--degradado {
+  display: inline;
+}
+/* Em janela estreita o chip cede lugar ao título. */
+@media (max-width: 1180px) {
+  .sessao-chip {
+    display: none;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Estados de tela: vazio, erro, carregando. Um padrão só, em todas as telas.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.estado-da-tela {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.75rem;
+  padding: var(--space-7) var(--space-5);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--color-card-border);
+  background: transparent;
+  color: var(--color-text-base);
+}
+.estado-da-tela--erro {
+  border-style: solid;
+  border-color: var(--tint-danger-border);
+  background: var(--tint-danger-bg);
+}
+.estado-da-tela__icone {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  margin-bottom: 0.25rem;
+}
+.estado-da-tela--erro .estado-da-tela__icone {
+  background: var(--tint-danger-bg);
+  color: var(--tint-danger-text);
+}
+.estado-da-tela__titulo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-h2);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: var(--leading-snug);
+}
+.estado-da-tela__texto {
+  margin: 0;
+  max-width: 44ch;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  color: var(--color-text-muted);
+}
+.estado-da-tela--erro .estado-da-tela__texto {
+  color: var(--tint-danger-text);
+}
+.estado-da-tela__acao {
+  margin-top: 0.5rem;
+}
+/* Carregando: giro contínuo, só onde NÃO há alvo de olhar (telas do
+   cuidador e transições). Nas telas do paciente use `.estado-da-tela--quieto`,
+   que troca o giro por um ponto que apenas escurece e clareia. */
+.estado-da-tela__giro {
+  animation: estadoGira 1s linear infinite;
+}
+@keyframes estadoGira {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.estado-da-tela--quieto .estado-da-tela__giro {
+  animation: estadoRespira 2.4s ease-in-out infinite;
+}
+@keyframes estadoRespira {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .estado-da-tela__giro {
+    animation: none;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Progresso do onboarding: seis passos, um traço por passo.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.onboarding-progresso {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 520px;
+}
+.onboarding-progresso__tracos {
+  display: flex;
+  gap: 0.4rem;
+  width: 100%;
+}
+.onboarding-progresso__traco {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-card-border);
+  transition: background-color 0.4s ease;
+}
+.onboarding-progresso__traco--feito {
+  background: var(--color-teal);
+}
+.onboarding-progresso__traco--atual {
+  background: var(--color-primary);
+}
+.onboarding-progresso__rotulo {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Botões do cuidador (PrimaryButton) — mouse; sem mínimo de olhar.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  min-height: 3rem;
+  padding: 0.8rem 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.18s ease,
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    opacity 0.18s ease;
+}
+.btn:hover:not(:disabled),
+.btn:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+.btn:disabled {
+  opacity: var(--state-disabled-opacity);
+  cursor: not-allowed;
+}
+.btn--primary {
+  background: var(--color-primary-fill);
+  color: var(--color-primary-contrast);
+  box-shadow: var(--shadow-1);
+}
+.btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+  box-shadow: var(--shadow-2);
+}
+.btn--secondary {
+  background: var(--color-card-bg);
+  color: var(--color-text-base);
+  border-color: var(--color-card-border);
+  box-shadow: var(--shadow-1);
+}
+.btn--secondary:hover:not(:disabled) {
+  border-color: var(--state-hover-border);
+}
+.btn--danger {
+  background: var(--color-danger);
+  color: #ffffff;
+  box-shadow: var(--shadow-1);
+}
+.btn--ghost {
+  background: transparent;
+  color: var(--color-primary);
+  border-color: var(--state-hover-border);
+}
+.btn--ghost:hover:not(:disabled) {
+  background: var(--state-active-bg);
+}
+.btn--full {
+  width: 100%;
+}
+
+/* Campo de formulário do cuidador. */
+.campo {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
+  color: var(--color-text-base);
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.campo::placeholder {
+  color: var(--color-text-faint);
+}
+.campo:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: var(--state-hover-ring);
+  outline: none;
+}
+textarea.campo {
+  resize: vertical;
+  min-height: 9rem;
+}
+.campo__rotulo {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--color-text-base);
 }

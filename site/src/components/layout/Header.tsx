@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { Logo } from './Logo'
-import { ThemeToggle } from './ThemeToggle'
 import { Button } from '@/components/ui/Button'
 import { useScrollProgress } from '@/hooks/useScrollProgress'
 import { useAccount } from '@/context/AccountContext'
+import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { BETA, BETA_CTA, TRIAL_DAYS } from '@/data/content'
 import './header.css'
 
@@ -21,8 +21,8 @@ const NAV: NavItem[] = [
   { to: '/contato', label: 'Contato' },
 ]
 
-/** Rotas que começam com fundo claro, sem faixa escura de abertura. */
-const LIGHT_ROUTES = [
+/** Rotas de fluxo, sem a faixa de abertura: o cabeçalho já nasce sólido. */
+const SOLID_ROUTES = [
   '/beta',
   '/cadastro',
   '/pagamento',
@@ -38,6 +38,9 @@ export function Header() {
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
   const { account, loading } = useAccount()
+  // A barra de progresso de leitura é movimento contínuo ao rolar: some
+  // quando o sistema pede menos movimento.
+  const reduced = useReducedMotion()
 
   useEffect(() => setOpen(false), [pathname])
 
@@ -48,22 +51,24 @@ export function Header() {
     }
   }, [open])
 
-  // As páginas de conteúdo abrem com uma faixa escura; as de fluxo
-  // (cadastro, pagamento, conta) são claras desde o topo. O cabeçalho
-  // só entra no modo negativo quando está de fato sobre a faixa escura.
-  const opensLight = LIGHT_ROUTES.some((r) => pathname.startsWith(r))
-  const onLightBackdrop = scrolled || open || opensLight
+  // As páginas de conteúdo abrem com a faixa de destaque, sob a qual o
+  // cabeçalho fica transparente; nas de fluxo (beta, conta, acesso) e
+  // depois de rolar, ele ganha fundo sólido para separar do conteúdo.
+  const opensSolid = SOLID_ROUTES.some((r) => pathname.startsWith(r))
+  const solid = scrolled || open || opensSolid
 
   return (
-    <header className={`header${onLightBackdrop ? ' is-scrolled' : ''}`}>
-      <span
-        className="header__progress"
-        style={{ transform: `scaleX(${progress})` }}
-        aria-hidden="true"
-      />
+    <header className={`header${solid ? ' is-scrolled' : ''}`}>
+      {!reduced && (
+        <span
+          className="header__progress"
+          style={{ transform: `scaleX(${progress})` }}
+          aria-hidden="true"
+        />
+      )}
 
       <div className="container header__inner">
-        <Logo size="sm" tone={onLightBackdrop ? 'positivo' : 'negativo'} />
+        <Logo size="sm" tone="negativo" />
 
         <nav className="header__nav" aria-label="Navegação principal">
           {NAV.map((item) => (
@@ -79,7 +84,6 @@ export function Header() {
         </nav>
 
         <div className="header__actions">
-          <ThemeToggle />
           {/* Enquanto a sessão carrega não mostramos nem "Entrar" nem "Minha
               conta": exibir o par errado por um instante e trocar depois
               chama mais atenção do que o espaço vazio. */}
@@ -130,7 +134,6 @@ export function Header() {
           ))}
         </nav>
         <div className="drawer__actions">
-          <ThemeToggle full />
           {loading ? null : account ? (
             <Button to="/conta" full variant="secondary">
               Minha conta

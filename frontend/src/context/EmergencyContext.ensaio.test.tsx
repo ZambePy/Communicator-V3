@@ -3,7 +3,7 @@ import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import React from 'react';
 import { EmergencyProvider, useEmergency } from './EmergencyContext';
-import { api } from '../utils/api';
+import { EmergencyEscalation } from '../pages/output/EmergencyEscalation';
 
 // -----------------------------------------------------------------------------
 // O ensaio de emergência do tutorial.
@@ -14,19 +14,31 @@ import { api } from '../utils/api';
 // tratado como possível engano, e é aí que ele deixa de funcionar.
 //
 // O envio não mora neste contexto: `triggerEmergencyImmediately` navega para
-// `/emergency?autoTrigger=other`, e é o `EmergencyEscalation` que chama
-// `api.sendHelpAlert`. Por isso o teste que importa espiona o ENVIO, e não a
+// `/emergency?autoTrigger=other`, e é o `EmergencyEscalation` que emite o
+// pedido de ajuda no barramento da nuvem. Por isso o teste que importa monta a
+// tela de emergência DE VERDADE nessa rota e espiona o ENVIO, e não a
 // navegação: uma asserção de "não navegou" passaria com o alerta saindo por
 // outro caminho.
 // -----------------------------------------------------------------------------
 
-vi.mock('../utils/api', () => ({
-  api: { sendHelpAlert: vi.fn(() => Promise.resolve({ ok: true })) },
+const emitirPedidoDeAjuda = vi.fn();
+vi.mock('../cloud/eventos', () => ({
+  emitirPedidoDeAjuda: (...a: unknown[]) => emitirPedidoDeAjuda(...a),
+}));
+
+vi.mock('../cloud/CloudContext', () => ({
+  useCloud: () => ({ ajustesRemotos: null, reconhecimento: null }),
+}));
+
+vi.mock('../components/ui/GazePageLayout', () => ({
+  GazePageLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 vi.mock('../utils/emergencyAudio', () => ({
   playTickSound: vi.fn(),
   playCancelSound: vi.fn(),
+  playTone: vi.fn(),
+  getSharedAudioContext: () => null,
 }));
 
 vi.mock('./GazeContext', () => ({
@@ -37,7 +49,8 @@ vi.mock('./AuthContext', () => ({
   useAuth: () => ({ currentProfile: { id: 'p1' } }),
 }));
 
-const enviou = () => (api.sendHelpAlert as ReturnType<typeof vi.fn>).mock.calls.length;
+const enviou = () => emitirPedidoDeAjuda.mock.calls.length;
+const naTelaDeEmergencia = () => screen.queryByText(/Seu alerta foi enviado/i) !== null;
 
 let rota = '';
 
@@ -66,7 +79,7 @@ const montar = (ensaio: boolean) =>
       <EmergencyProvider>
         <Routes>
           <Route path="/menu" element={<Sonda ensaio={ensaio} />} />
-          <Route path="/emergency" element={<div>tela de emergencia</div>} />
+          <Route path="/emergency" element={<EmergencyEscalation />} />
         </Routes>
       </EmergencyProvider>
     </MemoryRouter>
@@ -93,7 +106,7 @@ describe('modo de ensaio ligado', () => {
     act(() => {
       screen.getByTestId('disparar').click();
     });
-    expect(screen.queryByText('tela de emergencia')).toBeNull();
+    expect(naTelaDeEmergencia()).toBe(false);
     expect(rota).toBe('/menu');
   });
 
@@ -109,12 +122,16 @@ describe('modo de ensaio ligado', () => {
 });
 
 describe('modo de ensaio desligado', () => {
-  it('o caminho real continua funcionando', () => {
+  it('o caminho real continua funcionando: tela de emergência e UM pedido de ajuda', () => {
+    // Também prova que o espião enxerga o envio — sem isto, o "0" dos testes
+    // do ensaio passaria mesmo com o espião no lugar errado.
     montar(false);
     act(() => {
       screen.getByTestId('disparar').click();
     });
-    expect(screen.getByText('tela de emergencia')).toBeInTheDocument();
+    expect(naTelaDeEmergencia()).toBe(true);
+    expect(enviou()).toBe(1);
+    expect(emitirPedidoDeAjuda).toHaveBeenCalledWith('emergencia', expect.any(String));
   });
 });
 
@@ -133,6 +150,7 @@ describe('o modo não sobrevive à saída do tutorial', () => {
     act(() => {
       screen.getByTestId('disparar').click();
     });
-    expect(screen.getByText('tela de emergencia')).toBeInTheDocument();
+    expect(naTelaDeEmergencia()).toBe(true);
+    expect(enviou()).toBe(1);
   });
 });

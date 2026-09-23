@@ -1,49 +1,198 @@
 /* ============================================================
    Página "A empresa".
 
-   A equipe não vira grade de cartões: são três pessoas, e uma
-   lista com filete separando cada linha diz isso melhor do que
-   três retângulos iguais. Nome à esquerda, o que a pessoa faz
-   à direita, na mesma linha de base.
+   Abre com a foto dos três e a missão; depois a origem com números,
+   a equipe com retratos redondos, e o resto do plano.
    ============================================================ */
 
+/* --- foto dos três --- */
+.about-hero {
+  padding-top: var(--sp-6);
+}
+
+.about-hero__figure {
+  position: relative;
+  max-width: 960px;
+  margin: 0 auto;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  background: var(--navy);
+  box-shadow: var(--shadow-lg);
+  aspect-ratio: 21 / 9;
+}
+
+.about-hero__pic,
+.about-hero__pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 28%;
+}
+
+.about-hero__figure::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(6, 18, 35, 0) 35%, rgba(6, 18, 35, 0.8) 75%, rgba(6, 18, 35, 0.94)),
+    linear-gradient(90deg, rgba(6, 18, 35, 0.4), transparent 55%);
+  pointer-events: none;
+}
+
+.about-hero__caption {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: var(--sp-6);
+  color: #f2f6fd;
+}
+
+.about-hero__mission {
+  font-family: var(--font-display);
+  font-size: clamp(1.3rem, 2.6vw, 2.2rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: #fff;
+  max-width: 28ch;
+  margin: 0 0 var(--sp-2);
+  text-wrap: balance;
+}
+
+.about-hero__who {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #c3d2e8;
+}
+
+/* --- origem --- */
+.origin__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--sp-8);
+  align-items: start;
+  margin-bottom: var(--sp-8);
+}
+
+.origin__title {
+  max-width: 18ch;
+  margin: 0;
+}
+
+.origin__text p {
+  font-size: 1.08rem;
+  line-height: 1.7;
+  max-width: 60ch;
+}
+
+.impact {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+.impact li {
+  margin: 0;
+  padding: var(--sp-5);
+  border-left: 2px solid var(--line-strong);
+}
+
+.impact__value {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(2.2rem, 4.2vw, 3.2rem);
+  line-height: 1;
+  color: var(--text);
+  margin-bottom: var(--sp-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.impact__label {
+  margin: 0;
+  font-size: 0.96rem;
+  max-width: 26ch;
+}
+
+/* --- equipe: retratos redondos (180 px) com anel em gradiente --- */
 .team {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.team__row {
-  display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--sp-5);
-  align-items: start;
-  padding: var(--sp-5) 0;
-  border-top: 1px solid var(--line);
 }
 
-.team__name {
-  font-size: 1.1rem;
-  margin: 0 0 6px;
-}
-
-.team__role {
+.team li {
   margin: 0;
-  font-size: 0.92rem;
+}
+
+.member {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--sp-6) var(--sp-5) var(--sp-5);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform var(--dur) var(--ease-spring),
+    box-shadow var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
+}
+
+.member:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--line-strong);
+}
+
+.member__body {
+  display: grid;
+  gap: 6px;
+  margin-top: var(--sp-4);
+}
+
+.member__name {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.member__role {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--ok);
 }
 
-.team__text {
-  margin: 0;
-  font-size: 0.99rem;
-  max-width: 58ch;
+.member__line {
+  margin: 4px 0 0;
+  font-size: 1.02rem;
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.member__text {
+  margin: var(--sp-2) 0 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  text-align: left;
 }
 
 /* --- Objetivos de Desenvolvimento Sustentável --- */
-
 .sdg {
   margin-top: var(--sp-7);
   padding-top: var(--sp-5);
@@ -82,9 +231,124 @@
   font-size: 0.93rem;
 }
 
-@media (max-width: 760px) {
-  .team__row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-3);
+/* --- roteiro --- */
+.roadmap__title {
+  --title-w: 24ch;
+  margin-bottom: var(--sp-6);
+}
+
+.roadmap {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.roadmap li {
+  margin: 0;
+}
+
+.roadmap__item {
+  display: flex;
+  gap: var(--sp-5);
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+
+.roadmap__item .tag {
+  flex: none;
+}
+
+.roadmap__body {
+  flex: 1 1 320px;
+}
+
+.roadmap__h {
+  font-size: 1.14rem;
+  margin-bottom: 6px;
+}
+
+.roadmap__text {
+  margin: 0;
+  font-size: 0.97rem;
+}
+
+/* --- fecho --- */
+.about-close {
+  display: grid;
+  place-items: center;
+  gap: var(--sp-4);
+}
+
+.about-close__title {
+  max-width: 20ch;
+}
+
+.about-close__lead {
+  max-width: 58ch;
+}
+
+@media (max-width: 1000px) {
+  .impact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+@media (max-width: 860px) {
+  .team {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 520px;
+    margin-inline: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .about-hero__figure {
+    aspect-ratio: 4 / 3;
+  }
+  .about-hero__caption {
+    padding: var(--sp-5);
+  }
+  .origin__inner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-5);
+    margin-bottom: var(--sp-7);
+  }
+}
+
+@media (max-width: 640px) {
+  .impact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* No celular a foto não é cortada em retrato: fica 3:2 e a legenda
+     desce para baixo dela, em vez de cobrir os rostos. */
+  .about-hero__figure {
+    aspect-ratio: auto;
+  }
+  .about-hero__pic,
+  .about-hero__pic img {
+    height: auto;
+    aspect-ratio: 3 / 2;
+  }
+  .about-hero__figure::after {
+    display: none;
+  }
+  .about-hero__caption {
+    position: static;
+    padding: var(--sp-4) var(--sp-4) var(--sp-5);
+  }
+}
+
+.about-close .link-ok {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.about-close .underline-grow::after {
+  bottom: 8px;
 }

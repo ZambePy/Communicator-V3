@@ -112,3 +112,56 @@
     left: -40px;
   }
 }
+
+/* --- versão em três frases, para famílias --- */
+.pipeline__simple {
+  list-style: none;
+  margin: 0 0 var(--sp-7);
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+.pipeline__simple li {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--ok-line);
+  background: var(--ok-soft);
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.pipeline__simple-n {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--ok);
+  color: #04231f;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.pipeline__detail-label {
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-bottom: var(--sp-5);
+}
+
+@media (max-width: 860px) {
+  .pipeline__simple {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

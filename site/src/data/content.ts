@@ -6,6 +6,24 @@
    ============================================================ */
 
 import type { IconName } from '@/components/ui/Icon'
+import { resolveSiteUrl } from '@/seo/site'
+import { platformsText, RELEASES_AVAILABLE } from '@/lib/releases'
+
+/** Origem pública do site: base de URLs absolutas (og:image, canonical).
+    Vem de VITE_SITE_URL no build; sem ela, o padrão de src/seo/site.ts. */
+export const SITE_URL = resolveSiteUrl(import.meta.env.VITE_SITE_URL)
+
+/** Plataformas suportadas hoje — uma frase só, usada em todo o site.
+    Derivada de VITE_RELEASES_AVAILABLE (src/lib/releases.ts): com o padrão
+    (só Windows) fica "Windows 10/11 (macOS e Linux em preparação)". */
+export const PLATFORMS = platformsText(RELEASES_AVAILABLE)
+
+/** As condições atendidas, na forma curta usada em títulos e chamadas. */
+export const CONDITIONS_SHORT = 'ELA, AVC, esclerose múltipla, lesão medular e paralisia cerebral'
+
+/** A frase de privacidade, igual no hero e no FAQ. */
+export const PRIVACY_LINE =
+  'O vídeo da webcam é processado 100 % no seu computador; nenhuma imagem sai dele.'
 
 export const BRAND = {
   /** Nome da EMPRESA. Usado em rodapé, páginas legais, contato e "sobre". */
@@ -16,25 +34,27 @@ export const BRAND = {
   product: 'IrisFlow Communicator',
   solution: 'a solução da IrisFlow',
   tagline: 'Seu olhar tem voz.',
-  claim: 'Comunicação e controle do computador pelo olhar, com a webcam que você já tem.',
+  claim: 'Comunicação pelo olhar para quem tem ELA, AVC ou lesão medular — com a webcam que já está em casa.',
+  /** Título e descrição padrão das páginas (document.title / meta description). */
+  seoTitle: 'Comunicador por olhar para ELA, AVC e tetraplegia | IrisFlow',
+  seoDescription:
+    'O IrisFlow Communicator transforma o movimento dos olhos em fala e em controle do computador para pessoas com ELA, AVC, esclerose múltipla, lesão medular alta e paralisia cerebral — com a webcam comum, processado 100 % no seu computador. Beta gratuita.',
   email: 'irisflowteam@gmail.com',
   instagram: 'https://www.instagram.com/irisflow.ia',
   linkedin: 'https://www.linkedin.com/company/irisflowia/',
-  repo: 'https://github.com/ZambePy/Blink',
-  /** Rótulo do repositório: desde a virada comercial, o que fica aberto é a
-      documentação, o protocolo de medição e os componentes de interface —
-      não o núcleo de calibração. Ver CODE_POSITION. */
-  repoLabel: 'documentação técnica e protocolo de medição',
+  // Sem link para repositório de código: o projeto é confidencial e o site
+  // entrega só a solução (ver CODE_POSITION).
 }
 
-/** Frases que a máquina de escrever compõe no hero. */
-export const HERO_PHRASES = [
-  'Estou com sede.',
-  'Quero falar com a minha filha.',
-  'Pode aumentar o volume?',
-  'Hoje eu estou bem.',
-  'Chama a enfermeira, por favor.',
-]
+/** Texto do hero da home. */
+export const HERO = {
+  eyebrow: 'Comunicação assistiva por rastreamento ocular',
+  title:
+    'Comunicação pelo olhar para quem tem ELA, AVC ou lesão medular — com a webcam que já está em casa.',
+  lead: 'O IrisFlow Communicator transforma o movimento dos olhos em palavra falada e em controle do computador — para quem perdeu a fala e as mãos, mas ainda controla o olhar.',
+  primary: 'Experimente sem risco',
+  secondary: 'Ver como funciona',
+}
 
 /* ---------------- quem espera do outro lado ----------------
    Vem do tópico 1.2 do plano ("Por que a empresa existe além do
@@ -53,13 +73,88 @@ export const HUMAN = {
   source: 'Pesquisa de mercado IrisFlow, 2026',
   close:
     'A IrisFlow precisa se pagar para continuar existindo, e levamos essa parte a sério. Mas não é ela a razão de existir. A razão é uma família voltar a conversar.',
+  /** A frase de missão, ao lado da foto dos três. */
+  mission:
+    'Nenhuma família com ELA ou AVC no Brasil deveria ficar sem voz por causa do preço de um aparelho.',
+}
+
+/* ---------------- por condição ----------------
+   Blocos curtos de "isto é para você": a família precisa se reconhecer
+   antes de ler qualquer especificação. Uma frase de encaixe, uma de
+   ressalva honesta e a pergunta que leva ao FAQ.
+   ---------------------------------------------------------------- */
+
+export const SEGMENTS: {
+  id: string
+  icon: IconName
+  title: string
+  fit: string
+  caveat: string
+}[] = [
+  {
+    id: 'ela',
+    icon: 'olho',
+    title: 'Para quem tem ELA',
+    fit: 'O olhar costuma ser o último movimento voluntário preservado. O IrisFlow foi desenhado primeiro para ELA: teclado por fixação, frases prontas, pedido de ajuda sempre no mesmo lugar.',
+    caveat: 'Vale começar cedo, enquanto a pessoa ainda fala: a calibração e o vocabulário ficam prontos antes de serem indispensáveis.',
+  },
+  {
+    id: 'avc',
+    icon: 'conversa',
+    title: 'Após um AVC',
+    fit: 'Quando a sequela atinge a fala e o movimento, mas a compreensão está preservada, a pessoa consegue apontar com os olhos o que quer dizer.',
+    caveat: 'Em afasia com comprometimento da compreensão ou da leitura, a prancha de pictogramas ajuda mais que o teclado. Avaliação caso a caso.',
+  },
+  {
+    id: 'lesao-medular',
+    icon: 'monitor',
+    title: 'Lesão medular alta',
+    fit: 'Tetraplegia por lesão cervical: cognição e visão intactas, quadro estável. Além de falar, a pessoa volta a usar o computador — navegar, escrever, trabalhar.',
+    caveat: 'O controle do sistema é funcional, não milimétrico: menus densos e arraste preciso ficam fora do alcance confortável.',
+  },
+  {
+    id: 'esclerose-multipla',
+    icon: 'inclinacao',
+    title: 'Esclerose múltipla',
+    fit: 'Em fases avançadas, com disartria grave e perda de função das mãos, o olhar segue sendo um canal confiável. O tempo de fixação é ajustável conforme o dia.',
+    caveat: 'Nistagmo ou visão dupla podem degradar o rastreamento; a preparação automática do posto informa quando a leitura não está confiável.',
+  },
+  {
+    id: 'paralisia-cerebral',
+    icon: 'lazer',
+    title: 'Paralisia cerebral',
+    fit: 'Para crianças e adultos sem fala funcional e sem controle das mãos, com o olhar preservado: prancha de pictogramas grande, jogos pelo olhar e teclado quando fizer sentido.',
+    caveat: 'Movimentos involuntários acentuados ainda não foram avaliados pela equipe. Vale testar na beta antes de contar com o sistema.',
+  },
+]
+
+/* ---------------- checklist de elegibilidade ---------------- */
+
+export const ELIGIBILITY = {
+  title: 'O IrisFlow serve para a pessoa que você tem em mente?',
+  lead: 'Três perguntas resolvem a maior parte dos casos. Se a resposta for sim para as três, vale instalar e testar na beta — de graça, com a webcam que já está em casa.',
+  items: [
+    {
+      q: 'Consegue fixar o olhar em um ponto por cerca de um segundo?',
+      why: 'É o gesto que substitui o clique. Tremor leve e óculos não atrapalham; o tempo de fixação é ajustável de 0,8 a 2,5 s.',
+    },
+    {
+      q: 'Compreende o que é dito e reconhece letras ou figuras?',
+      why: 'O teclado pede leitura; a prancha de pictogramas, não. Basta que a pessoa entenda o que quer comunicar.',
+    },
+    {
+      q: 'A visão está preservada, ao menos em um dos olhos?',
+      why: 'A câmera precisa ver a íris. Visão dupla, nistagmo intenso ou baixa visão severa podem impedir o rastreamento.',
+    },
+  ],
+  extra: 'Se ficou em dúvida em alguma resposta, escreva para a gente: a equipe responde caso a caso, sem compromisso.',
 }
 
 /* ---------------- o problema ---------------- */
 
 export const PROBLEM = {
   title: 'Quem perde a fala e o movimento continua com tudo a dizer — e com os olhos.',
-  lead: 'A IrisFlow é feita para pessoas com esclerose lateral amiotrófica (ELA), tetraplegia alta por lesão medular, sequela grave de AVC, paralisia cerebral severa ou distrofia muscular avançada. São condições diferentes, com uma coisa em comum: a pessoa perde a fala e o movimento das mãos, mas continua lúcida, com opiniões, dor, vontades e afetos — e com o controle dos olhos preservado. É esse movimento que vira palavra.',
+  lead: 'A IrisFlow é feita para pessoas com esclerose lateral amiotrófica (ELA), sequela grave de AVC, esclerose múltipla avançada, tetraplegia alta por lesão medular, paralisia cerebral severa ou distrofia muscular avançada. São condições diferentes, com uma coisa em comum: a pessoa perde a fala e o movimento das mãos, mas continua lúcida, com opiniões, dor, vontades e afetos — e com o controle dos olhos preservado. É esse movimento que vira palavra.',
   /** As condições que o produto atende, no nível de detalhe que a família reconhece (tópico 1.2 do plano). */
   conditions: [
     {
@@ -73,6 +168,10 @@ export const PROBLEM = {
     {
       name: 'Sequela grave de AVC',
       text: 'Quando o acidente vascular cerebral atinge as áreas da fala e do movimento, mas preserva a compreensão. Exige avaliação caso a caso: a IrisFlow serve quando o controle ocular e a cognição estão preservados.',
+    },
+    {
+      name: 'Esclerose múltipla avançada',
+      text: 'Quando a disartria e a perda de função das mãos tornam fala e digitação impraticáveis. A fadiga varia dia a dia, por isso o tempo de fixação é ajustável; visão dupla e nistagmo pedem avaliação antes.',
     },
     {
       name: 'Paralisia cerebral severa e distrofias musculares avançadas',
@@ -132,7 +231,7 @@ export const MODULES: {
       icon: 'alvo',
       name: 'Onboarding e calibração',
       description:
-        'Tela inicial, seleção de perfil, acesso protegido do cuidador, calibração guiada de nove pontos e verificação rápida antes de cada sessão.',
+        'Tela inicial, seleção de perfil, acesso protegido do cuidador, calibração guiada de cerca de meio minuto e verificação rápida antes de cada sessão.',
       state: 'Implementado',
     },
     {
@@ -174,7 +273,7 @@ export const MODULES: {
       icon: 'ajustes',
       name: 'Configurações',
       description:
-        'Ajuste de tempo de fixação, sensibilidade, predefinição do filtro de suavização, layout de teclado, voz e idioma.',
+        'Ajuste de tempo de fixação, sensibilidade, estabilidade do cursor, layout de teclado, voz e idioma.',
       state: 'Implementado',
     },
     {
@@ -193,38 +292,47 @@ export const MODULES: {
     },
   ]
 
-/* ---------------- como funciona: os seis estágios do pipeline ---------------- */
+/* ---------------- como funciona: os seis estágios, em linguagem de benefício ----------------
+   O projeto é confidencial: aqui entra o QUE cada etapa entrega a quem usa,
+   nunca a técnica (bibliotecas, modelos, algoritmos, parâmetros). */
+
+/** A versão em três frases, para quem não é engenheiro. Fica acima do pipeline. */
+export const PIPELINE_SIMPLE = [
+  'A webcam filma o rosto e o programa encontra os olhos, dezenas de vezes por segundo.',
+  'Uma calibração de cerca de meio minuto ensina ao programa para onde aquela pessoa está olhando, inclusive nos cantos da tela.',
+  'Olhar fixo em uma tecla por um instante vira letra, frase e voz — tudo dentro do computador.',
+]
 
 export const PIPELINE = [
   {
     step: '01',
     title: 'Captura',
-    text: 'A webcam comum entrega vídeo contínuo a 1280 por 720 pixels, com taxa-alvo de trinta quadros por segundo. Nenhum equipamento adicional.',
+    text: 'A webcam comum do computador filma o rosto em vídeo contínuo. Nenhum equipamento adicional, nenhuma câmera especial.',
   },
   {
     step: '02',
-    title: 'Detecção facial',
-    text: 'O MediaPipe, executado localmente em WebAssembly, extrai 478 marcos faciais tridimensionais por quadro, incluindo o contorno da íris de ambos os olhos.',
+    title: 'Leitura do rosto',
+    text: 'A cada quadro, o programa localiza o rosto e os olhos, íris incluída, dentro do próprio computador. Nenhuma imagem sai dele.',
   },
   {
     step: '03',
-    title: 'Engenharia de características',
-    text: 'Um vetor compacto de cerca de 37 dimensões por olho reúne deslocamento da íris, abertura palpebral, ângulos da cabeça e termos de interação entre pose e deslocamento.',
+    title: 'Leitura do olhar',
+    text: 'Dos olhos e da posição da cabeça sai a estimativa de para onde a pessoa está olhando, sem exigir que ela fique imóvel.',
   },
   {
     step: '04',
-    title: 'Calibração e regressão',
-    text: 'A partir da calibração de nove pontos, o sistema treina em tempo real um modelo de regressão Ridge individual. Ele aprende o olho daquela pessoa, naquele computador, naquela posição.',
+    title: 'Calibração pessoal',
+    text: 'Uma calibração rápida ensina ao sistema, na hora, o jeito de olhar daquela pessoa, naquele computador, naquela posição.',
   },
   {
     step: '05',
-    title: 'Filtragem',
-    text: 'Um filtro One Euro bidimensional, com três predefinições (estável, balanceada e responsiva), arbitra o compromisso entre ruído e latência conforme o perfil motor do usuário.',
+    title: 'Cursor estável',
+    text: 'O cursor fica firme sem ficar atrasado, e dá para escolher entre mais estabilidade ou mais agilidade conforme o perfil motor de quem usa.',
   },
   {
     step: '06',
     title: 'Interação',
-    text: 'O cursor de fixação entra na interface, com detecção de alvo, temporizador configurável e período refratário que evita reativação acidental.',
+    text: 'O cursor de fixação entra na interface: olhar fixo em um alvo confirma a escolha, com tempo ajustável e uma pausa que evita a reativação acidental.',
   },
 ]
 
@@ -233,18 +341,18 @@ export const PIPELINE = [
 export const DIFFERENTIATORS: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'olho',
-    title: 'Modelo treinado para cada olho',
-    text: 'Regressão Ridge com penalidade anisotrópica derivada da covariância das amostras, regularização escolhida por validação cruzada deixando um alvo inteiro de fora e detecção de pontos de calibração contaminados. É o ativo técnico proprietário da empresa.',
+    title: 'Calibração que aprende o seu olhar',
+    text: 'Em cerca de meio minuto, o sistema aprende o jeito de olhar de cada pessoa, naquele computador e naquela posição, e percebe quando um ponto da calibração saiu ruim para não deixar que ele estrague o resultado. É o ativo técnico proprietário da empresa.',
   },
   {
     icon: 'inclinacao',
-    title: 'Compensação geométrica de pose',
-    text: 'A correção da inclinação da cabeça é aplicada na saída, sem coeficiente ajustável, correta por construção mesmo fora da faixa vista na calibração. Colocar a pose como característica de entrada piorava o resultado, então foi medido e descartado, mesmo já estando pronto.',
+    title: 'A cabeça não precisa ficar imóvel',
+    text: 'A inclinação da cabeça é compensada automaticamente, inclusive além do que foi visto na calibração. A pessoa não precisa travar a postura para usar.',
   },
   {
     icon: 'webcam',
     title: 'Preparação automática do posto de uso',
-    text: 'Antes de calibrar, o sistema mede distância, enquadramento, postura, iluminação, contraste, reflexo em lentes e cintilação da rede, e ajusta a câmera em malha fechada. Quando o driver não permite, informa a providência física em vez de fingir que ajustou.',
+    text: 'Antes de calibrar, o sistema confere distância, enquadramento, postura e iluminação, inclusive reflexo nos óculos, e ajusta a câmera sozinho quando dá. Quando não dá, diz qual providência tomar em vez de fingir que ajustou.',
   },
   {
     icon: 'teclado',
@@ -318,7 +426,8 @@ export const COMPARISON = {
 export const TRIAL_DAYS = 15
 
 /* ---------------- programa beta ----------------
-   A ÚNICA chave que liga e desliga o modo beta no site (docs/BETA.md §5).
+   A ÚNICA chave que liga e desliga o modo beta no site (README da raiz,
+   seção "Site (site/)").
    Com `ativo` verdadeiro: /cadastro, /pagamento e /sucesso redirecionam
    para /beta, os CTAs de "Testar grátis" viram "Entrar na beta" e a grade
    de planos aparece como indisponível. Desligar é trocar para false —
@@ -399,7 +508,7 @@ export const PLANS: Plan[] = ([
       'Comunicação por olhar, teclado em português e frases rápidas',
       'Controle do cursor do sistema operacional',
       'Painel do cuidador e acionamento de emergência',
-      'Instalador para Windows 10/11 (macOS e Linux em preparação)',
+      `Instalador para ${PLATFORMS.long}`,
       'Calibração guiada e preparação automática do posto',
       'Funcionamento offline do núcleo de rastreamento',
     ],
@@ -463,7 +572,7 @@ export const BETA_PLAN: Plan = {
     'Painel do cuidador, app do cuidador no celular e acionamento de emergência',
     'Assistente de conversação e módulo de lazer e bem-estar',
     'Relatórios de sessão e histórico de uso para a família',
-    'Instalador para Windows 10/11, com atualizações durante a beta (macOS e Linux em preparação)',
+    `Instalador para ${PLATFORMS.long}, com atualizações automáticas durante a beta`,
   ],
 }
 
@@ -517,8 +626,28 @@ export const CHEAPEST_PLAN: Plan = cheapestPlan()
 
 export const FAQ = [
   {
+    q: 'Em que estágio da ELA vale começar?',
+    a: 'Antes de precisar. Quem ainda fala usa o IrisFlow para o computador e vai montando o vocabulário; quando a fala vai embora, a calibração e as frases já estão prontas e a família já sabe operar. Em estágio avançado também funciona — o olhar costuma ser o último movimento voluntário — mas o aprendizado é mais cansativo para todo mundo.',
+  },
+  {
+    q: 'Serve para afasia pós-AVC?',
+    a: 'Depende do tipo. Quando a sequela atinge a produção da fala e o movimento, mas a compreensão está preservada, sim: a pessoa aponta com os olhos o que quer dizer. Quando a afasia compromete a compreensão ou a leitura, o teclado ajuda pouco; a prancha de pictogramas e as frases rápidas são o caminho, com avaliação do fonoaudiólogo. É por isso que a beta é gratuita: para testar antes de contar com o sistema.',
+  },
+  {
+    q: 'Serve para esclerose múltipla?',
+    a: 'Sim, nas fases em que a disartria e a perda de função das mãos tornam a fala e a digitação impraticáveis. O tempo de fixação é ajustável dia a dia, porque a fadiga varia. Nistagmo ou visão dupla podem degradar o rastreamento; a preparação automática do posto avisa quando a leitura não está confiável, em vez de fingir que está.',
+  },
+  {
+    q: 'Criança com paralisia cerebral consegue usar?',
+    a: 'Consegue, quando o olhar está preservado e a criança compreende o que quer comunicar. Começa-se pela prancha de pictogramas grande e pelos jogos pelo olhar, que ensinam o gesto de fixar sem exigir leitura. O que ainda não avaliamos é o uso com movimentos involuntários acentuados — nesses casos, teste na beta com o terapeuta que acompanha.',
+  },
+  {
+    q: 'As imagens da câmera saem do meu computador?',
+    a: `Não. ${PRIVACY_LINE} Marcos faciais, dados de calibração e registros brutos de sessão também ficam no dispositivo. Quando existe conta vinculada, o que sobe é apenas o texto que o paciente escolheu enviar, os alertas e indicadores agregados de uso. Clonagem de voz e chatbot integrado são as duas exceções, e cada uma depende de autorização expressa e revogável antes de funcionar.`,
+  },
+  {
     q: 'Preciso comprar algum equipamento?',
-    a: `Não. O ${BRAND.product} foi construído sob a restrição de funcionar com uma webcam comum, e foi essa restrição autoimposta que definiu toda a arquitetura técnica. Se o computador da família tem câmera e roda Windows, macOS ou Linux, ele roda o ${BRAND.product}.`,
+    a: `Não. O ${BRAND.product} foi construído sob a restrição de funcionar com uma webcam comum, e foi essa restrição autoimposta que definiu toda a arquitetura técnica. Se o computador da família tem câmera e roda ${PLATFORMS.long}, ele roda o ${BRAND.product}.`,
   },
   {
     q: 'Funciona com quem usa óculos?',
@@ -526,19 +655,15 @@ export const FAQ = [
   },
   {
     q: 'E se a cabeça do usuário escorregar durante a sessão?',
-    a: 'O sistema mede os três ângulos da cabeça a cada quadro e aplica a correção geométrica na saída. Além disso, quando o desvio postural acumulado passa do equivalente a sessenta pixels, o cuidador recebe um aviso que distingue o desvio lento, que só exige reapoiar a nuca, do desvio errático, que indica necessidade de recalibrar.',
+    a: 'O sistema acompanha a posição da cabeça o tempo todo e compensa sozinho os movimentos pequenos. Quando o desvio acumulado fica grande, o cuidador recebe um aviso que distingue o desvio lento, que só exige reapoiar a nuca, do desvio errático, que indica necessidade de recalibrar.',
   },
   {
     q: `O ${BRAND.product} controla qualquer programa do computador?`,
     a: 'Ela entrega controle pleno dentro das próprias telas e controle do cursor do sistema operacional em nível funcional: abrir um programa, navegar em uma página, clicar em botões de tamanho razoável. Interfaces de terceiros com alvos pequenos, menus densos ou arraste preciso ficam fora do alcance confortável do rastreamento por webcam, e preferimos declarar isso a prometer o que a física do sensor não permite.',
   },
   {
-    q: 'As imagens da câmera são enviadas para algum servidor?',
-    a: 'Não. Imagens da câmera, marcos faciais, dados de calibração e registros brutos de sessão são processados e permanecem exclusivamente no dispositivo do usuário: nada disso trafega pela rede. Quando existe conta vinculada, o que sobe é apenas o texto que o paciente escolheu enviar, os alertas e indicadores agregados de uso. Clonagem de voz e chatbot integrado são as duas exceções, e cada uma depende de autorização expressa e revogável antes de funcionar.',
-  },
-  {
     q: 'Quanto tempo leva a calibração?',
-    a: 'Entre dezenove e vinte e nove segundos, em uma grade de nove pontos com ordem embaralhada. A faixa é deliberada: acima de aproximadamente quarenta segundos, a fadiga ocular começa a degradar a qualidade dos próprios dados coletados.',
+    a: 'Cerca de meio minuto: a pessoa só acompanha com o olhar alguns pontos na tela, inclusive nos cantos. A calibração é curta de propósito, porque, quando ela se estende, o cansaço dos olhos começa a atrapalhar a própria calibração.',
   },
   {
     q: 'Já existe validação clínica do produto?',
@@ -554,7 +679,7 @@ export const FAQ = [
   },
   {
     q: 'O código da IrisFlow é aberto?',
-    a: 'Em parte, e a posição mudou. Durante a fase acadêmica o repositório inteiro era público. Agora o núcleo de calibração é proprietário, porque é a única barreira técnica real que uma empresa pequena tem. Continuam abertos a documentação técnica, o protocolo de medição de acurácia, os relatórios de precisão com as condições em que foram obtidos e os componentes de interface acessível. Além disso, o tráfego de rede da aplicação passa por verificação externa antes do lançamento, com resultado publicado.',
+    a: 'Em parte. O núcleo de calibração é proprietário, porque é a única barreira técnica real que uma empresa pequena tem. Continuam abertos a documentação técnica, o protocolo de medição de acurácia, os relatórios de precisão com as condições em que foram obtidos e os componentes de interface acessível. Além disso, o tráfego de rede da aplicação passa por verificação externa antes do lançamento, com resultado publicado.',
   },
   {
     q: `O ${BRAND.product} é um dispositivo médico?`,
@@ -599,23 +724,64 @@ export const VALUES = [
    Três sócios fundadores, com as atribuições do tópico 6.3 do plano.
    ------------------------------------------------------- */
 
-export const TEAM = [
+export const TEAM: {
+  name: string
+  role: string
+  /** Uma frase, no cartão com foto. */
+  line: string
+  text: string
+  /** Base do arquivo em /team/ (gera -400/-800 .jpg e .webp). */
+  photo: string
+  alt: string
+}[] = [
   {
     name: 'Gabriel Almeida Santos Zambe',
-    role: 'Product Owner e desenvolvimento back-end',
-    text: 'Definiu e construiu o núcleo de visão computacional desde a primeira linha: calibração, regressão, filtragem e a suíte de testes automatizados. Decide o que entra no produto e em que ordem.',
+    role: 'Product Owner e back-end',
+    line: 'Escreveu o núcleo de calibração desde a primeira linha.',
+    text: 'Definiu e construiu o núcleo de rastreamento ocular desde a primeira linha, da calibração à suíte de testes automatizados. Decide o que entra no produto e em que ordem.',
+    photo: 'gabriel',
+    alt: 'Gabriel Zambe, de óculos e camiseta branca, braços cruzados, olhando para a câmera.',
   },
   {
     name: 'Marcus Vinicius Duarte',
-    role: 'CTO e desenvolvimento front-end',
+    role: 'CTO e front-end',
+    line: 'Responde pela interface que a pessoa opera só com os olhos.',
     text: 'Responde pela arquitetura da interface e pelos componentes de seleção por fixação. Em um produto assim, a usabilidade não é acabamento: é o que decide se a pessoa consegue ou não se comunicar.',
+    photo: 'marcus',
+    alt: 'Marcus Duarte, de camiseta branca, em pé com os braços cruzados.',
   },
   {
     name: 'Giulia Calioni',
-    role: 'Diretoria de Marketing e Financeiro',
+    role: 'Marketing e Financeiro',
+    line: 'Conduziu a pesquisa com as famílias e cuida do caixa.',
     text: 'Conduziu a modelagem financeira e a pesquisa de mercado com os 38 respondentes. Cuida do posicionamento, do relacionamento com associações e profissionais de saúde e da gestão do caixa.',
+    photo: 'giulia',
+    alt: 'Giulia Calioni, de cabelo comprido, de perfil, sorrindo para a câmera.',
   },
 ]
+
+/** Foto dos três, usada na Home e na abertura da página Sobre. */
+export const TEAM_PHOTO = {
+  base: 'equipe',
+  alt: 'Giulia, Marcus e Gabriel, os três fundadores da IrisFlow, em estúdio, sorrindo.',
+}
+
+/* ---------------- história de origem e números ---------------- */
+
+export const ORIGIN = {
+  title: 'Começou como projeto de estudo. Virou a única coisa que a gente queria fazer.',
+  paragraphs: [
+    'O projeto nasceu como um sistema de rastreamento ocular por webcam chamado Blink, desenvolvido em ambiente acadêmico e validado com orientadores. A pergunta inicial era técnica: dá para estimar o olhar com precisão suficiente, sem hardware dedicado, para selecionar uma tecla?',
+    'A resposta veio junto com uma pesquisa de mercado. Entre os 38 respondentes — a maioria profissionais de saúde — 60,5 % apontaram o preço como a principal barreira das soluções existentes, e uma delas, médica, contou que a própria mãe tinha perdido a fala na semana anterior. A pergunta deixou de ser técnica.',
+    'Em 2026 o Blink virou IrisFlow: uma empresa de três pessoas, um produto instalável com sete módulos e um programa beta aberto às famílias. O núcleo de calibração ficou fechado; a documentação, o protocolo de medição e a interface acessível continuam abertos.',
+  ],
+  numbers: [
+    { value: 100, suffix: ' %', label: 'do processamento da imagem feito no próprio computador' } as { value: number; suffix: string; label: string; decimals?: number },
+    { value: 1, suffix: ' min', label: 'ou menos para calibrar, olhando para alguns pontos na tela' },
+    { value: 60.5, suffix: ' %', decimals: 1, label: 'dos respondentes da nossa pesquisa apontam o preço como a principal barreira' },
+    { value: 0, suffix: '', label: 'imagens da câmera enviadas para a internet' },
+  ],
+}
 
 /* ---------------- compromissos assumidos ----------------
    Tópico 3.1 do plano (ESG e Agenda 2030). Cada item aqui tem
@@ -649,21 +815,22 @@ export const COMMITMENTS: { icon: IconName; title: string; text: string }[] = [
 export const SDGS = [
   { n: 3, title: 'Saúde e bem-estar', text: 'Restabelecer a comunicação permite que a pessoa relate dor e desconforto, informação clínica hoje frequentemente inacessível.' },
   { n: 9, title: 'Indústria e inovação', text: 'Tecnologia assistiva desenvolvida no Brasil, em um segmento historicamente dependente de importação.' },
-  { n: 10, title: 'Redução das desigualdades', text: 'O que hoje depende de dezenas de milhares de reais passa a caber no orçamento de uma família de renda média.' },
+  { n: 10, title: 'Redução das desigualdades', text: 'Um eye tracker dedicado custa de R$ 15 mil a R$ 80 mil, pago de uma vez. O IrisFlow é uma assinatura mensal, cancelável, que roda no computador que a família já tem.' },
   { n: 17, title: 'Parcerias', text: 'Associações de pacientes, profissionais de saúde e instituições de ensino ampliam o alcance além do que o mercado sozinho alcançaria.' },
 ]
 
 /* ---------------- posição sobre o código ----------------
-   Mudou na virada para a fase comercial: núcleo fechado,
-   periferia aberta. Ver tópico 1.3 do plano.
+   Núcleo fechado, periferia aberta (tópico 1.3 do plano). O texto diz o
+   que é proprietário sem descrever como funciona por dentro, e o site não
+   aponta para repositório de código.
    ------------------------------------------------------- */
 
 export const CODE_POSITION = {
   title: 'O que é nosso e o que fica aberto.',
-  lead: 'Durante a fase acadêmica o repositório inteiro era público. Na virada comercial essa posição mudou, e é melhor dizer isso do que deixar a página antiga no ar.',
+  lead: 'O núcleo de calibração é proprietário; a documentação, o protocolo de medição e a interface acessível continuam abertos.',
   closed: {
     title: 'Fechado',
-    text: 'O extrator de características do olho, o modelo de calibração individual, a detecção de pontos contaminados e a compensação geométrica de pose. É a única barreira técnica real que temos, num mercado em que detecção de rosto e redes de estimação de olhar estão disponíveis para qualquer concorrente.',
+    text: 'O núcleo de rastreamento e calibração: a parte que transforma a imagem da webcam comum em um cursor preciso para cada pessoa. É a única barreira técnica real que uma empresa pequena tem, e por isso não é publicado.',
   },
   open: {
     title: 'Aberto',
@@ -675,17 +842,17 @@ export const ROADMAP = [
   {
     when: 'Concluído',
     title: 'Fluxo de rastreamento completo',
-    text: 'Captura, detecção de 478 marcos faciais, calibração, predição e seleção por fixação em sessão real de uso.',
+    text: 'Da câmera à seleção por fixação, passando pela calibração, em sessão real de uso.',
   },
   {
     when: 'Concluído',
     title: 'Sete módulos funcionais',
-    text: 'Onboarding, comunicação, computador, lazer, cuidador, emergência e configurações, com instaladores para os três sistemas.',
+    text: `Onboarding, comunicação, computador, lazer, cuidador, emergência e configurações, com instalador para ${PLATFORMS.long}.`,
   },
   {
     when: 'Concluído',
     title: 'Infraestrutura de medição',
-    text: 'Gravação de sessões sem vídeo, reprodução determinista fora de linha e protocolo formal de acurácia com grade de validação separada.',
+    text: 'Protocolo formal de medição de acurácia, repetível e sem gravar vídeo de ninguém.',
   },
   {
     when: 'Em realização',
@@ -705,6 +872,7 @@ export const ROADMAP = [
 ]
 
 export const MARQUEE_ITEMS = [
+  'ELA · AVC · esclerose múltipla · lesão medular · paralisia cerebral',
   'webcam comum',
   'processamento local',
   'sem hardware proprietário',

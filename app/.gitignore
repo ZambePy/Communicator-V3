@@ -13,7 +13,8 @@ android/
 # Documentação, anotações e arquivos de dados fora do código
 #
 # Decisão de 10/09/2026: o repositório guarda CÓDIGO. Texto solto (.txt) e
-# documentação (.md) ficam de fora.
+# documentação (.md) ficam de fora. Desde 23/09/2026 a documentação do app
+# vive no README.md da raiz ("App do cuidador" e "Hospedagem e publicação").
 # ─────────────────────────────────────────────────────────────────────────────
 *.txt
 *.md
@@ -29,7 +30,13 @@ android/
 .env.*
 !.env.example
 credentials.json
+credentials/
 google-services.json
+# Chave da conta de serviço do Google Play (eas submit). Dá poder de publicar.
+*service-account*.json
+*-adminsdk-*.json
+pc-api-*.json
+# Chave de API do App Store Connect (eas submit) — já coberta por *.p8.
 GoogleService-Info.plist
 *.keystore
 *.jks
@@ -53,3 +60,7 @@ supabase/.branches/
 *.ipa
 
 coverage/
+
+# Diretório local do Sentry CLI / propriedades com token.
+.sentryclirc
+sentry.properties

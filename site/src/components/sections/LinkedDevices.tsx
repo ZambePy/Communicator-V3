@@ -51,7 +51,7 @@ export function LinkedDevices() {
       setLicense(l)
       setDevices(d)
     } catch (e) {
-      // A migração 20260908 ainda não foi aplicada, ou a rede caiu: o painel
+      // A migração 20260923022507_integracao_ecossistema ainda não foi aplicada, ou a rede caiu: o painel
       // explica em vez de sumir.
       setFalha(e instanceof Error ? e.message : 'Não foi possível carregar.')
       setDevices([])

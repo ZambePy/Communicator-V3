@@ -5,6 +5,7 @@ import { GraduationCap, Timer, AlertOctagon, Info } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { useAuth } from '../../context/AuthContext';
 import { lerTutorial } from '../../services/local/tutorialProfile';
+import { limparMissoes } from './missao';
 
 /**
  * Atalho para refazer o tutorial, nas Configurações.
@@ -18,6 +19,10 @@ import { lerTutorial } from '../../services/local/tutorialProfile';
  *
  * Como o `AtalhoDePreparo`, **não apaga** o registro ao ser clicado — quem
  * grava por cima é a conclusão do wizard.
+ *
+ * Mas APAGA o progresso da sessão (passo guardado, missões, ensaio): sem isso
+ * "Refazer" retomava do meio de uma passagem anterior, no passo em que a
+ * pessoa tinha parado — que não é refazer.
  */
 export const AtalhoDeTutorial: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -109,7 +114,10 @@ export const AtalhoDeTutorial: React.FC = () => {
 
       <PrimaryButton
         type="button"
-        onClick={() => navigate('/tutorial')}
+        onClick={() => {
+          limparMissoes();
+          navigate('/tutorial');
+        }}
         style={{ alignSelf: 'flex-start' }}
       >
         {t('tutorial.atalho.button')}

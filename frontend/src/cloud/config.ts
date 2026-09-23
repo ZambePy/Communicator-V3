@@ -1,5 +1,5 @@
 /**
- * Configuração da nuvem do IrisFlow (projeto Supabase "Site Iris Flow").
+ * Configuração da nuvem do IrisFlow (projeto Supabase "IrisFlow Communicator").
  *
  * É o MESMO projeto do site e do app do cuidador. Sem estas variáveis o app
  * roda 100% local, como sempre rodou: login vira uma tela de passagem,
@@ -17,8 +17,13 @@ export const cloudConfig = {
   anonKey,
   /** Edge Function por onde o desktop escreve (heartbeat, sessão, mensagens, socorro). */
   desktopSyncUrl: (import.meta.env.VITE_DESKTOP_SYNC_URL ?? '').trim() || (url ? `${url}/functions/v1/desktop-sync` : ''),
-  /** Site da IrisFlow, para o link "gerenciar assinatura" nas telas de bloqueio. */
-  siteUrl: (import.meta.env.VITE_SITE_URL ?? '').trim() || 'https://irisflow.com.br',
+  /**
+   * Site da IrisFlow, para os links do login ("esqueci a senha", "criar
+   * conta") e o "gerenciar assinatura" das telas de bloqueio. `VITE_SITE_URL`
+   * no build (o domínio próprio, quando existir); sem ela, o site oficial.
+   * Sem barra no fim.
+   */
+  siteUrl: ((import.meta.env.VITE_SITE_URL ?? '').trim() || 'https://irisflow.pages.dev').replace(/\/+$/, ''),
   /** Dias que uma licença já verificada continua valendo sem internet. */
   carenciaOfflineDias: Number(import.meta.env.VITE_LICENSE_OFFLINE_DAYS ?? 7) || 7,
   /** Intervalo do heartbeat que mantém o computador "online" no app do cuidador. */

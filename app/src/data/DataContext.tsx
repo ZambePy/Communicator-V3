@@ -1,20 +1,17 @@
 import React, { createContext, useContext, useMemo } from 'react';
-import { hasSupabaseConfig } from '@/lib/supabase';
 import { DataProvider } from './types';
-import { MockProvider } from './mockProvider';
 import { SupabaseProvider } from './supabaseProvider';
 
 const DataContext = createContext<DataProvider | null>(null);
 
 /**
- * Seleciona o provedor: Supabase quando EXPO_PUBLIC_SUPABASE_URL/ANON_KEY existem,
- * caso contrário o modo demonstração (MockProvider).
+ * Camada de dados do app: sempre o Supabase real (EXPO_PUBLIC_SUPABASE_URL /
+ * EXPO_PUBLIC_SUPABASE_ANON_KEY). Não existe modo de demonstração: um build sem
+ * essas variáveis nem chega aqui — `app/_layout.tsx` mostra o aviso de serviço
+ * indisponível (`hasSupabaseConfig`).
  */
-export function DataProviderRoot({ children, forceMock = false }: { children: React.ReactNode; forceMock?: boolean }) {
-  const provider = useMemo<DataProvider>(
-    () => (hasSupabaseConfig && !forceMock ? new SupabaseProvider() : new MockProvider()),
-    [forceMock],
-  );
+export function DataProviderRoot({ children }: { children: React.ReactNode }) {
+  const provider = useMemo<DataProvider>(() => new SupabaseProvider(), []);
   return <DataContext.Provider value={provider}>{children}</DataContext.Provider>;
 }
 
