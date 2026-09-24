@@ -23,7 +23,7 @@ export const cloudConfig = {
    * no build (o domínio próprio, quando existir); sem ela, o site oficial.
    * Sem barra no fim.
    */
-  siteUrl: ((import.meta.env.VITE_SITE_URL ?? '').trim() || 'https://irisflow.pages.dev').replace(/\/+$/, ''),
+  siteUrl: ((import.meta.env.VITE_SITE_URL ?? '').trim() || 'https://irisflow-communicator.pages.dev').replace(/\/+$/, ''),
   /** Dias que uma licença já verificada continua valendo sem internet. */
   carenciaOfflineDias: Number(import.meta.env.VITE_LICENSE_OFFLINE_DAYS ?? 7) || 7,
   /** Intervalo do heartbeat que mantém o computador "online" no app do cuidador. */

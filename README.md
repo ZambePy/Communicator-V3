@@ -1152,7 +1152,7 @@ suporte continuam, e as mensagens do cuidador seguem sendo faladas.
 |---|---|---|
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | ligam a nuvem; a origem entra na CSP | modo local (abaixo) |
 | `VITE_DESKTOP_SYNC_URL` | Edge Function hospedada fora (também entra na CSP) | `<URL>/functions/v1/desktop-sync` |
-| `VITE_SITE_URL` | links do login ("esqueci a senha", "criar conta", `/conta`) | `https://irisflow.pages.dev` |
+| `VITE_SITE_URL` | links do login ("esqueci a senha", "criar conta", `/conta`) | `https://irisflow-communicator.pages.dev` |
 | `VITE_LICENSE_OFFLINE_DAYS` | dias de carência offline de uma licença já verificada | 7 |
 
 **Sem as variáveis**, nada sai e a licença vem do serviço simulado
@@ -1261,7 +1261,7 @@ SQL Editor (todos são idempotentes; os que já estão aplicados não mudam nada
 e publique a função pelo painel (*Edge Functions → desktop-sync*, com os dois
 arquivos `index.ts` e `horario.ts`, "Verify JWT" desligado). O `seed.sql`
 roda à parte, no SQL Editor. No Auth do painel: Site URL = a origem do site
-(`https://irisflow.pages.dev`) e Redirect URLs `<site>/entrar` e
+(`https://irisflow-communicator.pages.dev`) e Redirect URLs `<site>/entrar` e
 `<site>/nova-senha` — o "Esqueci a senha" do site e o do app mandam
 `redirectTo` para `/nova-senha`, e o site leva o evento de recuperação para lá
 de qualquer página. A proteção contra senha vazada só existe no plano Pro.
@@ -1333,7 +1333,7 @@ que o `.env.local`. Para desenvolver (`npm run dev`), copie
 | variável | uso | sem ela |
 |---|---|---|
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | contas, planos, beta | site abre; ação de conta diz "serviço indisponível" |
-| `VITE_SITE_URL` | canonical, og:*, sitemap, destino dos e-mails | `https://irisflow.pages.dev` |
+| `VITE_SITE_URL` | canonical, og:*, sitemap, destino dos e-mails | `https://irisflow-communicator.pages.dev` |
 | `VITE_RELEASES_REPO` / `VITE_RELEASES_AVAILABLE` | de onde vêm os instaladores / quais sistemas o site oferece | `ZambePy/Communicator-V3` / `windows` |
 | `VITE_APP_CUIDADOR_URL` | link do app em `/beta` | "o link chega por e-mail" |
 | `VITE_CF_ANALYTICS_TOKEN` | Cloudflare Web Analytics | nenhuma estatística |
@@ -1589,7 +1589,7 @@ confira antes de pagar.
 
 | peça | agora (R$ 0) | limite que importa | quando pagar |
 |---|---|---|---|
-| site | Cloudflare Pages, `irisflow.pages.dev` | 500 builds/mês, 20 min cada, 20 000 arquivos de até 25 MiB | domínio próprio |
+| site | Cloudflare Pages, `irisflow-communicator.pages.dev` | 500 builds/mês, 20 min cada, 20 000 arquivos de até 25 MiB | domínio próprio |
 | banco e login | Supabase Free | pausa após 7 dias parado, sem backup, 500 MB | Pro, US$ 25/mês |
 | instaladores | GitHub Releases, repositório público | arquivo < 2 GiB; Actions ilimitado só se público | privado: 2 000 min/mês |
 | app do cuidador | EAS Free | 15 builds Android + 15 iOS/mês, fila lenta; Update até 1 000 usuários | Starter, US$ 19/mês |
@@ -1598,8 +1598,8 @@ confira antes de pagar.
 
 ### Site no Cloudflare Pages
 
-Projeto **irisflow** (`https://irisflow.pages.dev`), ligado ao repositório pelo app do GitHub
-da Cloudflare; cada push na `main` publica. Build: branch `main`, root directory `site`,
+Projeto **irisflow-communicator** (`https://irisflow-communicator.pages.dev`), ligado ao `ZambePy/Communicator-V3` pelo
+app do GitHub da Cloudflare; cada push na `main` publica. Build: branch `main`, root directory `site`,
 comando `npm run build` (`tsc -b && vite build`), saída `dist` (dentro de `site/`) e *build
 watch paths* `site/*`, para commit só de desktop ou app não gastar build. **Nada fica no
 painel:** a versão do Node vem de [`site/.node-version`](site/.node-version) (`24.11.1`, a do
@@ -1611,7 +1611,7 @@ painel, que teria prioridade sobre o arquivo sem aparecer no repositório.
 | variável | valor |
 |---|---|
 | `VITE_SUPABASE_URL` / `_ANON_KEY` | `https://xouznaqxhqzjdgeshlmh.supabase.co` / chave *anon* (a proteção é a RLS) |
-| `VITE_SITE_URL` | `https://irisflow.pages.dev`: canonical, `og:*`, sitemap, robots e links dos e-mails |
+| `VITE_SITE_URL` | `https://irisflow-communicator.pages.dev`: canonical, `og:*`, sitemap, robots e links dos e-mails |
 | `VITE_RELEASES_REPO` / `_AVAILABLE` | `ZambePy/Communicator-V3` / `windows` (`windows,macos,linux` quando testados) |
 | `VITE_CF_ANALYTICS_TOKEN`, `VITE_APP_CUIDADOR_URL` | token do Web Analytics e link do APK; ausentes, o site segue sem eles |
 
@@ -1635,7 +1635,7 @@ diferentes.
   `Permissions-Policy`, COOP e cache longo em `/assets/*` e `/fonts/*`; o HTML fica no
   padrão do Pages, `public, max-age=0, must-revalidate`.
 - **Prévias e estatísticas:** cada push fora da `main` e cada PR ganham
-  `<hash>.`/`<branch>.irisflow.pages.dev`, **públicas**, `noindex`, com o Supabase de
+  `<hash>.`/`<branch>.irisflow-communicator.pages.dev`, **públicas**, `noindex`, com o Supabase de
   produção (para fechar: *Preview branches* = None). O Web Analytics é o manual
   (`VITE_CF_ANALYTICS_TOKEN`, carrega a menos que o visitante recuse); não ligue o
   automático do projeto, que ignora a recusa.
@@ -1646,6 +1646,17 @@ diferentes.
   segredo no cliente (só URL e chave anon) e toda permissão ser decidida no servidor
   (RLS, funções do banco, Edge Function); a `service_role` nunca sai do Supabase.
 
+**Endereço anterior, `irisflow.pages.dev`.** É outro projeto do Pages, **irisflow**, que
+continua ligado ao repositório antigo (`Communicator-v2`) — um projeto do Pages não troca de
+repositório. Ele publica só uma página que leva o visitante ao endereço novo preservando
+caminho, parâmetros e âncora (`/entrar?x#y` vai para o mesmo caminho em
+`irisflow-communicator.pages.dev`): é o que mantém funcionando os links já gravados em
+instaladores, no APK e em e-mails antigos. Essa página não vem de commit nenhum: o *build
+command* do projeto (*Settings → Builds*) grava `redirecionamento/index.html`, que é a saída
+publicada. Para mudar o destino (o domínio próprio, por exemplo), edite o comando e use
+*Retry deployment* no último deploy. **Não apague esse projeto:** a Cloudflare reserva o nome
+de um projeto apagado, e o `irisflow.pages.dev` não voltaria.
+
 ### Domínio próprio (depois)
 
 Compre (`.com.br` só no Registro.br, R$ 40/ano; outros TLDs no Cloudflare Registrar, a
@@ -1653,7 +1664,7 @@ preço de custo, ou em qualquer registrador — olhe a renovação: o `.tech` sa
 no 1º ano e renova a US$ 49,20, valores de agregador). Domínio raiz exige a zona na
 Cloudflare (plano Free: desligue o DNSSEC no registrador, troque os nameservers, religue
 pela Cloudflare); com DNS externo, só subdomínio, adicionado no Pages **antes** do CNAME
-para `irisflow.pages.dev` (senão, erro 522). Em *Pages → Custom domains* adicione o
+para `irisflow-communicator.pages.dev` (senão, erro 522). Em *Pages → Custom domains* adicione o
 domínio e o `www`. Depois:
 
 | onde | o quê |
@@ -1664,9 +1675,10 @@ domínio e o `www`. Depois:
 | `app/.env.production` → `EXPO_PUBLIC_SITE_URL` | novo build ou `eas update` |
 | `app/app.json` → `extra.privacyPolicyUrl`, `termsUrl`, `accountDeletionUrl` | e as fichas da Play e da App Store |
 
-Mantenha o `irisflow.pages.dev` no ar: versões antigas abrem esse endereço (ele é fixo na
-lista de hosts do desktop). Releases, keepalive e Edge Function não mudam, e não há deep
-link a trocar: o scheme `irisflow://` do app não participa do Auth.
+Mantenha os dois endereços `pages.dev` no ar: versões antigas abrem o
+`irisflow.pages.dev` (que redireciona), e os dois estão na lista fixa de hosts do desktop.
+Releases, keepalive e Edge Function não mudam, e não há deep link a trocar: o scheme
+`irisflow://` do app não participa do Auth.
 
 ### Supabase (plano Free)
 
@@ -1693,8 +1705,8 @@ Projeto **IrisFlow Communicator**, ref `xouznaqxhqzjdgeshlmh`, São Paulo (`sa-e
 
 | Authentication → | valor | por quê |
 |---|---|---|
-| URL Configuration → Site URL | `https://irisflow.pages.dev` | de fábrica é `http://localhost:3000`, e é o destino de qualquer link sem `redirectTo` e o `{{ .SiteURL }}` dos modelos de e-mail; o site e o app passam `redirectTo` em todos os fluxos |
-| URL Configuration → Redirect URLs | `https://irisflow.pages.dev/entrar`, `…/nova-senha`, `http://localhost:5173/**` | fora da lista o destino é ignorado; as prévias usam `VITE_SITE_URL` |
+| URL Configuration → Site URL | `https://irisflow-communicator.pages.dev` | de fábrica é `http://localhost:3000`, e é o destino de qualquer link sem `redirectTo` e o `{{ .SiteURL }}` dos modelos de e-mail; o site e o app passam `redirectTo` em todos os fluxos |
+| URL Configuration → Redirect URLs | `https://irisflow-communicator.pages.dev/entrar`, `…/nova-senha`, os mesmos dois de `https://irisflow.pages.dev` (builds antigos do app) e `http://localhost:5173/**` | fora da lista o destino é ignorado; as prévias usam `VITE_SITE_URL` |
 | Emails → SMTP Settings | Gmail: `smtp.gmail.com`, porta 465, usuário e remetente = o Gmail, senha de app | o SMTP padrão só entrega à equipe do projeto, 2 por hora |
 | Rate Limits → e-mails | 20/h | com SMTP próprio o padrão é 30/h, que passaria dos 500/dia do Gmail |
 | Sign In / Providers | *Confirm email* ligado; Email → *Minimum password length* 8, sem exigir tipos de caractere | o mesmo `SENHA_MINIMA` do site; sem SMTP ninguém de fora recebe o link |
@@ -1776,12 +1788,12 @@ o que o app envia (`app/src/data/supabaseProvider.ts`, `usePushNotifications.ts`
 | ID do dispositivo | token de push (`push_tokens`) | não | funcionalidade | sim |
 | falhas e diagnóstico | só com `EXPO_PUBLIC_SENTRY_DSN` (sem PII, sem captura de tela) | — | análise | não |
 
-Criptografado em trânsito: sim. Exclusão: sim (`https://irisflow.pages.dev/privacidade#direitos`
+Criptografado em trânsito: sim. Exclusão: sim (`https://irisflow-communicator.pages.dev/privacidade#direitos`
 e Ajustes → "Excluir conta e dados", que abre um pedido por e-mail). Compartilhamento com
 terceiros e rastreamento: não — Supabase, Expo/Google/Apple (push) e Sentry são
 prestadores. Não coleta localização, agenda, fotos, áudio, arquivos nem identificador de
 publicidade; não há SDK de estatística. Demais respostas: política
-`https://irisflow.pages.dev/privacidade`; público 18+; mensagens privadas entre pessoas da
+`https://irisflow-communicator.pages.dev/privacidade`; público 18+; mensagens privadas entre pessoas da
 mesma conta; recurso de saúde declarado, sem ser dispositivo médico; iOS sem criptografia
 não isenta (`usesNonExemptEncryption: false`) e sem iPad (`supportsTablet: false`: só
 capturas de iPhone). Ligar o Sentry exige atualizar os dois formulários e a política.

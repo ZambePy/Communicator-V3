@@ -18,16 +18,16 @@ const LIMITS = [
     tone: 'ok' as const,
     items: [
       'Controle pleno dentro das próprias telas, desenhadas com alvos grandes e bem espaçados',
-      'Controle do cursor do sistema operacional em nível funcional: abrir um programa, navegar, clicar em botões de tamanho razoável',
-      'Composição de texto por fixação, com um evento por caractere e tempo aproximadamente constante',
-      'Funcionamento offline do núcleo de rastreamento, do teclado e das frases rápidas',
+      'Modo Computador no Windows: clicar, arrastar, rolar e digitar em qualquer programa, com uma lupa para os alvos pequenos',
+      'Escrita por fixação, com sugestões de palavras e de frases que aprendem com a pessoa',
+      'Funcionamento offline do rastreamento, do teclado e das frases rápidas',
     ],
   },
   {
-    title: 'O que ela ainda não entrega',
+    title: 'O que ele ainda não entrega',
     tone: 'warn' as const,
     items: [
-      'Interfaces de terceiros com alvos pequenos, menus densos ou elementos que exigem arraste preciso',
+      'Arraste fino e menus muito densos, que continuam trabalhosos com a precisão de uma webcam, mesmo com a lupa',
       'Uso confortável por quem apresenta movimento involuntário acentuado, espasticidade ou tremor, condições ainda não avaliadas',
       'Taxa de acionamento acidental medida em uso contínuo real, que só o programa de validação vai responder',
       'Estudo clínico publicado, atributo em que as soluções internacionais têm décadas de vantagem',
@@ -48,8 +48,8 @@ const ADOPTION: { icon: IconName; title: string; text: string }[] = [
   },
   {
     icon: 'documento',
-    title: 'Orientação em linguagem simples',
-    text: 'Material escrito para quem vai cuidar, não para quem vai programar. Sem jargão de engenharia e sem depender de tradução.',
+    title: 'Guia para quem cuida',
+    text: 'A área do cuidador traz um guia de instalação e explica o resultado do teste de precisão em linguagem simples, escrito para quem vai cuidar, não para quem vai programar.',
   },
   {
     icon: 'email',
@@ -119,7 +119,7 @@ export default function Solucao() {
               A principal causa de abandono de tecnologia assistiva não é falha do produto: é falta
               de apoio na hora de adotar. Um software que funciona mas que a família não consegue
               instalar, calibrar ou ajustar termina na gaveta. Por isso o acompanhamento do
-              primeiro uso faz parte da assinatura, e não de um serviço à parte.
+              primeiro uso faz parte do produto, e não de um serviço à parte.
             </p>
           </Reveal>
 

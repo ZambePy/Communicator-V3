@@ -188,6 +188,9 @@ export function preferenciasWebSeguras(empacotado: boolean): typeof PREFERENCIAS
  * mandaria o cuidador para o site de um estranho.
  */
 export const HOSTS_EXTERNOS_PERMITIDOS = [
+  'irisflow-communicator.pages.dev',
+  // Endereço anterior do site (outro projeto do Cloudflare Pages, nosso): hoje
+  // só redireciona para o de cima, mas links antigos continuam abrindo.
   'irisflow.pages.dev',
   'github.com',
 ] as const;

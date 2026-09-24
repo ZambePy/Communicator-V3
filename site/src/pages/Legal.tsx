@@ -17,7 +17,7 @@ import './legal.css'
 type Block = { id: string; h: string; p?: string[]; list?: string[]; after?: string[] }
 
 /** Data da versão em vigor dos dois documentos. */
-const ATUALIZADO_EM = '23 de setembro de 2026'
+const ATUALIZADO_EM = '24 de setembro de 2026'
 
 const PRIVACIDADE: Block[] = [
   {
@@ -33,6 +33,7 @@ const PRIVACIDADE: Block[] = [
     h: '2. O que nunca sai do seu computador',
     p: [
       'O rastreamento ocular roda inteiro no computador onde o IrisFlow Communicator está instalado. As imagens da webcam, os pontos do rosto extraídos de cada quadro, os dados de calibração e os registros brutos de sessão são processados ali e não são enviados para a internet — nem para nós, nem para ninguém.',
+      'O mesmo vale para a voz personalizada e para o assistente de escrita: a gravação de referência da voz, o modelo de voz e o vocabulário que o assistente aprende ficam no computador. Para a voz, o aplicativo baixa uma vez os arquivos do modelo (do Hugging Face), sem enviar nenhum dado seu.',
       'Este site não acessa a sua câmera. A verificação de compatibilidade da página da beta só consulta se o navegador oferece acesso à webcam, sem ligá-la.',
     ],
   },
@@ -126,10 +127,11 @@ const PRIVACIDADE: Block[] = [
     ],
   },
   {
-    id: 'futuro',
-    h: '11. Módulos futuros',
+    id: 'voz-e-assistente',
+    h: '11. Voz personalizada e assistente de escrita',
     p: [
-      'A clonagem de voz e o assistente de conversação ainda estão em desenvolvimento e não fazem parte da beta atual. Antes de serem liberados, esta política será atualizada, e cada um só funcionará com uma autorização específica, que poderá ser revogada a qualquer momento.',
+      'A voz personalizada recria a voz de quem usa a partir de uma gravação escolhida pelo cuidador. Por ser dado biométrico (art. 5º, II, e art. 11 da LGPD), ela só é ativada depois que o responsável aceita, no próprio aplicativo, um termo de consentimento específico, e pode ser removida a qualquer momento em Configurações. A gravação e o modelo ficam no computador: nada disso é enviado para nós.',
+      'O assistente de escrita aprende palavras e frases de quem usa para sugeri-las de volta. Ele roda inteiro no computador, e o aprendizado pode ser desligado ou apagado em Configurações. Se um dia houver uma versão que use a internet, ela dependerá de uma autorização separada, revogável a qualquer momento, e esta política será atualizada antes.',
     ],
   },
 ]
@@ -172,10 +174,10 @@ const TERMOS: Block[] = [
   },
   {
     id: 'licenca',
-    h: '5. Licença de uso',
+    h: '5. Licença e código aberto',
     p: [
-      'Concedemos uma licença pessoal, não exclusiva, intransferível e revogável para instalar e usar o IrisFlow durante a beta. Não é permitido redistribuir, sublicenciar, vender, fazer engenharia reversa dos componentes proprietários (como o núcleo de calibração) nem usar o produto para fins ilícitos.',
-      'A marca IrisFlow e o código proprietário pertencem à IrisFlow. Componentes publicados como abertos seguem as próprias licenças.',
+      'O código-fonte do IrisFlow Communicator, do site e do app do cuidador é aberto, publicado sob a licença GNU GPL versão 3 (GPL-3.0). Copiar, estudar, modificar e redistribuir o código segue os termos dessa licença, e nada nestes termos os restringe. Componentes de terceiros seguem as próprias licenças.',
+      'Estes termos tratam do serviço oferecido pela IrisFlow: a conta, o programa beta, o app do cuidador e os servidores que fazem as mensagens chegarem. O nome e a marca IrisFlow não são licenciados pela GPL-3.0, e versões modificadas por terceiros não são o produto oferecido pela IrisFlow. Não é permitido usar o serviço para fins ilícitos.',
     ],
   },
   {
@@ -184,7 +186,7 @@ const TERMOS: Block[] = [
     list: [
       'A precisão depende da câmera, da iluminação, da distância, da posição da cabeça e do quadro clínico de quem usa.',
       'As medições de precisão feitas até aqui envolveram um único operador da equipe, em ambiente controlado, e ainda não foram replicadas com pacientes do público-alvo.',
-      'O controle do sistema operacional é funcional, não milimétrico: alvos muito pequenos, menus densos e arraste preciso ficam fora do alcance confortável do rastreamento por webcam.',
+      'O controle do sistema operacional (Modo Computador) funciona no Windows. A lupa torna alcançáveis alvos pequenos, mas arraste fino e menus muito densos continuam trabalhosos com a precisão de uma webcam.',
     ],
   },
   {

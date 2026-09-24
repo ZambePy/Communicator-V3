@@ -217,8 +217,8 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
         <Reveal anim="fade" delay={860}>
           <p className="pricing__note">
             Para clínicas, associações de pacientes e profissionais prescritores, o acesso durante
-            o programa de validação é gratuito. E se a mensalidade não couber no orçamento da
-            família, existe o programa IrisFlow Doa: pergunte antes de desistir.{' '}
+            o programa de validação é gratuito. E, se depois da beta a mensalidade não couber no
+            orçamento da família, fale com a gente antes de desistir.{' '}
             <Link to="/contato#validacao" className="underline-grow">
               Fale com a equipe
             </Link>

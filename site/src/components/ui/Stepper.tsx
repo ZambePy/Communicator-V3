@@ -8,6 +8,10 @@ type Props = {
 /**
  * Trilha de contexto: indica permanentemente em que etapa o usuário está.
  * É o quarto princípio de acessibilidade do produto, aplicado ao site.
+ *
+ * O traço de progresso é um segmento por etapa, entre o rótulo de uma e o
+ * círculo da seguinte — e não uma linha única atrás da trilha inteira, que
+ * passava por cima dos rótulos e os deixava com cara de riscados.
  */
 export function Stepper({ steps, current }: Props) {
   return (
@@ -35,15 +39,15 @@ export function Stepper({ steps, current }: Props) {
               </span>
               <span className="stepper__label">{label}</span>
               {state === 'current' && <span className="sr-only">(etapa atual)</span>}
+              {i < steps.length - 1 && (
+                <span className="stepper__line" aria-hidden="true">
+                  <span className="stepper__fill" />
+                </span>
+              )}
             </li>
           )
         })}
       </ol>
-      <span
-        className="stepper__bar"
-        style={{ transform: `scaleX(${steps.length > 1 ? current / (steps.length - 1) : 1})` }}
-        aria-hidden="true"
-      />
     </nav>
   )
 }

@@ -96,7 +96,10 @@ export function DownloadPanel({ onDownload, compact = false }: Props) {
             <span>
               O IrisFlow abre em <strong>tela cheia</strong>, para os alvos ficarem grandes e nada
               distrair o olhar. Ele está em <strong>beta</strong>: recebe atualizações frequentes, e
-              o próprio aplicativo baixa e instala as novas versões automaticamente.
+              o próprio aplicativo baixa e instala as novas versões automaticamente. Como o
+              instalador ainda não tem assinatura digital, o Windows pode mostrar o aviso “O
+              Windows protegeu o computador”: clique em <strong>Mais informações</strong> e depois
+              em <strong>Executar assim mesmo</strong>.
             </span>
           </p>
         )}

@@ -276,6 +276,9 @@ describe('webPreferences de toda janela', () => {
 
 describe('links externos: só no navegador do sistema, só para a lista', () => {
   it('site oficial (Cloudflare Pages) e GitHub abrem (com subdomínio)', () => {
+    expect(permitirAberturaExterna('https://irisflow-communicator.pages.dev/beta')).toBe(true);
+    expect(permitirAberturaExterna('https://abc123.irisflow-communicator.pages.dev/')).toBe(true);
+    // O endereço anterior continua aceito: ele redireciona para o atual.
     expect(permitirAberturaExterna('https://irisflow.pages.dev/beta')).toBe(true);
     expect(permitirAberturaExterna('https://irisflow.pages.dev/conta')).toBe(true);
     expect(permitirAberturaExterna('https://abc123.irisflow.pages.dev/')).toBe(true);
@@ -286,7 +289,11 @@ describe('links externos: só no navegador do sistema, só para a lista', () => 
   it('a lista fixa não carrega domínio próprio nem nome de repositório', () => {
     // Domínio próprio entra por VITE_SITE_URL (teste abaixo); repositório não
     // entra em lista nenhuma — o host github.com basta.
-    expect([...HOSTS_EXTERNOS_PERMITIDOS].sort()).toEqual(['github.com', 'irisflow.pages.dev']);
+    expect([...HOSTS_EXTERNOS_PERMITIDOS].sort()).toEqual([
+      'github.com',
+      'irisflow-communicator.pages.dev',
+      'irisflow.pages.dev',
+    ]);
   });
 
   it('domínio próprio só abre quando o build o configura (VITE_SITE_URL)', () => {

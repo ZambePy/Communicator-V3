@@ -97,8 +97,8 @@ export function Comparison() {
           >
             <table className="cmp">
               <caption className="sr-only">
-                Comparação entre a IrisFlow, sistemas de rastreamento ocular dedicados e aplicativos
-                de comunicação por piscada
+                Comparação entre a IrisFlow, sistemas de rastreamento ocular dedicados e
+                comunicadores nacionais por assinatura
               </caption>
               <thead>
                 <tr>
