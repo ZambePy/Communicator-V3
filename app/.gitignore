@@ -29,6 +29,11 @@ android/
 .env
 .env.*
 !.env.example
+# Exceção (24/09/2026): a configuração PÚBLICA de produção do app (URL e chave
+# anon do Supabase, sem segredo — as mesmas do eas.json e do EAS), usada pelo
+# `expo export` local. O scripts/conferir-config-publica.mjs confere no CI que
+# ela só tem o permitido.
+!/.env.production
 credentials.json
 credentials/
 google-services.json

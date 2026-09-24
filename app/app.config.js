@@ -6,10 +6,10 @@
  * versionado (.gitignore). Ele chega ao build de duas formas:
  *
  *   - EAS Build: variável de ambiente do tipo ARQUIVO `GOOGLE_SERVICES_JSON`
- *       eas env:create --environment production --name GOOGLE_SERVICES_JSON \
+ *       eas env:set --environment production --environment preview \
+ *         --environment development --name GOOGLE_SERVICES_JSON \
  *         --type file --value ./google-services.json --visibility secret
- *     (repita para preview/development). O EAS grava o arquivo e põe o
- *     caminho na variável.
+ *     O EAS grava o arquivo e põe o caminho na variável.
  *   - Local (`npx expo prebuild`/`run:android`): o arquivo em app/google-services.json.
  *
  * Sem nenhum dos dois o build sai normalmente, mas SEM push no Android — os

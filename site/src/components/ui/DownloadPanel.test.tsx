@@ -11,8 +11,8 @@ import { __resetLatestReleaseForTests } from '@/lib/latestRelease'
    chama de "em preparação", mesmo que o release tenha o arquivo.
    ============================================================ */
 
-const API = 'https://api.github.com/repos/ZambePy/Blinkv1/releases/latest'
-const DL = 'https://github.com/ZambePy/Blinkv1/releases/download/v1.0.0-beta.3'
+const API = 'https://api.github.com/repos/ZambePy/Communicator-v2/releases/latest'
+const DL = 'https://github.com/ZambePy/Communicator-v2/releases/download/v1.0.0-beta.3'
 
 const asset = (name: string) => ({ name, state: 'uploaded', browser_download_url: `${DL}/${name}` })
 
@@ -145,12 +145,12 @@ describe('<DownloadPanel /> com o último release do GitHub', () => {
     await waitFor(() => expect(document.querySelector('.dl')).not.toHaveAttribute('aria-busy'))
     expect(screen.getByRole('link', { name: /Baixar para Windows/ })).toHaveAttribute(
       'href',
-      'https://github.com/ZambePy/Blinkv1/releases/latest/download/IrisFlow-Setup.exe',
+      'https://github.com/ZambePy/Communicator-v2/releases/latest/download/IrisFlow-Setup.exe',
     )
     expect(screen.getByRole('button', { name: /macOS — Em breve/ })).toBeDisabled()
     expect(screen.getByRole('link', { name: /Todas as versões/ })).toHaveAttribute(
       'href',
-      'https://github.com/ZambePy/Blinkv1/releases',
+      'https://github.com/ZambePy/Communicator-v2/releases',
     )
   })
 

@@ -12,7 +12,7 @@
 --
 -- Idempotente: rodar de novo não duplica nada nem troca a senha de uma
 -- conta que já existe. A senha e o e-mail desta conta são protegidos por um
--- gatilho (migração 20260923150200_conta_de_teste_protegida.sql): a conta é pública, e
+-- gatilho (migração 20260924022108_conta_de_teste_protegida.sql): a conta é pública, e
 -- sem ele qualquer pessoa que entrasse podia trocar a senha e trancar os
 -- outros. Para a equipe trocar a senha de propósito, siga o SQL do cabeçalho
 -- daquela migração — e troque também em

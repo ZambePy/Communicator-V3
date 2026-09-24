@@ -56,6 +56,7 @@ const PASSOS = [
   { grupo: 'desktop', nome: 'build frontend',       dir: 'frontend', cmd: ['npm', 'run', 'build', '--silent'], build: true },
   { grupo: 'desktop', nome: 'compile Electron',     dir: '.',        cmd: ['npm', 'run', 'electron:compile', '--silent'], build: true },
   // ---- site: espelho do job `site` ----
+  { grupo: 'site',    nome: 'config pública',       dir: '.',        cmd: ['node', 'scripts/conferir-config-publica.mjs'] },
   { grupo: 'site',    nome: 'tsc site',             dir: 'site',     cmd: ['npx', 'tsc', '--noEmit', '-p', 'tsconfig.app.json'] },
   { grupo: 'site',    nome: 'vitest site',          dir: 'site',     cmd: ['npm', 'test', '--silent'] },
   { grupo: 'site',    nome: 'build site',           dir: 'site',     cmd: ['npm', 'run', 'build', '--silent'], build: true },

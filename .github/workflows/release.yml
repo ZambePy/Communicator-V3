@@ -2,8 +2,8 @@ name: Release
 
 # Instaladores do IrisFlow para Windows, macOS e Linux + atualização automática,
 # publicados num release do GitHub. O upload usa o GITHUB_TOKEN automático, e
-# assinatura de código é opcional. Numa tag, os ÚNICOS segredos obrigatórios são
-# VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (ver "Nuvem" abaixo).
+# assinatura de código é opcional. NENHUM segredo é obrigatório: a nuvem do
+# instalador vem da configuração pública versionada (ver "Nuvem" abaixo).
 #
 # QUANDO RODA
 #   - tag `v*` (ex.: v1.0.0-beta.3): verifica, empacota as três plataformas e
@@ -16,12 +16,16 @@ name: Release
 #     "permitir_sem_nuvem" (desligada por padrão) aceita gerar esse teste sem os
 #     segredos da nuvem.
 #
-# NUVEM (obrigatória numa tag): sem VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
-# o instalador NÃO falha sozinho — cai no serviço de licença SIMULADO
-# (frontend/src/services/license/index.ts), sem login real e sem app do
-# cuidador. Por isso o primeiro job confere os dois (mesmo teste do app:
-# URL https:// e chave com mais de 20 caracteres) e, faltando, para o workflow
-# antes de gastar minutos. Só o teste manual com "permitir_sem_nuvem" passa.
+# NUVEM (obrigatória numa tag): VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY vêm
+# de frontend/.env.production, versionado desde 24/09/2026 (valores públicos:
+# vão dentro de todo instalador; a RLS do banco protege os dados) — o `vite
+# build` o lê sozinho. Segredos com os mesmos nomes, se existirem, têm
+# prioridade. Sem nenhum dos dois o instalador NÃO falha sozinho — cai no
+# serviço de licença SIMULADO (frontend/src/services/license/index.ts), sem
+# login real e sem app do cuidador. Por isso o primeiro job confere a nuvem
+# (mesmo teste do app: URL https:// e chave com mais de 20 caracteres) e,
+# faltando, para o workflow antes de gastar minutos. Só o teste manual com
+# "permitir_sem_nuvem" passa.
 #
 # O QUE O RELEASE CONTÉM (nomes FIXOS — o site linka
 # https://github.com/<repositório de releases>/releases/latest/download/<nome>):
@@ -30,6 +34,10 @@ name: Release
 #            IrisFlow-mac-arm64.zip, IrisFlow-mac-x64.zip (+ .blockmap, latest-mac.yml)
 #   Linux    IrisFlow-linux-x86_64.AppImage, IrisFlow-linux-amd64.deb,
 #            IrisFlow-linux-x86_64.rpm (+ latest-linux.yml)
+#   Android  IrisFlow-Cuidador.apk — o app do cuidador, gerado pelo EAS (não
+#            por este workflow): baixado da variável de repositório
+#            IRISFLOW_APK_CUIDADOR_URL ou copiado do release anterior (passo
+#            "APK do app do cuidador"). O botão da /beta aponta para ele.
 # O electron-updater dos apps instalados lê os latest*.yml do release mais
 # recente e baixa o arquivo pela URL da TAG (/releases/download/vX/<nome>),
 # por isso o nome sem versão não confunde versões.
@@ -56,14 +64,18 @@ name: Release
 # (1.0.0-beta.N) e no título. O release só é criado depois que as TRÊS
 # plataformas passaram — o site nunca aponta para um release pela metade.
 #
-# SEGREDOS (Settings → Secrets and variables → Actions → Secrets). Eles NÃO
-# aparecem pelo nome neste arquivo — os passos recebem `toJSON(secrets)` e leem
-# só o que precisam (scripts/ci-segredos-opcionais.mjs para a nuvem e a
-# assinatura; o RELEASES_TOKEN só nos passos que falam com outro repositório).
-# Por isso a extensão do VS Code não acusa "Context access might be invalid"
-# enquanto eles não forem criados.
-#   Nuvem:   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY (OBRIGATÓRIOS numa tag);
-#            VITE_SITE_URL, VITE_DESKTOP_SYNC_URL (opcionais)
+# SEGREDOS (Settings → Secrets and variables → Actions → Secrets). Todos
+# opcionais; cada passo recebe só os que usa, pelo nome (segredo não cadastrado
+# chega vazio): o da nuvem e o de "Segredos opcionais" como SEGREDO_<NOME>,
+# filtrados por scripts/ci-segredos-opcionais.mjs; o RELEASES_TOKEN só nos
+# passos que falam com outro repositório. Nunca o contexto inteiro serializado
+# (toJSON de secrets): o GitHub o trata como possível exfiltração ("this
+# workflow file may be malicious") e segura cada execução até alguém aprovar à
+# mão. A extensão do VS Code acusa "Context access might be invalid" para
+# segredo ainda não cadastrado — só aviso do editor; o workflow roda.
+#   Nuvem:   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_SITE_URL,
+#            VITE_DESKTOP_SYNC_URL (todos opcionais: só para sobrepor o
+#            frontend/.env.production)
 #   Windows: WIN_CSC_LINK + WIN_CSC_KEY_PASSWORD (.pfx) — só estes: o CSC_* é
 #            do macOS e não chega ao job de Windows (se chegasse, o
 #            electron-builder assinaria o .exe com o certificado da Apple) —
@@ -74,11 +86,25 @@ name: Release
 #   Falhas:  IRISFLOW_CRASH_URL (envio de minidumps; vazio = ficam no computador)
 #   Outro repositório (releases ou modelos): RELEASES_TOKEN (ver acima)
 #
-# MODELO DO L2CS: `l2cs_gaze360.onnx` (92 MB) é gitignored. O workflow o baixa
+# L2CS NO INSTALADOR — variável de repositório IRISFLOW_BUILD_L2CS (Settings →
+# Secrets and variables → Actions → Variables); sem ela, `off`:
+#   - `off` (padrão desde 24/09/2026): o instalador sai SEM os pesos do L2CS e
+#     com o rastreamento só pelas features de íris. O `vite build` recebe a
+#     variável e o app nasce com `l2cs: 'off'` (src/config/experiment.ts,
+#     `aplicarPadroesDeBuild`) — status `disabled`, pré-calibração liberada,
+#     modelo sem o bloco angular. É a decisão enquanto os pesos atuais forem
+#     research-only (docs/MEDICOES.md: pesos com uso comercial proibido nunca
+#     saem num release).
+#   - `auto`: o de sempre — baixa os pesos (abaixo) e liga o L2CS. Use quando
+#     houver pesos com licença comercial. Troque só a variável; este arquivo
+#     não muda.
+#
+# MODELO DO L2CS (só com IRISFLOW_BUILD_L2CS diferente de `off`):
+# `l2cs_gaze360.onnx` (92 MB) é gitignored. O workflow o baixa
 # do release de tag `0.0.0-modelos` do repositório de modelos — variável
 # IRISFLOW_MODELOS_REPO; sem ela, o repositório de releases — e o empacota
 # DENTRO de todo instalador. Numa tag, sem modelo o release FALHA: um
-# instalador com rastreamento degradado não pode sair.
+# instalador que espera o L2CS e não o traz sairia com rastreamento degradado.
 #   - LICENÇA: os pesos atuais foram treinados no Gaze360, licença
 #     research-only (README, "Modelos" e "Pendências e riscos"). Num
 #     repositório PÚBLICO, o release de modelos deixa o arquivo para download
@@ -131,6 +157,10 @@ env:
   IRISFLOW_RELEASES_REPO: ${{ vars.IRISFLOW_RELEASES_REPO || github.repository }}
   # Repositório do release de modelos (ver cabeçalho); pode ser privado.
   IRISFLOW_MODELOS_REPO: ${{ vars.IRISFLOW_MODELOS_REPO || vars.IRISFLOW_RELEASES_REPO || github.repository }}
+  # L2CS no instalador (ver cabeçalho): `off` = sem os pesos, rastreamento só
+  # pelas features de íris; `auto` = com os pesos. O `vite build` do passo
+  # "Build do app e instaladores" lê esta mesma variável.
+  IRISFLOW_BUILD_L2CS: ${{ vars.IRISFLOW_BUILD_L2CS || 'off' }}
 
 jobs:
   # -------------------------------------------------------------------------
@@ -152,7 +182,8 @@ jobs:
       # manual, só com a opção "permitir_sem_nuvem" marcada.
       - name: Nuvem do instalador (VITE_SUPABASE_*)
         env:
-          SEGREDOS_JSON: ${{ toJSON(secrets) }}
+          SEGREDO_VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SEGREDO_VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           PERMITIR_SEM_NUVEM: ${{ github.event_name == 'workflow_dispatch' && inputs.permitir_sem_nuvem }}
         run: |
           if [ "$PERMITIR_SEM_NUVEM" = "true" ]; then
@@ -254,7 +285,25 @@ jobs:
       # seguintes. Ver o cabeçalho e scripts/ci-segredos-opcionais.mjs.
       - name: Segredos opcionais
         env:
-          SEGREDOS_JSON: ${{ toJSON(secrets) }}
+          SEGREDO_WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          SEGREDO_WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          SEGREDO_AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          SEGREDO_AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          SEGREDO_AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          SEGREDO_AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          SEGREDO_AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          SEGREDO_AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+          SEGREDO_AZURE_TRUSTED_SIGNING_PUBLISHER: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER }}
+          SEGREDO_CSC_LINK: ${{ secrets.CSC_LINK }}
+          SEGREDO_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          SEGREDO_APPLE_ID: ${{ secrets.APPLE_ID }}
+          SEGREDO_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          SEGREDO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SEGREDO_VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SEGREDO_VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SEGREDO_VITE_SITE_URL: ${{ secrets.VITE_SITE_URL }}
+          SEGREDO_VITE_DESKTOP_SYNC_URL: ${{ secrets.VITE_DESKTOP_SYNC_URL }}
+          SEGREDO_IRISFLOW_CRASH_URL: ${{ secrets.IRISFLOW_CRASH_URL }}
         run: node scripts/ci-segredos-opcionais.mjs --plataforma "${{ matrix.plataforma }}"
 
       - name: Versão da tag no package.json
@@ -269,11 +318,16 @@ jobs:
       # Só este passo e o de publicar veem o segredo.
       - name: Modelo do L2CS
         env:
-          SEGREDOS_JSON: ${{ toJSON(secrets) }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           TOKEN_DO_WORKFLOW: ${{ github.token }}
         run: |
-          token_de_releases="$(node -e "process.stdout.write(String((JSON.parse(process.env.SEGREDOS_JSON || '{}') || {}).RELEASES_TOKEN || ''))")"
-          unset SEGREDOS_JSON
+          if [ "$IRISFLOW_BUILD_L2CS" = "off" ]; then
+            unset RELEASES_TOKEN
+            echo "::notice::Instalador SEM o L2CS (IRISFLOW_BUILD_L2CS=off): os pesos não são baixados nem empacotados, e o app nasce com l2cs: 'off' — rastreamento pelas features de íris. Para ligar, defina a variável de repositório IRISFLOW_BUILD_L2CS=auto (release.yml, cabeçalho)."
+            exit 0
+          fi
+          token_de_releases="${RELEASES_TOKEN:-}"
+          unset RELEASES_TOKEN
           if [ "$IRISFLOW_MODELOS_REPO" != "$GITHUB_REPOSITORY" ] && [ -n "$token_de_releases" ]; then
             echo "::add-mask::$token_de_releases"
             export GH_TOKEN="$token_de_releases"
@@ -406,15 +460,57 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # APK do app do cuidador (Android) em todo release, com nome fixo: o
+      # site linka .../releases/latest/download/IrisFlow-Cuidador.apk
+      # (VITE_APP_CUIDADOR_URL em site/.env.production). Vem da variável de
+      # repositório IRISFLOW_APK_CUIDADOR_URL — o link do build do EAS, que
+      # expira em semanas — ou, sem ela ou com o link vencido, do release
+      # anterior. Sem nenhum dos dois o release sai sem o APK, com aviso.
+      - name: APK do app do cuidador
+        env:
+          APK_URL: ${{ vars.IRISFLOW_APK_CUIDADOR_URL }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TOKEN_DO_WORKFLOW: ${{ github.token }}
+        run: |
+          token_de_releases="${RELEASES_TOKEN:-}"
+          unset RELEASES_TOKEN
+          destino=dist/IrisFlow-Cuidador.apk
+          e_apk() {
+            # APK é um zip: começa com "PK" e tem ao menos 1 MB.
+            [ -f "$1" ] && [ "$(head -c 2 "$1")" = "PK" ] && [ "$(wc -c < "$1")" -gt 1048576 ]
+          }
+          if [ -n "$APK_URL" ] && curl -fsSL --retry 3 --max-time 900 -o "$destino" "$APK_URL" && e_apk "$destino"; then
+            echo "APK do cuidador: baixado de IRISFLOW_APK_CUIDADOR_URL"
+          else
+            rm -f "$destino"
+            if [ -n "$APK_URL" ]; then
+              echo "::warning::IRISFLOW_APK_CUIDADOR_URL não trouxe um APK (link do EAS vencido?); tentando o do release anterior."
+            fi
+            if [ "$IRISFLOW_RELEASES_REPO" != "$GITHUB_REPOSITORY" ] && [ -n "$token_de_releases" ]; then
+              echo "::add-mask::$token_de_releases"
+              export GH_TOKEN="$token_de_releases"
+            else
+              export GH_TOKEN="$TOKEN_DO_WORKFLOW"
+            fi
+            # Sem tag, o gh baixa do release mais recente — o anterior a este.
+            if gh release download --repo "$IRISFLOW_RELEASES_REPO" --pattern IrisFlow-Cuidador.apk --dir dist 2>/dev/null && e_apk "$destino"; then
+              echo "APK do cuidador: copiado do release anterior"
+            else
+              rm -f "$destino"
+              echo "::warning::Release SEM o APK do app do cuidador: o botão da /beta (VITE_APP_CUIDADOR_URL) vai dar 404. Defina a variável de repositório IRISFLOW_APK_CUIDADOR_URL com o link do APK do build do EAS (README, 'App do cuidador (EAS)') e rode o workflow de novo na mesma tag."
+            fi
+          fi
+          ls -la dist
+
       - name: Criar (ou completar) o release
         env:
-          SEGREDOS_JSON: ${{ toJSON(secrets) }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           TOKEN_DO_WORKFLOW: ${{ github.token }}
           TAG: ${{ github.ref_name }}
           VERSAO: ${{ needs.preparar.outputs.versao }}
         run: |
-          token_de_releases="$(printf '%s' "$SEGREDOS_JSON" | jq -r '.RELEASES_TOKEN // empty')"
-          unset SEGREDOS_JSON
+          token_de_releases="${RELEASES_TOKEN:-}"
+          unset RELEASES_TOKEN
           if [ "$IRISFLOW_RELEASES_REPO" = "$GITHUB_REPOSITORY" ]; then
             # O próprio repositório: o token do workflow (contents: write) basta.
             mesmo_repositorio=true

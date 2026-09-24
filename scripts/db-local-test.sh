@@ -24,7 +24,7 @@
 #     as linhas `create extension ... pg_cron/pg_net` saem na hora de aplicar.
 #
 # A ordem é a do nome (a versão no começo do arquivo), a mesma em que o
-# `supabase db push` aplica — inclusive as migrações que ainda não foram
+# `supabase db push` aplica — inclusive uma migração que ainda não tenha ido
 # para produção (ver README → Supabase).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -201,7 +201,7 @@ begin
 end $$;
 select 'seed: conta de teste conferida' as resultado;
 
--- Conta de teste protegida (migração 20260923150200_conta_de_teste_protegida): trocar a
+-- Conta de teste protegida (migração 20260924022108_conta_de_teste_protegida): trocar a
 -- senha ou o e-mail é recusado; o resto da linha (o que o Auth grava a cada
 -- login) passa; com a liberação explícita da equipe, a troca passa.
 do $$

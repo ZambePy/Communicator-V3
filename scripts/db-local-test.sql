@@ -92,7 +92,7 @@ end $$;
 
 -- 7.1 Novo login no MESMO computador (mesmo id local): substitui o vínculo
 --     dele em vez de acumular; o outro computador não é tocado; sem id
---     local (desktop antigo) nada é revogado. (migração 20260923150100_pair_device_mesmo_computador)
+--     local (desktop antigo) nada é revogado. (migração 20260924022100_pair_device_mesmo_computador)
 do $$
 declare b uuid; antigo uuid; outro uuid; novo jsonb; sem_id jsonb;
 begin
@@ -312,7 +312,7 @@ update public.beta_program set open = false;
 set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
 
 -- ---------------------------------------------------------------------
--- 16. Escalonamento de emergência (20260923022524 + 20260923150000_help_requests_received_at)
+-- 16. Escalonamento de emergência (20260923022524 + 20260924020011_help_requests_received_at)
 --     Com o pg_net de mentira: o que teria sido enviado fica em net.chamadas.
 --     O prazo conta da CHEGADA (received_at), não de quando o pedido
 --     aconteceu no computador (created_at) — um socorro que esperou na fila

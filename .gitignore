@@ -122,6 +122,10 @@ relatorio-clinico-paciente-*.json
 .env
 .env.*
 !.env.example
+# Exceção (24/09/2026): a configuração PÚBLICA do build do desktop (URL e chave
+# anon do Supabase, sem segredo). O scripts/conferir-config-publica.mjs confere
+# no CI que ela só tem o permitido. Só este caminho — nenhum outro .env.*.
+!/frontend/.env.production
 *.pem
 *.key
 *.pfx

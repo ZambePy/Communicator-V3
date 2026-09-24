@@ -1,10 +1,9 @@
 -- =====================================================================
 -- IrisFlow — a conta de teste pública não pode ter senha nem e-mail trocados
 --
--- AINDA NÃO APLICADA EM PRODUÇÃO (23/09/2026): a aplicação pelo assistente foi
--- barrada pela checagem de permissões. Aplique com `supabase db push` (a versão
--- do nome já está depois da última registrada no projeto) ou colando este
--- arquivo no SQL Editor — é idempotente. Ordem: 150000 → 150100 → 150200.
+-- APLICADA EM PRODUÇÃO em 24/09/2026, registrada no projeto como a versão
+-- 20260924022108 (o nome do arquivo acompanha o histórico remoto, para o
+-- `supabase db push` reconhecê-la). Idempotente.
 --
 -- A conta admin@irisflow.com / irisflow2026 (supabase/seed.sql) é pública de
 -- propósito: está no README e nos apps, e o repositório é público. Qualquer

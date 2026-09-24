@@ -120,11 +120,17 @@ function conferirApp({ rotulo, recursos, binarioOuApp }) {
   }
   if (fs.existsSync(path.join(recursos, 'app'))) falhar(rotulo, 'existe resources/app: código fora do asar');
 
-  // 2. Conteúdo do asar.
-  const entradas = asar.listPackage(arquivoAsar, { isPack: false }).map((e) => e.replace(/\\/g, '/'));
+  // 2. Conteúdo do asar. A listagem vem com o separador do sistema (`\` no
+  // Windows); as regras abaixo usam `/`, mas o @electron/asar só acha um
+  // arquivo pelo caminho com o separador do sistema — por isso cada entrada
+  // guarda o seu caminho nativo para statFile/extractFile.
+  const nativas = asar.listPackage(arquivoAsar, { isPack: false });
+  const entradas = nativas.map((e) => e.replace(/\\/g, '/'));
+  const nativaDe = new Map(entradas.map((e, i) => [e, nativas[i]]));
+  const noAsar = (e) => nativaDe.get(e).slice(1);
   const arquivos = entradas.filter((e) => {
     try {
-      return !asar.statFile(arquivoAsar, e.slice(1)).files;
+      return !asar.statFile(arquivoAsar, noAsar(e)).files;
     } catch {
       return true;
     }
@@ -143,7 +149,7 @@ function conferirApp({ rotulo, recursos, binarioOuApp }) {
   if (!bundles.some((e) => e === '/dist-electron/main.cjs')) falhar(rotulo, 'dist-electron/main.cjs ausente');
   if (!bundles.some((e) => e.startsWith('/frontend/dist/assets/'))) falhar(rotulo, 'frontend/dist/assets ausente');
   for (const e of bundles) {
-    const texto = asar.extractFile(arquivoAsar, e.slice(1)).toString('utf8');
+    const texto = asar.extractFile(arquivoAsar, noAsar(e)).toString('utf8');
     if (/[#@]\s*sourceMappingURL=/.test(texto)) falhar(rotulo, `${e} aponta para source map`);
     if (texto.length >= TAMANHO_MINIMO_PARA_MEDIR) {
       const linhas = texto.split('\n').length;

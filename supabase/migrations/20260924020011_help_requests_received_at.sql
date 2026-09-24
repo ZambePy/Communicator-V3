@@ -1,10 +1,9 @@
 -- =====================================================================
 -- IrisFlow — help_requests.received_at: quando o SERVIDOR recebeu o pedido
 --
--- AINDA NÃO APLICADA EM PRODUÇÃO (23/09/2026): a aplicação pelo assistente foi
--- barrada pela checagem de permissões. Aplique com `supabase db push` (a versão
--- do nome já está depois da última registrada no projeto) ou colando este
--- arquivo no SQL Editor — é idempotente. Ordem: 150000 → 150100 → 150200.
+-- APLICADA EM PRODUÇÃO em 24/09/2026, registrada no projeto como a versão
+-- 20260924020011 (o nome do arquivo acompanha o histórico remoto, para o
+-- `supabase db push` reconhecê-la). É idempotente.
 --
 -- Por quê. A Edge Function `desktop-sync` passou a gravar em `created_at` o
 -- horário em que o pedido de ajuda aconteceu no computador do paciente
