@@ -8,7 +8,7 @@
    ============================================================ */
 
 /** Usado quando VITE_SITE_URL não está definida. */
-export const DEFAULT_SITE_URL = 'https://irisflow.pages.dev'
+export const DEFAULT_SITE_URL = 'https://irisflow-communicator.pages.dev'
 
 /**
  * Normaliza a origem: aceita "irisflow.tech", "https://irisflow.tech/",

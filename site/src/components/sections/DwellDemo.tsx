@@ -337,10 +337,9 @@ export function DwellDemo() {
         <Reveal anim="fade" delay={320}>
           <p className="demo__note">
             A prancha não substitui o teclado: ela resolve o que se repete todo dia, e o teclado
-            ordenado pela frequência das letras do português continua ali para o que não cabe em
-            um pictograma. No produto, a fixação já vocaliza a frase sozinha — aqui o botão existe
-            porque ninguém gosta de um site que começa a falar sem avisar. O repertório de
-            pictogramas é editado pelo cuidador, com as palavras que aquela casa usa.
+            continua ali para o que não cabe em um pictograma, com sugestões que aprendem as
+            palavras e as frases de quem usa. No produto, a fixação já vocaliza a frase sozinha —
+            aqui o botão existe porque ninguém gosta de um site que começa a falar sem avisar.
           </p>
         </Reveal>
       </div>

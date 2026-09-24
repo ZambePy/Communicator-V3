@@ -1,5 +1,4 @@
 .stepper {
-  position: relative;
   margin-bottom: var(--sp-6);
   padding-bottom: var(--sp-4);
 }
@@ -9,18 +8,24 @@
   margin: 0;
   padding: 0;
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   gap: var(--sp-3);
-  position: relative;
-  z-index: 1;
 }
 
+/* Cada etapa ocupa o espaço que sobra até a seguinte; o traço (.stepper__line)
+   preenche esse espaço DEPOIS do rótulo, então nunca passa por cima do texto.
+   A última etapa não tem traço e fica só do tamanho do conteúdo. */
 .stepper__item {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
   margin: 0;
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.stepper__item:last-child {
+  flex: 0 0 auto;
 }
 
 .stepper__dot {
@@ -62,6 +67,8 @@
 }
 
 .stepper__label {
+  flex: none;
+  white-space: nowrap;
   font-size: 0.92rem;
   font-weight: 600;
   color: var(--text-dim);
@@ -76,33 +83,33 @@
   color: var(--text-soft);
 }
 
-.stepper__bar {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  top: 18px;
+/* Traço entre uma etapa e a seguinte: trilho apagado e, por cima, o
+   preenchimento que acende quando a etapa é concluída. */
+.stepper__line {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: var(--sp-4);
   height: 2px;
-  transform-origin: left;
-  background: linear-gradient(90deg, var(--teal), var(--accent));
-  transition: transform var(--dur-slow) var(--ease-out);
-  z-index: 0;
+  border-radius: 1px;
+  background: var(--line);
+  overflow: hidden;
 }
 
-.stepper::before {
-  content: '';
+.stepper__fill {
   position: absolute;
-  left: 18px;
-  right: 18px;
-  top: 18px;
-  height: 2px;
-  background: var(--line);
+  inset: 0;
+  background: linear-gradient(90deg, var(--teal), var(--accent));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.stepper__item.is-done .stepper__fill {
+  transform: scaleX(1);
 }
 
 @media (max-width: 700px) {
   .stepper__label {
     display: none;
-  }
-  .stepper ol {
-    justify-content: flex-start;
   }
 }

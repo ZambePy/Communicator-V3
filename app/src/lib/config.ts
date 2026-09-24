@@ -6,7 +6,7 @@ import Constants from 'expo-constants';
  * `EXPO_PUBLIC_SITE_URL` em `app/.env` (ver `.env.example`). Sem a variável, o
  * padrão é o endereço público do site, o mesmo de `site/src/seo/site.ts`.
  */
-export const DEFAULT_SITE_URL = 'https://irisflow.pages.dev';
+export const DEFAULT_SITE_URL = 'https://irisflow-communicator.pages.dev';
 
 export const SITE_URL = (process.env.EXPO_PUBLIC_SITE_URL || DEFAULT_SITE_URL).trim().replace(/\/+$/, '');
 
@@ -27,7 +27,7 @@ export const CONTA_DE_TESTE = { email: 'admin@irisflow.com', senha: 'irisflow202
  */
 export type SiteRoute = '/beta' | '/conta' | '/contato' | '/recuperar-senha' | '/nova-senha' | '/privacidade' | '/termos';
 
-/** URL completa de uma rota do site, ex.: `siteRoute('/beta')` → `https://irisflow.pages.dev/beta`. */
+/** URL completa de uma rota do site, ex.: `siteRoute('/beta')` → `https://irisflow-communicator.pages.dev/beta`. */
 export function siteRoute(route: SiteRoute): string {
   return `${SITE_URL}${route}`;
 }

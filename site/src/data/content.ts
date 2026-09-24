@@ -1,13 +1,17 @@
 /* ============================================================
-   Conteúdo do site, extraído do Plano de Negócios IrisFlow 2026.
-   Fica centralizado aqui para que texto e números possam ser
-   revisados sem abrir nenhum componente. Todos os dados são
-   verificáveis no plano.
+   Conteúdo do site, centralizado aqui para que texto e números
+   possam ser revisados sem abrir nenhum componente.
+
+   Regra: o que descreve o produto diz o que o aplicativo faz HOJE
+   (conferido no código e no README da raiz), sem recurso prometido
+   como pronto. Números de mercado vêm da pesquisa de 2026 (38
+   respondentes) e do Plano de Negócios, e aparecem com a ressalva
+   de amostra onde são usados.
    ============================================================ */
 
 import type { IconName } from '@/components/ui/Icon'
 import { resolveSiteUrl } from '@/seo/site'
-import { platformsText, RELEASES_AVAILABLE } from '@/lib/releases'
+import { platformsText, RELEASES_AVAILABLE, RELEASES_REPO } from '@/lib/releases'
 
 /** Origem pública do site: base de URLs absolutas (og:image, canonical).
     Vem de VITE_SITE_URL no build; sem ela, o padrão de src/seo/site.ts. */
@@ -42,8 +46,9 @@ export const BRAND = {
   email: 'irisflowteam@gmail.com',
   instagram: 'https://www.instagram.com/irisflow.ia',
   linkedin: 'https://www.linkedin.com/company/irisflowia/',
-  // Sem link para repositório de código: o projeto é confidencial e o site
-  // entrega só a solução (ver CODE_POSITION).
+  /** Código-fonte público (GPL-3.0): o mesmo repositório dos instaladores
+      (VITE_RELEASES_REPO). Ver CODE_POSITION. */
+  code: `https://github.com/${RELEASES_REPO}`,
 }
 
 /** Texto do hero da home. */
@@ -111,7 +116,7 @@ export const SEGMENTS: {
     icon: 'monitor',
     title: 'Lesão medular alta',
     fit: 'Tetraplegia por lesão cervical: cognição e visão intactas, quadro estável. Além de falar, a pessoa volta a usar o computador — navegar, escrever, trabalhar.',
-    caveat: 'O controle do sistema é funcional, não milimétrico: menus densos e arraste preciso ficam fora do alcance confortável.',
+    caveat: 'No Windows, a lupa do Modo Computador torna alcançáveis os botões pequenos, mas arraste fino e menus muito densos continuam trabalhosos.',
   },
   {
     id: 'esclerose-multipla',
@@ -137,7 +142,7 @@ export const ELIGIBILITY = {
   items: [
     {
       q: 'Consegue fixar o olhar em um ponto por cerca de um segundo?',
-      why: 'É o gesto que substitui o clique. Tremor leve e óculos não atrapalham; o tempo de fixação é ajustável de 0,8 a 2,5 s.',
+      why: 'É o gesto que substitui o clique. Tremor leve e óculos não atrapalham, e o tempo de fixação é ajustável de 0,4 a 4 segundos.',
     },
     {
       q: 'Compreende o que é dito e reconhece letras ou figuras?',
@@ -218,9 +223,13 @@ export const PROBLEM = {
   },
 }
 
-/* ---------------- módulos da solução (Quadro 7 do plano) ---------------- */
+/* ---------------- módulos do aplicativo ----------------
+   O que o IrisFlow Communicator tem hoje, na ordem em que a família
+   encontra (a Home mostra os seis primeiros). Cada descrição foi conferida
+   no aplicativo; "Experimental" é o mesmo selo que o próprio app mostra.
+   ------------------------------------------------------------------ */
 
-export type ModuleState = 'Implementado' | 'Em realização'
+export type ModuleState = 'Implementado' | 'Experimental'
 
 export const MODULES: {
   icon: IconName
@@ -229,73 +238,73 @@ export const MODULES: {
   state: ModuleState
 }[] = [
     {
-      icon: 'alvo',
-      name: 'Onboarding e calibração',
-      description:
-        'Tela inicial, seleção de perfil, acesso protegido do cuidador, calibração guiada de cerca de meio minuto e verificação rápida antes de cada sessão.',
-      state: 'Implementado',
-    },
-    {
       icon: 'teclado',
       name: 'Comunicação',
       description:
-        'Teclado virtual ordenado pela frequência das letras do português, campo de texto com síntese de voz, frases rápidas e pictogramas.',
+        'Teclado em dois passos — primeiro o grupo de letras, depois a letra —, frases rápidas e pictogramas, tudo falado em voz alta em português. Letras e botões grandes, sempre no mesmo lugar.',
       state: 'Implementado',
     },
     {
       icon: 'monitor',
-      name: 'Computador',
+      name: 'Modo Computador',
       description:
-        'Mouse virtual que assume o cursor do sistema operacional, permitindo abrir programas, navegar e clicar em alvos de tamanho razoável.',
+        'O cursor do olhar sai do aplicativo e controla o Windows inteiro: clicar, clicar duas vezes, clicar com o botão direito, arrastar, rolar e digitar em qualquer programa, com uma lupa para os alvos pequenos.',
       state: 'Implementado',
     },
     {
-      icon: 'lazer',
-      name: 'Lazer e bem-estar',
+      icon: 'conversa',
+      name: 'Conversa com o cuidador',
       description:
-        'Jogos adaptados ao olhar (Estoura Bolhas, Jogo da Memória, Desenho e Siga o Alvo), galeria de imagens e conteúdo de estimulação.',
-      state: 'Implementado',
-    },
-    {
-      icon: 'pessoas',
-      name: 'Cuidador',
-      description:
-        'Painel com status da sessão, tela de confirmação rápida de estado e histórico de solicitações de ajuda.',
+        'O que a pessoa escreve com os olhos chega ao app do cuidador no celular; o que a família responde aparece e é falado na tela do computador, com respostas rápidas que o cuidador cadastra.',
       state: 'Implementado',
     },
     {
       icon: 'alerta',
       name: 'Emergência',
       description:
-        'Célula de pedido de ajuda em posição fixa em todas as telas, com escalonamento automático para contato externo caso não haja resposta.',
+        'Botão de socorro no mesmo lugar em todas as telas. Dispara um alarme no computador e aparece em tela cheia no app do cuidador; se ninguém confirmar no prazo, o pedido é reforçado.',
+      state: 'Implementado',
+    },
+    {
+      icon: 'lazer',
+      name: 'Lazer e bem-estar',
+      description:
+        'Jogos feitos para o olhar (Estoura Bolhas, Siga o Alvo, Jogo da Memória e Desenho), notícias, meditação, câmera com álbum de fotos e um modo descanso para os olhos.',
+      state: 'Implementado',
+    },
+    {
+      icon: 'alvo',
+      name: 'Primeiros passos e calibração',
+      description:
+        'Tutorial de dez passos nas telas de verdade, um perfil por paciente, preparo do posto de uso e calibração guiada de cerca de meio minuto, com teste de precisão ao final.',
       state: 'Implementado',
     },
     {
       icon: 'ajustes',
-      name: 'Configurações',
+      name: 'Área do cuidador',
       description:
-        'Ajuste de tempo de fixação, sensibilidade, estabilidade do cursor, layout de teclado, voz e idioma.',
+        'Protegida por PIN: tempo de fixação, estabilidade do cursor, som, voz e idioma, painel com o estado do rastreamento, guia de instalação e um relatório de suporte que nunca inclui o que a pessoa escreveu.',
       state: 'Implementado',
     },
     {
-      icon: 'conversa',
-      name: 'Assistente de conversação',
+      icon: 'documento',
+      name: 'Assistente de escrita',
       description:
-        'Composição assistida de frases por inteligência artificial, para reduzir o custo motor de escrever letra a letra.',
-      state: 'Em realização',
+        'Aprende as palavras e as frases que a pessoa usa e as sugere no teclado e na conversa, para que repetir o que já foi dito custe uma fixação em vez de vinte. Roda inteiro no computador.',
+      state: 'Implementado',
     },
     {
       icon: 'voz',
-      name: 'Clonagem de voz',
+      name: 'Voz personalizada',
       description:
-        'Reprodução das frases do usuário com a sua própria voz, gerada a partir de amostras de áudio anteriores à perda da fala.',
-      state: 'Em realização',
+        'O que a pessoa escreve sai na própria voz dela, recriada no computador a partir de uma gravação antiga — só com autorização expressa, porque voz é dado biométrico. Pede um computador com mais memória.',
+      state: 'Experimental',
     },
   ]
 
 /* ---------------- como funciona: os seis estágios, em linguagem de benefício ----------------
-   O projeto é confidencial: aqui entra o QUE cada etapa entrega a quem usa,
-   nunca a técnica (bibliotecas, modelos, algoritmos, parâmetros). */
+   Aqui entra o QUE cada etapa entrega a quem usa, não a técnica (bibliotecas,
+   modelos, parâmetros): quem quiser o detalhe tem o código aberto e o README. */
 
 /** A versão em três frases, para quem não é engenheiro. Fica acima do pipeline. */
 export const PIPELINE_SIMPLE = [
@@ -343,32 +352,32 @@ export const DIFFERENTIATORS: { icon: IconName; title: string; text: string }[] 
   {
     icon: 'olho',
     title: 'Calibração que aprende o seu olhar',
-    text: 'Em cerca de meio minuto, o sistema aprende o jeito de olhar de cada pessoa, naquele computador e naquela posição, e percebe quando um ponto da calibração saiu ruim para não deixar que ele estrague o resultado. É o ativo técnico proprietário da empresa.',
+    text: 'Em cerca de meio minuto, o sistema aprende o jeito de olhar de cada pessoa, naquele computador e naquela posição, e percebe quando um ponto da calibração saiu ruim para que ele não estrague o resultado. Ao final, um teste mede a precisão alcançada.',
   },
   {
     icon: 'inclinacao',
     title: 'A cabeça não precisa ficar imóvel',
-    text: 'A inclinação da cabeça é compensada automaticamente, inclusive além do que foi visto na calibração. A pessoa não precisa travar a postura para usar.',
+    text: 'Movimentos pequenos — virar, inclinar, aproximar ou afastar o rosto — são compensados automaticamente. Quando a postura muda muito, a tela avisa e um reajuste de dois segundos resolve, sem refazer a calibração.',
   },
   {
     icon: 'webcam',
     title: 'Preparação automática do posto de uso',
-    text: 'Antes de calibrar, o sistema confere distância, enquadramento, postura e iluminação, inclusive reflexo nos óculos, e ajusta a câmera sozinho quando dá. Quando não dá, diz qual providência tomar em vez de fingir que ajustou.',
+    text: 'Antes de calibrar, o sistema confere distância, enquadramento, postura e iluminação, inclusive reflexo nos óculos, e ajusta zoom, brilho e contraste da câmera sozinho quando dá. Quando não dá, diz qual providência tomar em vez de fingir que ajustou.',
   },
   {
     icon: 'teclado',
-    title: 'Teclado ordenado pelo português',
-    text: 'As teclas seguem a frequência das letras do idioma (A, E, O, S, R, I, N, D, M, U, T, C, L) em vez da ordem QWERTY, o que encurta a distância média que o olho percorre entre teclas consecutivas. Os layouts alfabético e QWERTY seguem disponíveis.',
+    title: 'Escrever custa cada vez menos',
+    text: 'O teclado tem letras enormes, escolhidas em dois passos, e o assistente de escrita aprende o vocabulário da pessoa: sugere a próxima palavra, a frase inteira e até a resposta que ela costuma dar a cada pergunta do cuidador.',
   },
   {
     icon: 'offline',
     title: 'Funciona sem internet',
-    text: 'Núcleo de rastreamento, teclado e frases rápidas operam offline. Foi apontado como essencial por 57,9% dos respondentes da pesquisa, à frente até da síntese de voz — em casas do interior, com conexão instável, depender da internet seria fragilidade.',
+    text: 'Rastreamento, teclado, frases e o alarme de emergência no computador funcionam offline. Isso foi apontado como essencial por 57,9% dos respondentes da nossa pesquisa, à frente até da síntese de voz — em casas com conexão instável, depender da internet seria fragilidade.',
   },
   {
     icon: 'cadeado',
     title: 'Privacidade por desenho',
-    text: 'A privacidade tem três camadas. O rastreamento ocular é 100% local: imagens da câmera, marcos faciais, calibração e registros brutos de sessão nunca saem do dispositivo. Com conta vinculada, o que sai é apenas o texto que o paciente escolheu enviar, os alertas e os indicadores agregados. E dois módulos só funcionam com autorização expressa por funcionalidade, revogável a qualquer momento: a clonagem de voz, porque o áudio de referência é dado biométrico, e o chatbot integrado. Antes do lançamento comercial, o tráfego de rede da aplicação passa por verificação externa e o resultado é publicado: a promessa fica comprovada por terceiro, e não apenas declarada por nós.',
+    text: 'O rastreamento é 100% local: imagens da câmera, marcos do rosto, calibração e registros brutos de sessão nunca saem do computador. Com a conta vinculada, sai só o que a pessoa escolheu dizer, os alertas e números agregados de uso. A voz personalizada depende de autorização expressa e revogável. E o código é aberto: qualquer pessoa pode conferir essas promessas.',
   },
 ]
 
@@ -397,15 +406,18 @@ export const A11Y_PRINCIPLES = [
   },
 ]
 
-/* ---------------- comparativo ---------------- */
+/* ---------------- comparativo ----------------
+   As duas categorias de comparação vêm da análise de mercado do Plano de
+   Negócios (faixas de preço, não marcas). O custo da IrisFlow é o da grade
+   de planos PREVISTA (12 × Essencial a 12 × Voz) — na beta, é gratuito.
+   ---------------------------------------------- */
 
 export const COMPARISON = {
   columns: ['IrisFlow', 'Eye tracker dedicado', 'Comunicador nacional por assinatura'],
   rows: [
-    { feature: 'Custo no primeiro ano', values: ['R$ 2.988 a R$ 7.788 em assinatura', 'R$ 15.000 a R$ 80.000', 'R$ 708 a R$ 1.490'] },
+    { feature: 'Custo no primeiro ano', values: ['grátis na beta; depois, R$ 2.988 a R$ 7.788 (previsto)', 'R$ 15.000 a R$ 80.000', 'R$ 708 a R$ 1.490'] },
     { feature: 'Compra de equipamento', values: ['não', 'sim', 'parcial'] },
     { feature: 'Apontamento direto pelo olhar', values: ['sim', 'sim', 'não'] },
-    { feature: 'Teclado ordenado pela frequência do português', values: ['sim', 'não', 'não'] },
     { feature: 'Controle do sistema operacional', values: ['sim', 'sim', 'não'] },
     { feature: 'Painel do cuidador e emergência', values: ['sim', 'parcial', 'não'] },
     { feature: 'Funciona offline', values: ['sim', 'sim', 'parcial'] },
@@ -413,7 +425,7 @@ export const COMPARISON = {
     { feature: 'Adoção institucional consolidada', values: ['não', 'sim', 'sim'] },
   ],
   honesty:
-    'Duas coisas precisam ser ditas aqui, e nenhuma delas ajuda a vender. A primeira: a IrisFlow não é a solução mais barata do mercado brasileiro de tecnologia assistiva. Existem comunicadores nacionais por assinatura que custam menos, com distribuição consolidada e adoção por grandes centros de reabilitação. A afirmação correta é mais estreita e continua valendo: entre as soluções que apontam direto pelo olhar, categoria em que as alternativas pedem de R$ 6.000 a R$ 80.000 no primeiro ano, a IrisFlow é a mais barata do país, com uma redução de custo de acesso superior a 90%. A segunda: a IrisFlow ainda não tem estudo clínico publicado, e nisso perde para quem tem décadas de vantagem. Essa distância não se fecha com texto de site. Fecha com execução, e o programa de validação de noventa dias é o começo dela.',
+    'Duas coisas precisam ser ditas aqui, e nenhuma delas ajuda a vender. A primeira: a IrisFlow não é a solução mais barata do mercado brasileiro de tecnologia assistiva. Existem comunicadores nacionais por assinatura que custam menos, com distribuição consolidada e adoção por grandes centros de reabilitação — mas eles não apontam direto pelo olhar. Entre as soluções que apontam pelo olhar, cujo equipamento custa de R$ 15 mil a R$ 80 mil, a IrisFlow é a de menor custo de entrada que conhecemos no país: não há nada para comprar, e durante a beta o uso é gratuito. A segunda: a IrisFlow ainda não tem estudo clínico publicado, e nisso perde para quem tem décadas de vantagem. Essa distância não se fecha com texto de site. Fecha com execução, e o programa de validação de noventa dias é o começo dela.',
 }
 
 /* ---------------- planos de assinatura ---------------- */
@@ -506,12 +518,12 @@ export const PLANS: Plan[] = ([
     devices: '1 dispositivo ativo',
     support: 'Suporte por e-mail e tutoriais',
     includes: [
-      'Comunicação por olhar, teclado em português e frases rápidas',
-      'Controle do cursor do sistema operacional',
-      'Painel do cuidador e acionamento de emergência',
-      `Instalador para ${PLATFORMS.long}`,
+      'Comunicação por olhar: teclado, frases rápidas, pictogramas e voz em português',
+      'Modo Computador: o Windows inteiro pelo olhar',
+      'App do cuidador no celular, com conversa e alertas de emergência',
+      'Lazer e bem-estar: jogos pelo olhar, notícias e meditação',
       'Calibração guiada e preparação automática do posto',
-      'Funcionamento offline do núcleo de rastreamento',
+      `Instalador para ${PLATFORMS.long}, com funcionamento offline`,
     ],
   },
   {
@@ -519,17 +531,16 @@ export const PLANS: Plan[] = ([
     name: 'Completo',
     price: 399,
     period: 'por mês',
-    tagline: 'O plano recomendado. Reduz o esforço de escrever letra a letra e acrescenta o lazer terapêutico.',
+    tagline: 'O plano recomendado. O assistente de escrita poupa o esforço de escrever letra a letra, e os relatórios mostram à família como está o uso.',
     devices: 'Até 3 dispositivos ativos',
     support: 'Suporte prioritário por mensagem',
     recommended: true,
     includes: [
       'Tudo do plano Essencial',
-      'Assistente de conversação com inteligência artificial',
-      'Módulo de lazer e bem-estar com jogos adaptados',
-      'Relatórios de sessão e histórico de uso para a família',
+      'Assistente de escrita, que aprende as palavras e as frases da pessoa',
+      'Relatórios de uso e do teste de precisão no app do cuidador',
+      'O mesmo acesso em mais de um computador',
       'Uma sessão de calibração assistida no primeiro mês',
-      'Atualizações contínuas enquanto a assinatura estiver ativa',
     ],
   },
   {
@@ -538,14 +549,12 @@ export const PLANS: Plan[] = ([
     price: 649,
     period: 'por mês',
     tagline: 'A voz do próprio paciente, reconstruída a partir de gravações anteriores à perda da fala.',
-    note: 'A clonagem de voz está em fase experimental: o modelo é gerado e roda no próprio computador, e o módulo só é ativado mediante autorização expressa da família, porque o áudio de referência é dado biométrico. O plano Voz só entra em comercialização quando esse módulo for validado — até lá, indicamos o Completo.',
+    note: 'A voz personalizada está em fase experimental: é gerada e roda no próprio computador, pede um computador com 16 GB de memória para funcionar bem e só é ativada com autorização expressa da família, porque o áudio de referência é dado biométrico. O plano Voz só entra em comercialização quando esse recurso for validado — até lá, indicamos o Completo.',
     devices: 'Até 5 dispositivos ativos',
-    support: 'Suporte dedicado com resposta em até 4 h úteis',
+    support: 'Suporte dedicado, com prioridade',
     includes: [
       'Tudo do plano Completo',
-      'Clonagem da voz do próprio paciente',
-      'Perfis múltiplos no mesmo dispositivo',
-      'Backup em nuvem das frases, pictogramas e configurações',
+      'Voz personalizada: a própria voz do paciente, recriada no computador',
       'Onboarding assistido, com sessão de configuração acompanhada',
       'Canal direto com a equipe técnica',
     ],
@@ -568,11 +577,11 @@ export const BETA_PLAN: Plan = {
   support: 'Canal direto com a equipe',
   purchasable: false,
   includes: [
-    'Comunicação por olhar, teclado em português e frases rápidas',
-    'Controle do cursor do sistema operacional',
-    'Painel do cuidador, app do cuidador no celular e acionamento de emergência',
-    'Assistente de conversação e módulo de lazer e bem-estar',
-    'Relatórios de sessão e histórico de uso para a família',
+    'Comunicação por olhar: teclado, frases rápidas, pictogramas e voz em português',
+    'Modo Computador: o Windows inteiro pelo olhar',
+    'App do cuidador no celular, com conversa, alertas de emergência e relatórios',
+    'Assistente de escrita, lazer e bem-estar',
+    'Voz personalizada, em fase experimental',
     `Instalador para ${PLATFORMS.long}, com atualizações automáticas durante a beta`,
   ],
 }
@@ -644,23 +653,23 @@ export const FAQ = [
   },
   {
     q: 'As imagens da câmera saem do meu computador?',
-    a: `Não. ${PRIVACY_LINE} Marcos faciais, dados de calibração e registros brutos de sessão também ficam no dispositivo. Quando existe conta vinculada, o que sobe é apenas o texto que o paciente escolheu enviar, os alertas e indicadores agregados de uso. Clonagem de voz e chatbot integrado são as duas exceções, e cada uma depende de autorização expressa e revogável antes de funcionar.`,
+    a: `Não. ${PRIVACY_LINE} Marcos faciais, dados de calibração e registros brutos de sessão também ficam no dispositivo. Quando existe conta vinculada, o que sobe é apenas o texto que o paciente escolheu enviar, os alertas e indicadores agregados de uso. A voz personalizada também é gerada no computador — a gravação de referência não é enviada — e só é ligada com autorização expressa e revogável, porque voz é dado biométrico. O assistente de escrita aprende no próprio computador e não envia nada.`,
   },
   {
     q: 'Preciso comprar algum equipamento?',
-    a: `Não. O ${BRAND.product} foi construído sob a restrição de funcionar com uma webcam comum, e foi essa restrição autoimposta que definiu toda a arquitetura técnica. Se o computador da família tem câmera e roda ${PLATFORMS.long}, ele roda o ${BRAND.product}.`,
+    a: `Não. O ${BRAND.product} foi construído sob a restrição de funcionar com uma webcam comum, e foi essa restrição autoimposta que definiu toda a arquitetura técnica. Basta um computador com ${PLATFORMS.long}, webcam e pelo menos 8 GB de memória — a voz personalizada, se for usada, pede 16 GB. A página da beta confere o computador antes da instalação.`,
   },
   {
     q: 'Funciona com quem usa óculos?',
-    a: 'Sim. A equipe esperava que as lentes fossem um fator de degradação, mas, depois da correção de um problema específico no processamento, a melhor sessão com lentes registrou o mesmo erro em pixels da melhor sessão sem lentes.',
+    a: 'Sim. O reflexo fixo de uma lente é reconhecido e não atrapalha: o rastreamento enxerga em volta dele. O que atrapalha é reflexo que se move sobre os olhos, e o preparo do posto detecta esse caso antes da calibração e diz como resolver — em geral, inclinar a tela uns 10° para baixo ou reduzir luzes e janelas atrás da pessoa.',
   },
   {
     q: 'E se a cabeça do usuário escorregar durante a sessão?',
-    a: 'O sistema acompanha a posição da cabeça o tempo todo e compensa sozinho os movimentos pequenos. Quando o desvio acumulado fica grande, o cuidador recebe um aviso que distingue o desvio lento, que só exige reapoiar a nuca, do desvio errático, que indica necessidade de recalibrar.',
+    a: 'O sistema acompanha a posição da cabeça o tempo todo e compensa sozinho os movimentos pequenos. Quando a postura fica diferente da calibração, a tela avisa e oferece um reajuste de dois segundos; se a precisão cair além do que foi medido, ela sugere refazer a calibração. Nenhum desses avisos bloqueia o botão de emergência.',
   },
   {
     q: `O ${BRAND.product} controla qualquer programa do computador?`,
-    a: 'Ela entrega controle pleno dentro das próprias telas e controle do cursor do sistema operacional em nível funcional: abrir um programa, navegar em uma página, clicar em botões de tamanho razoável. Interfaces de terceiros com alvos pequenos, menus densos ou arraste preciso ficam fora do alcance confortável do rastreamento por webcam, e preferimos declarar isso a prometer o que a física do sensor não permite.',
+    a: 'No Windows, sim: no Modo Computador o cursor do olhar sai do aplicativo e passa a clicar, clicar duas vezes, clicar com o botão direito, arrastar, rolar e digitar em qualquer programa. Uma lupa amplia a região em volta do olhar antes do clique, e é ela que torna alcançáveis botões pequenos, como o de fechar uma janela. Arraste fino e menus muito densos continuam trabalhosos com a precisão de uma webcam, e preferimos declarar isso a prometer o que a física do sensor não permite.',
   },
   {
     q: 'Quanto tempo leva a calibração?',
@@ -672,15 +681,15 @@ export const FAQ = [
   },
   {
     q: 'E se a família não tiver como pagar?',
-    a: 'Fale com a gente antes de desistir. A IrisFlow mantém o programa IrisFlow Doa, pelo qual licenças são cedidas gratuitamente a pacientes indicados por associações parceiras. A solução existe por causa de uma barreira de preço, e seria incoerente deixar essa barreira de pé no nosso próprio caixa.',
+    a: 'Durante a beta, nada é cobrado. Para depois dela, se o preço for o que impede o uso, fale com a gente antes de desistir: o IrisFlow existe justamente por causa de uma barreira de preço, e cada caso é conversado com a família.',
   },
   {
     q: 'Quem instala e ensina a usar?',
-    a: 'Nós. A principal causa de abandono de tecnologia assistiva não é falha do produto: é falta de apoio na adoção. Um software que funciona mas que a família não consegue instalar, calibrar ou ajustar acaba na gaveta. Por isso o primeiro uso guiado, o tutorial dentro do produto, o material em linguagem simples e o suporte em português fazem parte da assinatura, e não de um serviço à parte.',
+    a: 'Nós. A principal causa de abandono de tecnologia assistiva não é falha do produto: é falta de apoio na adoção. Um software que funciona mas que a família não consegue instalar, calibrar ou ajustar acaba na gaveta. Por isso o preparo guiado do posto, o tutorial dentro do aplicativo, o guia de instalação para o cuidador e o suporte em português, direto com a equipe, fazem parte do produto, e não de um serviço à parte.',
   },
   {
     q: 'O código da IrisFlow é aberto?',
-    a: 'Em parte. O núcleo de calibração é proprietário, porque é a única barreira técnica real que uma empresa pequena tem. Continuam abertos a documentação técnica, o protocolo de medição de acurácia, os relatórios de precisão com as condições em que foram obtidos e os componentes de interface acessível. Além disso, o tráfego de rede da aplicação passa por verificação externa antes do lançamento, com resultado publicado.',
+    a: 'Sim. O código-fonte do aplicativo, do site e do app do cuidador é público no GitHub, sob a licença GPL-3.0, junto com o protocolo de medição de precisão e os resultados obtidos. Em tecnologia assistiva, o que precisa ser auditável é o que o programa faz com a imagem da câmera e com o que a pessoa escreve — e, com o código aberto, qualquer pessoa pode conferir.',
   },
   {
     q: `O ${BRAND.product} é um dispositivo médico?`,
@@ -688,7 +697,7 @@ export const FAQ = [
   },
   {
     q: 'Como funciona o cancelamento?',
-    a: 'Pelo painel da conta, a qualquer momento, sem multa. Não há equipamento adquirido que prenda o cliente. A retenção depende da utilidade percebida mês a mês.',
+    a: 'Durante a beta não há cartão nem cobrança, então não há o que cancelar: para sair, basta pedir a exclusão da conta. Quando os planos pagos começarem, o cancelamento será pelo painel da conta, a qualquer momento e sem multa — não há equipamento comprado que prenda ninguém.',
   },
 ]
 
@@ -772,9 +781,9 @@ export const TEAM_PHOTO = {
 export const ORIGIN = {
   title: 'Começou como projeto de estudo. Virou a única coisa que a gente queria fazer.',
   paragraphs: [
-    'O projeto nasceu como um sistema de rastreamento ocular por webcam chamado Blink, desenvolvido em ambiente acadêmico e validado com orientadores. A pergunta inicial era técnica: dá para estimar o olhar com precisão suficiente, sem hardware dedicado, para selecionar uma tecla?',
+    'O projeto começou em ambiente acadêmico, acompanhado por orientadores, com uma pergunta técnica: dá para estimar o olhar com precisão suficiente, só com a webcam comum e sem hardware dedicado, para escolher uma tecla na tela?',
     'A resposta veio junto com uma pesquisa de mercado. Entre os 38 respondentes — a maioria profissionais de saúde — 60,5 % apontaram o preço como a principal barreira das soluções existentes, e uma delas, médica, contou que a própria mãe tinha perdido a fala na semana anterior. A pergunta deixou de ser técnica.',
-    'Em 2026 o Blink virou IrisFlow: uma empresa de três pessoas, um produto instalável com sete módulos e um programa beta aberto às famílias. O núcleo de calibração ficou fechado; a documentação, o protocolo de medição e a interface acessível continuam abertos.',
+    'Daí nasceu a IrisFlow: três pessoas, um aplicativo para o computador, um app para o celular do cuidador e um programa beta gratuito aberto às famílias. O código é público, e as medições de precisão são publicadas com as condições em que foram feitas — inclusive quando o resultado não favorece.',
   ],
   numbers: [
     { value: 100, suffix: ' %', label: 'do processamento da imagem feito no próprio computador' } as { value: number; suffix: string; label: string; decimals?: number },
@@ -785,20 +794,20 @@ export const ORIGIN = {
 }
 
 /* ---------------- compromissos assumidos ----------------
-   Tópico 3.1 do plano (ESG e Agenda 2030). Cada item aqui tem
-   contrapartida concreta: nada entra só como declaração.
+   Só entra aqui o que já vale hoje e dá para conferir: no produto, no
+   código público ou nos termos da beta.
    ------------------------------------------------------- */
 
 export const COMMITMENTS: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'pessoas',
-    title: 'IrisFlow Doa',
-    text: 'Licenças cedidas gratuitamente a pacientes indicados por associações parceiras. Quem não pode pagar não fica de fora do produto que existe justamente por causa do preço.',
+    title: 'Beta gratuita de verdade',
+    text: 'Durante a beta, o aplicativo completo e o app do cuidador são gratuitos, sem cartão cadastrado. Quando ela terminar, nada é cobrado automaticamente: plano pago só com contratação expressa da família.',
   },
   {
-    icon: 'lazer',
-    title: 'Dia de impacto',
-    text: 'Jornada remunerada para a equipe atuar junto às associações. É benefício e também método: aproximar quem escreve o código de quem usa o software é a forma mais rápida de descobrir o que está errado.',
+    icon: 'cadeado-aberto',
+    title: 'Código aberto',
+    text: 'O código do aplicativo, do site e do app do cuidador é público, sob a licença GPL-3.0. A promessa de que a imagem da câmera não sai do computador pode ser conferida por qualquer pessoa, e não apenas declarada por nós.',
   },
   {
     icon: 'notebook',
@@ -808,7 +817,7 @@ export const COMMITMENTS: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'cadeado',
     title: 'O que o processamento local não resolve',
-    text: 'Manter o rastreamento inteiro no dispositivo reduz o risco na origem, mas não elimina as obrigações da LGPD. Continuamos tratando dados de conta, de suporte, o texto que o paciente escolhe enviar e, quando autorizado, o áudio de referência da voz. A política de privacidade diz exatamente quais, por quanto tempo e como revogar cada autorização.',
+    text: 'Manter o rastreamento inteiro no computador reduz o risco na origem, mas não elimina as obrigações da LGPD. Continuamos tratando dados de conta, de suporte e o texto que a pessoa escolhe enviar ao celular do cuidador. A política de privacidade diz exatamente quais, por quanto tempo e como pedir a exclusão.',
   },
 ]
 
@@ -816,59 +825,58 @@ export const COMMITMENTS: { icon: IconName; title: string; text: string }[] = [
 export const SDGS = [
   { n: 3, title: 'Saúde e bem-estar', text: 'Restabelecer a comunicação permite que a pessoa relate dor e desconforto, informação clínica hoje frequentemente inacessível.' },
   { n: 9, title: 'Indústria e inovação', text: 'Tecnologia assistiva desenvolvida no Brasil, em um segmento historicamente dependente de importação.' },
-  { n: 10, title: 'Redução das desigualdades', text: 'Um eye tracker dedicado custa de R$ 15 mil a R$ 80 mil, pago de uma vez. O IrisFlow é uma assinatura mensal, cancelável, que roda no computador que a família já tem.' },
-  { n: 17, title: 'Parcerias', text: 'Associações de pacientes, profissionais de saúde e instituições de ensino ampliam o alcance além do que o mercado sozinho alcançaria.' },
+  { n: 10, title: 'Redução das desigualdades', text: 'Um eye tracker dedicado custa de R$ 15 mil a R$ 80 mil, pago de uma vez. O IrisFlow roda no computador que a família já tem, é gratuito durante a beta e, depois, será uma assinatura mensal cancelável.' },
+  { n: 17, title: 'Parcerias', text: 'Buscamos associações de pacientes, profissionais de saúde e instituições de ensino para validar o produto com quem vai usá-lo e levá-lo a mais famílias.' },
 ]
 
-/* ---------------- posição sobre o código ----------------
-   Núcleo fechado, periferia aberta (tópico 1.3 do plano). O texto diz o
-   que é proprietário sem descrever como funciona por dentro, e o site não
-   aponta para repositório de código.
+/* ---------------- código aberto ----------------
+   O repositório do produto é público, sob a GPL-3.0 (LICENSE na raiz).
+   O link vem de BRAND.code — o mesmo repositório dos instaladores.
    ------------------------------------------------------- */
 
 export const CODE_POSITION = {
-  title: 'O que é nosso e o que fica aberto.',
-  lead: 'O núcleo de calibração é proprietário; a documentação, o protocolo de medição e a interface acessível continuam abertos.',
-  closed: {
-    title: 'Fechado',
-    text: 'O núcleo de rastreamento e calibração: a parte que transforma a imagem da webcam comum em um cursor preciso para cada pessoa. É a única barreira técnica real que uma empresa pequena tem, e por isso não é publicado.',
+  title: 'O código é aberto, do rastreamento à interface.',
+  lead: 'O código-fonte do IrisFlow Communicator, do site e do app do cuidador é público no GitHub, sob a licença GPL-3.0.',
+  what: {
+    title: 'O que está aberto',
+    text: 'O rastreamento e a calibração, a interface operada pelo olhar, o app do cuidador, este site e o banco de dados, junto com o protocolo de medição de precisão e os resultados obtidos, com as condições em que foram medidos.',
   },
-  open: {
-    title: 'Aberto',
-    text: 'A documentação técnica, o protocolo de medição de acurácia, os relatórios de precisão com as condições em que foram obtidos e os componentes de interface acessível. O que precisa ser auditado em tecnologia assistiva é o que o software faz com a imagem capturada — e isso continua verificável.',
+  why: {
+    title: 'Por que aberto',
+    text: 'Em tecnologia assistiva, o que precisa ser auditável é o que o software faz com a imagem da câmera e com o que a pessoa escreve. Com o código público, qualquer pessoa pode conferir que nada disso sai do computador sem autorização.',
   },
 }
 
 export const ROADMAP = [
   {
     when: 'Concluído',
-    title: 'Fluxo de rastreamento completo',
-    text: 'Da câmera à seleção por fixação, passando pela calibração, em sessão real de uso.',
+    title: 'Rastreamento completo',
+    text: 'Da câmera à seleção por fixação, com preparo do posto de uso, calibração guiada e teste de precisão, tudo processado no próprio computador.',
   },
   {
     when: 'Concluído',
-    title: 'Sete módulos funcionais',
-    text: `Onboarding, comunicação, computador, lazer, cuidador, emergência e configurações, com instalador para ${PLATFORMS.long}.`,
+    title: `Aplicativo para ${PLATFORMS.short}`,
+    text: 'Comunicação, teclado com assistente de escrita, Modo Computador, conversa com o cuidador, emergência, lazer e área do cuidador, com atualização automática.',
   },
   {
     when: 'Concluído',
-    title: 'Infraestrutura de medição',
-    text: 'Protocolo formal de medição de acurácia, repetível e sem gravar vídeo de ninguém.',
+    title: 'App do cuidador e site',
+    text: 'App para Android com conversa, alertas e relatórios, e este site, com a inscrição na beta, a conta e os downloads.',
   },
   {
     when: 'Em realização',
-    title: 'Assistente, voz e site de compra',
-    text: 'Composição assistida de frases, clonagem da voz do próprio paciente e o ambiente web de contratação, que é este site. Enquanto esses três não ficam prontos, o que a IrisFlow tem para vender é o plano Essencial.',
+    title: 'Beta aberta às famílias',
+    text: 'Gratuita até o fim do programa. É a fase de ouvir quem usa de verdade e corrigir rápido; a voz personalizada, já disponível, segue em fase experimental.',
   },
   {
     when: 'Próxima tarefa',
     title: 'Teste com o público-alvo',
-    text: 'Precisão e usabilidade com dois pacientes com restrição motora severa. Até aqui, todas as sessões foram conduzidas por um integrante da própria equipe: a segunda pessoa a calibrar é o dado mais valioso que o projeto pode receber agora.',
+    text: 'Precisão e usabilidade com pacientes com restrição motora severa. Até aqui, as medições de precisão foram feitas por um integrante da própria equipe: a próxima pessoa a calibrar é o dado mais valioso que o projeto pode receber agora.',
   },
   {
     when: 'Pendente',
     title: 'Programa de validação de 90 dias',
-    text: 'Com parceiros clínicos, medição de acurácia em uso continuado, ciclos quinzenais de ajuste e documentação de casos. As famílias dessa primeira safra ficam com condição diferenciada permanente.',
+    text: 'Com parceiros clínicos: medição de precisão em uso continuado, ciclos quinzenais de ajuste e documentação de casos.',
   },
 ]
 
@@ -882,5 +890,5 @@ export const MARQUEE_ITEMS = [
   'funciona offline',
   'painel do cuidador',
   'emergência sempre acessível',
-  'protocolo de medição aberto',
+  'código aberto',
 ]

@@ -341,7 +341,7 @@ describe('signUpBeta', () => {
     expect(auth.signUp).toHaveBeenCalledWith(
       expect.objectContaining({
         options: expect.objectContaining({
-          emailRedirectTo: 'https://irisflow.pages.dev/entrar',
+          emailRedirectTo: 'https://irisflow-communicator.pages.dev/entrar',
         }),
       }),
     )
@@ -435,7 +435,7 @@ describe('e-mails de conta (confirmação e nova senha)', () => {
     expect(auth.resend).toHaveBeenCalledWith({
       type: 'signup',
       email: 'maria@exemplo.com.br',
-      options: { emailRedirectTo: 'https://irisflow.pages.dev/entrar' },
+      options: { emailRedirectTo: 'https://irisflow-communicator.pages.dev/entrar' },
     })
   })
 
@@ -458,11 +458,11 @@ describe('e-mails de conta (confirmação e nova senha)', () => {
     await api.requestPasswordReset('maria@exemplo.com.br')
 
     expect(auth.resetPasswordForEmail).toHaveBeenCalledWith('maria@exemplo.com.br', {
-      redirectTo: 'https://irisflow.pages.dev/nova-senha',
+      redirectTo: 'https://irisflow-communicator.pages.dev/nova-senha',
     })
     expect(api.AUTH_REDIRECT).toEqual({
-      confirmacao: 'https://irisflow.pages.dev/entrar',
-      novaSenha: 'https://irisflow.pages.dev/nova-senha',
+      confirmacao: 'https://irisflow-communicator.pages.dev/entrar',
+      novaSenha: 'https://irisflow-communicator.pages.dev/nova-senha',
     })
   })
 

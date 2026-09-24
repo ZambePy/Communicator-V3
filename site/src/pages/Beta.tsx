@@ -621,7 +621,8 @@ function FormularioBeta({
 
         <Reveal anim="up" delay={120}>
           <p className="lead flow__lead">
-            A beta é fechada e gratuita: quem se inscreve recebe o aplicativo completo até{' '}
+            A beta é gratuita e as inscrições estão abertas: quem se inscreve recebe o aplicativo
+            completo até{' '}
             <strong>{formatDate(program.endsAt)}</strong>, sem cartão, sem cobrança e sem
             fidelidade. Em troca, pedimos retorno sobre o uso real. {PRIVACY_LINE}
           </p>

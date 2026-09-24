@@ -20,8 +20,12 @@ export const PhotoCaptureScreen: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   /** Contagem regressiva da foto. Ver o comentário em `handleStartCapture`. */
   const contagemRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Fim do flash do obturador (250 ms). Mesmo motivo da contagem: sair da
+   *  tela logo depois da foto não pode deixar um `setState` pendente. */
+  const flashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (contagemRef.current !== null) clearInterval(contagemRef.current);
+    if (flashRef.current !== null) clearTimeout(flashRef.current);
   }, []);
 
   const [, setStream] = useState<MediaStream | null>(null);
@@ -180,7 +184,9 @@ export const PhotoCaptureScreen: React.FC = () => {
     setIsFlashing(true);
     playSound('shutter');
 
-    setTimeout(() => {
+    if (flashRef.current !== null) clearTimeout(flashRef.current);
+    flashRef.current = setTimeout(() => {
+      flashRef.current = null;
       setIsFlashing(false);
     }, 250);
 

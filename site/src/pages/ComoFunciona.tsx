@@ -29,7 +29,7 @@ const STEPS_USER = [
   {
     n: '04',
     title: 'Comece a falar',
-    text: 'Teclado ordenado pela frequência do português, banco de frases, pictogramas, síntese de voz e o cursor do sistema operacional. A emergência fica sempre no mesmo lugar, em todas as telas.',
+    text: 'Teclado com sugestões que aprendem com a pessoa, frases prontas, pictogramas e síntese de voz — e, no Modo Computador, o Windows inteiro. A emergência fica sempre no mesmo lugar, em todas as telas.',
   },
 ]
 
@@ -37,7 +37,7 @@ const SAFETY: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'relogio',
     title: 'Tempo de fixação configurável',
-    text: 'De 800 a 2500 milissegundos, com retorno visual em três estágios. O usuário tem uma janela explícita para desistir antes que a seleção se complete.',
+    text: 'De 0,4 a 4 segundos, com atalhos para 0,8, 1,5 e 2,5 s, e retorno visual em três estágios. O usuário tem uma janela explícita para desistir antes que a seleção se complete.',
   },
   {
     icon: 'bloqueio',
@@ -51,8 +51,8 @@ const SAFETY: { icon: IconName; title: string; text: string }[] = [
   },
   {
     icon: 'olho',
-    title: 'Monitoramento de postura e fadiga',
-    text: 'Quando a cabeça sai demais da posição, o cuidador recebe um aviso que distingue o desvio lento, que só exige reapoiar a nuca, do desvio errático, que pede recalibração. O sistema também acompanha sinais de cansaço visual.',
+    title: 'Avisos de postura e de cansaço',
+    text: 'Quando a cabeça sai da posição da calibração, a tela avisa e oferece um reajuste de dois segundos; se a precisão cai além do medido, sugere recalibrar. O sistema também acompanha sinais de cansaço visual.',
   },
 ]
 

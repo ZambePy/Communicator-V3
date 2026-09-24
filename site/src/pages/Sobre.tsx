@@ -249,7 +249,7 @@ export default function Sobre() {
         </div>
       </section>
 
-      {/* --- posição sobre o código: o que é proprietário, sem link para código --- */}
+      {/* --- código aberto: o repositório do produto é público (GPL-3.0) --- */}
       <section className="section section--tight">
         <div className="container">
           <Reveal anim="fade">
@@ -259,26 +259,37 @@ export default function Sobre() {
             <h2 className="section-title">{CODE_POSITION.title}</h2>
           </Reveal>
           <Reveal anim="up" delay={120}>
-            <p className="lead section-lead section-lead--tight">{CODE_POSITION.lead}</p>
+            <p className="lead section-lead section-lead--tight">
+              {CODE_POSITION.lead}{' '}
+              <a
+                href={BRAND.code}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline-grow link-ok"
+              >
+                Ver o código no GitHub
+                <span className="sr-only"> (abre em outra aba)</span>
+              </a>
+            </p>
           </Reveal>
 
           <div className="grid grid--2">
             <Reveal anim="right" delay={160}>
               <Card as="div">
-                <CardIcon tone="blue">
-                  <Icon name="cadeado" size={26} />
+                <CardIcon tone="teal">
+                  <Icon name="cadeado-aberto" size={26} />
                 </CardIcon>
-                <h3>{CODE_POSITION.closed.title}</h3>
-                <p>{CODE_POSITION.closed.text}</p>
+                <h3>{CODE_POSITION.what.title}</h3>
+                <p>{CODE_POSITION.what.text}</p>
               </Card>
             </Reveal>
             <Reveal anim="left" delay={160}>
               <Card as="div">
-                <CardIcon tone="teal">
-                  <Icon name="cadeado-aberto" size={26} />
+                <CardIcon tone="blue">
+                  <Icon name="escudo" size={26} />
                 </CardIcon>
-                <h3>{CODE_POSITION.open.title}</h3>
-                <p>{CODE_POSITION.open.text}</p>
+                <h3>{CODE_POSITION.why.title}</h3>
+                <p>{CODE_POSITION.why.text}</p>
               </Card>
             </Reveal>
           </div>

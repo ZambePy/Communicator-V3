@@ -44,8 +44,8 @@ export default function Acessibilidade() {
           <Reveal anim="up" delay={120}>
             <p className="lead section-lead section-lead--tight">
               Cada alvo mostra o contorno de destaque ao receber o olhar, muda de cor durante a
-              seleção e completa um aro de progresso até confirmar. Compare os três tempos de
-              fixação que o produto oferece.
+              seleção e completa um aro de progresso até confirmar. Compare os três atalhos de
+              tempo de fixação que o aplicativo oferece.
             </p>
           </Reveal>
 
@@ -63,9 +63,9 @@ export default function Acessibilidade() {
 
           <Reveal anim="fade" delay={420}>
             <p className="aside-note">
-              O tempo padrão de 1500 ms se mostrou adequado nos testes de usabilidade já
-              realizados, mas a IrisFlow mantém as opções de 800 e 2500 ms porque o tempo ideal varia
-              com a fadiga e com o estágio da condição.
+              O padrão é 1,5 segundo. Como o tempo ideal varia com a fadiga e com o estágio da
+              condição, o cuidador pode ajustá-lo livremente de 0,4 a 4 segundos, e os atalhos de
+              0,8 e 2,5 s ficam a um toque.
             </p>
           </Reveal>
         </div>

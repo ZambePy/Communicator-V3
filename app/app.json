@@ -121,9 +121,9 @@
       "typedRoutes": true
     },
     "extra": {
-      "privacyPolicyUrl": "https://irisflow.pages.dev/privacidade",
-      "termsUrl": "https://irisflow.pages.dev/termos",
-      "accountDeletionUrl": "https://irisflow.pages.dev/privacidade#direitos",
+      "privacyPolicyUrl": "https://irisflow-communicator.pages.dev/privacidade",
+      "termsUrl": "https://irisflow-communicator.pages.dev/termos",
+      "accountDeletionUrl": "https://irisflow-communicator.pages.dev/privacidade#direitos",
       "supportEmail": "irisflowteam@gmail.com",
       "eas": {
         "projectId": "abab085b-842f-4ca0-85c6-705d90bb0f55"

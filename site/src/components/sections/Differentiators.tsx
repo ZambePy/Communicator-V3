@@ -14,16 +14,17 @@ export function Differentiators() {
         </Reveal>
 
         <AnimatedHeadline
-          text="Rastreamento por webcam não é novidade. A diferença está em seis decisões medidas."
+          text="Rastreamento por webcam não é novidade. A diferença está em seis decisões de projeto."
           as="h2"
-          highlight={['seis', 'decisões', 'medidas.']}
+          highlight={['seis', 'decisões']}
           className="differentiators__title"
         />
 
         <Reveal anim="up" delay={140}>
           <p className="lead differentiators__lead">
-            Cada decisão abaixo entrou no produto depois de ser medida, e é o conjunto delas que
-            produz a diferença de erro. Esse conjunto é o ativo proprietário da empresa.
+            Cada uma responde a um problema que aparece no uso de verdade — cansaço, postura, luz
+            ruim, internet instável, privacidade — e as de rastreamento só entraram no produto
+            depois de medidas.
           </p>
         </Reveal>
 
