@@ -19,7 +19,7 @@ o vínculo de quem já usa o app.
 ![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
 ![ONNX Runtime](https://img.shields.io/badge/ONNX%20Runtime-Web-005CED?logo=onnx&logoColor=white)
 ![MediaPipe](https://img.shields.io/badge/MediaPipe-Tasks%20Vision-00897B?logo=google&logoColor=white)
-[![CI](https://github.com/ZambePy/Communicator-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/ZambePy/Communicator-v2/actions/workflows/ci.yml)
+[![CI](https://github.com/ZambePy/Communicator-V3/actions/workflows/ci.yml/badge.svg)](https://github.com/ZambePy/Communicator-V3/actions/workflows/ci.yml)
 [![Licença: GPL v3](https://img.shields.io/badge/licen%C3%A7a-GPLv3-blue.svg)](LICENSE)
 
 ---
@@ -1334,7 +1334,7 @@ que o `.env.local`. Para desenvolver (`npm run dev`), copie
 |---|---|---|
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | contas, planos, beta | site abre; ação de conta diz "serviço indisponível" |
 | `VITE_SITE_URL` | canonical, og:*, sitemap, destino dos e-mails | `https://irisflow.pages.dev` |
-| `VITE_RELEASES_REPO` / `VITE_RELEASES_AVAILABLE` | de onde vêm os instaladores / quais sistemas o site oferece | `ZambePy/Communicator-v2` / `windows` |
+| `VITE_RELEASES_REPO` / `VITE_RELEASES_AVAILABLE` | de onde vêm os instaladores / quais sistemas o site oferece | `ZambePy/Communicator-V3` / `windows` |
 | `VITE_APP_CUIDADOR_URL` | link do app em `/beta` | "o link chega por e-mail" |
 | `VITE_CF_ANALYTICS_TOKEN` | Cloudflare Web Analytics | nenhuma estatística |
 | `VITE_PAYMENT_PUBLIC_KEY`, `VITE_API_URL` | reservadas (gateway, API própria) | sem uso hoje |
@@ -1513,8 +1513,10 @@ feed, qualquer que fosse; por isso ele não é forçado.
 
 **De onde vem a versão nova.** O repositório vai para `resources/app-update.yml` no
 empacotamento, nesta ordem: `IRISFLOW_RELEASES_REPO` → `GITHUB_REPOSITORY` →
-`build.publish` do `package.json` (`ZambePy/Communicator-v2`; o repositório se chamava
-`Blinkv1`, e o GitHub só redireciona o nome antigo). O `release.yml` publica no mesmo
+`build.publish` do `package.json` (`ZambePy/Communicator-V3`; o código morou antes em
+`Blinkv1`, renomeado para `Communicator-v2`, e desde então em `Communicator-V3` — um
+repositório novo, então o GitHub **não** redireciona do `Communicator-v2` para cá: um
+instalador antigo ainda aponta para o repositório anterior). O `release.yml` publica no mesmo
 repositório que grava (`vars.IRISFLOW_RELEASES_REPO || github.repository`) e o site lê
 `VITE_RELEASES_REPO`. Os três apontam para o mesmo repositório, que precisa ser
 **público**: o app baixa sem token e o site consulta a API sem login; releases privados
@@ -1610,7 +1612,7 @@ painel, que teria prioridade sobre o arquivo sem aparecer no repositório.
 |---|---|
 | `VITE_SUPABASE_URL` / `_ANON_KEY` | `https://xouznaqxhqzjdgeshlmh.supabase.co` / chave *anon* (a proteção é a RLS) |
 | `VITE_SITE_URL` | `https://irisflow.pages.dev`: canonical, `og:*`, sitemap, robots e links dos e-mails |
-| `VITE_RELEASES_REPO` / `_AVAILABLE` | `ZambePy/Communicator-v2` / `windows` (`windows,macos,linux` quando testados) |
+| `VITE_RELEASES_REPO` / `_AVAILABLE` | `ZambePy/Communicator-V3` / `windows` (`windows,macos,linux` quando testados) |
 | `VITE_CF_ANALYTICS_TOKEN`, `VITE_APP_CUIDADOR_URL` | token do Web Analytics e link do APK; ausentes, o site segue sem eles |
 
 O [`scripts/conferir-config-publica.mjs`](scripts/conferir-config-publica.mjs) (no CI e no
