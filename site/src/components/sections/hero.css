@@ -29,12 +29,15 @@
   color: var(--ok);
 }
 
+/* Título curto ("Seu olhar tem voz"): corpo de display, em duas linhas
+   equilibradas no desktop. */
 .hero__title {
-  font-size: clamp(2rem, 3.2vw, 2.85rem);
-  line-height: 1.12;
-  letter-spacing: -0.025em;
+  font-size: clamp(2.6rem, 5.2vw, 4.4rem);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
   margin-bottom: var(--sp-4);
-  max-width: 21ch;
+  max-width: 12ch;
+  text-wrap: balance;
 }
 
 .hero__title-mask {
@@ -93,20 +96,31 @@
   position: relative;
 }
 
-/* Em telas largas a ilustração avança um pouco sobre a margem da página:
-   a tela do monitor é uma captura real do app e fica mais legível. */
-@media (min-width: 1024px) {
-  .hero__mock {
-    margin-right: calc(-1 * clamp(0px, (100vw - var(--container)) / 2, 48px));
-  }
+/* A marca da íris (IrisMark): grande no desktop, contida no celular, onde
+   ela vem depois das chamadas. A aura azul e teal por trás é só do hero:
+   sem ela o símbolo azul some no azul-marinho da faixa. */
+.hero__marca {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
 }
 
-.hero__mock-caption {
-  margin: var(--sp-2) auto 0;
-  max-width: 420px;
-  text-align: center;
-  font-size: 0.95rem;
-  color: var(--text-dim);
+.hero__marca::before {
+  content: '';
+  position: absolute;
+  inset: -6%;
+  border-radius: 50%;
+  /* O símbolo ocupa 68 % deste raio: a aura nasce na borda dele. */
+  background: radial-gradient(
+    circle closest-side,
+    rgba(47, 102, 194, 0.55) 0%,
+    rgba(47, 102, 194, 0.38) 62%,
+    rgba(63, 214, 194, 0.14) 80%,
+    transparent 100%
+  );
+  filter: blur(14px);
+  pointer-events: none;
 }
 
 .hero__scroll {
@@ -147,7 +161,7 @@
     max-width: 640px;
   }
   .hero__title {
-    max-width: 22ch;
+    max-width: 12ch;
   }
   .hero__scroll {
     display: none;
@@ -166,7 +180,7 @@
     letter-spacing: 0.12em;
   }
   .hero__title {
-    font-size: clamp(1.6rem, 7vw, 2.05rem);
+    font-size: clamp(2.3rem, 11vw, 3rem);
     margin-bottom: var(--sp-3);
   }
   .hero__lead {
@@ -183,5 +197,8 @@
   }
   .hero__privacy {
     font-size: 0.92rem;
+  }
+  .hero__marca {
+    max-width: 280px;
   }
 }

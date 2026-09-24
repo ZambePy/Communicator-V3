@@ -6,18 +6,58 @@ interface GazeGridProps {
   rows: number;
   children: React.ReactNode;
   gap?: number; // em px
+  /**
+   * Só vira contêiner de rolagem quando as linhas, no piso de 5°, NÃO cabem.
+   *
+   * Contêiner de rolagem recorta tudo o que passa da borda, e a zona de acerto
+   * do `GazeButton` passa 12 px de cada cartão de propósito. Na última linha
+   * isso bastava para a grade "transbordar" ~10 px sem que faltasse espaço
+   * nenhum: aparecia uma barra de rolagem, o olhar ou a roda rolavam esses
+   * 10 px, e a primeira linha e o anel de dwell saíam cortados no topo.
+   * Com esta opção, quando cabe, a grade não recorta nada; quando não cabe,
+   * continua rolando como antes. Opt-in: as outras telas não mudam.
+   */
+  rolarSoSeNaoCouber?: boolean;
 }
 
 export const GazeGrid: React.FC<GazeGridProps> = ({
   columns,
   rows,
   children,
-  gap = 59 // Equivalente a 1.5° de espaçamento mínimo (GAZE_TOKENS.spacingMinDeg)
+  gap = 59, // Equivalente a 1.5° de espaçamento mínimo (GAZE_TOKENS.spacingMinDeg)
+  rolarSoSeNaoCouber = false,
 }) => {
   const ref = React.useRef<HTMLDivElement>(null);
   // fonte única, derivada da geometria real do usuário.
   const cellMinPx = alvoMinimoPx();
   const childCount = React.Children.count(children);
+
+  // O piso entra no estado junto com o "cabe": quando a geometria muda (a
+  // janela redimensionou e o `SettingsContext` recalculou o token), a grade
+  // re-renderiza e as linhas passam a usar o piso novo — o mesmo da decisão.
+  const [medida, setMedida] = React.useState({ cabe: false, piso: cellMinPx });
+  React.useLayoutEffect(() => {
+    if (!rolarSoSeNaoCouber) return;
+    const el = ref.current;
+    if (!el) return;
+    const linhas = Math.max(rows, Math.ceil(childCount / columns));
+    const medir = () => {
+      const piso = alvoMinimoPx();
+      // `clientHeight`, não `getBoundingClientRect()`: a entrada de rota anima
+      // um `scale(0.992)`, e a caixa transformada media 463 px numa grade de
+      // 467 — a Home de 1366×768 decidia "não cabe" e ficava com a rolagem.
+      // 1 px de folga para o arredondamento para inteiro.
+      const altura = el.clientHeight;
+      const cabe = altura > 0 && linhas * piso + (linhas - 1) * gap <= altura + 1;
+      setMedida((m) => (m.cabe === cabe && m.piso === piso ? m : { cabe, piso }));
+    };
+    medir();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [rolarSoSeNaoCouber, rows, columns, gap, childCount]);
+  const semRolagem = rolarSoSeNaoCouber && medida.cabe;
 
   React.useEffect(() => {
     if (import.meta.env?.DEV) {
@@ -74,8 +114,9 @@ export const GazeGrid: React.FC<GazeGridProps> = ({
         // flex; sem ele o `height: 100%` vira piso e o overflow volta a vazar
         // para fora da caixa em vez de rolar aqui dentro.
         minHeight: 0,
-        overflowY: 'auto',
-        overflowX: 'hidden',
+        ...(semRolagem
+          ? { overflow: 'visible' as const }
+          : { overflowY: 'auto' as const, overflowX: 'hidden' as const }),
         boxSizing: 'border-box',
       }}
     >
