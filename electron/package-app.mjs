@@ -113,8 +113,18 @@ console.log(
 // `0.0.0-modelos` (IRISFLOW_MODELOS_REPO) — ver o cabecalho do release.yml.
 // Atencao: o que estiver aqui vai para DENTRO do app.asar de todo instalador, e
 // os pesos atuais (Gaze360) tem licenca research-only (README, "Modelos").
+// Com IRISFLOW_BUILD_L2CS=off (o padrao do release.yml desde 24/09/2026) o app
+// nasce com `l2cs: 'off'` e nao procura os pesos: a ausencia e a decisao, nao
+// um defeito.
 const modeloL2cs = path.join(RAIZ, 'frontend', 'dist', 'models', 'l2cs', 'l2cs_gaze360.onnx');
-if (!fs.existsSync(modeloL2cs)) {
+if (env('IRISFLOW_BUILD_L2CS') === 'off') {
+  console.log(
+    fs.existsSync(modeloL2cs)
+      ? '[electron:package] IRISFLOW_BUILD_L2CS=off, mas frontend/dist tem os pesos do L2CS: eles IRIAM no pacote sem uso — apague frontend/public/models/l2cs/l2cs_gaze360.onnx antes do build'
+      : '[electron:package] sem o L2CS por decisao (IRISFLOW_BUILD_L2CS=off): rastreamento pelas features de iris',
+  );
+  if (fs.existsSync(modeloL2cs)) process.exit(1);
+} else if (!fs.existsSync(modeloL2cs)) {
   const msg = '[electron:package] modelo L2CS AUSENTE em frontend/dist/models/l2cs/l2cs_gaze360.onnx — o app sairia com rastreamento degradado';
   if (env('IRISFLOW_EXIGIR_MODELO') === '1') { console.error(msg); process.exit(1); }
   console.warn(`${msg}. (IRISFLOW_EXIGIR_MODELO=1 transforma isto em erro.)`);

@@ -14,7 +14,7 @@
     "primaryColor": "#1B54A8",
     "description": "App do cuidador da IrisFlow: conversa com o paciente, alertas de ajuda e emergência, relatórios de uso e ajustes remotos do computador.",
     "updates": {
-      "url": "https://u.expo.dev/SEU-PROJECT-ID",
+      "url": "https://u.expo.dev/abab085b-842f-4ca0-85c6-705d90bb0f55",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
@@ -126,8 +126,10 @@
       "accountDeletionUrl": "https://irisflow.pages.dev/privacidade#direitos",
       "supportEmail": "irisflowteam@gmail.com",
       "eas": {
-        "projectId": ""
-      }
-    }
+        "projectId": "abab085b-842f-4ca0-85c6-705d90bb0f55"
+      },
+      "router": {}
+    },
+    "owner": "zambee"
   }
 }

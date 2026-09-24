@@ -9,14 +9,18 @@ name: Supabase keepalive
 # de `beta_program`, tabela que o site já lê anonimamente). Custo: segundos de
 # runner e uma consulta.
 #
-# SEGREDOS (Settings → Secrets and variables → Actions → Secrets):
-#   SUPABASE_URL       https://<ref>.supabase.co
-#   SUPABASE_ANON_KEY  a chave "anon public" (é pública; está no bundle do site)
-# Sem eles o workflow FALHA (vermelho), de propósito: terminar verde sem ter
-# consultado nada daria a impressão de que o projeto está protegido da pausa.
-# Os nomes não aparecem como `secrets.X` aqui (o passo recebe
-# `toJSON(secrets)` e lê só os dois), então a extensão do VS Code não acusa
-# "Context access might be invalid" antes de você criá-los.
+# DE ONDE VÊM A URL E A CHAVE: da configuração pública versionada do site,
+# site/.env.production (VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY — a mesma
+# que o Cloudflare Pages usa; a chave anon é pública, está no bundle do site).
+# Nenhum segredo precisa ser cadastrado. Se existirem os segredos SUPABASE_URL
+# e SUPABASE_ANON_KEY (Settings → Secrets and variables → Actions), eles têm
+# prioridade. Sem nenhum dos dois o workflow FALHA (vermelho), de propósito:
+# terminar verde sem ter consultado nada daria a impressão de que o projeto
+# está protegido da pausa. O passo recebe só esses dois segredos, pelo nome —
+# nunca o contexto inteiro serializado (toJSON de secrets), que o GitHub trata
+# como possível exfiltração e segura, inclusive na execução agendada, até
+# alguém aprovar à mão. A extensão do VS Code acusa "Context access might be
+# invalid" enquanto eles não existirem; é só aviso do editor.
 #
 # ATENÇÃO: em repositório PÚBLICO, o GitHub desativa sozinho os workflows
 # agendados depois de 60 dias sem nenhuma atividade no repositório (e avisa
@@ -40,16 +44,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # Só o arquivo da configuração pública do site (sparse checkout).
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: site/.env.production
+          sparse-checkout-cone-mode: false
+
       - name: Ler uma linha de beta_program
         env:
-          SEGREDOS_JSON: ${{ toJSON(secrets) }}
+          SEGREDO_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SEGREDO_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         shell: bash
         run: |
-          url="$(printf '%s' "$SEGREDOS_JSON" | jq -r '.SUPABASE_URL // empty')"
-          chave="$(printf '%s' "$SEGREDOS_JSON" | jq -r '.SUPABASE_ANON_KEY // empty')"
-          unset SEGREDOS_JSON
+          url="${SEGREDO_SUPABASE_URL:-}"
+          chave="${SEGREDO_SUPABASE_ANON_KEY:-}"
+          unset SEGREDO_SUPABASE_URL SEGREDO_SUPABASE_ANON_KEY
+          publica=site/.env.production
+          if [ -z "$url" ] && [ -f "$publica" ]; then
+            url="$(sed -n 's/^VITE_SUPABASE_URL=//p' "$publica" | tr -d '\r"' | head -n1)"
+          fi
+          if [ -z "$chave" ] && [ -f "$publica" ]; then
+            chave="$(sed -n 's/^VITE_SUPABASE_ANON_KEY=//p' "$publica" | tr -d '\r"' | head -n1)"
+          fi
           if [ -z "$url" ] || [ -z "$chave" ]; then
-            echo "::error::Faltam os segredos SUPABASE_URL e/ou SUPABASE_ANON_KEY: sem eles o keepalive não consulta nada e o Supabase gratuito pausa após 7 dias sem uso. Crie-os em Settings → Secrets and variables → Actions (README, 'Hospedagem e publicação')."
+            echo "::error::Sem URL e/ou chave anon do Supabase: nem em site/.env.production (VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY) nem nos segredos SUPABASE_URL/SUPABASE_ANON_KEY. Sem elas o keepalive não consulta nada e o Supabase gratuito pausa após 7 dias sem uso (README, 'Hospedagem e publicação')."
             exit 1
           fi
           echo "::add-mask::$chave"

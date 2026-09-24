@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 /**
- * ci-segredos-opcionais.mjs — segredos OPCIONAIS do GitHub Actions sem
- * "Context access might be invalid".
+ * ci-segredos-opcionais.mjs — segredos OPCIONAIS do GitHub Actions, só para
+ * quem precisa deles.
  *
- * O problema: escrever `${{ secrets.CSC_LINK }}` num workflow faz a extensão
- * GitHub Actions do VS Code (e o actionlint, com a lista de segredos do
- * repositório) acusar erro enquanto o segredo não existe. Para um repositório
- * público recém-criado — que deve compilar SEM segredo nenhum — isso são
- * "erros" permanentes num arquivo correto.
+ * O workflow passa a UM passo pequeno cada segredo da lista abaixo, pelo nome,
+ * como variável `SEGREDO_<NOME>: ${{ secrets.<NOME> }}` — segredo não
+ * cadastrado chega vazio —, e este script copia para o ambiente dos passos
+ * seguintes ($GITHUB_ENV) só os que EXISTEM e servem à plataforma. Os demais
+ * passos (npm, electron-builder...) nunca veem os outros.
  *
- * A solução, com sintaxe válida de Actions: o workflow passa o contexto
- * inteiro para UM passo pequeno, `SEGREDOS_JSON: ${{ toJSON(secrets) }}`
- * (nenhum nome de segredo aparece no YAML, então não há o que acusar), e este
- * script copia para o ambiente dos passos seguintes ($GITHUB_ENV) só os
- * nomes da lista abaixo que EXISTEM e servem à plataforma. Os demais passos
- * (npm, electron-builder...) nunca veem o contexto inteiro.
+ * Por que pelo nome, e não o contexto inteiro com `toJSON(secrets)` (como até
+ * 24/09/2026): o GitHub trata um workflow que serializa todos os segredos como
+ * possível exfiltração — "this workflow file may be malicious" — e segura
+ * TODA execução até alguém aprovar à mão (tag, manual ou agendada, como o
+ * keepalive). A contrapartida é cosmética: a extensão GitHub Actions do VS
+ * Code acusa "Context access might be invalid" para segredo ainda não
+ * cadastrado; o workflow roda normalmente.
  *
  *   node scripts/ci-segredos-opcionais.mjs --plataforma windows|macos|linux
  *
@@ -24,11 +25,14 @@
  *
  * confere se VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY existem e passam no
  * MESMO teste que o app faz (`nuvemConfigurada` em frontend/src/cloud/config.ts:
- * URL `https://` e chave com mais de 20 caracteres). Um instalador sem elas não
- * falha: cai no serviço de licença SIMULADO (frontend/src/services/license/
- * index.ts), sem login real e sem app do cuidador. Por isso, sem elas, este
- * modo sai com código 1 — a não ser com `--permitir-sem-nuvem` (só o teste
- * manual do release.yml passa essa opção), que troca o erro por um aviso.
+ * URL `https://` e chave com mais de 20 caracteres). Vêm dos segredos do
+ * repositório, se existirem, ou do frontend/.env.production versionado — a
+ * configuração PÚBLICA que o `vite build` lê sozinho (desde 24/09/2026 é o
+ * caminho normal: nenhum segredo precisa ser cadastrado). Um instalador sem
+ * elas não falha: cai no serviço de licença SIMULADO (frontend/src/services/
+ * license/index.ts), sem login real e sem app do cuidador. Por isso, sem elas,
+ * este modo sai com código 1 — a não ser com `--permitir-sem-nuvem` (só o
+ * teste manual do release.yml passa essa opção), que troca o erro por um aviso.
  *
  * Imprime só NOMES presentes/ausentes — valores nunca. O GitHub mascara nos
  * logs qualquer valor vindo de `secrets`, e o script ainda registra cada linha
@@ -36,11 +40,13 @@
  *
  * Fora do GitHub Actions (sem $GITHUB_ENV) nada é gravado: o script só
  * imprime o que faria. É o jeito de testar à mão, por exemplo:
- *   SEGREDOS_JSON='{"WIN_CSC_LINK":"x"}' node scripts/ci-segredos-opcionais.mjs --plataforma windows
+ *   SEGREDO_WIN_CSC_LINK=x node scripts/ci-segredos-opcionais.mjs --plataforma windows
  */
 
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Nome → plataformas em que ele é repassado.
@@ -85,18 +91,37 @@ const DOC = 'README → "Instalador e atualização automática" e "Hospedagem e
 
 const args = process.argv.slice(2);
 
-let segredos = {};
-try {
-  segredos = JSON.parse(process.env.SEGREDOS_JSON || '{}') ?? {};
-} catch {
-  console.log('::warning::SEGREDOS_JSON ilegível — seguindo sem segredos');
+/** Os segredos que o passo recebeu, cada um em SEGREDO_<NOME> (vazio = não cadastrado). */
+const segredos = {};
+for (const nome of Object.keys(OPCIONAIS)) {
+  const valor = process.env[`SEGREDO_${nome}`];
+  if (typeof valor === 'string' && valor.trim()) segredos[nome] = valor;
 }
 const valorDe = (nome) => (typeof segredos[nome] === 'string' ? segredos[nome].trim() : '');
 
+/**
+ * A configuração pública versionada do build do desktop (KEY=VALOR, formato
+ * dotenv simples). É o que o `vite build` usa quando o segredo não existe.
+ */
+function configPublicaDoDesktop() {
+  const arquivo = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'frontend', '.env.production');
+  const vars = {};
+  if (!existsSync(arquivo)) return vars;
+  for (const linha of readFileSync(arquivo, 'utf8').split(/\r?\n/)) {
+    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(linha);
+    if (m && !linha.trimStart().startsWith('#')) vars[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
+  }
+  return vars;
+}
+
 // ── Modo portão: a nuvem do instalador ──────────────────────────────────────
 if (args.includes('--conferir-nuvem')) {
-  const url = valorDe('VITE_SUPABASE_URL');
-  const chave = valorDe('VITE_SUPABASE_ANON_KEY');
+  const publica = configPublicaDoDesktop();
+  const origem = valorDe('VITE_SUPABASE_URL') || valorDe('VITE_SUPABASE_ANON_KEY')
+    ? 'segredos do repositório'
+    : 'frontend/.env.production';
+  const url = valorDe('VITE_SUPABASE_URL') || (publica.VITE_SUPABASE_URL ?? '').trim();
+  const chave = valorDe('VITE_SUPABASE_ANON_KEY') || (publica.VITE_SUPABASE_ANON_KEY ?? '').trim();
   const problemas = [];
   if (!url) problemas.push('VITE_SUPABASE_URL ausente');
   else if (!url.startsWith('https://')) problemas.push('VITE_SUPABASE_URL não começa com https://');
@@ -104,13 +129,13 @@ if (args.includes('--conferir-nuvem')) {
   else if (chave.length <= 20) problemas.push('VITE_SUPABASE_ANON_KEY curta demais para ser a chave anon');
 
   if (problemas.length === 0) {
-    console.log('[segredos] nuvem: VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY presentes (o instalador sai com login real)');
+    console.log(`[segredos] nuvem: VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY presentes (${origem}; o instalador sai com login real)`);
     process.exit(0);
   }
   const motivo =
     `${problemas.join('; ')}. Sem os dois, o instalador cai na licença SIMULADA ` +
-    '(sem login real e sem app do cuidador). Cadastre os segredos em Settings → Secrets and variables → ' +
-    `Actions (${DOC}).`;
+    '(sem login real e sem app do cuidador). Eles vêm do frontend/.env.production versionado ' +
+    `(ou de segredos com os mesmos nomes) — ${DOC}.`;
   if (args.includes('--permitir-sem-nuvem')) {
     console.log(`::warning::Instalador de TESTE sem nuvem, por escolha de quem rodou o workflow: ${motivo}`);
     process.exit(0);
@@ -159,5 +184,11 @@ if (!presentes.some((n) => /CSC_LINK|AZURE_CLIENT_SECRET/.test(n)) && plataforma
   console.log(`::notice::Build SEM assinatura de código (${plataforma}). Veja no README "Instalador e atualização automática" → "Assinatura de código".`);
 }
 if (!presentes.includes('VITE_SUPABASE_URL')) {
-  console.log('::notice::VITE_SUPABASE_URL ausente: o instalador sai sem login na nuvem (licença simulada, modo 100% local).');
+  // Sem o segredo, o `vite build` usa a configuração pública versionada — o
+  // caminho normal desde 24/09/2026. O aviso só vale se ela também faltar.
+  if ((configPublicaDoDesktop().VITE_SUPABASE_URL ?? '').trim()) {
+    console.log('[segredos] nuvem: sem segredo VITE_SUPABASE_*, o vite build usa o frontend/.env.production versionado');
+  } else {
+    console.log('::notice::VITE_SUPABASE_URL ausente (nem segredo, nem frontend/.env.production): o instalador sai sem login na nuvem (licença simulada, modo 100% local).');
+  }
 }

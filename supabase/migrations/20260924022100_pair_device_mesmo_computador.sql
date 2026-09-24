@@ -1,10 +1,9 @@
 -- =====================================================================
 -- IrisFlow — pair_device(): o mesmo computador substitui o próprio vínculo
 --
--- AINDA NÃO APLICADA EM PRODUÇÃO (23/09/2026): a aplicação pelo assistente foi
--- barrada pela checagem de permissões. Aplique com `supabase db push` (a versão
--- do nome já está depois da última registrada no projeto) ou colando este
--- arquivo no SQL Editor — é idempotente. Ordem: 150000 → 150100 → 150200.
+-- APLICADA EM PRODUÇÃO em 24/09/2026, registrada no projeto como a versão
+-- 20260924022100 (o nome do arquivo acompanha o histórico remoto, para o
+-- `supabase db push` reconhecê-la). Idempotente.
 --
 -- O desktop manda o id local da máquina (gerado uma vez por instalação) em
 -- `p_hostname`, justamente para o servidor reconhecer "este mesmo computador"

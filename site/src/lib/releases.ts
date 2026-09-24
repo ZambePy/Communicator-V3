@@ -34,7 +34,7 @@ export type OS = 'windows' | 'macos' | 'linux'
 export const ALL_OS: OS[] = ['windows', 'macos', 'linux']
 
 /** Repositório usado quando VITE_RELEASES_REPO não está definida. */
-export const DEFAULT_RELEASES_REPO = 'ZambePy/Blinkv1'
+export const DEFAULT_RELEASES_REPO = 'ZambePy/Communicator-v2'
 
 /** Sistemas com instalador publicado quando VITE_RELEASES_AVAILABLE não está definida. */
 export const DEFAULT_AVAILABLE: OS[] = ['windows']

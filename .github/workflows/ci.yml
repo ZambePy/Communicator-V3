@@ -154,8 +154,9 @@ jobs:
 
   # -------------------------------------------------------------------------
   # site/ — SPA estática (Vite + React 18 + Vitest). Independe do desktop:
-  # lockfile próprio, Node próprio, roda em Linux e sem segredo nenhum — o
-  # cliente trata a ausência dos VITE_SUPABASE_*.
+  # lockfile próprio, Node próprio, roda em Linux e sem segredo nenhum — a
+  # configuração do build de produção é a pública, versionada em
+  # site/.env.production (a mesma que o Cloudflare Pages usa).
   # `tsc --noEmit -p tsconfig.app.json` e não `npm run typecheck`: o
   # tsconfig.json raiz do site tem `files: []` (só referências), então um
   # `tsc --noEmit` nele não verifica arquivo nenhum.
@@ -175,6 +176,12 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
       - run: npm ci
+      # site/.env.production, frontend/.env.production e app/.env.production
+      # são versionados (configuração pública dos builds). Este passo barra
+      # qualquer segredo neles — chave service_role, token, senha.
+      - name: Configuração pública sem segredo
+        working-directory: .
+        run: node scripts/conferir-config-publica.mjs
       - name: Verificação de tipos
         run: npx tsc --noEmit -p tsconfig.app.json
       - name: Testes

@@ -35,6 +35,11 @@ yarn-error.log*
 .env
 .env.*
 !.env.example
+# Exceção (24/09/2026): a configuração PÚBLICA do build do site, que o
+# Cloudflare Pages lê (URL e chave anon do Supabase, sem segredo). O
+# scripts/conferir-config-publica.mjs confere no CI que ela só tem o permitido.
+# Precisa vir DEPOIS do último `.env.*` deste arquivo.
+!/.env.production
 *.pem
 *.key
 *.pfx

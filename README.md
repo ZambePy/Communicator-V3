@@ -19,7 +19,7 @@ o vínculo de quem já usa o app.
 ![Electron](https://img.shields.io/badge/Electron-43-47848F?logo=electron&logoColor=white)
 ![ONNX Runtime](https://img.shields.io/badge/ONNX%20Runtime-Web-005CED?logo=onnx&logoColor=white)
 ![MediaPipe](https://img.shields.io/badge/MediaPipe-Tasks%20Vision-00897B?logo=google&logoColor=white)
-[![CI](https://github.com/ZambePy/Blinkv1/actions/workflows/ci.yml/badge.svg)](https://github.com/ZambePy/Blinkv1/actions/workflows/ci.yml)
+[![CI](https://github.com/ZambePy/Communicator-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/ZambePy/Communicator-v2/actions/workflows/ci.yml)
 [![Licença: GPL v3](https://img.shields.io/badge/licen%C3%A7a-GPLv3-blue.svg)](LICENSE)
 
 ---
@@ -532,6 +532,7 @@ scripts/
                             site e do app (o mesmo portão do ci.yml)
   conferir-pacote.mjs       confere o app empacotado (sem source map, fuses, asar...)
   ci-segredos-opcionais.mjs repassa ao CI só os segredos que existem; confere os da nuvem
+  conferir-config-publica.mjs barra segredo nos .env.production versionados (site, desktop, app)
   db-local-test.sh/.sql     aplica todas as migrações num PostgreSQL local e testa o cenário
   analisar-gravacao.mjs     diagnóstico de uma gravação do rastreador (JSONL)
   limpo.mjs                 roda o dev com o armazenamento local zerado
@@ -1207,37 +1208,44 @@ RPCs de cadastro estão na tabela do site; só a `service_role` roda
 socorro sem confirmação após `emergency_timeout_s` (padrão 45 s), grava uma
 mensagem de sistema e reenvia push a todos os celulares — não telefona para
 ninguém; `encerrar-sessoes-orfas` fecha sessões sem heartbeat há mais de 5 min.
-Com a migração `20260923150000_help_requests_received_at` (no repositório,
-**ainda não aplicada em produção** — ver abaixo), o prazo passa a contar da
-chegada ao servidor (`received_at`), não de quando o pedido aconteceu no
-computador, e a mensagem só diz que reenviou quando havia celular
+O prazo conta da chegada ao servidor (`received_at`, migração
+`20260924020011_help_requests_received_at`), não de quando o pedido aconteceu
+no computador, e a mensagem só diz que reenviou quando havia celular
 cadastrado.
 
-**Edge Functions.** `desktop-sync` está publicada (v1), com `verify_jwt = false`: as
+**Edge Functions.** `desktop-sync` está publicada (v2, 24/09/2026), com `verify_jwt = false`: as
 ações de [Conta IrisFlow e nuvem](#conta-irisflow-e-nuvem) mais
 `messages.pending`, `settings.get` e `device.info`, escopadas ao paciente da
 chave; push Expo só para `emergencia` e `ajuda` (`EXPO_ACCESS_TOKEN` opcional).
 Pelo painel, "Verify JWT" tem de ficar desligado, senão o desktop recebe 401 do
-gateway, trata como falta de rede e só enfileira. A versão do repositório (com
-o horário real dos eventos, `horario.ts`, testado com `deno test
-supabase/functions/desktop-sync/`) ainda não foi publicada e **depende da
-migração 20260923150000**: publicada antes dela, um socorro que chegasse
-atrasado seria escalado no minuto seguinte. `payment-webhook` é
+gateway, trata como falta de rede e só enfileira. A v2 grava o horário real
+dos eventos que esperaram na fila offline (`horario.ts`, testado com `deno test
+supabase/functions/desktop-sync/`) e **depende da migração
+`20260924020011_help_requests_received_at`**, aplicada antes dela: sem a coluna
+`received_at`, um socorro que chegasse atrasado seria escalado no minuto
+seguinte. `payment-webhook` é
 **esqueleto, não publicado**: HMAC de Stripe, Mercado Pago ou Pagar.me
 (`PAYMENT_GATEWAY`, `PAYMENT_WEBHOOK_SECRET`; sem segredo recusa tudo) →
 `gateway_events` → `register_charge()`. Na beta não há gateway: todo plano tem
 `purchasable = false`.
 
-**Estado em produção (23/09/2026).** Aplicadas as migrações até
-`20260923120907_pair_device_pgcrypto`, com as versões exatamente iguais às do
-nome dos arquivos. **Faltam três**, que a checagem de permissões desta sessão
-não deixou aplicar e ficam para a equipe, nesta ordem:
-`20260923150000_help_requests_received_at` (prazo de escalonamento contado da
-chegada), `20260923150100_pair_device_mesmo_computador` (novo login no mesmo
-PC substitui o vínculo dele em vez de acumular chaves válidas) e
-`20260923150200_conta_de_teste_protegida` (ninguém troca a senha nem o e-mail
-da [conta de teste](#conta-de-teste)). Depois delas, publique a
-`desktop-sync` do repositório.
+**Estado em produção (24/09/2026).** As 16 migrações do repositório
+aplicadas, com as versões do histórico remoto exatamente iguais às do nome dos
+arquivos. As três últimas entraram em 24/09 e os arquivos foram renomeados
+para a versão que o projeto registrou: `20260924020011_help_requests_received_at`
+(prazo de escalonamento contado da chegada),
+`20260924022100_pair_device_mesmo_computador` (novo login no mesmo PC
+substitui o vínculo dele em vez de acumular chaves válidas) e
+`20260924022108_conta_de_teste_protegida` (ninguém troca a senha nem o e-mail
+da [conta de teste](#conta-de-teste)). A `desktop-sync` v2 foi publicada
+depois delas.
+
+**Migração nova:** `supabase migration new <nome>` e `supabase db push` — a
+versão do nome do arquivo vira a do histórico. Aplicada por fora do CLI (MCP,
+API de gerenciamento), o projeto registra a hora da aplicação como versão:
+renomeie o arquivo para ela, senão o `db push` a trata como pendente. Colada no
+SQL Editor, ela não entra no histórico: marque com `supabase migration repair
+--status applied <versão>`.
 
 **Aplicar** (do zero ou só o que falta) com o CLI, que compara as versões com
 o histórico e aplica só as ausentes:
@@ -1277,7 +1285,8 @@ login no mesmo computador, inscrições fechadas, RLS de `beta_registrations` e
 `support_reports`, sessões órfãs, `patient_settings` sem padrões de
 rastreamento, telefone opcional, o escalonamento (prazo contado da chegada,
 push só com celular cadastrado) e, depois do seed, a conta de teste e a
-proteção dela. Passou em 23/09/2026 (PostgreSQL 16) com as 16 migrações. Fora
+proteção dela. Passou em 24/09/2026 (PostgreSQL 16) com as 16 migrações, já
+com os nomes novos. Fora
 dele: as Edge Functions (o horário dos eventos tem teste Deno próprio).
 
 ---
@@ -1315,14 +1324,17 @@ site nunca oferece um instalador de macOS ou Linux ainda não testado, e a
 frase da página bate com os botões. Os releases precisam ser públicos;
 `app_releases` não é mais lida.
 
-**Variáveis** ([`site/.env.example`](site/.env.example) → `.env.local`; todas
-públicas):
+**Variáveis** (todas públicas). As de produção estão em
+[`site/.env.production`](site/.env.production), versionado, que o `npm run build`
+lê — é o que o Cloudflare Pages publica; no modo produção do Vite ele vale mais
+que o `.env.local`. Para desenvolver (`npm run dev`), copie
+[`site/.env.example`](site/.env.example) para `.env.local`:
 
 | variável | uso | sem ela |
 |---|---|---|
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | contas, planos, beta | site abre; ação de conta diz "serviço indisponível" |
 | `VITE_SITE_URL` | canonical, og:*, sitemap, destino dos e-mails | `https://irisflow.pages.dev` |
-| `VITE_RELEASES_REPO` / `VITE_RELEASES_AVAILABLE` | de onde vêm os instaladores / quais sistemas o site oferece | `ZambePy/Blinkv1` / `windows` |
+| `VITE_RELEASES_REPO` / `VITE_RELEASES_AVAILABLE` | de onde vêm os instaladores / quais sistemas o site oferece | `ZambePy/Communicator-v2` / `windows` |
 | `VITE_APP_CUIDADOR_URL` | link do app em `/beta` | "o link chega por e-mail" |
 | `VITE_CF_ANALYTICS_TOKEN` | Cloudflare Web Analytics | nenhuma estatística |
 | `VITE_PAYMENT_PUBLIC_KEY`, `VITE_API_URL` | reservadas (gateway, API própria) | sem uso hoje |
@@ -1403,11 +1415,11 @@ conversas, alertas ou computadores) — o que aparecer nela veio de alguém que
 testou.
 
 O repositório é público: **qualquer pessoa pode entrar com ela** e ler e
-escrever o que houver lá. A migração `20260923150200_conta_de_teste_protegida`
-recusa, só para esta conta, trocar a senha ou o e-mail (a troca deliberada
-pela equipe está no cabeçalho dela) — **enquanto ela não for aplicada em
-produção, qualquer um pode trocar a senha em `/nova-senha`** e trancar os
-outros. Nunca guarde dado real nela nem vincule a ela o computador de um
+escrever o que houver lá. A migração `20260924022108_conta_de_teste_protegida`,
+em produção desde 24/09/2026, recusa só para esta conta trocar a senha ou o
+e-mail — ninguém tranca os outros do lado de fora pela `/nova-senha`; a troca
+deliberada pela equipe está no cabeçalho dela. Nunca guarde dado real nela nem
+vincule a ela o computador de um
 paciente — quem entrasse leria o que ele fala, mandaria mensagens faladas na
 tela dele e receberia os alertas. Antes do lançamento comercial, apague a
 conta (e o gatilho) e tire `LOGIN_PADRAO` e `CONTA_DE_TESTE` do código.
@@ -1435,9 +1447,12 @@ electron-builder); `IRISFLOW_RELEASE_DIR` troca a pasta e `--dir` gera só a pas
 desempacotada. Os nomes são **fixos, sem versão**, iguais no local e no release: o site
 linka `…/releases/latest/download/<nome>` e o `latest*.yml` aponta para o arquivo dentro
 da tag. O `.zip` do Mac não é redundante: o electron-updater só atualiza macOS por ele.
-O build local embute os `VITE_*` de `frontend/.env.local` e só leva o modelo L2CS e o
-motor de voz se existirem na máquina (sem o modelo, avisa e sai com rastreamento
-degradado). Onde cada um sai: Windows gera só Windows (Linux com Docker/WSL); **só o
+O build embute os `VITE_*` de `frontend/.env.production` — versionado, com a URL e a chave
+anon do Supabase de produção, as mesmas do release; no modo produção do Vite ele vale mais
+que o `.env.local` (para empacotar contra outro projeto, use `frontend/.env.production.local`,
+fora do git). Leva o modelo L2CS e o motor de voz se existirem na máquina (sem o modelo,
+avisa e sai com rastreamento degradado); com `IRISFLOW_BUILD_L2CS=off`, como no release,
+sai sem o L2CS de propósito. Onde cada um sai: Windows gera só Windows (Linux com Docker/WSL); **só o
 macOS gera `.dmg`** e assina/notariza (o script recusa `--mac` fora dele); Linux gera
 Linux (o `rpm` exige `rpmbuild`) e Windows via Wine. No `release.yml` cada sistema
 empacota no seu runner, e o motor de voz (PyInstaller) só entra no de Windows.
@@ -1498,11 +1513,12 @@ feed, qualquer que fosse; por isso ele não é forçado.
 
 **De onde vem a versão nova.** O repositório vai para `resources/app-update.yml` no
 empacotamento, nesta ordem: `IRISFLOW_RELEASES_REPO` → `GITHUB_REPOSITORY` →
-`build.publish` do `package.json` (`ZambePy/Blinkv1`). O `release.yml` publica no mesmo
+`build.publish` do `package.json` (`ZambePy/Communicator-v2`; o repositório se chamava
+`Blinkv1`, e o GitHub só redireciona o nome antigo). O `release.yml` publica no mesmo
 repositório que grava (`vars.IRISFLOW_RELEASES_REPO || github.repository`) e o site lê
 `VITE_RELEASES_REPO`. Os três apontam para o mesmo repositório, que precisa ser
 **público**: o app baixa sem token e o site consulta a API sem login; releases privados
-exigiriam token dentro do instalador. Código privado: item 9 de
+exigiriam token dentro do instalador. Código privado: item 8 de
 [Pendências e riscos](#pendências-e-riscos).
 
 ### O que o instalador entrega: o app, não o código
@@ -1536,19 +1552,26 @@ A versão **vem da tag** (semver, `v1.2.3` ou `v1.2.3-beta.4`). O `release.yml` 
 passarem**, cria o release normal, marcado como o mais recente — `/releases/latest/` e a
 API do site ignoram pré-lançamentos, então a beta fica no número.
 
-- **Nuvem obrigatória:** o primeiro job confere `VITE_SUPABASE_URL` e
-  `VITE_SUPABASE_ANON_KEY` (o mesmo teste do app: URL `https://`, chave com mais de 20
-  caracteres) e **para o workflow** se faltarem — sem eles o instalador cairia na licença
-  simulada, sem login real e sem cuidador. `VITE_SITE_URL` é opcional.
-- **Modelo:** o release de tag `0.0.0-modelos` com `l2cs_gaze360.onnx`, no repositório da
+- **Nuvem:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` e `VITE_SITE_URL` vêm de
+  `frontend/.env.production`, versionado (segredos com o mesmo nome, se existirem, têm
+  prioridade). O primeiro job confere a URL e a chave (o mesmo teste do app: URL
+  `https://`, chave com mais de 20 caracteres) e **para o workflow** se faltarem — sem elas
+  o instalador cairia na licença simulada, sem login real e sem cuidador.
+- **L2CS:** desde 24/09/2026 o instalador sai **sem** os pesos: a variável de repositório
+  `IRISFLOW_BUILD_L2CS` vale `off` por padrão, o app nasce com `l2cs: 'off'` e rastreia
+  pelas features de íris (item 1 das Pendências). Com `IRISFLOW_BUILD_L2CS=auto`, o
+  workflow baixa `l2cs_gaze360.onnx` do release de tag `0.0.0-modelos` no repositório da
   variável `IRISFLOW_MODELOS_REPO` (sem ela, o de releases; pode ser privado, lido com o
-  `RELEASES_TOKEN`). Numa tag, sem ele o workflow falha. No repositório dos instaladores
-  ele precisa ser pré-lançamento (o workflow confere), e num repositório público o log
-  avisa que os pesos estão abertos para download (item 1 das Pendências). A tag antiga
-  `modelos` ainda é aceita, com aviso.
+  `RELEASES_TOKEN`) e, numa tag, falha sem ele; no repositório dos instaladores esse
+  release precisa ser pré-lançamento (o workflow confere). A tag antiga `modelos` ainda é
+  aceita, com aviso.
 - **Teste sem publicar:** *Actions → Release → Run workflow*. Instaladores como artefato
-  por 14 dias, sem release; sem o modelo, só um aviso e rastreamento degradado. A opção
-  *permitir_sem_nuvem* (desligada por padrão) aceita testar sem os segredos da nuvem.
+  por 14 dias, sem release. A opção *permitir_sem_nuvem* (desligada por padrão) aceita
+  testar sem a configuração da nuvem.
+- **APK do cuidador:** o job de publicar anexa `IrisFlow-Cuidador.apk` (variável
+  `IRISFLOW_APK_CUIDADOR_URL` ou o APK do release anterior; ver
+  [App do cuidador (EAS)](#app-do-cuidador-eas)). Sem nenhum dos dois, avisa e publica sem
+  ele.
 - **Depois:** atualize `public.beta_program.current_version` (a `/beta` mostra). A tabela
   `app_releases` não é mais lida por nenhum app.
 - **Tirar do ar:** apague o release com defeito (ou volte-o a rascunho): as instalações
@@ -1569,29 +1592,39 @@ confira antes de pagar.
 | instaladores | GitHub Releases, repositório público | arquivo < 2 GiB; Actions ilimitado só se público | privado: 2 000 min/mês |
 | app do cuidador | EAS Free | 15 builds Android + 15 iOS/mês, fila lenta; Update até 1 000 usuários | Starter, US$ 19/mês |
 | lojas | APK por link | — | Play US$ 25 (uma vez); Apple US$ 99/ano |
-| e-mail do Auth | Gmail com senha de app (a configurar) | 500/dia | domínio + Resend (grátis até 3 000/mês) |
+| e-mail do Auth | Gmail com senha de app (desde 24/09/2026) | 500/dia; o Auth manda até 20/h | domínio + Resend (grátis até 3 000/mês) |
 
 ### Site no Cloudflare Pages
 
-Ligado ao repositório pelo app do GitHub da Cloudflare; cada push na `main` publica.
-Build: branch `main`, root directory `site`, comando `npm run build` (`tsc -b && vite
-build`), saída `dist` (dentro de `site/`); opcional, *build watch paths* `site/*`, para
-commit de desktop ou app não gastar build. Variáveis em **Production e Preview** — todo
-`VITE_*` vai para o bundle, é público e só muda com novo deploy:
+Projeto **irisflow** (`https://irisflow.pages.dev`), ligado ao repositório pelo app do GitHub
+da Cloudflare; cada push na `main` publica. Build: branch `main`, root directory `site`,
+comando `npm run build` (`tsc -b && vite build`), saída `dist` (dentro de `site/`) e *build
+watch paths* `site/*`, para commit só de desktop ou app não gastar build. **Nada fica no
+painel:** a versão do Node vem de [`site/.node-version`](site/.node-version) (`24.11.1`, a do
+CI; sem ele o Pages usaria o Node 22) e as variáveis, de
+[`site/.env.production`](site/.env.production), versionado — todo `VITE_*` vai para o bundle
+e é público. Para mudar um valor, edite o arquivo e faça push; não cadastre `VITE_*` no
+painel, que teria prioridade sobre o arquivo sem aparecer no repositório.
 
 | variável | valor |
 |---|---|
-| `NODE_VERSION` | `24.11.1` (a do CI; o Pages usa Node 22 por padrão) |
 | `VITE_SUPABASE_URL` / `_ANON_KEY` | `https://xouznaqxhqzjdgeshlmh.supabase.co` / chave *anon* (a proteção é a RLS) |
 | `VITE_SITE_URL` | `https://irisflow.pages.dev`: canonical, `og:*`, sitemap, robots e links dos e-mails |
-| `VITE_RELEASES_REPO` / `_AVAILABLE` | `ZambePy/Blinkv1` / `windows` (`windows,macos,linux` quando testados) |
-| `VITE_CF_ANALYTICS_TOKEN`, `VITE_APP_CUIDADOR_URL` | token do Web Analytics e link do APK, ou vazios |
+| `VITE_RELEASES_REPO` / `_AVAILABLE` | `ZambePy/Communicator-v2` / `windows` (`windows,macos,linux` quando testados) |
+| `VITE_CF_ANALYTICS_TOKEN`, `VITE_APP_CUIDADOR_URL` | token do Web Analytics e link do APK; ausentes, o site segue sem eles |
+
+O [`scripts/conferir-config-publica.mjs`](scripts/conferir-config-publica.mjs) (no CI e no
+`npm run verificar`) falha se `site/`, `frontend/` ou `app/.env.production` ganhar algo que
+não seja público: nome sem o prefixo `VITE_`/`EXPO_PUBLIC_` ou com SECRET, PASSWORD, TOKEN…,
+JWT que não seja o *anon*, `sb_secret_…`, chave privada, ou os três apontando para projetos
+diferentes.
 
 - **Downloads:** o navegador pergunta à API do GitHub pelo último release (sem token, 60
   consultas/h por IP, cache de 10 min na aba). Um sistema só ganha botão se tiver arquivo
   no release **e** estiver em `VITE_RELEASES_AVAILABLE`; os outros aparecem como "em
-  preparação". Para oferecer macOS e Linux depois de testá-los, basta trocar a variável
-  para `windows,macos,linux` e publicar de novo.
+  preparação". Para oferecer macOS e Linux depois de testá-los, basta trocar
+  `VITE_RELEASES_AVAILABLE` para `windows,macos,linux` em `site/.env.production` e fazer
+  push.
 - **SPA e cabeçalhos:** sem `404.html` no build (o atual não gera nenhum), o Pages serve o
   `index.html` em toda rota profunda; o `_redirects` fica sem regras — a antiga
   `/* /index.html 200` era descartada pelo Pages com aviso e faria falhar um deploy no
@@ -1623,10 +1656,10 @@ domínio e o `www`. Depois:
 
 | onde | o quê |
 |---|---|
-| Pages (Production) | `VITE_SITE_URL` do domínio + novo deploy |
-| Supabase → URL Configuration | Site URL `https://dominio/nova-senha`; Redirect URLs `+ /entrar` e `+ /nova-senha` do domínio (mantenha as do `pages.dev` na transição) |
-| GitHub → segredo `VITE_SITE_URL` | nova tag; chega aos desktops pela atualização (no Mac, só com Developer ID) |
-| EAS → `EXPO_PUBLIC_SITE_URL` | preview e production; novo build ou `eas update` |
+| `site/.env.production` → `VITE_SITE_URL` | push (o Pages publica sozinho) |
+| Supabase → URL Configuration | Site URL `https://dominio`; Redirect URLs `+ /entrar` e `+ /nova-senha` do domínio (mantenha as do `pages.dev` na transição) |
+| `frontend/.env.production` → `VITE_SITE_URL` | nova tag; chega aos desktops pela atualização (no Mac, só com Developer ID) |
+| `app/.env.production` → `EXPO_PUBLIC_SITE_URL` | novo build ou `eas update` |
 | `app/app.json` → `extra.privacyPolicyUrl`, `termsUrl`, `accountDeletionUrl` | e as fichas da Play e da App Store |
 
 Mantenha o `irisflow.pages.dev` no ar: versões antigas abrem esse endereço (ele é fixo na
@@ -1636,17 +1669,17 @@ link a trocar: o scheme `irisflow://` do app não participa do Auth.
 ### Supabase (plano Free)
 
 Projeto **IrisFlow Communicator**, ref `xouznaqxhqzjdgeshlmh`, São Paulo (`sa-east-1`),
-`https://xouznaqxhqzjdgeshlmh.supabase.co`: o esquema base e as migrações até
-`20260923120907` aplicados (as três de `20260923150000` em diante ainda não — ver
-[Supabase](#supabase-supabase)), pg_cron com `escalar-pedidos-de-ajuda` e
-`encerrar-sessoes-orfas`, e a Edge Function `desktop-sync` (v1) com `verify_jwt = false`
+`https://xouznaqxhqzjdgeshlmh.supabase.co`: todas as migrações do repositório aplicadas
+(ver [Supabase](#supabase-supabase)), pg_cron com `escalar-pedidos-de-ajuda` e
+`encerrar-sessoes-orfas`, e a Edge Function `desktop-sync` (v2) com `verify_jwt = false`
 (o desktop se autentica pela chave do computador). `EXPO_ACCESS_TOKEN` é segredo opcional.
 
 - **Pausa após 7 dias** sem atividade; volta pelo painel, com os dados. O
-  `supabase-keepalive.yml` lê uma linha de `beta_program` a cada 3 dias com os segredos
-  `SUPABASE_URL` e `SUPABASE_ANON_KEY` — sem eles, **falha** (vermelho), em vez de fingir
-  que protege. Em repositório público o GitHub desativa agendamentos após 60 dias sem
-  atividade: reative em *Actions*.
+  `supabase-keepalive.yml` lê uma linha de `beta_program` a cada 3 dias com a URL e a
+  chave anon de `site/.env.production` (os segredos `SUPABASE_URL` e `SUPABASE_ANON_KEY`,
+  se existirem, têm prioridade); resposta diferente de 200 o faz **falhar** (vermelho), em
+  vez de fingir que protege. Em repositório público o GitHub desativa agendamentos após
+  60 dias sem atividade: reative em *Actions*.
 - **Sem backup automático:** toda semana e antes de migrar,
   `supabase db dump --linked -f backup.sql` e o mesmo com `--data-only` (o CLI roda o
   `pg_dump` num contêiner: Docker aberto), fora do repositório — são dados de pacientes.
@@ -1661,30 +1694,45 @@ Projeto **IrisFlow Communicator**, ref `xouznaqxhqzjdgeshlmh`, São Paulo (`sa-e
 | URL Configuration → Site URL | `https://irisflow.pages.dev` | de fábrica é `http://localhost:3000`, e é o destino de qualquer link sem `redirectTo` e o `{{ .SiteURL }}` dos modelos de e-mail; o site e o app passam `redirectTo` em todos os fluxos |
 | URL Configuration → Redirect URLs | `https://irisflow.pages.dev/entrar`, `…/nova-senha`, `http://localhost:5173/**` | fora da lista o destino é ignorado; as prévias usam `VITE_SITE_URL` |
 | Emails → SMTP Settings | Gmail: `smtp.gmail.com`, porta 465, usuário e remetente = o Gmail, senha de app | o SMTP padrão só entrega à equipe do projeto, 2 por hora |
-| Rate Limits → e-mails | ~20/h | o SMTP próprio começa em 30/h; o Gmail para em 500/dia |
-| Sign In / Providers → Email | provedor ligado; *Confirm email* ligado **depois** do SMTP | o site trata os dois modos; sem SMTP ninguém de fora recebe o link |
+| Rate Limits → e-mails | 20/h | com SMTP próprio o padrão é 30/h, que passaria dos 500/dia do Gmail |
+| Sign In / Providers | *Confirm email* ligado; Email → *Minimum password length* 8, sem exigir tipos de caractere | o mesmo `SENHA_MINIMA` do site; sem SMTP ninguém de fora recebe o link |
+| Emails → Templates | *Confirm sign up*, *Reset password* e *Change email address* em português | os outros modelos seguem os do Supabase (em inglês) e não são usados pelo site nem pelo app |
+
+Assim desde 24/09/2026. Quem troca a senha de app do Gmail (ou a revoga em
+myaccount.google.com/apppasswords) precisa colá-la de novo em *Emails → SMTP Settings*: sem
+ela, confirmação e "esqueci a senha" param de chegar.
 
 ### App do cuidador (EAS)
 
-Perfis do `app/eas.json`, cada um com o canal OTA de mesmo nome: `development` (APK com
-dev client), `preview` (**APK** interno, por link/QR) e `production` (**AAB** para a loja,
-número de build remoto com `autoIncrement`; iOS pela App Store/TestFlight). Instalar em
-iPhone fora da loja também exige a conta Apple paga.
+Projeto **@zambee/irisflow-cuidador** no EAS, desde 24/09/2026: `owner`,
+`extra.eas.projectId` e `updates.url` em `app/app.json`. Perfis do `app/eas.json`, cada um
+com o canal OTA de mesmo nome: `development` (APK com dev client), `preview` (**APK**
+interno, por link/QR) e `production` (**AAB** para a loja, número de build remoto com
+`autoIncrement`; iOS pela App Store/TestFlight). Instalar em iPhone fora da loja também
+exige a conta Apple paga.
 
-- **Variáveis:** o `env` do `eas.json` já tem `EXPO_PUBLIC_SUPABASE_URL` e `_ANON_KEY`,
-  mas só o `eas build` o lê. O `eas update` (SDK 55+) exige `--environment` e usa **só**
-  as variáveis do EAS: cadastre as duas lá também, ou um update sai sem Supabase e o app
-  para de conectar. `EXPO_PUBLIC_SITE_URL` é opcional (vazio = `irisflow.pages.dev`);
-  `GOOGLE_SERVICES_JSON` (arquivo, secreto) liga o push no Android.
-- **Projeto:** `extra.eas.projectId` vazio e `updates.url` com o marcador `SEU-PROJECT-ID`
-  (`app/app.json`). O `eas init` só imprime o projectId (por causa do `app.config.js`):
-  cole nos dois lugares. Sem isso, nem push nem EAS Update.
+- **Variáveis:** o `env` de cada perfil do `eas.json` tem `EXPO_PUBLIC_SUPABASE_URL` e
+  `_ANON_KEY` — é o que o `eas build` usa. O `eas update` (SDK 55+) exige `--environment` e
+  usa **só** as variáveis do ambiente do EAS: as três públicas (`EXPO_PUBLIC_SUPABASE_URL`,
+  `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_SITE_URL`) estão cadastradas em
+  development, preview e production (`npx eas-cli env:list --environment preview`).
+  Trocou um valor? Troque no `eas.json`, no EAS (`npx eas-cli env:set`) e em
+  `app/.env.production`, a referência versionada. `GOOGLE_SERVICES_JSON` (arquivo,
+  secreto) liga o push no Android.
+- **APK da beta:** `npx eas-cli build -p android --profile preview` (na primeira vez o EAS
+  gerou o keystore e o guarda na conta do Expo; tenha uma cópia com `npx eas-cli
+  credentials`). O link do build no EAS expira em semanas, então o APK vai anexado a todo
+  release do GitHub com nome fixo, `IrisFlow-Cuidador.apk`, e a `/beta` linka
+  `…/releases/latest/download/IrisFlow-Cuidador.apk` (`VITE_APP_CUIDADOR_URL` em
+  `site/.env.production`). O `release.yml` o baixa da variável de repositório
+  `IRISFLOW_APK_CUIDADOR_URL` (o link do APK do build do EAS) ou, sem ela ou com o link
+  vencido, o copia do release anterior. **APK novo:** gere o build, troque a variável
+  pelo link novo e publique uma versão (ou rode de novo o workflow da última tag).
 - **Push:** não existe no Expo Go (SDK 53+); no Android exige Firebase (FCM V1); no iOS,
   a conta Apple paga.
 - **APK fora da loja:** verificação de desenvolvedor Android a partir de 30/09/2026, no
   Brasil, para apps de lojas participantes; APK por link fica fora nesta fase (confira
-  developer.android.com/developer-verification). O link interno do EAS não tem validade
-  garantida: anexe o APK a um release público. Guarde cópia do keystore (`eas credentials`).
+  developer.android.com/developer-verification).
 
 ### Publicação nas lojas
 
@@ -1750,14 +1798,18 @@ preciso uma função no servidor.
 
 ### Segredos e variáveis do GitHub Actions
 
-*Settings → Secrets and variables → Actions*. O `ci.yml` não usa nenhum; nos outros, um
-passo recebe `toJSON(secrets)` e `scripts/ci-segredos-opcionais.mjs` repassa só os que
-existem. O `GITHUB_TOKEN` automático publica o release.
+*Settings → Secrets and variables → Actions*. **Nenhum é obrigatório:** a nuvem vem dos
+`.env.production` versionados. O `ci.yml` não usa nenhum; nos outros, cada passo recebe
+só os segredos que usa, pelo nome (não cadastrado chega vazio), e
+`scripts/ci-segredos-opcionais.mjs` repassa só os que existem e servem ao sistema do job.
+Nunca `toJSON(secrets)`: o GitHub trata o contexto inteiro serializado como possível
+exfiltração ("this workflow file may be malicious") e segura cada execução — inclusive a
+agendada — até alguém aprovar à mão. O `GITHUB_TOKEN` automático publica o release.
 
 | nome | tipo | usado por | obrigatório? |
 |---|---|---|---|
-| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | segredo | `release.yml` | **obrigatórios numa tag**: sem eles o workflow para no primeiro job (teste manual: opção *permitir_sem_nuvem*) |
-| `VITE_SITE_URL` | segredo | `release.yml` | opcional (padrão `irisflow.pages.dev`); obrigatório com domínio |
+| `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | segredo | `release.yml` | opcionais: sobrepõem `frontend/.env.production` (sem nenhum dos dois o workflow para no primeiro job; teste manual: opção *permitir_sem_nuvem*) |
+| `VITE_SITE_URL` | segredo | `release.yml` | opcional: sobrepõe `frontend/.env.production` |
 | `VITE_DESKTOP_SYNC_URL`, `IRISFLOW_CRASH_URL` | segredo | `release.yml` | opcionais |
 | `WIN_CSC_LINK` + `WIN_CSC_KEY_PASSWORD`, ou os sete `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TRUSTED_SIGNING_{ENDPOINT,ACCOUNT,PROFILE,PUBLISHER}` | segredo | `release.yml` (só Windows) | opcional |
 | `CSC_LINK`, `CSC_KEY_PASSWORD` | segredo | `release.yml` (só macOS) | opcional (Developer ID) |
@@ -1765,7 +1817,9 @@ existem. O `GITHUB_TOKEN` automático publica o release.
 | `RELEASES_TOKEN` | segredo | `release.yml` (modelo e publicação) | só com releases ou modelos em outro repositório |
 | `IRISFLOW_RELEASES_REPO` | **variável** | `release.yml` → `package-app.mjs` | opcional (padrão: este repositório) |
 | `IRISFLOW_MODELOS_REPO` | **variável** | `release.yml` (modelo) | opcional (padrão: o de releases); pode ser privado |
-| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | segredo | `supabase-keepalive.yml` | obrigatórios: sem eles o workflow falha |
+| `IRISFLOW_BUILD_L2CS` | **variável** | `release.yml` → `vite build` e `package-app.mjs` | opcional: `off` (padrão, instalador sem os pesos do L2CS) ou `auto` |
+| `IRISFLOW_APK_CUIDADOR_URL` | **variável** | `release.yml` (publicar) | opcional: link do APK do build do EAS; sem ela, o APK do cuidador é copiado do release anterior |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | segredo | `supabase-keepalive.yml` | opcionais: sobrepõem `site/.env.production` |
 
 ---
 
@@ -1779,8 +1833,9 @@ node scripts/verificar-tudo.mjs --so desktop,pacote  # + empacota a pasta do app
 
 O `verificar` roda, em sequência: tipos do núcleo e do Electron, testes do
 núcleo (Vitest), testes e build da interface, compilação do Electron; tipos,
-testes e build do site; tipos e testes (Jest) do app do cuidador — e resume no
-fim. É o mesmo portão do `.github/workflows/ci.yml`, que roda a cada push e PR
+testes e build do site e a conferência da configuração pública
+(`scripts/conferir-config-publica.mjs`); tipos e testes (Jest) do app do
+cuidador — e resume no fim. É o mesmo portão do `.github/workflows/ci.yml`, que roda a cada push e PR
 na `main`: o desktop num runner Windows, e site, app e um empacotamento Linux
 (`--dir` + [`scripts/conferir-pacote.mjs`](scripts/conferir-pacote.mjs)) em
 runners Linux. Fora do `verificar` e do CI ficam o motor de voz (`cd
@@ -1791,12 +1846,13 @@ o replay de gravação real (`docs/MEDICOES.md` §15), que precisa de uma
 gravação. Os instaladores dos três sistemas saem de
 `.github/workflows/release.yml` ([Instalador](#instalador-e-atualização-automática)).
 
-**Estado medido nesta versão (24/09/2026):** núcleo com **1948 testes (mais 2 pulados) em 176 arquivos**,
+**Estado medido nesta versão (24/09/2026):** núcleo com **1952 testes (mais 2 pulados) em 177 arquivos**,
 interface com **1191 em 136 arquivos**, site com **174 em 17 arquivos** e app do
-cuidador com **96 em 12 suítes** — 3409 testes ao todo; checagem de tipos sem
-erro nos cinco projetos (núcleo, Electron, interface, site e app) e os builds
-de produção da interface e do site passando; banco local com as 16
-migrações, o cenário e o seed passando.
+cuidador com **96 em 12 suítes** — 3413 testes ao todo; checagem de tipos sem
+erro nos cinco projetos (núcleo, Electron, interface, site e app), configuração
+pública sem segredo, os builds de produção da interface e do site passando;
+banco local com as 16 migrações, o cenário e o seed passando; teste Deno da
+`desktop-sync` (11) passando.
 
 Os testes do núcleo cobrem os módulos puros, onde os limiares e as leis de
 controle vivem: calibração (inclusive a correção local dos cantos, com um olho
@@ -1855,26 +1911,25 @@ diz qual ajuste físico é necessário.
 
 ## Pendências e riscos
 
-Estado em 23/09/2026.
+Estado em 24/09/2026.
 
-1. **Pesos do L2CS no release — decisão jurídica.** A licença do Gaze360 é
-   *research-only* e proíbe uso comercial, inclusive de modelos treinados na base; a
-   decisão de 15/09/2026 é não distribuí-los ([Modelos](#modelos); `usoComercial:
-   "proibido"`). O `release.yml` faz o contrário: baixa `l2cs_gaze360.onnx` do release
-   `0.0.0-modelos`, o empacota em **todo** instalador e falha sem ele numa tag. Num
-   repositório público, esse release ainda deixa os pesos para download direto (o workflow
-   avisa); até a decisão, guarde-o num repositório privado (`IRISFLOW_MODELOS_REPO` +
-   `RELEASES_TOKEN`) — o que tira o arquivo da vitrine, mas não dos instaladores. Se o
-   antigo release `modelos` já existe num repositório público, os pesos já estão expostos.
-   Saídas: publicar sem o L2CS (menor precisão; muda o `release.yml`), autorização escrita
-   dos titulares, ou o modelo retreinado em base licenciada.
+1. **Pesos do L2CS — decisão jurídica.** A licença do Gaze360 é *research-only* e proíbe
+   uso comercial, inclusive de modelos treinados na base; a decisão de 15/09/2026 é não
+   distribuí-los ([Modelos](#modelos); `usoComercial: "proibido"`). Desde 24/09/2026 o
+   `release.yml` cumpre isso: o instalador sai **sem** os pesos e com o L2CS desligado
+   (variável `IRISFLOW_BUILD_L2CS`, padrão `off`), rastreando pelas features de íris, com
+   menor precisão. O repositório não tem release de modelos (`0.0.0-modelos` ou
+   `modelos`). Para religar: autorização escrita dos titulares ou o modelo retreinado em
+   base licenciada e, então, `IRISFLOW_BUILD_L2CS=auto`, com o release de modelos num
+   repositório privado (`IRISFLOW_MODELOS_REPO` + `RELEASES_TOKEN`) — os pesos voltariam a
+   ir dentro de cada instalador.
 2. **Conta de teste pública.** `admin@irisflow.com` / `irisflow2026` existe no projeto de
    produção (`supabase/seed.sql`) e a senha está no repositório público (`seed.sql`,
    `app/src/lib/config.ts`, `frontend/src/services/license/mockLicenseService.ts`) — de
    propósito, para qualquer testador entrar. Qualquer um entra no site, no desktop e no
    app do cuidador, altera os dados dessa conta, pareia computadores e dispara push aos
-   aparelhos registrados nela. A migração `20260923150200` impede trocar a senha e o
-   e-mail dela, mas **ainda não foi aplicada**. Antes do lançamento comercial, apague a
+   aparelhos registrados nela. A migração `20260924022108` (em produção desde 24/09/2026)
+   impede trocar a senha e o e-mail dela. Antes do lançamento comercial, apague a
    conta.
 3. **GPL-3.0 × distribuição fechada.** Fechar o repositório não revoga a licença de quem
    já recebeu o código. Distribuir binários sob GPL obriga oferecer o fonte a quem os
@@ -1883,38 +1938,32 @@ Estado em 23/09/2026.
 4. **Instaladores sem assinatura:** SmartScreen, Smart App Control e Gatekeeper, e nenhuma
    atualização no Mac sem Apple Developer. Os segredos já são separados por sistema
    (`WIN_CSC_*` só no Windows, `CSC_*` só no macOS).
-5. **Supabase Free e e-mail:** pausa (o keepalive falha em vermelho sem os segredos, mas
-   para de rodar se o GitHub desativar o agendamento), sem backup automático, as duas vagas
-   grátis ocupadas (decida o que guardar do projeto antigo antes de apagá-lo), sem proteção
-   contra senha vazada (só no Pro). O SMTP próprio ainda não está configurado: sem ele,
-   confirmação e "esqueci a senha" não chegam a quem é de fora da equipe.
-6. **Três migrações e a `desktop-sync` nova ainda não estão em produção** — a aplicação
-   foi barrada pela checagem de permissões desta sessão. Os clientes novos funcionam com o
-   banco e a função atuais (os campos novos são ignorados), mas sem elas: um socorro que
-   esperou na fila offline aparece como novo, cada login no mesmo PC deixa uma chave
-   antiga válida, e a senha da conta de teste pode ser trocada por qualquer um. Como
-   aplicar: [Supabase](#supabase-supabase).
-7. **App do cuidador sem projeto EAS:** sem push nem EAS Update até o `eas init`. Push não
-   existe no Expo Go e, no Android, depende do Firebase. Um `eas update` antes de cadastrar
-   as variáveis do Supabase no EAS publica um bundle que não conecta.
-8. **macOS e Linux sem teste real:** o CI só gera a pasta Linux (`--dir`), o `.dmg` nunca
+5. **Supabase Free e e-mail:** pausa (o keepalive falha em vermelho se a consulta falhar,
+   mas para de rodar se o GitHub desativar o agendamento), sem backup automático, as duas
+   vagas grátis ocupadas (decida o que guardar do projeto antigo antes de apagá-lo), sem
+   proteção contra senha vazada (só no Pro). E-mail pelo Gmail com senha de app: até 500
+   por dia, remetente `@gmail.com`; com domínio próprio, troque por um SMTP do domínio.
+6. **App do cuidador sem push:** o projeto EAS existe e o APK de teste vai em todo
+   release, mas o push depende do Firebase (`GOOGLE_SERVICES_JSON`) no Android e da conta
+   Apple paga no iOS; sem ele, os alertas chegam só com o app aberto (realtime).
+7. **macOS e Linux sem teste real:** o CI só gera a pasta Linux (`--dir`), o `.dmg` nunca
    foi gerado (sai no primeiro release) e nenhum dos dois foi instalado numa máquina real.
    O site só oferece esses botões quando `VITE_RELEASES_AVAILABLE` os listar.
-9. **Repositório privado depois:** os releases dele somem para visitantes e apps, e o
+8. **Repositório privado depois:** os releases dele somem para visitantes e apps, e o
    Actions cai para 2 000 min/mês (macOS custa ~10× o Linux). Caminho: repositório público
    só de releases, variável `IRISFLOW_RELEASES_REPO`, segredo `RELEASES_TOKEN` (PAT
    fine-grained, *Contents: Read and write* só nos repositórios de releases e de modelos) e
-   `VITE_RELEASES_REPO` no Pages; o de modelos pode ficar privado (item 1). Os apps
+   `VITE_RELEASES_REPO` em `site/.env.production`; o de modelos pode ficar privado (item 1). Os apps
    instalados leem o repositório antigo: antes de fechá-lo, publique nele uma versão-ponte
    com os arquivos do release novo.
-10. **Ainda aberto no código:** leitores de EDID testados só como parsers (confirmar num
-    PC real); medição em vídeo do roll normalizado e uma sessão ao vivo com a calibração
-    de 13 pontos (`docs/MEDICOES.md` §14.5); enum `condition_t` sem esclerose múltipla;
-    licença simulada (só sem nuvem, em desenvolvimento) que esquece a sessão a cada
-    reabertura; antes de reabrir vendas pagas, uma assinatura pode voltar a `ativa` sem
-    pagamento real (`attach_payment_method` sem gateway + cancelar + reativar) e o limite
-    de computadores de Completo/Voz anunciado no site não é aplicado pelo banco;
-    avisos de postura/fadiga previstos no banco que o desktop não envia.
+9. **Ainda aberto no código:** leitores de EDID testados só como parsers (confirmar num
+   PC real); medição em vídeo do roll normalizado e uma sessão ao vivo com a calibração
+   de 13 pontos (`docs/MEDICOES.md` §14.5); enum `condition_t` sem esclerose múltipla;
+   licença simulada (só sem nuvem, em desenvolvimento) que esquece a sessão a cada
+   reabertura; antes de reabrir vendas pagas, uma assinatura pode voltar a `ativa` sem
+   pagamento real (`attach_payment_method` sem gateway + cancelar + reativar) e o limite
+   de computadores de Completo/Voz anunciado no site não é aplicado pelo banco;
+   avisos de postura/fadiga previstos no banco que o desktop não envia.
 
 ---
 

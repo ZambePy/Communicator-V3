@@ -79,6 +79,7 @@ const TRADUCOES: Record<string, string> = {
   'Email not confirmed': EMAIL_NAO_CONFIRMADO,
   'User already registered': JA_CADASTRADO,
   'Password should be at least 6 characters.': 'A senha precisa ter ao menos 8 caracteres.',
+  'Password should be at least 8 characters.': 'A senha precisa ter ao menos 8 caracteres.',
   'For security purposes, you can only request this after 60 seconds.':
     'Aguarde um minuto antes de tentar de novo.',
   'Email rate limit exceeded': LIMITE_DE_EMAIL,
@@ -98,6 +99,9 @@ const TRADUCOES_POR_CODIGO: Record<string, string> = {
   over_email_send_rate_limit: LIMITE_DE_EMAIL,
   over_request_rate_limit: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.',
   email_address_not_authorized: FALHA_NO_ENVIO,
+  // Mínimo de 8 caracteres também no servidor (Auth → Email, desde 24/09/2026),
+  // o mesmo do SENHA_MINIMA do site; sem exigência de tipos de caractere.
+  weak_password: 'A senha precisa ter ao menos 8 caracteres.',
 }
 
 export function mensagemDeErro(erro: unknown): string {

@@ -225,7 +225,8 @@ export interface ExperimentConfig {
   gazeLostFallback: boolean;
 }
 
-export const DEFAULTS: ExperimentConfig = {
+/** Os padrões do código. `DEFAULTS` (abaixo) é isto com os padrões de build aplicados. */
+const DEFAULTS_DO_CODIGO: ExperimentConfig = {
   expandFactor: 1.4,
   l2csCadenceMs: 100,
   l2csInputSize: 448,
@@ -260,6 +261,39 @@ export const VALORES_ACEITOS = {
   formaDaExpansao: ['completa', 'parcial'],
   dimsDaIris: ['ambas', 'normalizadas', 'absolutas'],
 } as const;
+
+/**
+ * Padrões decididos por quem EMPACOTA, não por quem usa.
+ *
+ * O `vite build` do frontend troca `__IRISFLOW_PADROES_DE_BUILD__` por um
+ * objeto (frontend/vite.config.ts, `define`) montado de variáveis de ambiente
+ * do build. Hoje há uma só, `IRISFLOW_BUILD_L2CS`: o release.yml passa `off`
+ * enquanto os pesos do L2CS (Gaze360) não têm licença comercial — o instalador
+ * público sai sem eles e com o rastreamento pelas features de íris. O caminho
+ * `l2cs: 'off'` já existe inteiro: o engine marca o status `disabled`, a
+ * pré-calibração libera o início, e o modelo treina sem o bloco angular (é a
+ * condição B da M-ablação em docs/MEDICOES.md).
+ *
+ * Fora de um build do Vite (testes do núcleo, Node) o identificador não existe
+ * e nada muda. Valores fora da lista fechada são ignorados. Uma escolha feita
+ * depois, pelo console ou pela URL, continua valendo por cima.
+ */
+declare const __IRISFLOW_PADROES_DE_BUILD__: unknown;
+
+export function aplicarPadroesDeBuild(base: ExperimentConfig, padroes: unknown): ExperimentConfig {
+  if (!padroes || typeof padroes !== 'object' || Array.isArray(padroes)) return { ...base };
+  const out: ExperimentConfig = { ...base };
+  const l2cs = (padroes as Record<string, unknown>).l2cs;
+  if (typeof l2cs === 'string' && (VALORES_ACEITOS.l2cs as readonly string[]).includes(l2cs)) {
+    out.l2cs = l2cs as ExperimentConfig['l2cs'];
+  }
+  return out;
+}
+
+export const DEFAULTS: ExperimentConfig = aplicarPadroesDeBuild(
+  DEFAULTS_DO_CODIGO,
+  typeof __IRISFLOW_PADROES_DE_BUILD__ !== 'undefined' ? __IRISFLOW_PADROES_DE_BUILD__ : undefined,
+);
 
 export const L2CS_INPUT_SIZES_ACEITOS = [224, 448] as const;
 
