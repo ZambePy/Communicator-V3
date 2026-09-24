@@ -167,7 +167,7 @@ titulo('3b. Instaladores (GitHub Releases)')
 // Os mesmos padrões de src/lib/releases.ts (DEFAULT_RELEASES_REPO e DEFAULT_AVAILABLE).
 const repoCru = (env.VITE_RELEASES_REPO ?? '').trim()
 const repoMatch = repoCru.match(/^(?:https?:\/\/github\.com\/)?([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i)
-const repo = repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : 'ZambePy/Communicator-v2'
+const repo = repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : 'ZambePy/Communicator-V3'
 const liberados = new Set()
 for (const parte of (env.VITE_RELEASES_AVAILABLE ?? '').toLowerCase().split(/[\s,;]+/)) {
   if (parte === 'windows' || parte === 'win') liberados.add('windows')
