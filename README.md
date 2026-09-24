@@ -776,6 +776,12 @@ pessoa não confirmar, o caminho de volta é uma flag.
    (`/conversation`) com o celular do cuidador e **Computador**
    (`/virtual-mouse`), que liga o Modo Computador. O botão de emergência é um
    alerta local (som e tela) e, com a conta ligada, também chega ao celular.
+   No menu, a largura dos cartões acompanha a altura disponível (proporção
+   1,6 : 1, com piso para o texto não quebrar), a grade só rola se as linhas
+   não couberem no alvo mínimo de 5°, e as partículas do site derivam ao fundo
+   — atrás dos cartões, só em `transform`/`opacity` e desligadas com "reduzir
+   movimento" do sistema
+   ([`ParticulasDeFundo.tsx`](frontend/src/components/ui/ParticulasDeFundo.tsx)).
 5. **Área do cuidador** (`/settings`, `/settings/voice`, `/caregiver`,
    `/caregiver/guide`): configurações por seção (rastreamento, tela,
    calibração, voz personalizada, sugestões de escrita, dados), painel com
@@ -1332,23 +1338,12 @@ canonical e og:* a cada rota e o `vite.config.ts` gera `sitemap.xml` e
 (`seo.test.ts` confere). O site não grava cookie; o Cloudflare Web Analytics
 (sem cookie) carrega a menos que o visitante recuse no aviso.
 
-**Hero.** Um pictograma branco de cadeirante (SVG em
-[`GazeStory.tsx`](site/src/components/sections/GazeStory.tsx)) olha para um
-monitor com a **captura real** da Home do desktop (`public/produto/`); o feixe
-leva o cursor aos botões de verdade (`BOTOES`) e o anel de fixação enche. Quando
-o menu mudar, sirva uma cópia do app sem `.env` em `vite preview --port 4190`,
-grave um vídeo de rosto `.y4m` para a câmera falsa do Chromium (passos no
-cabeçalho de
-[`capturar-tela-do-app.mjs`](site/scripts/capturar-tela-do-app.mjs)) e rode, em
-`site/`, com Playwright:
-
-```bash
-ROSTO_Y4M=/tmp/irisflow-snap/rosto.y4m PLAYWRIGHT_MODULE="$(npm root -g)/playwright" \
-  node scripts/capturar-tela-do-app.mjs
-```
-
-Ele entra com a conta local, abre o menu (daí o selo "Sem calibração"), grava as
-duas WebP e imprime o `BOTOES` novo.
+**Hero.** Título "Seu olhar tem voz" (com "voz" em gradiente) e, ao lado, só a
+marca: o símbolo da íris (`IrisMark`, de
+[`Logo.tsx`](site/src/components/layout/Logo.tsx)) girando devagar, com o halo,
+os anéis que se expandem e uma aura azul e teal própria do hero
+([`hero.css`](site/src/components/sections/hero.css)). No celular ela vem depois
+das chamadas, menor. Com movimento reduzido fica parada.
 
 ---
 
@@ -1796,9 +1791,9 @@ o replay de gravação real (`docs/MEDICOES.md` §15), que precisa de uma
 gravação. Os instaladores dos três sistemas saem de
 `.github/workflows/release.yml` ([Instalador](#instalador-e-atualização-automática)).
 
-**Estado medido nesta versão (23/09/2026):** núcleo com **1948 testes (mais 2 pulados) em 176 arquivos**,
-interface com **1183 em 134 arquivos**, site com **175 em 17 arquivos** e app do
-cuidador com **96 em 12 suítes** — 3402 testes ao todo; checagem de tipos sem
+**Estado medido nesta versão (24/09/2026):** núcleo com **1948 testes (mais 2 pulados) em 176 arquivos**,
+interface com **1191 em 136 arquivos**, site com **174 em 17 arquivos** e app do
+cuidador com **96 em 12 suítes** — 3409 testes ao todo; checagem de tipos sem
 erro nos cinco projetos (núcleo, Electron, interface, site e app) e os builds
 de produção da interface e do site passando; banco local com as 16
 migrações, o cenário e o seed passando.
@@ -1875,12 +1870,12 @@ Estado em 23/09/2026.
    dos titulares, ou o modelo retreinado em base licenciada.
 2. **Conta de teste pública.** `admin@irisflow.com` / `irisflow2026` existe no projeto de
    produção (`supabase/seed.sql`) e a senha está no repositório público (`seed.sql`,
-   `app/src/lib/config.ts`, `frontend/src/services/license/mockLicenseService.ts`,
-   `site/scripts/capturar-tela-do-app.mjs`) — de propósito, para qualquer testador
-   entrar. Qualquer um entra no site, no desktop e no app do cuidador, altera os dados
-   dessa conta, pareia computadores e dispara push aos aparelhos registrados nela. A
-   migração `20260923150200` impede trocar a senha e o e-mail dela, mas **ainda não foi
-   aplicada**. Antes do lançamento comercial, apague a conta.
+   `app/src/lib/config.ts`, `frontend/src/services/license/mockLicenseService.ts`) — de
+   propósito, para qualquer testador entrar. Qualquer um entra no site, no desktop e no
+   app do cuidador, altera os dados dessa conta, pareia computadores e dispara push aos
+   aparelhos registrados nela. A migração `20260923150200` impede trocar a senha e o
+   e-mail dela, mas **ainda não foi aplicada**. Antes do lançamento comercial, apague a
+   conta.
 3. **GPL-3.0 × distribuição fechada.** Fechar o repositório não revoga a licença de quem
    já recebeu o código. Distribuir binários sob GPL obriga oferecer o fonte a quem os
    recebe; fechar exige o acordo de todos os autores e uma conferência das licenças das

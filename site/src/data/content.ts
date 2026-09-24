@@ -49,9 +49,10 @@ export const BRAND = {
 /** Texto do hero da home. */
 export const HERO = {
   eyebrow: 'Comunicação assistiva por rastreamento ocular',
-  title:
-    'Comunicação pelo olhar para quem tem ELA, AVC ou lesão medular — com a webcam que já está em casa.',
-  lead: 'O IrisFlow Communicator transforma o movimento dos olhos em palavra falada e em controle do computador — para quem perdeu a fala e as mãos, mas ainda controla o olhar.',
+  title: 'Seu olhar tem voz',
+  /** Palavra do título em gradiente. */
+  titleAccent: 'voz',
+  lead: 'O IrisFlow Communicator transforma o olhar em comunicação e controle do computador, usando uma webcam comum.',
   primary: 'Experimente sem risco',
   secondary: 'Ver como funciona',
 }

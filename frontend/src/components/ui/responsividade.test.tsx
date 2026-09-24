@@ -115,10 +115,30 @@ describe('as causas estruturais do corte foram removidas', () => {
   });
 
   it('a Home aproveita a largura de telas grandes', () => {
-    // `maxWidth: 1280` fixo desperdiçava 544 px em 1920.
+    // `maxWidth: 1280` fixo desperdiçava 544 px em 1920. O teto continua
+    // sendo 1600 px / 92 % — só que agora a largura também acompanha a
+    // proporção dos cartões (ver o teste seguinte), em vez de um número fixo.
     const src = lerCodigo('src/pages/MainMenu.tsx');
     expect(src).not.toMatch(/maxWidth:\s*1280\b/);
-    expect(src).toMatch(/maxWidth:\s*'min\(1600px, 92%\)'/);
+    expect(src).toMatch(/`min\(1600px, 92%, calc\(3 \* \$\{larguraDoCartao\}/);
+  });
+
+  it('os cartões da Home seguem a proporção, não a largura que sobrar', () => {
+    // Pedido do usuário: a 1920×1080 os cartões eram 515×231 (2,2 : 1). A
+    // largura sai da altura disponível (100cqh do contêiner de tamanho), com
+    // o piso de 5° na altura da linha e um piso de largura para o texto.
+    const src = lerCodigo('src/pages/MainMenu.tsx');
+    expect(src).toMatch(/containerType:\s*'size'/);
+    expect(src).toMatch(/const PROPORCAO_DO_CARTAO = 1\.6;/);
+    expect(src).toMatch(/max\(var\(--gaze-target-min, 198px\), \(100cqh - /);
+    expect(src).toMatch(/max\(\$\{LARGURA_MINIMA_DO_CARTAO\}, \$\{PROPORCAO_DO_CARTAO\} \* /);
+  });
+
+  it('a grade da Home só rola quando as linhas não cabem', () => {
+    // A zona de acerto de 12 px da última linha fazia a grade "transbordar"
+    // ~10 px mesmo cabendo: barra de rolagem fantasma, e a primeira linha e o
+    // anel de dwell cortados no topo depois de rolar esses 10 px.
+    expect(lerCodigo('src/pages/MainMenu.tsx')).toMatch(/<GazeGrid[^>]*\brolarSoSeNaoCouber\b/);
   });
 
   it('os tokens de gaze são recalculados ao redimensionar a janela', () => {

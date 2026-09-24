@@ -1271,6 +1271,61 @@ select:focus-visible,
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
+ * Partículas de fundo da Home (ParticulasDeFundo) — o efeito do fundo do site.
+ *
+ * Camada fixa, inerte ao olhar e ao mouse, atrás do conteúdo. Só `transform`
+ * e `opacity` animam: o compositor faz o trabalho, a thread principal (onde
+ * roda o rastreamento) não participa.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.particulas-de-fundo {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.particulas-de-fundo__ponto {
+  position: absolute;
+  border-radius: 50%;
+  background: #a8c8ff;
+  box-shadow: 0 0 10px rgba(168, 200, 255, 0.85);
+  animation-name: particulaDeriva;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.particulas-de-fundo__ponto--teal {
+  background: #3fd6c2;
+  box-shadow: 0 0 12px rgba(63, 214, 194, 0.9);
+}
+/* Tema claro (hoje o app é sempre escuro): sem brilho, como a variante clara
+   do site, para não competir com o texto. */
+html:not(.dark) .particulas-de-fundo__ponto {
+  background: #4d86e0;
+  box-shadow: none;
+}
+@keyframes particulaDeriva {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--p-opacity, 0.6);
+  }
+  90% {
+    opacity: var(--p-opacity, 0.6);
+  }
+  100% {
+    transform: translate3d(var(--p-dx, 30px), var(--p-dy, -120px), 0) scale(1.4);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .particulas-de-fundo__ponto {
+    display: none;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
  * Teclado de varredura ocular (KeyboardScreen)
  *
  * PRINCÍPIO QUE GOVERNA ESTE BLOCO: nada de movimento na periferia.

@@ -19,6 +19,7 @@ import { GazePageLayout } from '../components/ui/GazePageLayout';
 import { GazeGrid } from '../components/ui/GazeGrid';
 import { GazeButton } from '../components/ui/GazeButton';
 import { EstadoDaSessao } from '../components/ui/EstadoDaSessao';
+import { ParticulasDeFundo } from '../components/ui/ParticulasDeFundo';
 import { aoMudarMissao, passoGuardado } from './tutorial/missao';
 import {
   PASSOS_DO_TUTORIAL,
@@ -46,6 +47,29 @@ interface AppModule {
 }
 
 const ICONE = 46;
+
+/** Espaço entre os cartões da grade, em px. */
+const GAP = 28;
+
+/**
+ * Proporção largura ÷ altura de cada cartão. A largura deixou de ser "toda a
+ * que sobrar": a 1920×1080 os cartões chegavam a 515×231 (2,2 : 1) e, a
+ * 1366×768 com a faixa do tutorial, a 379×137 (2,8 : 1) — retângulos compridos
+ * demais. A altura continua sendo toda a disponível (é ela que limita o alvo);
+ * a largura passa a acompanhá-la.
+ */
+const PROPORCAO_DO_CARTAO = 1.6;
+
+/**
+ * Piso da largura do cartão: a descrição mais longa ("Pause the screen and
+ * rest your eyes", "Jogos, fotos, leituras e descanso") numa linha só na
+ * menor fonte. Só pesa em tela baixa — a 1366×768 com a faixa do tutorial a
+ * proporção daria 219 px e a descrição quebrava em duas linhas.
+ */
+const LARGURA_MINIMA_DO_CARTAO = '17.5rem';
+
+/** Altura que a faixa "Continuar o tutorial" ocupa: 84 px + 1rem de margem. */
+const FAIXA_DO_TUTORIAL = 'calc(84px + 1rem)';
 
 // Título e descrição vêm do i18n (`menu.modulos.<id>`): o menu ficava em
 // português fixo enquanto o resto do app trocava de idioma.
@@ -89,10 +113,27 @@ export const MainMenu: React.FC = () => {
     return aoMudarMissao(() => setPassoPendente(passoDoTutorialEmCurso()));
   }, []);
 
+  // A largura da coluna (faixa do tutorial + grade) sai da ALTURA disponível:
+  // três cartões na proporção acima, mais os dois vãos. A altura de cada
+  // linha é a da área (100cqh, medida pelo `containerType: 'size'` do pai)
+  // menos a faixa e os vãos, dividida por 3 — e nunca menos que o alvo mínimo
+  // de 5°, que é o piso das linhas na `GazeGrid`. Continuam valendo o teto de
+  // 1600 px e os 92 % da largura: em tela estreita o cartão fica menos largo
+  // que a proporção, nunca mais baixo. (Antes de 1600/92 %, o teto era 1280
+  // fixo, e desperdiçava 544 px em 1920: "fica tudo pequeno no meio da tela".)
+  const faixa = passoPendente !== null ? FAIXA_DO_TUTORIAL : '0px';
+  const alturaDaLinha = `max(var(--gaze-target-min, 198px), (100cqh - ${faixa} - ${2 * GAP}px) / 3)`;
+  const larguraDoCartao = `max(${LARGURA_MINIMA_DO_CARTAO}, ${PROPORCAO_DO_CARTAO} * ${alturaDaLinha})`;
+  const larguraDaColuna = `min(1600px, 92%, calc(3 * ${larguraDoCartao} + ${2 * GAP}px))`;
+
   return (
     <GazePageLayout showBack={false}>
+      <ParticulasDeFundo />
       <div
         style={{
+          // Acima das partículas (z-index 0), que ficam ATRÁS de tudo.
+          position: 'relative',
+          zIndex: 1,
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
@@ -106,144 +147,144 @@ export const MainMenu: React.FC = () => {
             justamente quem ela existe para servir. */}
         <EstadoDaSessao />
 
-        {passoPendente !== null && (
-          <GazeButton
-            onClick={() => navigate('/tutorial')}
-            height={84}
-            isolado
-            aria-label={t('menu.continuarTutorial.title')}
+        {/* Área da faixa + grade. `containerType: 'size'` é o que dá à coluna
+            abaixo a altura disponível (100cqh) para calcular a largura. */}
+        <div style={{ flex: 1, minHeight: 0, width: '100%', containerType: 'size' }}>
+          <div
             style={{
-              width: '100%',
-              maxWidth: 'min(1600px, 92%)',
-              margin: '0 auto 1rem auto',
-              borderRadius: '1.25rem',
-              background: 'var(--tint-info-bg)',
-              border: '2px solid var(--tint-info-border)',
-              color: 'var(--tint-info-text)',
-              padding: '0 1.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%',
+              width: larguraDaColuna,
+              margin: '0 auto',
             }}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '100%' }}>
-              <GraduationCap size={30} aria-hidden="true" style={{ flexShrink: 0 }} />
-              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, textAlign: 'left' }}>
-                <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{t('menu.continuarTutorial.title')}</span>
-                <span style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 600 }}>
-                  {t('menu.continuarTutorial.lead', {
-                    n: indiceDoPassoDoTutorial(passoPendente) + 1,
-                    total: PASSOS_DO_TUTORIAL.length,
-                    passo: t(`tutorial.steps.${passoPendente}`),
-                  })}
-                </span>
-              </span>
-              <ArrowRight size={26} aria-hidden="true" style={{ flexShrink: 0 }} />
-            </span>
-          </GazeButton>
-        )}
-
-        {/*
-          A largura máxima era um número fixo, e desperdiçava 544 px em 1920 —
-          era a causa do "fica tudo pequeno no meio da tela grande". Com `min()` o
-          conteúdo cresce até 92 % da largura disponível e o teto sobe para
-          1600, que ainda mantém a linha de leitura confortável.
-        */}
-        <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            maxWidth: 'min(1600px, 92%)',
-            width: '100%',
-            margin: '0 auto',
-          }}
-        >
-          <GazeGrid columns={3} rows={3} gap={28}>
-            {MODULES.map((module) => (
+            {passoPendente !== null && (
               <GazeButton
-                key={module.id}
-                onClick={() => navigate(module.route)}
-                aria-label={t('menu.abrirAria', {
-                  title: t(`menu.modulos.${module.id}.title`),
-                  description: t(`menu.modulos.${module.id}.description`),
-                })}
+                onClick={() => navigate('/tutorial')}
+                height={84}
+                isolado
+                aria-label={t('menu.continuarTutorial.title')}
                 style={{
-                  height: '100%',
-                  borderRadius: '1.6rem',
-                  background: 'var(--color-card-bg)',
-                  border: '2px solid var(--color-card-border)',
-                  boxShadow: '0 8px 24px var(--color-card-shadow)',
+                  width: '100%',
+                  flexShrink: 0,
+                  margin: '0 0 1rem 0',
+                  borderRadius: '1.25rem',
+                  background: 'var(--tint-info-bg)',
+                  border: '2px solid var(--tint-info-border)',
+                  color: 'var(--tint-info-text)',
+                  padding: '0 1.5rem',
                 }}
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    textAlign: 'center',
-                    padding: 'clamp(0.5rem, 1.2vh, 1rem)',
-                    width: '100%',
-                  }}
-                >
-                  <div
-                    aria-hidden="true"
+                <span style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: '100%' }}>
+                  <GraduationCap size={30} aria-hidden="true" style={{ flexShrink: 0 }} />
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1, textAlign: 'left' }}>
+                    <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{t('menu.continuarTutorial.title')}</span>
+                    <span style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 600 }}>
+                      {t('menu.continuarTutorial.lead', {
+                        n: indiceDoPassoDoTutorial(passoPendente) + 1,
+                        total: PASSOS_DO_TUTORIAL.length,
+                        passo: t(`tutorial.steps.${passoPendente}`),
+                      })}
+                    </span>
+                  </span>
+                  <ArrowRight size={26} aria-hidden="true" style={{ flexShrink: 0 }} />
+                </span>
+              </GazeButton>
+            )}
+
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <GazeGrid columns={3} rows={3} gap={GAP} rolarSoSeNaoCouber>
+                {MODULES.map((module) => (
+                  <GazeButton
+                    key={module.id}
+                    onClick={() => navigate(module.route)}
+                    aria-label={t('menu.abrirAria', {
+                      title: t(`menu.modulos.${module.id}.title`),
+                      description: t(`menu.modulos.${module.id}.description`),
+                    })}
                     style={{
-                      position: 'relative',
-                      // Era 88×88 fixo. O selo é decoração: em tela pequena ele
-                      // consumia altura que o alvo precisa. Encolher o selo NÃO
-                      // encolhe o alvo — o alvo é a caixa do botão inteiro.
-                      width: 'clamp(52px, 7vh, 88px)',
-                      height: 'clamp(52px, 7vh, 88px)',
-                      borderRadius: '50%',
-                      background: module.badge,
-                      color: '#0f172a',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginBottom: 'clamp(0.4rem, 1vh, 1rem)',
-                      boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
+                      height: '100%',
+                      borderRadius: '1.6rem',
+                      background: 'var(--color-card-bg)',
+                      border: '2px solid var(--color-card-border)',
+                      boxShadow: '0 8px 24px var(--color-card-shadow)',
                     }}
                   >
-                    {module.icon}
-                    {module.id === 'conversation' && naoFaladas > 0 && (
-                      <span
-                        aria-hidden="false"
-                        aria-label={t('menu.novasMensagens', { n: naoFaladas })}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textAlign: 'center',
+                        padding: 'clamp(0.5rem, 1.2vh, 1rem)',
+                        width: '100%',
+                      }}
+                    >
+                      <div
+                        aria-hidden="true"
                         style={{
-                          position: 'absolute', top: -6, right: -10, minWidth: 30, height: 30, padding: '0 8px',
-                          borderRadius: 15, background: '#dc2626', color: '#fff', fontSize: '1rem', fontWeight: 900,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          border: '3px solid var(--color-card-bg)',
+                          position: 'relative',
+                          // Era 88×88 fixo. O selo é decoração: em tela pequena ele
+                          // consumia altura que o alvo precisa. Encolher o selo NÃO
+                          // encolhe o alvo — o alvo é a caixa do botão inteiro.
+                          width: 'clamp(52px, 7vh, 88px)',
+                          height: 'clamp(52px, 7vh, 88px)',
+                          borderRadius: '50%',
+                          background: module.badge,
+                          color: '#0f172a',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginBottom: 'clamp(0.4rem, 1vh, 1rem)',
+                          boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
                         }}
                       >
-                        {naoFaladas}
-                      </span>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 'clamp(1.15rem, 2.2vh, 1.7rem)',
-                      fontWeight: 800,
-                      color: 'var(--color-text-base)',
-                      letterSpacing: '-0.01em',
-                      lineHeight: 1.15,
-                    }}
-                  >
-                    {t(`menu.modulos.${module.id}.title`)}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 'clamp(0.85rem, 1.4vh, 1.05rem)',
-                      opacity: 0.7,
-                      marginTop: '0.45rem',
-                      fontWeight: 500,
-                      color: 'var(--color-text-base)',
-                    }}
-                  >
-                    {t(`menu.modulos.${module.id}.description`)}
-                  </div>
-                </div>
-              </GazeButton>
-            ))}
-          </GazeGrid>
+                        {module.icon}
+                        {module.id === 'conversation' && naoFaladas > 0 && (
+                          <span
+                            aria-hidden="false"
+                            aria-label={t('menu.novasMensagens', { n: naoFaladas })}
+                            style={{
+                              position: 'absolute', top: -6, right: -10, minWidth: 30, height: 30, padding: '0 8px',
+                              borderRadius: 15, background: '#dc2626', color: '#fff', fontSize: '1rem', fontWeight: 900,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              border: '3px solid var(--color-card-bg)',
+                            }}
+                          >
+                            {naoFaladas}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 'clamp(1.15rem, 2.2vh, 1.7rem)',
+                          fontWeight: 800,
+                          color: 'var(--color-text-base)',
+                          letterSpacing: '-0.01em',
+                          lineHeight: 1.15,
+                        }}
+                      >
+                        {t(`menu.modulos.${module.id}.title`)}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 'clamp(0.85rem, 1.4vh, 1.05rem)',
+                          opacity: 0.7,
+                          marginTop: '0.45rem',
+                          fontWeight: 500,
+                          color: 'var(--color-text-base)',
+                        }}
+                      >
+                        {t(`menu.modulos.${module.id}.description`)}
+                      </div>
+                    </div>
+                  </GazeButton>
+                ))}
+              </GazeGrid>
+            </div>
+          </div>
         </div>
       </div>
     </GazePageLayout>

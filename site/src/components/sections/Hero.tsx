@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
+import { IrisMark } from '@/components/layout/Logo'
 import { Reveal } from '@/components/effects/Reveal'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
-import { GazeStory } from './GazeStory'
 import {
   BETA,
   BETA_CTA,
@@ -15,11 +15,24 @@ import {
 import { usePlans } from '@/hooks/usePlans'
 import './hero.css'
 
+/** O título com uma palavra em gradiente, como nos títulos de seção. */
+function tituloComDestaque(titulo: string, destaque?: string) {
+  const i = destaque ? titulo.lastIndexOf(destaque) : -1
+  if (!destaque || i < 0) return titulo
+  return (
+    <>
+      {titulo.slice(0, i)}
+      <span className="gradient-text">{destaque}</span>
+      {titulo.slice(i + destaque.length)}
+    </>
+  )
+}
+
 /**
  * Hero da home: a mensagem e a chamada à esquerda (sempre na primeira
- * dobra, no desktop e no celular) e, à direita, a ilustração animada de
- * quem o produto atende — uma pessoa em cadeira de rodas usando o
- * IrisFlow com o olhar, com a tela inicial de verdade no monitor.
+ * dobra, no desktop e no celular) e, à direita, a marca da IrisFlow — o
+ * símbolo da íris girando devagar, com o halo e os anéis que se expandem.
+ * Uma imagem só, sem nada disputando atenção com o título.
  */
 export function Hero() {
   const { cheapest } = usePlans()
@@ -37,7 +50,7 @@ export function Hero() {
           <h1 className="hero__title">
             <span className="hero__title-mask">
               <span className="hero__title-line" style={{ animationDelay: '120ms' }}>
-                {HERO.title}
+                {tituloComDestaque(HERO.title, HERO.titleAccent)}
               </span>
             </span>
           </h1>
@@ -95,11 +108,9 @@ export function Hero() {
         </div>
 
         <Reveal anim="zoom" delay={260} duration={1100} className="hero__mock">
-          <GazeStory />
-          <p className="hero__mock-caption">
-            Olhar fixo por um instante no botão, e ele é acionado. No monitor, a tela inicial do
-            IrisFlow.
-          </p>
+          <div className="hero__marca">
+            <IrisMark size={440} />
+          </div>
         </Reveal>
       </div>
 
