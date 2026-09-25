@@ -10,6 +10,24 @@ type Options = {
 }
 
 /**
+ * O limiar de fração visível pode ser inalcançável?
+ *
+ * A fração visível de um elemento nunca passa de (altura da área observada ÷
+ * altura do elemento). Um bloco mais alto que isso — o formulário da beta, o
+ * painel de download, uma seção longa da política — com o zoom em 400 % (a
+ * viewport encolhe para ~256 px de altura) nunca chegava aos 18 % e ficava
+ * INVISÍVEL para sempre (o Reveal o mantém com opacidade 0 até entrar em cena).
+ */
+export function limiarInalcancavel(
+  alturaDoElemento: number,
+  alturaObservada: number,
+  threshold: number,
+): boolean {
+  if (!(alturaDoElemento > 0) || !(alturaObservada > 0) || threshold <= 0) return false
+  return alturaDoElemento * threshold >= alturaObservada * 0.95
+}
+
+/**
  * Observa a entrada do elemento na viewport.
  * Base de todas as entradas em cena do site.
  */
@@ -32,14 +50,21 @@ export function useInView<T extends HTMLElement = HTMLDivElement>({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
+        // O limiar 0 também é observado: é o aviso de que um bloco alto demais
+        // para o limiar começou a entrar — e então ele entra em cena já.
+        const alturaObservada = entry.rootBounds?.height ?? window.innerHeight
+        const visivel =
+          entry.isIntersecting &&
+          (entry.intersectionRatio >= threshold ||
+            limiarInalcancavel(entry.boundingClientRect.height, alturaObservada, threshold))
+        if (visivel) {
           setInView(true)
           if (once) observer.unobserve(entry.target)
-        } else if (!once) {
+        } else if (!once && !entry.isIntersecting) {
           setInView(false)
         }
       },
-      { threshold, rootMargin },
+      { threshold: [0, threshold], rootMargin },
     )
 
     observer.observe(el)

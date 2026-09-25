@@ -34,8 +34,11 @@ export const DURACAO_DO_REAJUSTE_MS = 2000;
  */
 export const Z_DO_REAJUSTE = 1000001;
 
-/** Lado do alvo (o SVG do anel), em px. Centrado na horizontal pelo flex. */
+/** Lado do alvo (o SVG do anel), em px. */
 export const LADO_DO_ALVO_PX = 120;
+
+/** Espaço entre o alvo e a frase embaixo dele. */
+const ESPACO_ATE_A_FRASE = '2.2rem';
 
 export interface Props {
   /** Duração da coleta que está acontecendo no engine, só para animar o anel. */
@@ -75,18 +78,25 @@ export const ReancoragemOverlay: React.FC<Props> = ({ duracaoMs = DURACAO_DO_REA
         inset: 0,
         zIndex: Z_DO_REAJUSTE,
         background: '#000',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '2.2rem',
         // Sem `pointerEvents: none`: durante a coleta nada da tela de baixo
         // deve receber clique ou dwell — um clique acidental aqui viraria uma
         // ação numa tela que a pessoa nem está vendo. A Emergência não é "a
         // tela de baixo": ela fica acima deste overlay.
       }}
     >
-      <svg width={LADO_DO_ALVO_PX} height={LADO_DO_ALVO_PX} viewBox="0 0 120 120" aria-hidden="true">
+      {/* O PONTO no centro exato da tela, posicionado sozinho. Antes era um
+          flex em coluna que centrava o bloco ponto + frase: o ponto ficava
+          ~40 px acima do meio, e o motor, que mede o viés contra (0,5; 0,5),
+          aprendia esse deslocamento como correção — depois de cada
+          "Reajustar" o cursor passava a cair abaixo de onde a pessoa olhava. */}
+      <svg
+        data-testid="reancoragem-alvo"
+        width={LADO_DO_ALVO_PX}
+        height={LADO_DO_ALVO_PX}
+        viewBox="0 0 120 120"
+        aria-hidden="true"
+        style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}
+      >
         <circle cx={60} cy={60} r={raio} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={6} />
         <circle
           cx={60}
@@ -104,11 +114,15 @@ export const ReancoragemOverlay: React.FC<Props> = ({ duracaoMs = DURACAO_DO_REA
       </svg>
       <p
         style={{
+          position: 'absolute',
+          left: '50%',
+          top: `calc(50% + ${LADO_DO_ALVO_PX / 2}px + ${ESPACO_ATE_A_FRASE})`,
+          transform: 'translateX(-50%)',
+          width: 'min(26ch, 90vw)',
           color: '#e8eefc',
           fontSize: '1.35rem',
           margin: 0,
           textAlign: 'center',
-          maxWidth: '26ch',
           lineHeight: 1.4,
         }}
       >

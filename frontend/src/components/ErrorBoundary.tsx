@@ -22,7 +22,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   private handleReload = () => {
-    window.location.href = '/';
+    // Recarrega ESTA página na rota inicial do HashRouter. `location.href =
+    // '/'` levava o app empacotado (file://…/frontend/dist/index.html) para a
+    // RAIZ DO DISCO (file:///C:/): a janela em tela cheia mostrava a lista de
+    // pastas do C:, sem menu e sem atalho de recarregar — quem usa só o olhar
+    // ficava preso até alguém fechar o programa.
+    window.location.hash = '#/';
+    window.location.reload();
   };
 
   render() {

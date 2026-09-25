@@ -43,7 +43,13 @@ export function criarControleLinux(): ControleDoSistema {
   const x = (...args: string[]) => {
     fila = fila.then(() => new Promise<void>((resolve) => {
       execFile('xdotool', args, { timeout: 15_000 }, (err) => {
-        if (err) console.warn('[computador] xdotool falhou:', args.join(' '), err.message);
+        // Só o subcomando e o tipo da falha: a linha de comando inteira (e a
+        // `err.message`, que a repete) traz o texto que o paciente digitou,
+        // e este aviso vai para o registro que o cuidador envia ao suporte.
+        if (err) {
+          const tipo = (err as NodeJS.ErrnoException).code ?? (err.killed ? 'tempo esgotado' : 'erro');
+          console.warn(`[computador] xdotool ${args[0]} falhou: ${tipo}`);
+        }
         resolve();
       });
     }));

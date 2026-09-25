@@ -376,7 +376,10 @@ export async function signIn(email: string, password: string): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
-  const { error } = await client().auth.signOut()
+  // `local`: sai só deste navegador. O padrão do supabase-js é `global`, que
+  // revoga a sessão da conta em todo lugar — e a conta é da família: sair do
+  // site derrubava o app dos cuidadores (e o alarme de socorro com ele).
+  const { error } = await client().auth.signOut({ scope: 'local' })
   if (error) erro(error)
 }
 

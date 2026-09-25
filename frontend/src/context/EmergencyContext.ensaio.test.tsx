@@ -131,7 +131,7 @@ describe('modo de ensaio desligado', () => {
     });
     expect(naTelaDeEmergencia()).toBe(true);
     expect(enviou()).toBe(1);
-    expect(emitirPedidoDeAjuda).toHaveBeenCalledWith('emergencia', expect.any(String));
+    expect(emitirPedidoDeAjuda).toHaveBeenCalledWith('emergencia', expect.any(String), expect.any(String));
   });
 });
 

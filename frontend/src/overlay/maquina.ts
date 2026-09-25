@@ -164,7 +164,11 @@ function aoBotao(estado: EstadoDaMaquina, id: IdDeBotao): Passo {
 function aoArea(estado: EstadoDaMaquina, ponto: Ponto): Passo {
   if (estado.pausado || estado.teclado) return { estado, efeitos: [] };
   if (estado.fase.tipo === 'rolando') {
-    // Um dwell durante a rolagem encerra a rolagem.
+    // Um dwell de volta NA ÂNCORA (dentro da zona morta) encerra a rolagem.
+    // Fora dela o olhar parado é justamente o gesto de rolar: antes qualquer
+    // fixação encerrava, e segurar o olhar abaixo da âncora para descer a
+    // página completava o dwell e desligava a rolagem em ~2 s.
+    if (Math.abs(ponto.y - estado.fase.ancora.y) >= ROLAGEM_ZONA_MORTA_PX) return { estado, efeitos: [] };
     return { estado: { ...estado, fase: OCIOSO, tarefa: estado.fixar ? estado.tarefa : null }, efeitos: [] };
   }
   if (estado.fase.tipo === 'lupa') return { estado, efeitos: [] };

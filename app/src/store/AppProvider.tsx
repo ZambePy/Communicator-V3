@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState as EstadoDoApp } from 'react-native';
 import { useData } from '@/data/DataContext';
 import type { FalhaPush } from '@/hooks/usePushNotifications';
 import { haptics } from '@/lib/haptics';
@@ -35,6 +36,12 @@ interface AppState {
   unreadCount: number;
   pendingAlert: HelpRequest | null;
   loading: boolean;
+  /**
+   * A conta (perfil, pacientes, assinatura) já carregou ao menos uma vez nesta
+   * sessão. Com ela carregada e sem paciente, as abas mostram o que fazer em
+   * vez de esqueletos para sempre.
+   */
+  accountLoaded: boolean;
   /** Primeira carga do paciente selecionado concluída (para os esqueletos das telas). */
   patientLoaded: boolean;
   error: string | null;
@@ -81,14 +88,58 @@ function refreshDeviceLiveness(devices: Device[], now: number): Device[] {
 }
 
 /**
- * O pedido que deve ocupar a tela ao abrir o app: o mais recente ainda aberto
- * e sem confirmação. Sem isto, um socorro acionado com o app fechado (push
- * tocado, ou app aberto minutos depois) ficava só na lista de Alertas.
+ * Janela em que um pedido sem confirmação ainda é "agora": a mesma da função
+ * agendada que reenvia o alerta (migração 20260924020011_help_requests_received_at,
+ * 6 h a partir de `received_at`). Mais antigo que isso, fica só na lista de
+ * Alertas — sem esta janela, cada vez que o app abria, um socorro de dias
+ * atrás (atendido pessoalmente, sem tocar no celular) voltava em tela cheia,
+ * vibrando, como se fosse agora.
  */
-export function derivePendingAlert(helpRequests: HelpRequest[]): HelpRequest | null {
-  const abertos = helpRequests.filter((h) => !h.resolved_at && !h.acknowledged_at);
+export const JANELA_DO_ALERTA_MS = 6 * 60 * 60_000;
+
+const urgente = (h: HelpRequest) => h.kind === 'emergencia' || h.kind === 'ajuda';
+
+/** Quanto um pedido pede a tela: socorro/ajuda sem resposta > aviso sem resposta > já confirmado > nada. */
+function pesoDoAlerta(h: HelpRequest | null): number {
+  if (!h || h.resolved_at) return 0;
+  if (h.acknowledged_at) return 1;
+  return urgente(h) ? 3 : 2;
+}
+
+/**
+ * O pedido que deve ocupar a tela ao abrir o app (ou ao recarregar): entre os
+ * abertos, sem confirmação e dentro da janela, socorro/ajuda antes de aviso e,
+ * entre iguais, o mais recente. Sem isto, um socorro acionado com o app
+ * fechado (push tocado, ou app aberto minutos depois) ficava só na lista.
+ */
+export function derivePendingAlert(helpRequests: HelpRequest[], agoraMs: number = Date.now()): HelpRequest | null {
+  const abertos = helpRequests.filter((h) => {
+    if (h.resolved_at || h.acknowledged_at) return false;
+    const recebido = Date.parse(h.received_at ?? h.created_at);
+    return !Number.isFinite(recebido) || agoraMs - recebido <= JANELA_DO_ALERTA_MS;
+  });
   if (abertos.length === 0) return null;
-  return [...abertos].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  return [...abertos].sort((a, b) => pesoDoAlerta(b) - pesoDoAlerta(a) || b.created_at.localeCompare(a.created_at))[0];
+}
+
+/**
+ * Qual pedido fica na tela quando chega `candidato` (pedido novo, atualização
+ * de um pedido, ou o resultado de `derivePendingAlert` numa recarga).
+ *
+ * - O mesmo pedido: a versão nova substitui (resolvido → sai da tela).
+ * - Outro pedido: entra só se pede MAIS atenção que o da tela. Um aviso de
+ *   postura não cobre um socorro sem resposta; um socorro novo cobre um
+ *   pedido já confirmado. Empate fica com o da tela — o alerta não troca
+ *   debaixo do dedo de quem está respondendo.
+ * - Sem nada na tela, um pedido já confirmado (por outro celular) não abre
+ *   alerta nenhum.
+ */
+export function escolherAlerta(atual: HelpRequest | null, candidato: HelpRequest | null): HelpRequest | null {
+  const vivo = atual && !atual.resolved_at ? atual : null;
+  if (!candidato) return vivo;
+  if (vivo && candidato.id === vivo.id) return candidato.resolved_at ? null : candidato;
+  if (!vivo) return pesoDoAlerta(candidato) >= 2 ? candidato : null;
+  return pesoDoAlerta(candidato) > pesoDoAlerta(vivo) ? candidato : vivo;
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -109,6 +160,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     unreadCount: 0,
     pendingAlert: null,
     loading: false,
+    accountLoaded: false,
     patientLoaded: false,
     error: null,
     pushError: null,
@@ -157,6 +209,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         subscription: sub?.subscription ?? null,
         plan: sub?.plan ?? null,
         loading: false,
+        accountLoaded: true,
       }));
     } catch (e) {
       patch({ loading: false, error: (e as Error).message });
@@ -179,6 +232,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         settings: null,
         unreadCount: 0,
         pendingAlert: null,
+        accountLoaded: false,
         patientLoaded: false,
       });
   }, [state.user, loadAccount, patch]);
@@ -203,8 +257,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         messages,
         settings,
         unreadCount: messages.filter((m) => m.sender === 'paciente' && !m.read_at).length,
-        // Não troca um alerta já em tela; só preenche quando não há nenhum.
-        pendingAlert: s.pendingAlert ?? derivePendingAlert(helpRequests),
+        // O alerta em tela ganha a versão atual do banco (confirmado ou
+        // resolvido em outro celular enquanto este estava sem conexão) e cede
+        // o lugar a um pedido que peça mais atenção — antes ele ficava, e um
+        // socorro novo esperava atrás de um aviso já confirmado.
+        pendingAlert: escolherAlerta(
+          s.pendingAlert ? helpRequests.find((h) => h.id === s.pendingAlert?.id) ?? s.pendingAlert : null,
+          derivePendingAlert(helpRequests),
+        ),
         patientLoaded: true,
         error: null,
       }));
@@ -217,6 +277,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     patch({ patientLoaded: false });
     loadPatient();
   }, [loadPatient, patch]);
+
+  // Voltou para a frente (celular desbloqueado, app reaberto pelo ícone):
+  // recarrega. Com o app suspenso o tempo real cai, e o que chegou nesse
+  // intervalo — um socorro inclusive — não seria reenviado.
+  useEffect(() => {
+    if (!patientId) return;
+    const sub = EstadoDoApp.addEventListener('change', (estado) => {
+      if (estado === 'active') void loadPatient();
+    });
+    return () => sub.remove();
+  }, [patientId, loadPatient]);
 
   // Espelho dos ajustes correntes para o rollback otimista (o updater do
   // setState roda depois, não dá para capturar o valor anterior dentro dele).
@@ -266,17 +337,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (urgent) haptics.erro();
             else haptics.aviso();
             pendingRef.current = h;
-            return { helpRequests: [h, ...s.helpRequests], pendingAlert: h };
+            // Um aviso (postura, fadiga...) não cobre um socorro sem resposta.
+            return { helpRequests: [h, ...s.helpRequests], pendingAlert: escolherAlerta(s.pendingAlert, h) };
           }
           const helpRequests = s.helpRequests.map((x) => (x.id === h.id ? h : x));
-          if (s.pendingAlert?.id !== h.id) return { helpRequests };
+          if (s.pendingAlert?.id !== h.id) {
+            // Outro pedido mudou — escalou sem resposta, por exemplo: se agora
+            // pede mais atenção que o da tela, ele entra.
+            const proximo = escolherAlerta(s.pendingAlert, h);
+            if (proximo?.id === h.id && h.escalated_at) haptics.erro();
+            return { helpRequests, pendingAlert: proximo };
+          }
           // Escalou agora (o prazo passou sem ninguém confirmar): vibra de novo,
           // como o push que o servidor reenviou — mas sem trocar o alerta em tela.
           if (h.escalated_at && !s.pendingAlert.escalated_at) {
             haptics.erro();
           }
-          // Resolvido em outro aparelho: o overlay não tem mais o que pedir.
-          return { helpRequests, pendingAlert: h.resolved_at ? null : h };
+          // Resolvido em outro aparelho: o overlay não tem mais o que pedir — e
+          // o próximo pedido aberto, se houver, assume a tela.
+          return { helpRequests, pendingAlert: h.resolved_at ? derivePendingAlert(helpRequests) : h };
         }),
       onSession: (sess) =>
         patch((s) => ({ session: isSessionLive(sess, s.devices) ? sess : null })),
@@ -286,9 +365,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const devices = s.devices.some((x) => x.id === d.id) ? s.devices.map((x) => (x.id === d.id ? d : x)) : [d, ...s.devices];
           return { devices, session: isSessionLive(s.session, devices) ? s.session : null };
         }),
+      // Inscrição (re)confirmada: recarrega o que pode ter chegado com o canal fora.
+      onSubscribed: () => void loadPatient(),
     });
     return off;
-  }, [data, patientId, patch]);
+  }, [data, patientId, patch, loadPatient]);
 
   // ----- ações -----
   const actions = useMemo<AppActions>(
@@ -336,22 +417,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await data.acknowledgeHelpRequest(id);
         haptics.sucesso();
         const now = new Date().toISOString();
-        patch((s) => ({
-          helpRequests: s.helpRequests.map((h) => (h.id === id && !h.acknowledged_at ? { ...h, acknowledged_at: now } : h)),
-          pendingAlert: s.pendingAlert?.id === id ? { ...s.pendingAlert, acknowledged_at: now } : s.pendingAlert,
-        }));
+        patch((s) => {
+          const helpRequests = s.helpRequests.map((h) => (h.id === id && !h.acknowledged_at ? { ...h, acknowledged_at: now } : h));
+          if (s.pendingAlert?.id !== id) return { helpRequests };
+          // Confirmado: se há OUTRO socorro/ajuda aberto sem resposta, ele
+          // assume a tela; senão fica o "Confirmado às …" deste (um aviso de
+          // postura não interrompe quem acabou de responder a um socorro).
+          const proximo = derivePendingAlert(helpRequests);
+          const confirmado = { ...s.pendingAlert, acknowledged_at: now };
+          return { helpRequests, pendingAlert: proximo && pesoDoAlerta(proximo) === 3 ? proximo : confirmado };
+        });
       },
       async resolveAlert(id) {
         await data.resolveHelpRequest(id);
         haptics.sucesso();
         const now = new Date().toISOString();
-        patch((s) => ({
-          helpRequests: s.helpRequests.map((h) => (h.id === id ? { ...h, acknowledged_at: h.acknowledged_at ?? now, resolved_at: now } : h)),
-          pendingAlert: s.pendingAlert?.id === id ? null : s.pendingAlert,
-        }));
+        patch((s) => {
+          const helpRequests = s.helpRequests.map((h) => (h.id === id ? { ...h, acknowledged_at: h.acknowledged_at ?? now, resolved_at: now } : h));
+          return { helpRequests, pendingAlert: s.pendingAlert?.id === id ? derivePendingAlert(helpRequests) : s.pendingAlert };
+        });
       },
       dismissPendingAlert() {
-        patch({ pendingAlert: null });
+        // "Ver depois" de um pedido já confirmado: outro aberto sem resposta,
+        // se houver, assume a tela.
+        patch((s) => ({ pendingAlert: derivePendingAlert(s.helpRequests.filter((h) => h.id !== s.pendingAlert?.id)) }));
       },
       async updateSettings(p) {
         if (!patientId) return;

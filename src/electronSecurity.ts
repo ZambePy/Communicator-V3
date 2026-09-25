@@ -48,9 +48,35 @@ export function permitirPermissao(
   return true;
 }
 
-/** O app não navega para fora de si mesmo (um link num texto do paciente, por exemplo). */
-export function permitirNavegacao(url: string | null | undefined): boolean {
-  return origemConfiavel(url);
+/**
+ * O app não navega para fora de si mesmo (um link num texto do paciente, por exemplo).
+ *
+ * `raizDoApp` (app empacotado): URL `file://` da pasta `frontend/dist`. Com
+ * ela, só páginas DENTRO dessa pasta passam, e `localhost` não — ele só existe
+ * no desenvolvimento. Sem a raiz, qualquer `file://` passava: a recarga da
+ * tela de erro que apontava para `/` levou a janela para a raiz do disco
+ * (file:///C:/), fora do app e ainda com as pontes do preload.
+ */
+export function permitirNavegacao(url: string | null | undefined, raizDoApp?: string | null): boolean {
+  if (!raizDoApp) return origemConfiavel(url);
+  if (!url) return false;
+  let alvo: URL;
+  let raiz: URL;
+  try {
+    alvo = new URL(url);
+    raiz = new URL(raizDoApp);
+  } catch {
+    return false;
+  }
+  if (alvo.protocol !== 'file:' || raiz.protocol !== 'file:' || alvo.host !== raiz.host) return false;
+  // Comparação sem diferenciar maiúsculas (Windows: `C:` e `c:` são a mesma
+  // unidade) e com os `%20`/acentos decodificados dos dois lados.
+  const normalizar = (p: string): string | null => {
+    try { return decodeURIComponent(p).toLowerCase(); } catch { return null; }
+  };
+  const caminho = normalizar(alvo.pathname);
+  const base = normalizar(raiz.pathname.endsWith('/') ? raiz.pathname : `${raiz.pathname}/`);
+  return caminho !== null && base !== null && caminho.startsWith(base);
 }
 
 /**

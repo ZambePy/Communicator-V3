@@ -258,7 +258,9 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
 
         {mostrarContatos ? (
           <View style={styles.contacts}>
-            {contacts.slice(0, 2).map((c, i) => (
+            {/* Todos os contatos, não só os dois primeiros: o terceiro pode ser
+                justamente quem está perto agora. */}
+            {contacts.map((c, i) => (
               <PressableScale
                 key={`${c.phone}-${i}`}
                 onPress={() => void Linking.openURL(`tel:${c.phone}`).catch(() => undefined)}
@@ -348,6 +350,6 @@ const styles = StyleSheet.create({
   prazoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   prazoIcon: { marginTop: spacing.xxs },
   falha: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.md, padding: spacing.md },
-  contacts: { flexDirection: 'row', gap: spacing.sm },
-  contact: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: sizes.button.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: sizes.border },
+  contacts: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  contact: { flexGrow: 1, flexBasis: '45%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: sizes.button.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: sizes.border },
 });

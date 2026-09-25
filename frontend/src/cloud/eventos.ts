@@ -16,8 +16,12 @@ import { modoApresentacaoAtivo } from '../services/apresentacao';
 export type EventoDoPaciente =
   /** O paciente falou algo (teclado, frase rápida, pictograma, sim/não). */
   | { tipo: 'fala'; texto: string; kind: MessageKind }
-  /** O paciente pediu ajuda ou o sistema detectou algo que o cuidador deve saber. */
-  | { tipo: 'ajuda'; kind: HelpKind; mensagem: string }
+  /**
+   * O paciente pediu ajuda ou o sistema detectou algo que o cuidador deve saber.
+   * `id` (UUID, opcional): quem precisa reconhecer a confirmação do cuidador
+   * para ESTE pedido — a tela de emergência — escolhe o id e o passa aqui.
+   */
+  | { tipo: 'ajuda'; kind: HelpKind; mensagem: string; id?: string }
   /** Calibração + teste de precisão concluídos. */
   | { tipo: 'calibracao'; resultado: AccuracyResult; meta: RunMeta | null; duracaoCalibracaoS: number | null }
   /** Contadores da sessão (o teclado conta caracteres; as telas contam frases). */
@@ -54,8 +58,8 @@ export function ouvir(o: Ouvinte): () => void {
 // Atalhos legíveis nas telas.
 export const emitirFalaDoPaciente = (texto: string, kind: MessageKind = 'texto') =>
   emitir({ tipo: 'fala', texto, kind });
-export const emitirPedidoDeAjuda = (kind: HelpKind, mensagem: string) =>
-  emitir({ tipo: 'ajuda', kind, mensagem });
+export const emitirPedidoDeAjuda = (kind: HelpKind, mensagem: string, id?: string) =>
+  emitir(id ? { tipo: 'ajuda', kind, mensagem, id } : { tipo: 'ajuda', kind, mensagem });
 export const emitirResultadoDeCalibracao = (
   resultado: AccuracyResult, meta: RunMeta | null, duracaoCalibracaoS: number | null,
 ) => emitir({ tipo: 'calibracao', resultado, meta, duracaoCalibracaoS });

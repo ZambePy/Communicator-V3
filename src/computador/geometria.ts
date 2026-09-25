@@ -259,3 +259,22 @@ export function reacaoAMudancaDeTela(
   }
   return 'reajustar';
 }
+
+/**
+ * O monitor da sessão do Modo Computador saiu?
+ *
+ * O `display-removed` do Electron entrega o monitor que SAIU, com a geometria
+ * que ele tinha — passado a `reacaoAMudancaDeTela` como "o monitor atual", dava
+ * "nada mudou" e a sessão seguia apontando para uma tela que não existe mais:
+ * o Windows prende o cursor na borda da tela que sobrou e cada clique por
+ * dwell cai ali, com o app do paciente escondido. O que decide é se o monitor
+ * da sessão ainda está na lista.
+ */
+export function monitorDaSessaoSumiu(
+  idDaSessao: number,
+  removido: { id: number } | null | undefined,
+  idsAtuais: readonly number[],
+): boolean {
+  if (removido && removido.id === idDaSessao) return true;
+  return !idsAtuais.includes(idDaSessao);
+}

@@ -172,6 +172,29 @@ describe('as guardas de estado', () => {
     olhar(ATRASO_MS + 500, { y: 20 });
     expect(rolou).not.toHaveBeenCalled();
   });
+
+  it('não rola com o rosto perdido, mesmo com a última posição na faixa', () => {
+    // Sem rosto o motor repete a última posição: se ela ficou na faixa de
+    // baixo, a página descia até o fim com ninguém olhando.
+    montar(false);
+    olhar(ATRASO_MS + 2000, { y: ALTURA - 20, hasFace: false });
+    expect(rolou).not.toHaveBeenCalled();
+  });
+
+  it('olhos fechados pausam a rolagem sem zerar o prazo da borda', () => {
+    montar(false);
+    // 200 ms na borda (menos que o atraso), piscada longa, e volta: rola sem
+    // precisar esperar o atraso de novo desde o começo.
+    const passo = 1000 / 30;
+    act(() => {
+      let t = 0;
+      for (; t <= 200; t += passo) emitir(amostra({ timestamp: t, y: 20 }));
+      for (; t <= 800; t += passo) emitir(amostra({ timestamp: t, y: 20, eyeState: 'closed' }));
+      expect(rolou).not.toHaveBeenCalled();
+      for (const fim = t + 3 * passo; t <= fim; t += passo) emitir(amostra({ timestamp: t, y: 20 }));
+    });
+    expect(rolou).toHaveBeenCalled();
+  });
 });
 
 describe('a faixa', () => {

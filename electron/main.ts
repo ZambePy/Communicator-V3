@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, dialog, session, ipcMain, screen, safeStorage
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   permitirPermissao, permitirNavegacao, permitirAberturaExterna, hostDoSite, CSP, CSP_DEV, cspComNuvem,
   preferenciasWebSeguras, atalhoBloqueadoEmProducao, alternaTelaCheia, decidirRecarga,
@@ -277,6 +278,16 @@ function hostsExtrasDoSite(): string[] {
  *     assim que "Gerenciar assinatura" e os links do login funcionam;
  *   - `<webview>` proibido (além de `webviewTag: false`).
  */
+/**
+ * Pasta das páginas do app empacotado, como URL `file://` — só dentro dela a
+ * janela pode navegar (`permitirNavegacao`). No desenvolvimento, `null`: o
+ * app vem do servidor do Vite (localhost).
+ */
+function raizDoApp(): string | null {
+  if (!app.isPackaged) return null;
+  return pathToFileURL(path.join(__dirname, '..', 'frontend', 'dist') + path.sep).href;
+}
+
 function endurecerWebContents(contents: WebContents): void {
   const abrirFora = (url: string): boolean => {
     if (!permitirAberturaExterna(url, hostsExtrasDoSite())) return false;
@@ -287,12 +298,12 @@ function endurecerWebContents(contents: WebContents): void {
   // As DevTools (só existem fora do app empacotado) navegam por `devtools://`.
   const internoDoDev = (url: string) => !app.isPackaged && url.startsWith('devtools://');
   contents.on('will-navigate', (event, url) => {
-    if (permitirNavegacao(url) || internoDoDev(url)) return;
+    if (permitirNavegacao(url, raizDoApp()) || internoDoDev(url)) return;
     event.preventDefault();
     if (!abrirFora(url)) console.warn(`[electron] navegação bloqueada para origem não confiável: ${url.slice(0, 200)}`);
   });
   contents.on('will-redirect', (event, url) => {
-    if (permitirNavegacao(url) || internoDoDev(url)) return;
+    if (permitirNavegacao(url, raizDoApp()) || internoDoDev(url)) return;
     event.preventDefault();
     console.warn(`[electron] redirecionamento bloqueado: ${url.slice(0, 200)}`);
   });

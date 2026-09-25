@@ -26,27 +26,37 @@
 // (ver ./horario.ts). Sem os campos — desktops antigos — ou fora dos limites,
 // vale a hora do servidor.
 //
-//   heartbeat          { app_version, camera_ok, tracker_ok, calibrated }
-//                      → { ok, pending_messages }
+//   heartbeat          { app_version, camera_ok, tracker_ok, calibrated, session_id? }
+//                      → { ok, pending_messages, sessao_aberta? }
 //                      (também carimba sessions.last_heartbeat_at das sessões
-//                       abertas deste computador — migração 20260923022642_sessoes_orfas)
+//                       abertas deste computador — migração 20260923022642_sessoes_orfas;
+//                       `sessao_aberta` diz se a `session_id` enviada ainda está
+//                       aberta — o job de sessões órfãs pode tê-la encerrado)
 //   session.upsert     { session: { id?, status, dwell_ms, filter_preset, ... } } → { ok, id }
 //   session.end        { session_id, utterances?, chars_typed?, modules_used?, occurred_at?, sent_at? } → { ok }
 //   calibration.result { session_id?, calibration: {...}, report: {...}, occurred_at?, sent_at? } → { ok, id }
 //   message.send       { text, kind, occurred_at?, sent_at? }  → { ok, id }   (sender = paciente)
 //   message.spoken     { message_id, occurred_at?, sent_at? }  → { ok }       (msg do cuidador vocalizada)
 //   messages.pending   {}                            → { messages } (do cuidador, ainda não faladas)
-//   help.create        { kind, message, session_id, occurred_at?, sent_at? } → { ok, id }   + push
+//   help.create        { id?, kind, message, session_id, occurred_at?, sent_at? } → { ok, id }   + push
+//                      (`id`: UUID gerado no computador; um reenvio com o mesmo id
+//                       não cria outro pedido nem outro push)
 //   voice.status       { voice }                     → { ok, stored }  (rótulo da voz em uso)
 //   report.send        { report, motivo?, resumo? }     → { ok, stored }  (opt-in; só números)
 //   settings.get       {}                            → { settings, phrases }
 //   device.info        {}                            → { device, beneficiary, license, devices_active }
+//
+// Erros: 401/403 só quando a chave não existe ou foi revogada — o desktop
+// apaga o vínculo e a fila ao receber. Falha do banco ao CONFERIR a chave é
+// 503, nunca 401. Erro do banco numa escrita é 400 só quando o conteúdo é
+// inválido (ver ./respostas.ts); o resto é 503, e o desktop reenvia.
 //
 // O renderer do Electron roda em `file://` (origem "null") e manda um header
 // customizado, então o navegador faz preflight: CORS liberado abaixo.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { chegouComAtraso, horaDeBrasilia, horarioDoEvento } from './horario.ts';
+import { idDoCliente, statusDoErroDoBanco } from './respostas.ts';
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
@@ -62,6 +72,14 @@ function json(body: unknown, status = 200) {
     headers: { 'content-type': 'application/json', ...CORS },
   });
 }
+
+/** Resposta para um erro do banco: 400 se o conteúdo é inválido, 503 se é passageiro. */
+function erroDoBanco(erro: { message: string; code?: string | null }) {
+  return json({ error: erro.message }, statusDoErroDoBanco(erro));
+}
+
+/** O push não pode segurar a resposta: o desktop desiste em 10 s e reenviaria o pedido. */
+const PRAZO_DO_PUSH_MS = 6_000;
 
 async function sha256(s: string) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
@@ -122,6 +140,7 @@ async function notifyCaregiver(beneficiaryId: string, kind: string, body: string
         ...(Deno.env.get('EXPO_ACCESS_TOKEN') ? { authorization: `Bearer ${Deno.env.get('EXPO_ACCESS_TOKEN')}` } : {}),
       },
       body: JSON.stringify(messages),
+      signal: AbortSignal.timeout(PRAZO_DO_PUSH_MS),
     });
   } catch (e) {
     // O alerta já está no banco (e chega por realtime); o push é o segundo canal.
@@ -136,11 +155,15 @@ Deno.serve(async (req) => {
   const key = req.headers.get('x-device-key');
   if (!key) return json({ error: 'unauthorized' }, 401);
 
-  const { data: device } = await supabase
+  const { data: device, error: erroDaChave } = await supabase
     .from('devices')
     .select('id, beneficiary_id, name, os, app_version, revoked_at')
     .eq('device_key_hash', await sha256(key))
     .maybeSingle();
+  // Sem isto, uma falha do banco ao conferir a chave virava "chave
+  // desconhecida" (401): o desktop apagava o vínculo, a licença e a fila
+  // offline — pedidos de socorro inclusive — e caía no login.
+  if (erroDaChave) return json({ error: 'servico_indisponivel' }, 503);
   if (!device) return json({ error: 'unauthorized' }, 401);
   if (device.revoked_at) return json({ error: 'device_revoked' }, 403);
 
@@ -173,14 +196,22 @@ Deno.serve(async (req) => {
       // O erro é ignorado de propósito: se a coluna ainda não existir
       // (migração não aplicada), o heartbeat continua respondendo e o job
       // usa `updated_at` como reserva.
-      await supabase.from('sessions')
+      const { data: abertas, error: erroDasSessoes } = await supabase.from('sessions')
         .update({ last_heartbeat_at: now })
-        .eq('device_id', device.id).neq('status', 'ended');
+        .eq('device_id', device.id).neq('status', 'ended')
+        .select('id');
       const { count } = await supabase
         .from('messages')
         .select('id', { count: 'exact', head: true })
         .eq('beneficiary_id', b).eq('sender', 'cuidador').eq('spoken', false);
-      return json({ ok: true, pending_messages: count ?? 0 });
+      // A sessão que o desktop acha que está aberta ainda está? Depois de uns
+      // minutos sem rede, o job de sessões órfãs a encerra; sem esta resposta
+      // o desktop seguia mandando contadores para uma sessão encerrada e o
+      // celular mostrava o paciente como desconectado enquanto ele usava o app.
+      const sessaoAberta = typeof body.session_id === 'string' && !erroDasSessoes
+        ? (abertas ?? []).some((s) => s.id === body.session_id)
+        : undefined;
+      return json({ ok: true, pending_messages: count ?? 0, sessao_aberta: sessaoAberta });
     }
 
     case 'session.upsert': {
@@ -193,14 +224,14 @@ Deno.serve(async (req) => {
           .update({ ...campos, device_id: device.id })
           .eq('id', input.id).eq('beneficiary_id', b)
           .select('id').maybeSingle();
-        if (error) return json({ error: error.message }, 400);
+        if (error) return erroDoBanco(error);
         if (!data) return json({ error: 'sessão não encontrada' }, 404);
         return json({ ok: true, id: data.id });
       }
       const { data, error } = await supabase.from('sessions')
         .insert({ ...campos, beneficiary_id: b, device_id: device.id })
         .select('id').single();
-      if (error) return json({ error: error.message }, 400);
+      if (error) return erroDoBanco(error);
       return json({ ok: true, id: data.id });
     }
 
@@ -211,7 +242,7 @@ Deno.serve(async (req) => {
       // Idempotente: fila offline + keepalive ao fechar podem mandar duas vezes.
       const { error } = await supabase.from('sessions').update(patch)
         .eq('id', body.session_id).eq('beneficiary_id', b).neq('status', 'ended');
-      if (error) return json({ error: error.message }, 400);
+      if (error) return erroDoBanco(error);
       return json({ ok: true });
     }
 
@@ -229,7 +260,7 @@ Deno.serve(async (req) => {
       };
       if (typeof body.session_id === 'string') {
         const { error } = await supabase.from('sessions').update(patch).eq('id', body.session_id).eq('beneficiary_id', b);
-        if (error) return json({ error: error.message }, 400);
+        if (error) return erroDoBanco(error);
         await supabase.from('devices').update({ calibrated: true, last_seen_at: now }).eq('id', device.id);
         return json({ ok: true, id: body.session_id });
       }
@@ -237,7 +268,7 @@ Deno.serve(async (req) => {
         .from('sessions')
         .insert({ ...patch, beneficiary_id: b, device_id: device.id })
         .select('id').single();
-      if (error) return json({ error: error.message }, 400);
+      if (error) return erroDoBanco(error);
       await supabase.from('devices').update({ calibrated: true, last_seen_at: now }).eq('id', device.id);
       return json({ ok: true, id: data.id });
     }
@@ -250,7 +281,7 @@ Deno.serve(async (req) => {
         .from('messages')
         .insert({ beneficiary_id: b, sender: 'paciente', kind, text, spoken: true, created_at: quando })
         .select('id').single();
-      if (error) return json({ error: error.message }, 400);
+      if (error) return erroDoBanco(error);
       return json({ ok: true, id: data.id });
     }
 
@@ -269,7 +300,7 @@ Deno.serve(async (req) => {
         .eq('beneficiary_id', b).eq('sender', 'cuidador').eq('spoken', false)
         .order('created_at', { ascending: true })
         .limit(50);
-      if (error) return json({ error: error.message }, 400);
+      if (error) return erroDoBanco(error);
       return json({ messages: data ?? [] });
     }
 
@@ -284,14 +315,38 @@ Deno.serve(async (req) => {
           .eq('id', body.session_id).eq('beneficiary_id', b).maybeSingle();
         sessionId = sess?.id ?? null;
       }
-      const { data, error } = await supabase
-        .from('help_requests')
-        // created_at = quando aconteceu (a fila offline pode entregar horas
-        // depois); received_at, a chegada, é o default do banco e é dela que o
-        // prazo de escalonamento conta.
-        .insert({ beneficiary_id: b, kind, message, session_id: sessionId, created_at: quando })
-        .select('id').single();
-      if (error) return json({ error: error.message }, 400);
+      // created_at = quando aconteceu (a fila offline pode entregar horas
+      // depois); received_at, a chegada, é o default do banco e é dela que o
+      // prazo de escalonamento conta.
+      const linha = { beneficiary_id: b, kind, message, session_id: sessionId, created_at: quando };
+      let id: string | null = null;
+      const idPedido = idDoCliente(body.id);
+      if (idPedido) {
+        // Id escolhido no computador: um reenvio do mesmo pedido (a resposta
+        // anterior se perdeu no caminho) encontra a linha que já existe e para
+        // aqui — sem segunda linha, sem segundo push e sem um escalonamento
+        // falso depois de o cuidador já ter confirmado o primeiro.
+        const { data: gravado, error } = await supabase
+          .from('help_requests')
+          .upsert({ id: idPedido, ...linha }, { onConflict: 'id', ignoreDuplicates: true })
+          .select('id');
+        if (error) return erroDoBanco(error);
+        if (gravado?.length) {
+          id = gravado[0].id as string;
+        } else {
+          const { data: existente, error: erroDaBusca } = await supabase
+            .from('help_requests').select('beneficiary_id').eq('id', idPedido).maybeSingle();
+          if (erroDaBusca) return erroDoBanco(erroDaBusca);
+          if (existente?.beneficiary_id === b) return json({ ok: true, id: idPedido, repetido: true });
+          // Id já usado por OUTRO paciente (um UUID aleatório não repete; seria
+          // um cliente adulterado): o pedido é gravado com id do servidor.
+        }
+      }
+      if (!id) {
+        const { data, error } = await supabase.from('help_requests').insert(linha).select('id').single();
+        if (error) return erroDoBanco(error);
+        id = data.id as string;
+      }
       // Push só nos tipos que exigem ação imediata; avisos de sistema chegam
       // pelo realtime e ficam no histórico de alertas. Um pedido que chega
       // atrasado diz a hora em que foi feito, para não passar por novo.
@@ -301,7 +356,7 @@ Deno.serve(async (req) => {
           : message;
         await notifyCaregiver(b, kind, corpo);
       }
-      return json({ ok: true, id: data.id });
+      return json({ ok: true, id });
     }
 
     case 'voice.status': {
@@ -320,7 +375,7 @@ Deno.serve(async (req) => {
       const { error } = await supabase.from('patient_settings')
         .upsert({ beneficiary_id: b, voice: body.voice, updated_at: now }, { onConflict: 'beneficiary_id' })
         .select('beneficiary_id').maybeSingle();
-      if (error) return json({ error: error.message }, 500);
+      if (error) return erroDoBanco(error);
       return json({ ok: true, stored: true });
     }
 
@@ -350,7 +405,7 @@ Deno.serve(async (req) => {
         beneficiary_id: b, device_id: device.id, app_version: versao || null,
         motivo, resumo, relatorio,
       });
-      if (error) return json({ error: error.message }, 400);
+      if (error) return erroDoBanco(error);
       return json({ ok: true, stored: true });
     }
 

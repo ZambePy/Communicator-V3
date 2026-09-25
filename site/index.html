@@ -26,13 +26,17 @@
     <!-- Padrões para quem lê o HTML sem executar JavaScript (redes sociais,
          WhatsApp). Cada rota sobrescreve no navegador via RouteMeta, a
          partir de src/seo/pages.ts. O marcador de origem (SITE_URL entre sublinhados duplos) é trocado no build pela
-         origem de VITE_SITE_URL (vite.config.ts). -->
+         origem de VITE_SITE_URL (vite.config.ts).
+         Sem canonical e sem og:url aqui, de propósito: este mesmo HTML é
+         servido em TODAS as rotas (SPA), e um canonical fixo na home dizia ao
+         buscador que /beta, /planos e /solucao eram cópias dela. O RouteMeta
+         escreve os dois com o endereço de cada rota; quem não executa
+         JavaScript usa o endereço que pediu. -->
     <title>Comunicador por olhar para ELA, AVC e tetraplegia | IrisFlow</title>
     <meta
       name="description"
       content="O IrisFlow Communicator transforma o movimento dos olhos em fala e em controle do computador, com a webcam comum e processamento 100 % local. Beta gratuita."
     />
-    <link rel="canonical" href="__SITE_URL__/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="IrisFlow" />
     <meta property="og:locale" content="pt_BR" />
@@ -41,7 +45,6 @@
       property="og:description"
       content="Comunicação pelo olhar para quem tem ELA, AVC, esclerose múltipla ou lesão medular, com a webcam que já está em casa. Nenhuma imagem sai do computador. Beta gratuita."
     />
-    <meta property="og:url" content="__SITE_URL__/" />
     <meta property="og:image" content="__SITE_URL__/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />

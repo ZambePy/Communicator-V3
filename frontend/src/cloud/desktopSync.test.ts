@@ -199,9 +199,12 @@ describe('DesktopSync — envio, fila offline e credencial', () => {
     expect(corpos).toHaveLength(2);
     expect(corpos[0]).toMatchObject({ occurred_at: '2026-09-23T12:00:00.000Z', sent_at: '2026-09-23T12:00:00.000Z' });
     expect(corpos[1]).toEqual({
-      action: 'help.create', kind: 'emergencia', message: 'dor',
+      action: 'help.create', id: corpos[0].id, kind: 'emergencia', message: 'dor',
       occurred_at: '2026-09-23T12:00:00.000Z', sent_at: '2026-09-23T15:00:00.000Z',
     });
+    // O id do pedido nasce na primeira tentativa e é o MESMO no reenvio:
+    // é o que impede a função de gravar um segundo socorro.
+    expect(corpos[0].id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     // E a Edge Function grava esse horário (3 h de atraso) em vez de "agora".
     expect(horarioDoEvento(corpos[1].occurred_at, corpos[1].sent_at, new Date(relogio))).toBe('2026-09-23T12:00:00.000Z');
     expect(s.tamanhoDaFila).toBe(0);
@@ -251,6 +254,43 @@ describe('DesktopSync — envio, fila offline e credencial', () => {
       expect(JSON.parse(String(c[1].body))).not.toHaveProperty('occurred_at');
       expect(JSON.parse(String(c[1].body))).not.toHaveProperty('sent_at');
     }
+  });
+
+  it('pedido de ajuda com id escolhido por quem chama (a tela de emergência) mantém esse id', async () => {
+    const fetchImpl = vi.fn(async () => respostaHttp(200, { ok: true, id: 'x' }));
+    const s = new DesktopSync({ url: URL_FN, chave: () => 'k', fetchImpl });
+    await s.enviar({ action: 'help.create', id: '9b2f8c1e-6d3a-4c7b-8e1f-2a3b4c5d6e7f', kind: 'emergencia', message: 'dor' });
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).id).toBe('9b2f8c1e-6d3a-4c7b-8e1f-2a3b4c5d6e7f');
+  });
+
+  it('fila cheia só de socorros e mensagens: sai a mensagem mais antiga, NUNCA o socorro', async () => {
+    const off = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    const s = new DesktopSync({ url: URL_FN, chave: () => 'k', fetchImpl: off });
+    await s.enviar({ action: 'help.create', kind: 'emergencia', message: 'socorro antigo' });
+    for (let i = 0; i < 200; i++) await s.enviar({ action: 'message.send', text: `m${i}`, kind: 'texto' });
+    expect(s.tamanhoDaFila).toBe(200);
+    const acoes = s._fila().map((it) => it.acao);
+    expect(acoes[0]).toMatchObject({ action: 'help.create', message: 'socorro antigo' });
+    // A mensagem mais antiga (m0) é que saiu.
+    expect(acoes.some((a) => a.action === 'message.send' && a.text === 'm0')).toBe(false);
+    expect(acoes.some((a) => a.action === 'message.send' && a.text === 'm199')).toBe(true);
+  });
+
+  it('um envio que dá certo drena também a fila gravada por uma execução anterior (ainda não lida)', async () => {
+    const off = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    const s1 = new DesktopSync({ url: URL_FN, chave: () => 'k', fetchImpl: off });
+    await s1.enviar({ action: 'help.create', kind: 'emergencia', message: 'da execução anterior' });
+    // App reaberto: a primeira coisa que sai é um heartbeat, e ele dá certo.
+    const enviados: string[] = [];
+    const on = vi.fn(async (_u: string | URL | Request, init?: RequestInit) => {
+      enviados.push(JSON.parse(String(init?.body)).action);
+      return respostaHttp(200, { ok: true });
+    });
+    const s2 = new DesktopSync({ url: URL_FN, chave: () => 'k', fetchImpl: on as unknown as typeof fetch });
+    await s2.enviar({ action: 'heartbeat', app_version: '1', camera_ok: true, tracker_ok: true, calibrated: true });
+    await vi.waitFor(() => expect(enviados).toContain('help.create'));
+    await vi.waitFor(() => expect(s2.tamanhoDaFila).toBe(0));
   });
 
   it('cada item da fila leva a marca do vínculo, não a chave', async () => {

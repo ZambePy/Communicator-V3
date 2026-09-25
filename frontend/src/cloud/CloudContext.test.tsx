@@ -49,6 +49,7 @@ const licencaMock: { status: string; license: unknown; reverificar: ReturnType<t
 vi.mock('../context/LicenseContext', () => ({ useLicense: () => licencaMock }));
 
 import { CloudProvider, useCloud } from './CloudContext';
+import { cloudConfig } from './config';
 
 const LICENCA_ATIVA = {
   account: { email: 'familia@exemplo.com', name: 'Carlos', beneficiaryId: 'ben-1', beneficiaryName: 'Carlos' },
@@ -270,5 +271,32 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     r.rerender(<CloudProvider><Sonda /></CloudProvider>);
     await waitFor(() => expect(screen.getByTestId('vinculo').textContent).toBe('-'));
     expect(chamadas(fetchMock)).toContainEqual(expect.objectContaining({ action: 'session.end', session_id: 'sess-1' }));
+  });
+
+  it('o heartbeat leva a sessão; se o servidor diz que ela foi encerrada (sessão órfã), abre outra', async () => {
+    const original = cloudConfig.heartbeatMs;
+    (cloudConfig as { heartbeatMs: number }).heartbeatMs = 60;
+    let sessoes = 0;
+    fetchMock.mockImplementation(async (_u: string, init?: RequestInit) => {
+      const corpo = JSON.parse(String(init?.body));
+      const resposta = corpo.action === 'session.upsert' ? { ok: true, id: `sess-${++sessoes}` }
+        : corpo.action === 'settings.get' ? { settings: null, phrases: [] }
+        : corpo.action === 'messages.pending' ? { messages: [] }
+        // O job de sessões órfãs encerrou a primeira; as outras seguem abertas.
+        : corpo.action === 'heartbeat' ? { ok: true, pending_messages: 0, sessao_aberta: corpo.session_id ? corpo.session_id !== 'sess-1' : undefined }
+        : { ok: true };
+      return { ok: true, status: 200, json: async () => resposta } as unknown as Response;
+    });
+    try {
+      await montarComLicencaAtiva();
+      await waitFor(() => expect(chamadas(fetchMock)).toContainEqual(expect.objectContaining({ action: 'heartbeat', session_id: 'sess-1' })));
+      await waitFor(() => expect(sessoes).toBe(2));
+      await waitFor(() => expect(chamadas(fetchMock)).toContainEqual(expect.objectContaining({ action: 'heartbeat', session_id: 'sess-2' })));
+      // Aberta a nova, não abre uma terceira.
+      await new Promise((r) => setTimeout(r, 200));
+      expect(sessoes).toBe(2);
+    } finally {
+      (cloudConfig as { heartbeatMs: number }).heartbeatMs = original;
+    }
   });
 });

@@ -109,6 +109,33 @@ const STEP_FIELDS: (keyof Form)[][] = [
   ['terms'],
 ]
 
+/**
+ * Nome de cada campo como o rótulo dele diz, para a dica sob o "Continuar"
+ * NOMEAR o que falta. Com o botão desabilitado e só "preencha os campos
+ * obrigatórios", quem usa leitor de tela ou teclado não descobria qual campo
+ * (as três listas da etapa 2 nem têm asterisco, e só mostram erro depois de
+ * tocadas).
+ */
+const NOME_DO_CAMPO: Partial<Record<keyof Form, string>> = {
+  buyerName: 'nome completo',
+  email: 'e-mail',
+  phone: 'telefone',
+  document: 'CPF',
+  password: 'senha',
+  passwordConfirm: 'confirmação da senha',
+  userName: 'nome da pessoa que vai usar',
+  relation: 'relação com ela',
+  condition: 'condição principal',
+  os: 'sistema do computador',
+  terms: 'aceite dos termos e da política de privacidade',
+}
+
+/** "a, b e c" */
+function listaEmPortugues(itens: string[]): string {
+  if (itens.length <= 1) return itens.join('')
+  return `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}`
+}
+
 const STEP_FIELDS_CONCLUIR: (keyof Form)[][] = [
   ['phone', 'document'],
   ['userName', 'relation', 'condition', 'os'],
@@ -992,7 +1019,11 @@ function FormularioBeta({
                 <p className="form-hint" aria-live="polite">
                   {step === 2
                     ? 'Marque o aceite dos termos e da política de privacidade para entrar.'
-                    : 'Preencha os campos obrigatórios desta etapa para continuar.'}
+                    : `Para continuar, falta corrigir ou preencher: ${listaEmPortugues(
+                        stepFields[step]
+                          .filter((k) => v.errors[k])
+                          .map((k) => NOME_DO_CAMPO[k] ?? String(k)),
+                      )}.`}
                 </p>
               )}
             </form>
