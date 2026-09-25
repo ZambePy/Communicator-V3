@@ -17,3 +17,34 @@ project_id = "irisflow"
 # mas esta linha garante que a função funcione de qualquer jeito.
 [functions.desktop-sync]
 verify_jwt = false
+
+# Modelos de e-mail do Supabase Auth, em português e com a marca (os mesmos
+# aplicados no projeto em produção, em Authentication → Emails → Templates).
+# Confirmação e nova senha levam o link direto para o site com o token_hash
+# ({{ .SiteURL }}/confirmar-email?token_hash=… e /nova-senha?token_hash=…):
+# a página verifica o link e abre a sessão no aparelho do clique. Os outros
+# usam o link padrão, {{ .ConfirmationURL }}. Valem para o `supabase start`
+# local; no projeto remoto são aplicados pelo painel (ou pela API de gestão).
+[auth.email.template.confirmation]
+subject = "Confirme seu e-mail no IrisFlow"
+content_path = "./supabase/templates/confirmacao.html"
+
+[auth.email.template.recovery]
+subject = "Redefina sua senha do IrisFlow"
+content_path = "./supabase/templates/recuperacao.html"
+
+[auth.email.template.email_change]
+subject = "Confirme seu novo e-mail no IrisFlow"
+content_path = "./supabase/templates/troca-de-email.html"
+
+[auth.email.template.magic_link]
+subject = "Seu link de acesso ao IrisFlow"
+content_path = "./supabase/templates/link-de-acesso.html"
+
+[auth.email.template.invite]
+subject = "Convite para a beta do IrisFlow"
+content_path = "./supabase/templates/convite.html"
+
+[auth.email.template.reauthentication]
+subject = "{{ .Token }} é o seu código do IrisFlow"
+content_path = "./supabase/templates/codigo.html"

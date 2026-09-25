@@ -6,14 +6,15 @@ import { ApiError } from '@/services/api'
 import { motivoDoLinkNaUrl } from '@/utils/linkDeEmail'
 
 /* ============================================================
-   /entrar também é o destino do link de confirmação do cadastro. Com a
-   sessão aberta pela URL, segue para /conta (que leva a conta sem
-   inscrição para /beta). Link vencido volta com o motivo na URL, e login
-   de e-mail não confirmado oferece o reenvio do link.
+   /entrar leva cada um à etapa em que está: sem a pesquisa da beta
+   respondida → /beta (a pesquisa); com ela → /perfil. `?email=` preenche o
+   e-mail (botão "Já confirmei, continuar aqui"). Links de confirmação
+   antigos ainda caem aqui: com sessão, seguem; vencidos, mostram o motivo.
+   Login de e-mail não confirmado oferece o reenvio do link.
    ============================================================ */
 
 const { sessao, signIn, reenviar } = vi.hoisted(() => ({
-  sessao: { authenticated: false, loading: false },
+  sessao: { authenticated: false, loading: false, account: null as unknown },
   signIn: vi.fn(),
   reenviar: vi.fn(async (_email: string) => {}),
 }))
@@ -27,12 +28,13 @@ vi.mock('@/services/api', async (importOriginal) => {
   return { ...real, reenviarConfirmacao: reenviar }
 })
 
-function montar() {
+function montar(endereco = '/entrar') {
   return render(
-    <MemoryRouter initialEntries={['/entrar']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <MemoryRouter initialEntries={[endereco]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/entrar" element={<Entrar />} />
-        <Route path="/conta" element={<p>painel da conta</p>} />
+        <Route path="/perfil" element={<p>meu perfil</p>} />
+        <Route path="/beta" element={<p>pesquisa da beta</p>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -47,6 +49,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   sessao.authenticated = false
   sessao.loading = false
+  sessao.account = null
 })
 
 afterEach(() => {
@@ -54,20 +57,40 @@ afterEach(() => {
 })
 
 describe('<Entrar />', () => {
-  it('quem chega já autenticado (link de confirmação) segue direto para o painel', async () => {
+  it('já autenticado sem a pesquisa (link antigo de confirmação) segue para a pesquisa da beta', async () => {
     sessao.authenticated = true
     montar()
-    expect(await screen.findByText('painel da conta')).toBeInTheDocument()
+    expect(await screen.findByText('pesquisa da beta')).toBeInTheDocument()
   })
 
-  it('login certo vai para /conta', async () => {
-    signIn.mockResolvedValueOnce(undefined)
+  it('já autenticado com a inscrição completa segue para o perfil', async () => {
+    sessao.authenticated = true
+    sessao.account = { id: 'sub-1' }
+    montar()
+    expect(await screen.findByText('meu perfil')).toBeInTheDocument()
+  })
+
+  it('login de quem já respondeu a pesquisa vai para /perfil', async () => {
+    signIn.mockResolvedValueOnce({ id: 'sub-1' })
     montar()
     preencher()
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
 
-    expect(await screen.findByText('painel da conta')).toBeInTheDocument()
+    expect(await screen.findByText('meu perfil')).toBeInTheDocument()
     expect(signIn).toHaveBeenCalledWith('maria@exemplo.com.br', 'segredo123')
+  })
+
+  it('login de quem ainda não respondeu a pesquisa vai para /beta', async () => {
+    signIn.mockResolvedValueOnce(null)
+    montar()
+    preencher()
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByText('pesquisa da beta')).toBeInTheDocument()
+  })
+
+  it('?email= preenche o e-mail (vindo do "Já confirmei, continuar aqui")', () => {
+    montar('/entrar?email=maria%40exemplo.com.br')
+    expect(screen.getByLabelText('E-mail')).toHaveValue('maria@exemplo.com.br')
   })
 
   it('e-mail não confirmado: mostra o motivo e oferece reenviar o link para o e-mail digitado', async () => {

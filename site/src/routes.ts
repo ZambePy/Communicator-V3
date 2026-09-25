@@ -24,6 +24,8 @@ export const ROUTE_LOADERS: Record<string, Loader> = {
   '/recuperar-senha': () => import('@/pages/RecuperarSenha'),
   '/nova-senha': () => import('@/pages/NovaSenha'),
   '/conta': () => import('@/pages/Conta'),
+  '/perfil': () => import('@/pages/Perfil'),
+  '/confirmar-email': () => import('@/pages/ConfirmarEmail'),
   '/privacidade': () =>
     import('@/pages/Legal').then((m) => ({ default: m.Privacidade })),
   '/termos': () => import('@/pages/Legal').then((m) => ({ default: m.Termos })),

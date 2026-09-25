@@ -1,8 +1,8 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { PasswordStrength } from '@/components/ui/PasswordStrength'
 import { validar } from '@/utils/validation'
 import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Field } from '@/components/ui/Field'
@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { SessionLoading } from '@/components/ui/Skeleton'
 import { useAccount } from '@/context/AccountContext'
-import { updatePassword } from '@/services/api'
+import { updatePassword, verificarLinkDoEmail } from '@/services/api'
 import { motivoDoLinkNaUrl } from '@/utils/linkDeEmail'
 import './checkout.css'
 
@@ -33,9 +33,36 @@ export default function NovaSenha() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const { authenticated, loading: carregandoSessao } = useAccount()
+  const { authenticated, loading: carregandoSessao, refresh } = useAccount()
   const navigate = useNavigate()
   const motivo = useMemo(motivoNaUrl, [])
+  // Modelo de e-mail do repositório (supabase/templates/recuperacao.html): o
+  // link traz o token_hash e a sessão de recuperação nasce aqui, no aparelho
+  // do clique — um antivírus que "visita" o link antes não gasta o token.
+  const [busca] = useSearchParams()
+  const tokenHash = busca.get('type') === 'recovery' ? busca.get('token_hash') : null
+  const [verificando, setVerificando] = useState(Boolean(tokenHash))
+  const [erroDoLink, setErroDoLink] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!tokenHash) return
+    let vivo = true
+    verificarLinkDoEmail(tokenHash, 'recovery')
+      .then(() => refresh())
+      .then(() => {
+        if (!vivo) return
+        setVerificando(false)
+        navigate({ search: '' }, { replace: true })
+      })
+      .catch((e: unknown) => {
+        if (!vivo) return
+        setErroDoLink(e instanceof Error ? e.message : 'O link não é válido.')
+        setVerificando(false)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [tokenHash]) // navigate e refresh são estáveis
   const values = useMemo(() => ({ password, confirm }), [password, confirm])
   const v = useFormValidation(values, RULES)
 
@@ -48,7 +75,7 @@ export default function NovaSenha() {
     setLoading(true)
     try {
       await updatePassword(password)
-      navigate('/conta', { replace: true })
+      navigate('/perfil', { replace: true })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível trocar a senha.')
     } finally {
@@ -60,7 +87,7 @@ export default function NovaSenha() {
      token da URL; o AccountContext espera isso terminar antes de dizer se
      há sessão. Sem esta espera, a tela diria "link inválido" por um instante
      mesmo com o link bom. */
-  if (carregandoSessao) return <SessionLoading />
+  if (carregandoSessao || verificando) return <SessionLoading />
 
   return (
     <div className="flow">
@@ -87,7 +114,7 @@ export default function NovaSenha() {
                     {/* O cliente usa o fluxo implícito (tokens no endereço): o link
                         vale em qualquer navegador, inclusive quando o pedido saiu do
                         app do cuidador. */}
-                    {motivo ?? 'Este link não é mais válido ou já foi usado.'} Peça um novo
+                    {erroDoLink ?? motivo ?? 'Este link não é mais válido ou já foi usado.'} Peça um novo
                     link, pelo site ou pelo app do cuidador.
                   </p>
                 </div>

@@ -150,3 +150,33 @@ export const OS_LABELS: Record<string, string> = {
 export function osLabel(value: string): string {
   return OS_LABELS[value] ?? value
 }
+
+/**
+ * Relação de quem se inscreve com quem vai usar (enum relation_t do banco),
+ * como aparece no /perfil. A pergunta da pesquisa usa frases próprias
+ * ("Eu mesmo(a)", "Meu cônjuge"…), em components/beta/FormularioPesquisa.tsx.
+ */
+export const RELACAO_LABELS: Record<string, string> = {
+  proprio: 'A própria pessoa se inscreveu',
+  conjuge: 'Cônjuge',
+  'pai-mae': 'Pai ou mãe',
+  filho: 'Filho ou filha',
+  irmao: 'Irmão ou irmã',
+  cuidador: 'Cuidador(a)',
+  outro: 'Outra relação',
+}
+
+/** Condição principal (enum condition_t do banco). */
+export const CONDICAO_LABELS: Record<string, string> = {
+  ela: 'Esclerose lateral amiotrófica (ELA)',
+  tetraplegia: 'Tetraplegia alta',
+  pc: 'Paralisia cerebral severa',
+  avc: 'Sequela grave de AVC',
+  distrofia: 'Distrofia muscular avançada',
+  // O enum não tem valor próprio para esclerose múltipla: entra em "outra".
+  outra: 'Outra (esclerose múltipla, encarceramento…)',
+  'prefiro-nao': 'Prefiro não informar',
+}
+
+export const relacaoLabel = (value: string) => RELACAO_LABELS[value] ?? value
+export const condicaoLabel = (value: string) => CONDICAO_LABELS[value] ?? value

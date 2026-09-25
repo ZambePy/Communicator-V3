@@ -73,6 +73,7 @@ const LIMITE_DE_EMAIL =
   'Muitos e-mails enviados em pouco tempo. Aguarde alguns minutos e tente de novo.'
 const FALHA_NO_ENVIO =
   'Não conseguimos enviar o e-mail agora. Tente de novo mais tarde ou escreva para irisflowteam@gmail.com.'
+const LINK_VENCIDO = 'O link expirou ou já foi usado.'
 
 const TRADUCOES: Record<string, string> = {
   'Invalid login credentials': 'E-mail ou senha incorretos.',
@@ -86,6 +87,9 @@ const TRADUCOES: Record<string, string> = {
   'email rate limit exceeded': LIMITE_DE_EMAIL,
   'Error sending confirmation email': FALHA_NO_ENVIO,
   'Error sending recovery email': FALHA_NO_ENVIO,
+  // links de e-mail verificados na página (verifyOtp com token_hash)
+  'Email link is invalid or has expired': LINK_VENCIDO,
+  'Token has expired or is invalid': LINK_VENCIDO,
 }
 
 /* Os mesmos casos pelo código do GoTrue, que é estável entre versões (o texto
@@ -98,6 +102,7 @@ const TRADUCOES_POR_CODIGO: Record<string, string> = {
   user_already_exists: JA_CADASTRADO,
   over_email_send_rate_limit: LIMITE_DE_EMAIL,
   over_request_rate_limit: 'Muitas tentativas seguidas. Aguarde alguns minutos e tente de novo.',
+  otp_expired: LINK_VENCIDO,
   email_address_not_authorized: FALHA_NO_ENVIO,
   // Mínimo de 8 caracteres também no servidor (Auth → Email, desde 24/09/2026),
   // o mesmo do SENHA_MINIMA do site; sem exigência de tipos de caractere.

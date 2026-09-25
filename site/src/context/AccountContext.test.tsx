@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { AccountProvider, useAccount, type Account, type BetaProfile } from './AccountContext'
-import { RASCUNHO_KEY, salvarRascunhoBeta } from '../lib/rascunhoBeta'
+import { AccountProvider, useAccount, type Account } from './AccountContext'
+import type { NovaContaBeta, RespostasPesquisa, ResultadoNovaConta } from '../services/api'
 
 /* ============================================================
    O AccountContext precisa distinguir duas falhas ao reler a conta:
@@ -16,7 +16,7 @@ import { RASCUNHO_KEY, salvarRascunhoBeta } from '../lib/rascunhoBeta'
    expulsava o usuário do painel. Estes testes seguram esse contrato.
    ============================================================ */
 
-const { supabaseFake, fetchAccount, signUpBeta, apiSignIn, apiSignOut } = vi.hoisted(() => {
+const { supabaseFake, fetchAccount, criarContaBeta, responderPesquisa, apiSignIn, apiSignOut } = vi.hoisted(() => {
   const supabaseFake = {
     auth: {
       // sessão sempre presente: quem decide o resto é fetchAccount
@@ -25,10 +25,11 @@ const { supabaseFake, fetchAccount, signUpBeta, apiSignIn, apiSignOut } = vi.hoi
     },
   }
   const fetchAccount = vi.fn<() => Promise<Account | null>>()
-  const signUpBeta = vi.fn<(p: BetaProfile, senha: string) => Promise<Account>>()
+  const criarContaBeta = vi.fn<(nova: NovaContaBeta) => Promise<ResultadoNovaConta>>()
+  const responderPesquisa = vi.fn<(r: RespostasPesquisa) => Promise<Account>>()
   const apiSignIn = vi.fn<(email: string, senha: string) => Promise<void>>()
   const apiSignOut = vi.fn<() => Promise<void>>()
-  return { supabaseFake, fetchAccount, signUpBeta, apiSignIn, apiSignOut }
+  return { supabaseFake, fetchAccount, criarContaBeta, responderPesquisa, apiSignIn, apiSignOut }
 })
 
 vi.mock('../lib/supabase', async (importOriginal) => {
@@ -41,7 +42,7 @@ vi.mock('../services/api', async (importOriginal) => {
   // ehErroDeAutenticacao e ApiError são os de verdade: o teste é sobre a
   // classificação real, não sobre um dublê dela.
   const real = await importOriginal<typeof import('../services/api')>()
-  return { ...real, fetchAccount, signUpBeta, signIn: apiSignIn, signOut: apiSignOut }
+  return { ...real, fetchAccount, criarContaBeta, responderPesquisa, signIn: apiSignIn, signOut: apiSignOut }
 })
 
 const conta: Account = {
@@ -157,9 +158,9 @@ describe('AccountContext.refresh', () => {
 })
 
 /* ---------------- programa beta ----------------
-   `registerBeta` é o `register` da beta: chama `signUpBeta` e deixa a
-   conta carregada no contexto, para a própria /beta trocar o formulário
-   pelo painel de download sem navegar.
+   A beta tem duas ações no contexto: `criarContaBeta` (etapa 1, só a
+   conta) e `responderPesquisa` (etapa 3, que abre a assinatura 'beta' e
+   deixa a conta carregada para a /beta passar ao download sem navegar).
    ------------------------------------------------ */
 
 const contaBeta: Account = {
@@ -171,68 +172,106 @@ const contaBeta: Account = {
   nextChargeAt: '2027-03-31T23:59:59-03:00',
 }
 
-const perfilBeta: BetaProfile = {
-  ...conta.profile,
+const novaConta: NovaContaBeta = {
+  nome: 'Maria Aparecida Souza',
+  email: 'maria@exemplo.com.br',
+  senha: 'segredo123',
+  newsletter: true,
+}
+
+const respostas: RespostasPesquisa = {
+  relation: 'conjuge',
+  userName: 'João',
+  condition: 'ela',
+  os: 'windows',
   wantsCaregiverApp: true,
   feedbackConsent: false,
   howFound: 'Indicação',
+  phone: '',
 }
 
-describe('AccountContext.registerBeta', () => {
-  it('inscreve, guarda a conta beta e marca a sessão como autenticada', async () => {
+describe('AccountContext.criarContaBeta', () => {
+  it("'confirmar': a conta existe, mas sem sessão até o clique no link", async () => {
+    supabaseFake.auth.getSession.mockResolvedValue({ data: { session: null } } as never)
+    criarContaBeta.mockResolvedValueOnce('confirmar')
+
+    const { result } = renderHook(() => useAccount(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    let resultado: ResultadoNovaConta | undefined
+    await act(async () => {
+      resultado = await result.current.criarContaBeta(novaConta)
+    })
+
+    expect(criarContaBeta).toHaveBeenCalledWith(novaConta)
+    expect(resultado).toBe('confirmar')
+    expect(result.current.authenticated).toBe(false)
+    expect(result.current.account).toBeNull()
+  })
+
+  it("'sessao' (projeto sem confirmação de e-mail): relê a sessão e a pessoa já está logada, ainda sem conta", async () => {
     supabaseFake.auth.getSession.mockResolvedValueOnce({ data: { session: null } } as never)
-    signUpBeta.mockResolvedValueOnce(contaBeta)
+    const { result } = renderHook(() => useAccount(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    criarContaBeta.mockResolvedValueOnce('sessao')
+    supabaseFake.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } })
+    fetchAccount.mockResolvedValueOnce(null)
+    await act(async () => {
+      await result.current.criarContaBeta(novaConta)
+    })
+
+    expect(result.current.authenticated).toBe(true)
+    expect(result.current.account).toBeNull()
+  })
+})
+
+describe('AccountContext.responderPesquisa', () => {
+  it('grava a pesquisa, guarda a conta beta e marca a sessão como autenticada', async () => {
+    supabaseFake.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } })
+    fetchAccount.mockResolvedValueOnce(null) // logada, sem a pesquisa
+    responderPesquisa.mockResolvedValueOnce(contaBeta)
 
     const { result } = renderHook(() => useAccount(), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.account).toBeNull()
+    expect(result.current.authenticated).toBe(true)
 
     let devolvida: Account | undefined
     await act(async () => {
-      devolvida = await result.current.registerBeta(perfilBeta, 'segredo123')
+      devolvida = await result.current.responderPesquisa(respostas)
     })
 
-    expect(signUpBeta).toHaveBeenCalledWith(perfilBeta, 'segredo123')
+    expect(responderPesquisa).toHaveBeenCalledWith(respostas)
     expect(devolvida).toEqual(contaBeta)
-    expect(result.current.account).toEqual(contaBeta)
     expect(result.current.account?.planId).toBe('beta')
     expect(result.current.authenticated).toBe(true)
   })
 
   it('propaga a falha sem mexer no estado', async () => {
-    supabaseFake.auth.getSession.mockResolvedValueOnce({ data: { session: null } } as never)
-    signUpBeta.mockRejectedValueOnce(new Error('As inscrições da beta estão fechadas no momento.'))
+    supabaseFake.auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } })
+    fetchAccount.mockResolvedValueOnce(null)
+    responderPesquisa.mockRejectedValueOnce(new Error('As inscrições da beta estão fechadas no momento.'))
 
     const { result } = renderHook(() => useAccount(), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    await expect(
-      act(() => result.current.registerBeta(perfilBeta, 'segredo123')),
-    ).rejects.toThrow('fechadas')
-
+    await expect(act(() => result.current.responderPesquisa(respostas))).rejects.toThrow('fechadas')
     expect(result.current.account).toBeNull()
-    expect(result.current.authenticated).toBe(false)
   })
 
-  it('inscrição concluída apaga o rascunho guardado enquanto o e-mail era confirmado', async () => {
-    salvarRascunhoBeta('maria@exemplo.com.br', { userName: 'João', os: 'windows' })
-    supabaseFake.auth.getSession.mockResolvedValueOnce({ data: { session: null } } as never)
-    signUpBeta.mockResolvedValueOnce(contaBeta)
-
+  it('o rascunho da inscrição antiga (versão anterior do site) é apagado ao abrir', async () => {
+    window.localStorage.setItem('irisflow:rascunho-beta', JSON.stringify({ v: 1, email: 'x@y.com' }))
     const { result } = renderHook(() => useAccount(), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
-    await act(async () => {
-      await result.current.registerBeta(perfilBeta, 'segredo123')
-    })
-
-    expect(window.localStorage.getItem(RASCUNHO_KEY)).toBeNull()
+    expect(window.localStorage.getItem('irisflow:rascunho-beta')).toBeNull()
   })
 })
 
 /* ---------------- entrar e sair ---------------- */
 
 describe('AccountContext.signIn / signOut', () => {
-  it('conta sem inscrição concluída: a sessão fica marcada, para /conta levar a /beta e não a /entrar', async () => {
+  it('conta sem a pesquisa respondida: a sessão fica marcada e signIn resolve com null (a tela leva à pesquisa)', async () => {
     supabaseFake.auth.getSession.mockResolvedValueOnce({ data: { session: null } } as never)
     const { result } = renderHook(() => useAccount(), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -240,8 +279,12 @@ describe('AccountContext.signIn / signOut', () => {
 
     apiSignIn.mockResolvedValueOnce()
     fetchAccount.mockResolvedValueOnce(null) // sem assinatura: acabou de confirmar o e-mail
-    await act(() => result.current.signIn('maria@exemplo.com.br', 'segredo123'))
+    let lida: Account | null | undefined
+    await act(async () => {
+      lida = await result.current.signIn('maria@exemplo.com.br', 'segredo123')
+    })
 
+    expect(lida).toBeNull()
     expect(apiSignIn).toHaveBeenCalledWith('maria@exemplo.com.br', 'segredo123')
     expect(result.current.authenticated).toBe(true)
     expect(result.current.account).toBeNull()
@@ -274,14 +317,27 @@ describe('AccountContext.signIn / signOut', () => {
     expect(fetchAccount).not.toHaveBeenCalled()
   })
 
-  it('sair apaga o rascunho de inscrição deste navegador', async () => {
+  it('conta completa: signIn resolve com a conta lida (a tela leva ao perfil)', async () => {
+    supabaseFake.auth.getSession.mockResolvedValueOnce({ data: { session: null } } as never)
+    const { result } = renderHook(() => useAccount(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    apiSignIn.mockResolvedValueOnce()
+    fetchAccount.mockResolvedValueOnce(contaBeta)
+    let lida: Account | null | undefined
+    await act(async () => {
+      lida = await result.current.signIn('maria@exemplo.com.br', 'segredo123')
+    })
+    expect(lida).toEqual(contaBeta)
+  })
+
+  it('sair zera a conta e a sessão', async () => {
     const { result } = await montarComContaCarregada()
-    salvarRascunhoBeta('maria@exemplo.com.br', { userName: 'João' })
 
     apiSignOut.mockResolvedValueOnce()
     await act(() => result.current.signOut())
 
     expect(result.current.authenticated).toBe(false)
-    expect(window.localStorage.getItem(RASCUNHO_KEY)).toBeNull()
+    expect(result.current.account).toBeNull()
   })
 })

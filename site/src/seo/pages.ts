@@ -147,6 +147,20 @@ export const PAGES: PageMeta[] = [
     index: false,
   },
   {
+    path: '/perfil',
+    title: 'Meu perfil',
+    description:
+      'Seu perfil na IrisFlow: dados da conta, respostas da pesquisa da beta, data do lançamento e download do aplicativo.',
+    index: false,
+  },
+  {
+    path: '/confirmar-email',
+    title: 'E-mail confirmado',
+    description:
+      'Confirmação do e-mail da sua conta IrisFlow: você entra na conta neste aparelho e segue para a pesquisa rápida da beta.',
+    index: false,
+  },
+  {
     path: '/cadastro',
     title: 'Criar conta',
     description: 'Crie sua conta IrisFlow e comece a avaliação do comunicador por olhar.',

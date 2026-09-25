@@ -84,8 +84,8 @@ describe('URLs dos instaladores (GitHub Releases)', () => {
   })
 
   it('o texto de plataformas acompanha o que está publicado', () => {
-    expect(platformsText(['windows']).long).toBe('Windows 10/11 (macOS e Linux em preparação)')
-    expect(platformsText(['windows', 'macos', 'linux']).long).toBe('Windows 10/11, macOS e Linux')
+    expect(platformsText(['windows']).long).toBe('Windows 10 e 11 (macOS e Linux em preparação)')
+    expect(platformsText(['windows', 'macos', 'linux']).long).toBe('Windows 10 e 11, macOS e Linux')
   })
 })
 

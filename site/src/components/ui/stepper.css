@@ -1,4 +1,8 @@
 .stepper {
+  /* A trilha decide o formato pela própria largura, não pela da tela: num
+     cartão estreito (a coluna do formulário da /beta) os rótulos também não
+     cabem ao lado das bolinhas. */
+  container-type: inline-size;
   margin-bottom: var(--sp-6);
   padding-bottom: var(--sp-4);
 }
@@ -108,8 +112,47 @@
   transform: scaleX(1);
 }
 
-@media (max-width: 700px) {
+/* Legenda "Etapa 2 de 4 · Confirmar e-mail": só no celular. */
+.stepper__agora {
+  display: none;
+  margin: var(--sp-3) 0 0;
+  font-size: 0.92rem;
+  color: var(--text-dim);
+}
+
+.stepper__agora strong {
+  color: var(--text);
+}
+
+/* Estreita demais para os rótulos: eles somem da tela, mas não do leitor de
+   tela (display: none os calaria), e a legenda de baixo diz a etapa. */
+@container (max-width: 720px) {
   .stepper__label {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .stepper__agora {
+    display: block;
+  }
+}
+
+/* Navegador sem consultas de contêiner: decide pela largura da tela. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 700px) {
+    .stepper__label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    .stepper__agora {
+      display: block;
+    }
   }
 }
