@@ -236,6 +236,12 @@ export interface RealtimeHandlers {
   onHelpRequest?: (h: HelpRequest) => void;
   onSession?: (s: Session) => void;
   onDevice?: (d: Device) => void;
+  /**
+   * Canal inscrito — a primeira vez e a cada reinscrição depois de a conexão
+   * cair. O tempo real não reenvia o que chegou com o canal fora: quem ouve
+   * recarrega os dados aqui.
+   */
+  onSubscribed?: () => void;
 }
 
 /**

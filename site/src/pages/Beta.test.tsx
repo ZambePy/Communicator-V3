@@ -207,6 +207,21 @@ describe('<Beta /> sem sessão', () => {
     expect(screen.getByLabelText('CPF')).toHaveAttribute('aria-invalid', 'true')
   })
 
+  it('com o Continuar desabilitado, a dica NOMEIA o que falta (leitor de tela e teclado)', () => {
+    montar()
+    preencherEtapa1('')
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    // Etapa 2 em branco: as quatro coisas que faltam aparecem pelo nome.
+    expect(screen.getByRole('button', { name: 'Continuar' })).toBeDisabled()
+    const dica = screen.getByText(/Para continuar, falta corrigir ou preencher:/)
+    expect(dica).toHaveTextContent(
+      'nome da pessoa que vai usar, relação com ela, condição principal e sistema do computador',
+    )
+    // Preenchido um, ele sai da lista.
+    fireEvent.change(screen.getByLabelText('Nome da pessoa que vai usar'), { target: { value: 'João' } })
+    expect(screen.getByText(/Para continuar/)).not.toHaveTextContent('nome da pessoa')
+  })
+
   it('telefone vazio passa na etapa 1', () => {
     montar()
     preencherEtapa1('', '')

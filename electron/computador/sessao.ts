@@ -29,6 +29,7 @@ import {
   type Ponto,
   type QuadroDeTela,
   reacaoAMudancaDeTela,
+  monitorDaSessaoSumiu,
   sobreposicaoParaJanela,
 } from '../../src/computador/geometria';
 import { ehTeclaNomeada } from '../../src/computador/entradaWindows';
@@ -250,7 +251,7 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
     s.encerrando = true;
     sessao = null;
     screen.removeListener('display-metrics-changed', aoMudarTela);
-    screen.removeListener('display-removed', aoMudarTela);
+    screen.removeListener('display-removed', aoRemoverTela);
     if (s.vigia) clearInterval(s.vigia);
     for (const d of s.desligar) { try { d(); } catch { /* já foi */ } }
     try { globalShortcut.unregister(ATALHO_DE_SAIDA); } catch { /* não registrado */ }
@@ -285,6 +286,15 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
     if (reacao === 'ignorar') return;
     if (reacao === 'encerrar') { parar('tela_mudou'); return; }
     reajustarAoMonitor(s, atual);
+  };
+
+  // Monitor removido (desligado, cabo solto, projetor desconectado). O evento
+  // traz o monitor que SAIU, com a geometria antiga — não serve de "estado
+  // atual" para `aoMudarTela` (ver `monitorDaSessaoSumiu`).
+  const aoRemoverTela = (_e: unknown, removido?: Display) => {
+    const s = sessao;
+    if (!s) return;
+    if (monitorDaSessaoSumiu(s.idDoMonitor, removido, screen.getAllDisplays().map((d) => d.id))) parar('tela_mudou');
   };
 
   /** Mesmos pixels físicos, nova escala: refaz o quadro sem derrubar a sessão. */
@@ -413,7 +423,7 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
     principal.hide();
 
     screen.on('display-metrics-changed', aoMudarTela);
-    screen.on('display-removed', aoMudarTela);
+    screen.on('display-removed', aoRemoverTela);
 
     // Vigia: sem amostra (motor travou, câmera caiu) ou sem calibração (nada
     // clicável, nem a barra) o paciente não teria como sair — sai por ele.

@@ -29,6 +29,7 @@ import {
   ESTADO_INICIAL,
   LUPA_RAIO_PX,
   LUPA_ZOOM,
+  ROLAGEM_ZONA_MORTA_PX,
   reduzir,
   descricaoDoEstado,
   type EstadoDaMaquina,
@@ -235,8 +236,12 @@ export const Overlay: React.FC = () => {
         };
       }
     }
-    // Área: só conta quando há algo para fazer com a fixação.
-    const areaAtiva = !e.pausado && !e.teclado && e.fase.tipo !== 'lupa' && (e.tarefa !== null || e.fase.tipo === 'rolando');
+    // Área: só conta quando há algo para fazer com a fixação. Rolando, só a
+    // zona morta em volta da âncora é alvo (é lá que a fixação encerra a
+    // rolagem): fora dela o olhar parado é o gesto de rolar, e um anel
+    // enchendo ali seria uma promessa que a máquina não cumpre.
+    const foraDaAncora = e.fase.tipo === 'rolando' && Math.abs(a.y - e.fase.ancora.y) >= ROLAGEM_ZONA_MORTA_PX;
+    const areaAtiva = !e.pausado && !e.teclado && e.fase.tipo !== 'lupa' && !foraDaAncora && (e.tarefa !== null || e.fase.tipo === 'rolando');
     if (!areaAtiva) {
       fixacaoRef.current = null;
       return { target: null, tipo: null, el: null };

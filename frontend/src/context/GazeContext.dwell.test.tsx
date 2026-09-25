@@ -258,11 +258,57 @@ describe('GazeContext — casca DOM do dispatcher', () => {
     expect(el.classList.contains('gaze-hover')).toBe(false);
   });
 
+  it('um quadro sem rosto logo depois de um clique não encurta o período refratário', () => {
+    // O descarte do dwell na perda de rosto (fallback de gaze perdido, que só
+    // roda com o cursor à mostra — daí a rota) zerava também o refratário: a
+    // mesma tecla saía de novo ~700 ms antes do previsto.
+    window.location.hash = '#/menu';
+    const { onClick } = montar(<button data-testid="alvo">Ok</button>);
+    const t = olhar(DWELL_MS + 50, 0); // 1º clique por volta de 1500 ms
+    expect(onClick).toHaveBeenCalledTimes(1);
+    const instantes: number[] = [];
+    act(() => {
+      emitir(amostra({ timestamp: t + 33, hasFace: false }));
+      for (let u = t + 66; u <= t + 2600; u += 1000 / 30) {
+        const antes = onClick.mock.calls.length;
+        emitir(amostra({ timestamp: u }));
+        if (onClick.mock.calls.length > antes) instantes.push(u);
+      }
+    });
+    window.location.hash = '';
+    // Refratário (800 ms) + dwell (1500 ms) depois do clique: o 2º só por volta
+    // de 3800 ms. Sem o refratário ele sairia por volta de 3100 ms.
+    expect(instantes.every((u) => u >= 1500 + 800 + DWELL_MS - 50)).toBe(true);
+  });
+
   it('durante a calibração nada é clicável', () => {
     estadoEngine = 'calibrating';
     const { onClick } = montar(<button data-testid="alvo">Ok</button>);
     olhar(5000, 0);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('durante a calibração, o CANCELAR da confirmação de emergência continua clicável pelo olhar', () => {
+    // Emergência acionada sem querer no meio da calibração: sem isto o alerta
+    // saía sozinho ao fim da contagem, sem como desfazer pelo olhar.
+    estadoEngine = 'calibrating';
+    const { onClick } = montar(
+      <button data-testid="alvo" data-dwell-ms="1000" data-cancelar-emergencia="true">
+        CANCELAR
+      </button>
+    );
+    olhar(2500, 0);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('em degraded, o CANCELAR da confirmação de emergência também clica', () => {
+    const { onClick } = montar(
+      <button data-testid="alvo" data-dwell-ms="1000" data-cancelar-emergencia="true">
+        CANCELAR
+      </button>
+    );
+    olhar(2500, 0, { degraded: true });
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
   it('em degraded, botão comum não clica mas emergência clica', () => {

@@ -358,11 +358,14 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const iniciarServicos = useCallback(async (v: VinculoLocal) => {
     vinculoRef.current = v;
     patch({ vinculo: v });
+    // A fila primeiro: um socorro que ficou nela quando o app fechou sem rede
+    // não pode esperar a conversa carregar, a sessão abrir e — o mais lento —
+    // `buscarPendentes` falar em voz alta as mensagens do cuidador.
+    void sync.drenar().then((n) => { if (n) console.log(`[cloud] ${n} item(ns) reenviado(s) da fila`); });
     const info = await infoDoApp();
     await Promise.all([carregarConversa(), carregarAjustes(), buscarPendentes()]);
     await abrirSessao(info.version);
     await assinarRealtime(v.beneficiary_id);
-    void sync.drenar().then((n) => { if (n) console.log(`[cloud] ${n} item(ns) reenviado(s) da fila`); });
   }, [patch, carregarConversa, carregarAjustes, buscarPendentes, abrirSessao, assinarRealtime, sync]);
 
   const pararServicos = useCallback(async () => {
@@ -447,22 +450,34 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     void infoDoApp().then((i) => { versao = i.version; });
     const bater = () => {
       const g = gazeRef.current;
+      const sessaoEnviada = sessaoIdRef.current;
       void sync.enviar({
         action: 'heartbeat',
         app_version: versao,
         camera_ok: !g.cameraError && g.getCameraStream() !== null,
         tracker_ok: g.state === 'tracking' || g.state === 'calibrating' || g.state === 'uncalibrated',
         calibrated: g.calibration?.isCalibrated?.() ?? false,
+        session_id: sessaoEnviada,
       }).then((r) => {
         patch({ filaPendente: sync.tamanhoDaFila });
         if ((r.pending_messages ?? 0) > 0) void buscarPendentes();
+        // A sessão foi encerrada no servidor (o job de sessões órfãs fecha a
+        // de um computador que passou minutos sem rede). Sem reabrir, o
+        // desktop seguia contando para uma sessão encerrada e o celular
+        // mostrava o paciente desconectado enquanto ele usava o app.
+        if (r.ok && r.sessao_aberta === false && sessaoEnviada && sessaoIdRef.current === sessaoEnviada && vinculoRef.current) {
+          console.warn('[cloud] a sessão foi encerrada no servidor — abrindo outra');
+          sessaoIdRef.current = null;
+          patch({ sessaoId: null });
+          void abrirSessao(versao);
+        }
       });
     };
     bater();
     const hb = setInterval(bater, cloudConfig.heartbeatMs);
     const poll = setInterval(() => { if (realtimeRef.current !== 'conectado') void buscarPendentes(); }, POLL_MS);
     return () => { clearInterval(hb); clearInterval(poll); };
-  }, [estado.vinculo, sync, buscarPendentes, patch]);
+  }, [estado.vinculo, sync, buscarPendentes, patch, abrirSessao]);
 
   // ---------- fim da sessão ao fechar ----------
   useEffect(() => {
@@ -512,7 +527,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           break;
         }
         case 'ajuda':
-          void sync.enviar({ action: 'help.create', kind: e.kind, message: e.mensagem, session_id: sessaoIdRef.current });
+          void sync.enviar({ action: 'help.create', ...(e.id ? { id: e.id } : {}), kind: e.kind, message: e.mensagem, session_id: sessaoIdRef.current });
           break;
         case 'calibracao': {
           const r = e.resultado;

@@ -320,8 +320,8 @@ describe('o alvo do reajuste nunca fica sob a Emergência', () => {
   const alturas = [640, 720, 768, 900, 1080, 1440, 2160];
 
   it.each(larguras.flatMap((w) => alturas.map((h) => [w, h] as const)))('%i × %i', (w, h) => {
-    // Alvo: SVG de 120 px centrado na horizontal; na vertical, o bloco
-    // alvo+frase é centrado — margem folgada de ±150 px em torno do meio.
+    // Alvo: SVG de 120 px no centro exato (ver o teste abaixo); a frase fica
+    // embaixo dele — margem folgada de ±150 px em torno do meio.
     const alvo: Retangulo = {
       x0: (w - LADO_DO_ALVO_PX) / 2,
       x1: (w + LADO_DO_ALVO_PX) / 2,
@@ -342,5 +342,23 @@ describe('o alvo do reajuste nunca fica sob a Emergência', () => {
 
     expect(intersectam(alvo, noTopo)).toBe(false);
     expect(intersectam(alvo, noCanto)).toBe(false);
+  });
+});
+
+describe('o ponto do reajuste fica no centro EXATO da tela', () => {
+  it('posicionado sozinho em (50 %, 50 %) — não centrado junto com a frase', async () => {
+    // O motor mede o viés contra (0,5; 0,5). Centrar o bloco ponto + frase
+    // deixava o ponto ~40 px acima do meio, e esse deslocamento virava
+    // "correção". jsdom não faz layout: o contrato é o estilo.
+    const { ReancoragemOverlay } = await import('./ReancoragemOverlay');
+    render(<ReancoragemOverlay duracaoMs={2000} />);
+    const alvo = screen.getByTestId('reancoragem-alvo');
+    expect(alvo.style.position).toBe('absolute');
+    expect(alvo.style.left).toBe('50%');
+    expect(alvo.style.top).toBe('50%');
+    expect(alvo.style.transform).toBe('translate(-50%, -50%)');
+    const overlay = screen.getByTestId('reancoragem-overlay');
+    // Nada de flex centrando o conjunto.
+    expect(overlay.style.display).not.toBe('flex');
   });
 });

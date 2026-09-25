@@ -52,7 +52,8 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
     fireEvent.click(screen.getByRole('button', { name: /emergency.items.pain/i }));
 
     expect(emitirPedidoDeAjuda).toHaveBeenCalledTimes(1);
-    expect(emitirPedidoDeAjuda).toHaveBeenCalledWith('emergencia', 'emergency.items.pain');
+    // O terceiro argumento é o id do pedido, escolhido aqui (UUID).
+    expect(emitirPedidoDeAjuda).toHaveBeenCalledWith('emergencia', 'emergency.items.pain', expect.stringMatching(/^[0-9a-f-]{36}$/));
     expect(fetchEspiao).not.toHaveBeenCalled();
     expect(screen.getByText(/Seu alerta foi enviado. Aguarde atendimento./i)).toBeInTheDocument();
   });
@@ -67,7 +68,7 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
     );
 
     // Disparou automaticamente
-    expect(emitirPedidoDeAjuda).toHaveBeenCalledWith('emergencia', 'emergency.items.pain');
+    expect(emitirPedidoDeAjuda).toHaveBeenCalledWith('emergencia', 'emergency.items.pain', expect.any(String));
     expect(screen.getByText(/Aguarde atendimento/i)).toBeInTheDocument();
 
     // Avança o relógio em 15 segundos para simular não-resposta do cuidador
@@ -140,6 +141,32 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
 
     vi.unstubAllGlobals();
     vi.useRealTimers();
+  });
+
+  it('a confirmação DESTE pedido (mesmo id) vale mesmo com o relógio do PC 10 min adiantado', () => {
+    // acknowledged_at vem do relógio do celular; triggeredAt, do relógio deste
+    // PC. Pela comparação de horários (tolerância de 60 s) ela seria ignorada
+    // e o alarme continuaria tocando. Pelo id, é reconhecida.
+    const agoraReal = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(agoraReal + 10 * 60_000);
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
+        <EmergencyEscalation />
+      </MemoryRouter>
+    );
+    const idDoPedido = emitirPedidoDeAjuda.mock.calls[0][2] as string;
+    cloud.reconhecimento = {
+      id: idDoPedido, kind: 'emergencia', created_at: new Date(agoraReal).toISOString(),
+      acknowledged_at: new Date(agoraReal + 20_000).toISOString(), resolved_at: null,
+    };
+    act(() => {
+      rerender(
+        <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
+          <EmergencyEscalation />
+        </MemoryRouter>
+      );
+    });
+    expect(screen.getByText(/Seu cuidador viu o pedido/i)).toBeInTheDocument();
   });
 
   it('um reconhecimento ANTIGO (anterior ao disparo) não é tratado como resposta a este pedido', () => {

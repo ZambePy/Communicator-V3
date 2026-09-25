@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Text } from '@/components';
 import { useApp } from '@/store/AppProvider';
+import { SemPaciente } from '@/features/SemPaciente';
 import { motion, radius, sizes, spacing, useTheme } from '@/theme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -49,8 +50,11 @@ function TabLabel({ children, focused, color }: { children: string; focused: boo
 export default function TabsLayout() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { unreadCount, helpRequests } = useApp();
+  const { unreadCount, helpRequests, accountLoaded, beneficiaries } = useApp();
   const openAlerts = helpRequests.filter((h) => !h.resolved_at).length;
+
+  // Conta carregada e sem paciente: nada nas abas teria o que mostrar.
+  if (accountLoaded && beneficiaries.length === 0) return <SemPaciente />;
 
   return (
     <Tabs

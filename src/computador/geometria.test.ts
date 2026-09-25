@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   clampSuave, clampDuro, clampNaBorda, MARGEM_DURA_MAX_PX,
   reacaoAMudancaDeTela,
+  monitorDaSessaoSumiu,
   janelaParaTela,
   janelaParaSobreposicao,
   sobreposicaoParaTela,
@@ -186,5 +187,28 @@ describe('sobreposicaoParaJanela', () => {
     const q2 = { ...quadro, monitor: { x: 1920, y: -200, width: 1920, height: 1080 }, janela: { x: 2000, y: -100, width: 1600, height: 900 } };
     const p = { x: 300, y: 200 };
     expect(sobreposicaoParaJanela(janelaParaSobreposicao(p, q2), q2)).toEqual(p);
+  });
+});
+
+describe('monitorDaSessaoSumiu (display-removed)', () => {
+  it('o monitor removido é o da sessão: encerra, mesmo que a lista ainda o traga', () => {
+    expect(monitorDaSessaoSumiu(7, { id: 7 }, [7, 3])).toBe(true);
+  });
+
+  it('saiu outro monitor e o da sessão continua: segue', () => {
+    expect(monitorDaSessaoSumiu(7, { id: 3 }, [7])).toBe(false);
+  });
+
+  it('sem o monitor no evento, decide pela lista atual', () => {
+    expect(monitorDaSessaoSumiu(7, undefined, [3])).toBe(true);
+    expect(monitorDaSessaoSumiu(7, null, [7])).toBe(false);
+  });
+
+  it('a geometria do monitor removido não conta — é por isso que ele não passa por reacaoAMudancaDeTela', () => {
+    const removido = { id: 7, monitor: { x: 1920, y: 0, width: 1920, height: 1080 }, escala: 1 };
+    // Comparado consigo mesmo, "nada mudou" (o bug antigo):
+    expect(reacaoAMudancaDeTela(removido, removido, undefined)).toBe('ignorar');
+    // Pela identidade, a sessão acaba:
+    expect(monitorDaSessaoSumiu(7, removido, [1])).toBe(true);
   });
 });

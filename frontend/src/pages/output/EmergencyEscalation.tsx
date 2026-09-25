@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertOctagon, HeartPulse, ShieldAlert, Thermometer, Wind } from 'lucide-react';
 import { emitirPedidoDeAjuda } from '../../cloud/eventos';
+import { novoIdDePedido } from '../../cloud/desktopSync';
 import { useCloud } from '../../cloud/CloudContext';
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeButton } from '../../components/ui/GazeButton';
@@ -32,6 +33,8 @@ export const EmergencyEscalation: React.FC = () => {
   const [escalated, setEscalated] = useState(false);
   /** Horário em que o cuidador confirmou ESTE pedido (chegou pelo realtime). */
   const [vistoEm, setVistoEm] = useState<string | null>(null);
+  /** Id do pedido enviado por esta tela — é por ele que a confirmação é reconhecida. */
+  const [pedidoId, setPedidoId] = useState<string | null>(null);
 
   // Prazo de escalonamento: o mesmo que o cuidador configurou no app (e que
   // o cron do servidor usa), com 15 s de reserva quando não há ajuste.
@@ -48,10 +51,12 @@ export const EmergencyEscalation: React.FC = () => {
   }, []);
 
   const triggerAlert = (_id: string, label: string) => {
+    const id = novoIdDePedido();
     setTriggered(label);
     setTriggeredAt(Date.now());
     setEscalated(false);
     setVistoEm(null);
+    setPedidoId(id);
 
     // Som de bip forte inicial.
     //
@@ -88,7 +93,7 @@ export const EmergencyEscalation: React.FC = () => {
     // Celular do cuidador: tela de emergência + push (Edge Function desktop-sync).
     // É o único envio: o barramento respeita o modo apresentação e, com o
     // computador vinculado, a fila offline.
-    emitirPedidoDeAjuda('emergencia', label);
+    emitirPedidoDeAjuda('emergencia', label, id);
   };
 
   // Efeito de escuta de parâmetro para auto-disparo
@@ -101,13 +106,20 @@ export const EmergencyEscalation: React.FC = () => {
   }, [searchParams, t, triggered]);
 
   // Confirmação do cuidador chegou (UPDATE em help_requests com
-  // acknowledged_at, via CloudContext). Só vale se for posterior ao disparo
-  // desta tela — um reconhecimento antigo não é resposta a este pedido.
+  // acknowledged_at, via CloudContext). Vale a do pedido que ESTA tela enviou,
+  // reconhecido pelo id — sem comparar relógios: `acknowledged_at` vem do
+  // relógio do celular e `triggeredAt` do relógio deste PC, e um PC com o
+  // relógio uns minutos adiantado ignorava a confirmação e deixava o alarme
+  // tocando. A comparação por horário só sobra como reserva, para uma função
+  // antiga no servidor que ainda não grava o id escolhido aqui.
   useEffect(() => {
     if (!triggered || !triggeredAt || !reconhecimento) return;
-    const quando = new Date(reconhecimento.acknowledged_at).getTime();
-    // Tolerância de 60 s para relógios desalinhados entre PC e servidor.
-    if (!Number.isFinite(quando) || quando < triggeredAt - 60_000) return;
+    const doMeuPedido = pedidoId !== null && reconhecimento.id === pedidoId;
+    if (!doMeuPedido) {
+      const quando = new Date(reconhecimento.acknowledged_at).getTime();
+      // Tolerância de 60 s para relógios desalinhados entre PC e servidor.
+      if (!Number.isFinite(quando) || quando < triggeredAt - 60_000) return;
+    }
     if (vistoEm === reconhecimento.acknowledged_at) return;
     setVistoEm(reconhecimento.acknowledged_at);
     if ('speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
@@ -118,7 +130,7 @@ export const EmergencyEscalation: React.FC = () => {
       u.volume = 1.0;
       window.speechSynthesis.speak(u);
     }
-  }, [reconhecimento, triggered, triggeredAt, vistoEm]);
+  }, [reconhecimento, triggered, triggeredAt, vistoEm, pedidoId]);
 
   // Timer de escalonamento LOCAL (`prazoS`, o mesmo do cuidador). Cancelado
   // quando o cuidador confirma antes do prazo.
@@ -246,6 +258,7 @@ export const EmergencyEscalation: React.FC = () => {
                 setTriggeredAt(null);
                 setEscalated(false);
                 setVistoEm(null);
+                setPedidoId(null);
                 navigate('/menu');
               }}
               style={{

@@ -556,6 +556,30 @@ let modeloAntesDoReforco: {
   meta: CalibrationProfileMeta | null;
 } | null = null;
 
+/**
+ * Retrato do modelo EM USO quando uma calibração nova começou.
+ *
+ * `startCalibrationMode` descarta o modelo ativo (regressores, referência,
+ * correções) para a coleta começar do zero. Antes, cancelar essa calibração —
+ * sair da tela, a janela perder o foco, acionar a Emergência — ou um treino
+ * que falhasse deixava o app SEM modelo: o dwell bloqueia tudo sem calibração,
+ * inclusive a Emergência, e o cursor some. Para quem só usa o olhar, era ficar
+ * preso até alguém pegar o mouse. Com o retrato, cancelar ou falhar devolve a
+ * calibração que já funcionava. `null` quando não havia modelo, ou fora de
+ * uma calibração.
+ */
+interface ModeloEmUso {
+  left: RidgeModel;
+  right: RidgeModel;
+  scalerL: { means: number[]; stds: number[] };
+  scalerR: { means: number[]; stds: number[] };
+  referencia: CalibrationReferenceState;
+  treinadoEmMs: number | null;
+  perfil: PerfilDeCalibracao;
+  meta: CalibrationProfileMeta | null;
+}
+let modeloAntesDaCalibracao: ModeloEmUso | null = null;
+
 /** Resumo dos pesos do último treino, para o diagnóstico de ajuste. */
 let ultimoResumoDePesos: ReturnType<typeof resumoDePesos> = null;
 
@@ -1153,7 +1177,9 @@ export function isCalibrated(): boolean {
  *
  * Derruba TODO o estado de coleta, inclusive o timeout duro do ponto corrente
  * — que, se sobrevivesse, chamaria o callback de um componente desmontado.
- * Não toca no modelo treinado: quem quer descartá-lo chama `clearCalibration()`.
+ * Não descarta modelo nenhum: o que a calibração em curso tinha tirado de uso
+ * ao começar VOLTA (ver `modeloAntesDaCalibracao`). Quem quer descartar o
+ * modelo chama `clearCalibration()`.
  */
 export function abortCalibration(): void {
   if (collectionTimeoutHandle !== null) {
@@ -1161,7 +1187,16 @@ export function abortCalibration(): void {
     collectionTimeoutHandle = null;
   }
   const estavaAtiva = isCalibrating || isCollecting;
+  encerrarColeta(estavaAtiva);
+  // A calibração nova não terminou: volta a que funcionava (ver
+  // `modeloAntesDaCalibracao`). `clearCalibration` zera o retrato antes de
+  // chamar esta função, então lá nada volta.
+  if (estavaAtiva) restaurarModeloAntesDaCalibracao('calibração cancelada', true);
+  else modeloAntesDaCalibracao = null;
+}
 
+/** Derruba o estado de COLETA (o corpo do antigo `abortCalibration`). */
+function encerrarColeta(estavaAtiva: boolean): void {
   isCalibrating = false;
   isCollecting = false;
   pointCompleteCallback = null;
@@ -1208,7 +1243,51 @@ export function abortCalibration(): void {
   }
 }
 
+/** Fotografa o modelo em uso, ou `null` se não há modelo treinado. */
+function retratarModeloEmUso(): ModeloEmUso | null {
+  if (!regressorLeft || !regressorRight) return null;
+  const left = ridgeModelFromRegressor(regressorLeft);
+  const right = ridgeModelFromRegressor(regressorRight);
+  if (!left || !right) return null;
+  return {
+    left,
+    right,
+    scalerL: featureScalerLeft.getParams(),
+    scalerR: featureScalerRight.getParams(),
+    referencia: captureReferenceStateForProfile(),
+    treinadoEmMs,
+    perfil: perfilAtivo,
+    meta: ultimaMetaPersistida,
+  };
+}
+
+/**
+ * Reinstala o modelo de antes da calibração, se há retrato e se nenhum modelo
+ * novo tomou o lugar. `consumir: false` mantém o retrato (a recusa por
+ * contraluz deixa as amostras para um novo treino, que pode falhar de novo).
+ */
+function restaurarModeloAntesDaCalibracao(motivo: string, consumir: boolean): boolean {
+  const b = modeloAntesDaCalibracao;
+  if (consumir) modeloAntesDaCalibracao = null;
+  if (!b || isCalibrated()) return false;
+  perfilAtivo = b.perfil;
+  regressorLeft = ridgeRegressorFromModel(b.left);
+  regressorRight = ridgeRegressorFromModel(b.right);
+  featureScalerLeft.setParams(b.scalerL.means, b.scalerL.stds);
+  featureScalerRight.setParams(b.scalerR.means, b.scalerR.stds);
+  restoreReferenceStateFromProfile(b.referencia);
+  treinadoEmMs = b.treinadoEmMs;
+  ultimaMetaPersistida = b.meta;
+  // A meta pendente era da calibração que não terminou (rótulo, condição
+  // óptica escolhidos para ELA): não pode ir parar no perfil do modelo antigo.
+  pendingProfileMeta = null;
+  console.warn(`[calib] ${motivo}: a calibração anterior foi restaurada e segue valendo.`);
+  return true;
+}
+
 export function clearCalibration() {
+  // Descartar é descartar: nada de restaurar o modelo anterior no abort abaixo.
+  modeloAntesDaCalibracao = null;
   abortCalibration();
   profile = [];
   tempoUtilPorAlvoMs = [];
@@ -2088,6 +2167,11 @@ export function startCalibrationMode(
 
   // O limiar adaptativo de piscada não pode vir enviesado de sessões anteriores.
   resetEarHistory();
+
+  // Retrato do modelo que funciona, ANTES de trocar o perfil e de descartar
+  // tudo abaixo. Recomeçar uma calibração em curso mantém o retrato da
+  // primeira tentativa (nessa hora já não há modelo para retratar).
+  if (!isCalibrating) modeloAntesDaCalibracao = retratarModeloEmUso();
 
   if (opts?.perfil) perfilAtivo = opts.perfil;
 
@@ -3815,6 +3899,7 @@ export function completeCalibration(
     isCalibrating = false;
     modeloAntesDoReforco = null;
     currentCalibrationMode = null;
+    restaurarModeloAntesDaCalibracao('treino recusado por contraluz', false);
     ultimaRecusa = { motivo: 'contraluz_forte', mensagem: MENSAGEM_CONTRALUZ_FORTE, em: Date.now() };
     onComplete?.({ ok: false, reason: 'contraluz_forte', detail: MENSAGEM_CONTRALUZ_FORTE });
     return;
@@ -3841,6 +3926,8 @@ export function completeCalibration(
     // na calibração seguinte.
     persistActiveProfileToRegistry(summary);
     saveProfile();
+    // O modelo novo tomou o lugar: o retrato do anterior não serve mais.
+    modeloAntesDaCalibracao = null;
     // O instante do treino NÃO é `Date.now()` aqui: é o `createdAt` do perfil
     // que acabou de ser gravado (`persistActiveProfileToRegistry` o define).
     //
@@ -3878,6 +3965,10 @@ export function completeCalibration(
           '[calib] reforço falhou; a calibração anterior foi restaurada e segue valendo.',
         );
       }
+    } else {
+      // Calibração NOVA que falhou: o desfecho continua sendo falha (a tela
+      // precisa dizer), mas o app volta a funcionar com a calibração de antes.
+      restaurarModeloAntesDaCalibracao('a calibração nova falhou', true);
     }
   } finally {
     isCalibrating = false;

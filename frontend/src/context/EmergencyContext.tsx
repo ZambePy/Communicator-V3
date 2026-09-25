@@ -457,6 +457,10 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           <GazeButton
             onClick={cancelEmergency}
             data-dwell-ms={1000} // dwell rápido para facilidade de cancelamento voluntário
+            // Acionável pelo olhar também durante a calibração e com o
+            // rastreamento degradado (GazeContext): um acionamento acidental
+            // nesses momentos precisa poder ser desfeito antes da contagem acabar.
+            data-cancelar-emergencia="true"
             style={{
               width: '320px',
               height: '84px',

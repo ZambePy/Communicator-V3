@@ -12,10 +12,23 @@ export default function SessaoDetalhe() {
   const router = useRouter();
   const data = useData();
   const [s, setS] = useState<Session | null | undefined>(undefined);
+  /** Falha ao buscar (rede, servidor) — diferente de "não existe", e com nova tentativa. */
+  const [falhou, setFalhou] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
-    if (id) data.getSession(id).then(setS).catch(() => setS(null));
-  }, [data, id]);
+    if (!id) return;
+    setFalhou(false);
+    data
+      .getSession(id)
+      .then(setS)
+      .catch(() => {
+        // Antes toda falha virava "Sessão não encontrada… pode ter sido
+        // removida": uma queda de rede parecia dado apagado, e sem saída.
+        setS(undefined);
+        setFalhou(true);
+      });
+  }, [data, id, tentativa]);
 
   const titulo = s ? capitalizar(dateLong(s.started_at)) : 'Relatório de sessão';
   const periodo = s ? `${hm(s.started_at)}${s.ended_at ? ` – ${hm(s.ended_at)}` : ' · em andamento'} · ${formatDuration(durationMin(s))}` : undefined;
@@ -24,7 +37,17 @@ export default function SessaoDetalhe() {
     <Screen>
       <ScreenHeader onBack={() => router.back()} eyebrow="Relatório de sessão" title={titulo} subtitle={periodo} />
 
-      {s === undefined ? (
+      {falhou ? (
+        <Card>
+          <EmptyState
+            icon="cloud-offline-outline"
+            title="Não deu para carregar a sessão"
+            body="Verifique a internet e tente de novo."
+            action={{ label: 'Tentar de novo', icon: 'refresh', onPress: () => setTentativa((n) => n + 1) }}
+            compact
+          />
+        </Card>
+      ) : s === undefined ? (
         <Card>
           <Shimmer height={sizes.ring.md} />
         </Card>

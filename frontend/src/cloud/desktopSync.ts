@@ -45,14 +45,26 @@ import type { Message, PatientSettings, QuickPhrase, SessaoRemota, HelpKind, Mes
 type ComHorario = { occurred_at?: string; sent_at?: string };
 
 export type AcaoSync =
-  | { action: 'heartbeat'; app_version: string; camera_ok: boolean; tracker_ok: boolean; calibrated: boolean }
+  /**
+   * `session_id`: a sessão que este computador acha que está aberta. A
+   * resposta diz se ela ainda está (`sessao_aberta`) — o job de sessões órfãs
+   * do servidor encerra a de um computador que ficou minutos sem rede.
+   */
+  | { action: 'heartbeat'; app_version: string; camera_ok: boolean; tracker_ok: boolean; calibrated: boolean; session_id?: string | null }
   | { action: 'session.upsert'; session: SessaoRemota }
   | ({ action: 'session.end'; session_id: string; utterances?: number; chars_typed?: number; modules_used?: string[] } & ComHorario)
   | ({ action: 'calibration.result'; session_id?: string; calibration: SessaoRemota; report: SessaoRemota['accuracy_report'] } & ComHorario)
   | ({ action: 'message.send'; text: string; kind: MessageKind } & ComHorario)
   | ({ action: 'message.spoken'; message_id: string } & ComHorario)
   | { action: 'messages.pending' }
-  | ({ action: 'help.create'; kind: HelpKind; message: string; session_id?: string | null } & ComHorario)
+  /**
+   * `id`: UUID do pedido, escolhido AQUI e mantido nos reenvios da fila — a
+   * função não cria um segundo pedido (nem um segundo push) quando a resposta
+   * do primeiro se perdeu. É também como a tela de emergência reconhece a
+   * confirmação do cuidador para ESTE pedido. Quem chama pode passar o seu;
+   * sem ele, `enviar` gera um.
+   */
+  | ({ action: 'help.create'; id?: string; kind: HelpKind; message: string; session_id?: string | null } & ComHorario)
   | { action: 'settings.get' }
   /** Rótulo da voz em uso, para o app do cuidador mostrar em Ajustes → Voz. */
   | ({ action: 'voice.status'; voice: string } & ComHorario)
@@ -79,6 +91,10 @@ export interface RespostaSync {
   /** `voice.status` e `report.send`: o servidor gravou de fato? */
   stored?: boolean;
   pending_messages?: number;
+  /** `heartbeat` com `session_id`: a sessão ainda está aberta no servidor? Ausente em funções antigas. */
+  sessao_aberta?: boolean;
+  /** `help.create`: o pedido com este id já existia (reenvio). */
+  repetido?: boolean;
   messages?: Message[];
   settings?: PatientSettings | null;
   phrases?: QuickPhrase[];
@@ -139,6 +155,23 @@ export function impressaoDaChave(chave: string): string {
     h = Math.imul(h, 0x01000193);
   }
   return (h >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * UUID v4 para um pedido de ajuda. `crypto.randomUUID` existe no Electron e
+ * no Node dos testes; a reserva com `getRandomValues` cobre um navegador sem
+ * contexto seguro.
+ */
+export function novoIdDePedido(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+  const b = new Uint8Array(16);
+  if (c && typeof c.getRandomValues === 'function') c.getRandomValues(b);
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 /**
@@ -204,8 +237,12 @@ export class DesktopSync {
     const comHorario = this.carimbar(acao);
     try {
       const resposta = await this.chamar(comHorario, chave);
-      // conexão está boa: aproveita para drenar o que ficou pendente
-      if (this.fila.length) void this.drenar();
+      // Conexão está boa: aproveita para drenar o que ficou pendente — também
+      // a fila ainda NÃO lida do disco. Sem isto, o socorro que ficou na fila
+      // quando o app fechou sem rede só saía depois de toda a inicialização
+      // (inclusive falar as mensagens pendentes do cuidador), e nenhum
+      // heartbeat o destravava: a fila em memória parecia vazia.
+      if (this.fila.length || !this.filaCarregada) void this.drenar();
       return resposta;
     } catch (e) {
       if (e instanceof ErroDeSync && e.credencialInvalida) {
@@ -228,8 +265,12 @@ export class DesktopSync {
    * carimbo vale para a primeira tentativa e para o reenvio da fila.
    */
   private carimbar(acao: AcaoSync): AcaoSync {
-    if (!ENFILEIRAVEIS.has(acao.action) || ('occurred_at' in acao && acao.occurred_at)) return acao;
-    return { ...acao, occurred_at: new Date(this.agora()).toISOString() } as AcaoSync;
+    let a = acao;
+    // O id do pedido nasce aqui, antes da primeira tentativa, e viaja com o
+    // item da fila: é o mesmo em todos os reenvios (ver `AcaoSync`).
+    if (a.action === 'help.create' && !a.id) a = { ...a, id: novoIdDePedido() };
+    if (!ENFILEIRAVEIS.has(a.action) || ('occurred_at' in a && a.occurred_at)) return a;
+    return { ...a, occurred_at: new Date(this.agora()).toISOString() } as AcaoSync;
   }
 
   /** Esvazia a fila (ao sair da conta: o que ficou não pode ir parar em outra). */
@@ -340,9 +381,13 @@ export class DesktopSync {
     this.descartarDeOutroVinculo(chave);
     this.fila.push({ acao, criadoEm: new Date(this.agora()).toISOString(), tentativas: 0, vinculo: impressaoDaChave(chave) });
     if (this.fila.length > MAX_FILA) {
-      // nunca descarta socorro nem mensagens: tira o item mais antigo que não seja um deles
-      const i = this.fila.findIndex((it) => it.acao.action !== 'help.create' && it.acao.action !== 'message.send');
-      this.fila.splice(i >= 0 ? i : 0, 1);
+      // Cheia: sai primeiro o que não é socorro nem mensagem; depois, a
+      // mensagem mais antiga. Pedido de socorro NUNCA sai — antes, com a fila
+      // só de socorros e mensagens, o `splice(0)` tirava o item mais antigo,
+      // e o mais antigo podia ser justamente o socorro.
+      let i = this.fila.findIndex((it) => it.acao.action !== 'help.create' && it.acao.action !== 'message.send');
+      if (i < 0) i = this.fila.findIndex((it) => it.acao.action !== 'help.create');
+      if (i >= 0) this.fila.splice(i, 1);
     }
     await this.persistirFila();
   }

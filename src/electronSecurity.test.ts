@@ -97,6 +97,42 @@ describe('navegação para fora é bloqueada', () => {
     // pode substituir a aplicação inteira por uma página remota.
     expect(permitirNavegacao('https://exemplo.com/')).toBe(false);
   });
+
+  describe('app empacotado: só dentro da pasta das páginas', () => {
+    const RAIZ = 'file:///C:/Users/gabri/OneDrive/Desktop/Communicator%20V2/resources/app.asar/frontend/dist/';
+
+    it('as páginas do próprio app passam', () => {
+      expect(permitirNavegacao(`${RAIZ}index.html`, RAIZ)).toBe(true);
+      expect(permitirNavegacao(`${RAIZ}index.html#/menu`, RAIZ)).toBe(true);
+      expect(permitirNavegacao(`${RAIZ}overlay.html`, RAIZ)).toBe(true);
+    });
+
+    it('a raiz do disco (o `location.href = "/"` da tela de erro) não passa', () => {
+      expect(permitirNavegacao('file:///C:/', RAIZ)).toBe(false);
+      expect(permitirNavegacao('file:///C:/Users/gabri/Documents/qualquer.html', RAIZ)).toBe(false);
+    });
+
+    it('sair da pasta com ../ não passa (a URL já chega resolvida)', () => {
+      expect(permitirNavegacao(`${RAIZ}../../app.asar.unpacked/x.html`, RAIZ)).toBe(false);
+    });
+
+    it('prefixo parecido não é a pasta (dist-velho não é dist)', () => {
+      expect(permitirNavegacao(RAIZ.replace(/dist\/$/, 'dist-velho/index.html'), RAIZ)).toBe(false);
+    });
+
+    it('maiúsculas e acentos codificados não mudam a decisão (Windows)', () => {
+      expect(permitirNavegacao(`${RAIZ.replace('C:', 'c:')}index.html`, RAIZ)).toBe(true);
+      const raizComAcento = 'file:///C:/Users/Jo%C3%A3o/IrisFlow/resources/app.asar/frontend/dist/';
+      expect(permitirNavegacao('file:///C:/Users/João/IrisFlow/resources/app.asar/frontend/dist/index.html', raizComAcento)).toBe(true);
+    });
+
+    it('localhost e sites remotos não passam no app empacotado', () => {
+      expect(permitirNavegacao('http://localhost:5173/menu', RAIZ)).toBe(false);
+      expect(permitirNavegacao('https://exemplo.com/', RAIZ)).toBe(false);
+      expect(permitirNavegacao(null, RAIZ)).toBe(false);
+      expect(permitirNavegacao('nao-e-url', RAIZ)).toBe(false);
+    });
+  });
 });
 
 describe('a CSP fecha a promessa de privacidade', () => {

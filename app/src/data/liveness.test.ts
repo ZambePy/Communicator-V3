@@ -5,7 +5,7 @@
  */
 import type { Device, HelpRequest, Session } from './types';
 import { hasFatigueData, hasPostureData, isSessionLive } from './types';
-import { derivePendingAlert } from '@/store/AppProvider';
+import { derivePendingAlert, escolherAlerta, JANELA_DO_ALERTA_MS } from '@/store/AppProvider';
 
 // `derivePendingAlert` é puro; o mock só evita carregar o cliente Supabase junto com o AppProvider.
 jest.mock('@/data/DataContext', () => ({ useData: () => ({}) }));
@@ -51,11 +51,52 @@ describe('derivePendingAlert', () => {
   });
   it('escolhe o pedido aberto mais recente ainda sem confirmação', () => {
     const lista = [h('velho', { created_at: new Date(AGORA - 120_000).toISOString() }), h('novo'), h('confirmado', { acknowledged_at: 'x' }), h('resolvido', { resolved_at: 'x' })];
-    expect(derivePendingAlert(lista)?.id).toBe('novo');
+    expect(derivePendingAlert(lista, AGORA)?.id).toBe('novo');
   });
   it('null quando tudo está confirmado ou resolvido', () => {
-    expect(derivePendingAlert([h('a', { acknowledged_at: 'x' }), h('b', { resolved_at: 'x' })])).toBeNull();
-    expect(derivePendingAlert([])).toBeNull();
+    expect(derivePendingAlert([h('a', { acknowledged_at: 'x' }), h('b', { resolved_at: 'x' })], AGORA)).toBeNull();
+    expect(derivePendingAlert([], AGORA)).toBeNull();
+  });
+  it('fora da janela do servidor (6 h desde a chegada), não volta como alarme ao abrir o app', () => {
+    const antigo = h('antigo', {
+      created_at: new Date(AGORA - JANELA_DO_ALERTA_MS - 60_000).toISOString(),
+      received_at: new Date(AGORA - JANELA_DO_ALERTA_MS - 60_000).toISOString(),
+    });
+    expect(derivePendingAlert([antigo], AGORA)).toBeNull();
+    // A janela conta da CHEGADA: um pedido feito offline há 8 h que acabou de chegar é atual.
+    const atrasado = h('atrasado', { created_at: new Date(AGORA - 8 * 3_600_000).toISOString(), received_at: new Date(AGORA - 30_000).toISOString() });
+    expect(derivePendingAlert([antigo, atrasado], AGORA)?.id).toBe('atrasado');
+  });
+  it('socorro sem resposta vem antes de um aviso mais novo', () => {
+    const socorro = h('socorro', { created_at: new Date(AGORA - 300_000).toISOString() });
+    const postura = h('postura', { kind: 'postura' });
+    expect(derivePendingAlert([postura, socorro], AGORA)?.id).toBe('socorro');
+  });
+});
+
+describe('escolherAlerta', () => {
+  const h = (id: string, extra: Partial<HelpRequest> = {}): HelpRequest => ({
+    id, beneficiary_id: 'b1', session_id: null, kind: 'emergencia', message: '', created_at: new Date(AGORA - 60_000).toISOString(),
+    acknowledged_at: null, escalated_at: null, resolved_at: null, ...extra,
+  });
+  it('um aviso novo não cobre um socorro sem resposta', () => {
+    const socorro = h('socorro');
+    expect(escolherAlerta(socorro, h('postura', { kind: 'postura' }))?.id).toBe('socorro');
+  });
+  it('um socorro novo cobre um pedido já confirmado', () => {
+    expect(escolherAlerta(h('velho', { acknowledged_at: 'x' }), h('novo'))?.id).toBe('novo');
+  });
+  it('dois socorros sem resposta: o da tela fica (não troca debaixo do dedo)', () => {
+    expect(escolherAlerta(h('primeiro'), h('segundo'))?.id).toBe('primeiro');
+  });
+  it('mesmo pedido: a versão nova substitui; resolvido sai da tela', () => {
+    const atual = h('a');
+    expect(escolherAlerta(atual, h('a', { escalated_at: 'x' }))?.escalated_at).toBe('x');
+    expect(escolherAlerta(atual, h('a', { resolved_at: 'x' }))).toBeNull();
+  });
+  it('sem nada na tela, um pedido já confirmado por outro celular não abre alerta', () => {
+    expect(escolherAlerta(null, h('a', { acknowledged_at: 'x' }))).toBeNull();
+    expect(escolherAlerta(null, h('b'))?.id).toBe('b');
   });
 });
 

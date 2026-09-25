@@ -1213,7 +1213,7 @@ O prazo conta da chegada ao servidor (`received_at`, migração
 no computador, e a mensagem só diz que reenviou quando havia celular
 cadastrado.
 
-**Edge Functions.** `desktop-sync` está publicada (v2, 24/09/2026), com `verify_jwt = false`: as
+**Edge Functions.** `desktop-sync` está publicada, com `verify_jwt = false`: as
 ações de [Conta IrisFlow e nuvem](#conta-irisflow-e-nuvem) mais
 `messages.pending`, `settings.get` e `device.info`, escopadas ao paciente da
 chave; push Expo só para `emergencia` e `ajuda` (`EXPO_ACCESS_TOKEN` opcional).
@@ -1223,7 +1223,14 @@ dos eventos que esperaram na fila offline (`horario.ts`, testado com `deno test
 supabase/functions/desktop-sync/`) e **depende da migração
 `20260924020011_help_requests_received_at`**, aplicada antes dela: sem a coluna
 `received_at`, um socorro que chegasse atrasado seria escalado no minuto
-seguinte. `payment-webhook` é
+seguinte. Desde a revisão de 24/09 (`respostas.ts`, também com `deno test`):
+falha do banco ao conferir a chave responde 503, nunca 401 (o 401 faz o desktop
+apagar vínculo, licença e fila); erro do banco numa escrita é 400 só com
+conteúdo inválido (classes 22/23 do Postgres) e 503 no resto, para o desktop
+reenviar; `help.create` aceita o `id` escolhido no computador e um reenvio com
+o mesmo id não cria outro pedido nem outro push; o heartbeat com `session_id`
+responde `sessao_aberta`; e o push tem prazo de 6 s, para não segurar a
+resposta. `payment-webhook` é
 **esqueleto, não publicado**: HMAC de Stripe, Mercado Pago ou Pagar.me
 (`PAYMENT_GATEWAY`, `PAYMENT_WEBHOOK_SECRET`; sem segredo recusa tudo) →
 `gateway_events` → `register_charge()`. Na beta não há gateway: todo plano tem
@@ -1237,7 +1244,7 @@ para a versão que o projeto registrou: `20260924020011_help_requests_received_a
 `20260924022100_pair_device_mesmo_computador` (novo login no mesmo PC
 substitui o vínculo dele em vez de acumular chaves válidas) e
 `20260924022108_conta_de_teste_protegida` (ninguém troca a senha nem o e-mail
-da [conta de teste](#conta-de-teste)). A `desktop-sync` v2 foi publicada
+da [conta de teste](#conta-de-teste)). A `desktop-sync` foi publicada
 depois delas.
 
 **Migração nova:** `supabase migration new <nome>` e `supabase db push` — a
@@ -1258,8 +1265,8 @@ supabase functions deploy desktop-sync --no-verify-jwt
 
 Sem o CLI: cole cada arquivo de `supabase/migrations/`, na ordem do nome, no
 SQL Editor (todos são idempotentes; os que já estão aplicados não mudam nada)
-e publique a função pelo painel (*Edge Functions → desktop-sync*, com os dois
-arquivos `index.ts` e `horario.ts`, "Verify JWT" desligado). O `seed.sql`
+e publique a função pelo painel (*Edge Functions → desktop-sync*, com os três
+arquivos `index.ts`, `horario.ts` e `respostas.ts`, "Verify JWT" desligado). O `seed.sql`
 roda à parte, no SQL Editor. No Auth do painel: Site URL = a origem do site
 (`https://irisflow-communicator.pages.dev`) e Redirect URLs `<site>/entrar` e
 `<site>/nova-senha` — o "Esqueci a senha" do site e o do app mandam
@@ -1646,18 +1653,27 @@ diferentes.
   segredo no cliente (só URL e chave anon) e toda permissão ser decidida no servidor
   (RLS, funções do banco, Edge Function); a `service_role` nunca sai do Supabase.
 
-**Endereço anterior, `irisflow.pages.dev`.** É outro projeto do Pages, **irisflow**, que
-continua ligado ao repositório antigo (`Communicator-v2`) — um projeto do Pages não troca de
-repositório. Ele publica só uma página que leva o visitante ao endereço novo preservando
-caminho, parâmetros e âncora (`/entrar?x#y` vai para o mesmo caminho em
-`irisflow-communicator.pages.dev`): é o que mantém funcionando os links já gravados em
-instaladores, no APK e em e-mails antigos. Essa página não vem de commit nenhum: o *build
-command* do projeto (*Settings → Builds*) grava `redirecionamento/index.html`, que é a saída
-publicada. Para mudar o destino (o domínio próprio, por exemplo), edite o comando e use
-*Retry deployment* no último deploy. **Não apague esse projeto:** a Cloudflare reserva o nome
-de um projeto apagado, e o `irisflow.pages.dev` não voltaria.
+**Endereço anterior, `irisflow.pages.dev`.** É outro projeto do Pages, **irisflow**, criado
+ligado ao repositório antigo (`Communicator-v2`, já apagado) — um projeto do Pages não troca
+de repositório, e sem o repositório ele não faz mais build. O conteúdo dele é publicado
+direto pelo Wrangler (*Direct Upload*, aceito em projeto ligado ao Git): uma pasta só com
+`_redirects` (`/* https://irisflow-communicator.pages.dev/:splat 301`) e um `index.html` de
+reserva, enviada com
+`npx wrangler pages deploy <pasta> --project-name irisflow --branch main`. O 301 preserva
+caminho e parâmetros (`/nova-senha?x` vai para o mesmo caminho no endereço novo; a âncora o
+navegador mantém): é o que mantém funcionando os links já gravados em instaladores, no APK
+e em e-mails antigos. Para mudar o destino (o domínio próprio, por exemplo), publique de novo
+com o destino novo. **Não apague esse projeto enquanto houver APK ou instalador com o
+endereço antigo:** a Cloudflare reserva o nome de um projeto apagado, e o
+`irisflow.pages.dev` não voltaria.
 
 ### Domínio próprio (depois)
+
+O domínio é o **`irisflow.ia.br`**, já adicionado como zona (plano Free, pendente) nesta
+conta da Cloudflare, com os nameservers `natasha.ns.cloudflare.com` e
+`rodney.ns.cloudflare.com`. Falta quem administra o registro (na Hostinger) trocar os
+nameservers para esses dois e **remover o DNSSEC** (hoje há registro DS: sem remover, o site
+não resolve depois da troca). Com a zona ativa, siga daqui.
 
 Compre (`.com.br` só no Registro.br, R$ 40/ano; outros TLDs no Cloudflare Registrar, a
 preço de custo, ou em qualquer registrador — olhe a renovação: o `.tech` sai a US$ 9,99
@@ -1685,7 +1701,7 @@ Releases, keepalive e Edge Function não mudam, e não há deep link a trocar: o
 Projeto **IrisFlow Communicator**, ref `xouznaqxhqzjdgeshlmh`, São Paulo (`sa-east-1`),
 `https://xouznaqxhqzjdgeshlmh.supabase.co`: todas as migrações do repositório aplicadas
 (ver [Supabase](#supabase-supabase)), pg_cron com `escalar-pedidos-de-ajuda` e
-`encerrar-sessoes-orfas`, e a Edge Function `desktop-sync` (v2) com `verify_jwt = false`
+`encerrar-sessoes-orfas`, e a Edge Function `desktop-sync` com `verify_jwt = false`
 (o desktop se autentica pela chave do computador). `EXPO_ACCESS_TOKEN` é segredo opcional.
 
 - **Pausa após 7 dias** sem atividade; volta pelo painel, com os dados. O
@@ -1860,13 +1876,13 @@ o replay de gravação real (`docs/MEDICOES.md` §15), que precisa de uma
 gravação. Os instaladores dos três sistemas saem de
 `.github/workflows/release.yml` ([Instalador](#instalador-e-atualização-automática)).
 
-**Estado medido nesta versão (24/09/2026):** núcleo com **1952 testes (mais 2 pulados) em 177 arquivos**,
-interface com **1191 em 136 arquivos**, site com **174 em 17 arquivos** e app do
-cuidador com **96 em 12 suítes** — 3413 testes ao todo; checagem de tipos sem
+**Estado medido nesta versão (24/09/2026):** núcleo com **1968 testes (mais 2 pulados) em 178 arquivos**,
+interface com **1205 em 136 arquivos**, site com **180 em 18 arquivos** e app do
+cuidador com **103 em 12 suítes** — 3456 testes ao todo; checagem de tipos sem
 erro nos cinco projetos (núcleo, Electron, interface, site e app), configuração
 pública sem segredo, os builds de produção da interface e do site passando;
 banco local com as 16 migrações, o cenário e o seed passando; teste Deno da
-`desktop-sync` (11) passando.
+`desktop-sync` (15) passando.
 
 Os testes do núcleo cobrem os módulos puros, onde os limiares e as leis de
 controle vivem: calibração (inclusive a correção local dos cantos, com um olho

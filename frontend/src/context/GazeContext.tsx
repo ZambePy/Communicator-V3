@@ -87,6 +87,12 @@ export type {
 export const DWELL_SELECTOR = 'button, a, [role="button"], [role="link"]';
 
 /**
+ * O que continua acionável pelo olhar durante a calibração: a Emergência e o
+ * CANCELAR da confirmação dela (`data-cancelar-emergencia`).
+ */
+export const SELETOR_DURANTE_CALIBRACAO = '[data-emergency="true"], [data-cancelar-emergencia="true"]';
+
+/**
  * Suspensão do dwell do APP.
  *
  * No Modo Computador a janela do app fica escondida, mas o motor continua
@@ -1059,13 +1065,15 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Estado visual global (esmaecer sem rosto, dessaturar degradado).
       sinalizarEstadoDoOlhar(!sample.hasFace ? 'perdido' : isDegraded ? 'degradado' : 'ok');
 
-      // Durante a calibração, só a EMERGÊNCIA continua acionável. Um dwell
-      // acidental nos botões da própria tela corromperia a coleta, mas o botão
-      // de socorro fica visível durante os 1–2 minutos e não pode ficar
-      // inoperante nesse tempo.
+      // Durante a calibração, só a EMERGÊNCIA continua acionável — ela e o
+      // CANCELAR da confirmação dela. Um dwell acidental nos botões da própria
+      // tela corromperia a coleta, mas o botão de socorro fica visível durante
+      // os 1–2 minutos e não pode ficar inoperante nesse tempo. E quem o
+      // acionou sem querer precisa conseguir desfazer pelo olhar: sem o
+      // CANCELAR aqui, o alerta saía sozinho ao fim da contagem.
       const alvoDuranteCalibracao = engineIsCalibrating
         ? ((document.elementFromPoint(sample.x, sample.y) as Element | null)?.closest(
-            '[data-emergency="true"]'
+            SELETOR_DURANTE_CALIBRACAO
           ) as HTMLElement | null)
         : null;
 
@@ -1090,8 +1098,11 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               isEmergency: node.dataset.emergency === 'true',
               // Alvo de recuperação: aceito em `degraded` como o de emergência,
               // com dwell mais longo — é o que torna o "Recalibre aqui"
-              // acionável exatamente no estado em que ele aparece.
-              isRecovery: node.dataset.recovery === 'true',
+              // acionável exatamente no estado em que ele aparece. O CANCELAR
+              // da confirmação de emergência conta como recuperação: com o
+              // rastreamento degradado, desfazer um acionamento acidental
+              // também precisa continuar possível pelo olhar.
+              isRecovery: node.dataset.recovery === 'true' || node.dataset.cancelarEmergencia === 'true',
               isDisabled:
                 (node as HTMLButtonElement).disabled ||
                 node.getAttribute('aria-disabled') === 'true' ||
@@ -1254,7 +1265,19 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // As outras duas guardas são as mesmas da piscada, pelo mesmo motivo:
         // sem calibração o ponto é o fallback do nariz, e em `degraded` a
         // posição não é confiável o bastante para mover a tela sozinha.
-        const podeRolar = target === null && sample.uncalibrated !== true && !isDegraded;
+        //
+        // E só com o rosto à vista e os olhos abertos: sem rosto o motor
+        // repete a última posição, e uma última posição na faixa da borda
+        // rolava a página até o fim sem ninguém olhando. Olhos fechados
+        // PAUSAM (como no dwell): uma piscada não zera o prazo da borda.
+        const olhosFechados = sample.eyeState === 'closed';
+        const podeRolar =
+          target === null &&
+          sample.uncalibrated !== true &&
+          !isDegraded &&
+          sample.hasFace === true &&
+          !olhosFechados;
+        const pausaDaBorda = !podeRolar && olhosFechados && sample.hasFace === true && target === null;
 
         // O relógio é o do FLUXO DE AMOSTRAS, não o de parede — mesma razão
         // que o dwell documenta acima. Com `performance.now()`, uma pausa na
@@ -1275,6 +1298,9 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               relogio - ultimaRolagemMsRef.current
             );
           }
+          ultimaRolagemMsRef.current = relogio;
+        } else if (pausaDaBorda) {
+          // Piscada: não rola e não zera — o tempo parado não vira rolagem.
           ultimaRolagemMsRef.current = relogio;
         } else {
           // Sair do estado zera o prazo: voltar à borda recomeça os 300 ms.
@@ -1372,7 +1398,12 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // para a porta.
           if (fb.zerarDwell) {
             clearDwellVisuals();
-            dwellStateRef.current = createDwellState();
+            // O período refratário SOBREVIVE ao descarte: ele existe para uma
+            // seleção não repetir logo em seguida, e um quadro sem rosto logo
+            // depois de um clique não pode encurtá-lo — a mesma tecla sairia
+            // de novo antes do tempo.
+            const refratarioAte = dwellStateRef.current.refractoryUntil;
+            dwellStateRef.current = { ...createDwellState(), refractoryUntil: refratarioAte };
           }
 
           if (fb.mensagem !== gazeLostMessageRef.current) {

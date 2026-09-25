@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createSupabaseLicenseService } from './supabaseLicenseService';
+import { createSupabaseLicenseService, sistemaDoComputador } from './supabaseLicenseService';
 
 // O contrato do Bloco 1 (`LicenseService`) cumprido pelo Supabase do site.
 // Sem rede: o cliente supabase-js e o fetch da Edge Function são dublês.
@@ -184,8 +184,22 @@ describe('supabaseLicenseService.logout', () => {
     const { cliente, rpc, auth } = fabricarCliente();
     await createSupabaseLicenseService({ cliente: () => cliente }).logout('CHAVE-9');
     expect(rpc).toHaveBeenCalledWith('revoke_device', { p_device_id: 'dev-9' });
-    expect(auth.signOut).toHaveBeenCalled();
+    // Só DESTE computador: a sessão da conta nos celulares da família continua.
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(localStorage.getItem('irisflow.vinculo')).toBeNull();
     expect(localStorage.getItem('irisflow.fila')).toBeNull();
+  });
+});
+
+describe('sistemaDoComputador', () => {
+  it('macOS é macOS — "darwin" contém "win", e o teste antigo o registrava como Windows', () => {
+    expect(sistemaDoComputador('darwin')).toBe('macos');
+    expect(sistemaDoComputador('MacIntel')).toBe('macos');
+  });
+  it('Windows e Linux', () => {
+    expect(sistemaDoComputador('win32')).toBe('windows');
+    expect(sistemaDoComputador('Win32')).toBe('windows');
+    expect(sistemaDoComputador('linux')).toBe('linux');
+    expect(sistemaDoComputador('Linux x86_64')).toBe('linux');
   });
 });

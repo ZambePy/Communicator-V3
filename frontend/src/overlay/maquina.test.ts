@@ -118,6 +118,17 @@ describe('rolar', () => {
     expect(fim.estado.fase.tipo).toBe('ocioso');
     expect(fim.estado.tarefa).toBeNull();
   });
+
+  it('o olhar parado ABAIXO da âncora continua rolando — só a fixação na âncora encerra', () => {
+    const r1 = reduzir(armar('rolar'), { tipo: 'area', ponto: P });
+    // Segurar o olhar 150 px abaixo completa um dwell ali: não pode encerrar.
+    const r2 = reduzir(r1.estado, { tipo: 'area', ponto: { x: 400, y: 450 } });
+    expect(r2.estado.fase.tipo).toBe('rolando');
+    expect(reduzir(r2.estado, { tipo: 'olhar', ponto: { x: 400, y: 450 }, t: 5000 }).efeitos).not.toEqual([]);
+    // Dentro da zona morta (perto da âncora), a fixação encerra.
+    const fim = reduzir(r2.estado, { tipo: 'area', ponto: { x: 380, y: 330 } });
+    expect(fim.estado.fase.tipo).toBe('ocioso');
+  });
 });
 
 describe('teclado', () => {

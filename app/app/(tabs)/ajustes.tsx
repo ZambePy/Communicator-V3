@@ -52,6 +52,21 @@ export default function Ajustes() {
   const device = devices.find((d) => !d.revoked_at);
   const online = device?.online ?? false;
 
+  /** Tira um contato da lista, depois de confirmar. */
+  const removerContato = (indice: number) => {
+    const contatos = settings?.emergency_contacts ?? [];
+    const c = contatos[indice];
+    if (!c) return;
+    Alert.alert('Remover contato', `Tirar ${c.name} (${c.phone}) dos contatos de emergência?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Remover',
+        style: 'destructive',
+        onPress: () => void apply({ emergency_contacts: contatos.filter((_, i) => i !== indice) }),
+      },
+    ]);
+  };
+
   /**
    * Aplica uma mudança. Devolve `true` só quando o banco confirmou; na falha o
    * controle volta ao valor anterior (AppProvider) E a tela explica o porquê.
@@ -219,7 +234,19 @@ export default function Ajustes() {
           </View>
           {(settings?.emergency_contacts ?? []).map((c, i) => (
             // Índice na chave: o mesmo telefone pode estar cadastrado duas vezes.
-            <ListRow key={`${c.phone}-${i}`} icon="call-outline" title={c.name} subtitle={c.phone} tone="danger" role="link" accessibilityHint="Liga para este contato" onPress={() => abrirLink(`tel:${c.phone}`)} right={<Ionicons name="call" size={sizes.icon.sm} color={colors.dangerText} />} />
+            <ListRow
+              key={`${c.phone}-${i}`}
+              icon="call-outline"
+              title={c.name}
+              subtitle={c.phone}
+              tone="danger"
+              role="link"
+              accessibilityHint="Liga para este contato"
+              onPress={() => abrirLink(`tel:${c.phone}`)}
+              // Sem isto um número digitado errado (ou de quem não é mais
+              // contato) ficava para sempre no alerta de socorro.
+              right={<IconButton icon="trash-outline" accessibilityLabel={`Remover ${c.name} dos contatos de emergência`} onPress={() => removerContato(i)} />}
+            />
           ))}
           <ListRow
             icon="person-add-outline"

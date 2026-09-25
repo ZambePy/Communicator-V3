@@ -57,7 +57,11 @@ export class SupabaseProvider implements DataProvider {
       if (error) console.warn('[IrisFlow Cuidador] token de push não removido ao sair:', error.message);
       else this.pushToken = null;
     }
-    await this.sb.auth.signOut();
+    // `local`: sai só DESTE celular. O padrão do supabase-js é `global`, que
+    // revoga a sessão da conta em todo lugar — e a conta é da família: sair
+    // num celular derrubava o app dos outros cuidadores (e o alarme de
+    // socorro com ele) e a escuta do computador do paciente.
+    await this.sb.auth.signOut({ scope: 'local' });
   }
   onAuthChange(cb: (u: AuthUser | null) => void) {
     const { data } = this.sb.auth.onAuthStateChange((_e, session) => {
@@ -297,7 +301,13 @@ export class SupabaseProvider implements DataProvider {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices', filter }, (p) => {
         if (p.new && 'id' in p.new) handlers.onDevice?.(mapDevice(p.new));
       })
-      .subscribe();
+      // A cada inscrição confirmada — a primeira e as que o cliente refaz
+      // sozinho depois de a conexão cair (celular bloqueado, troca de rede) —
+      // quem chama recarrega: o tempo real não reenvia o que chegou enquanto
+      // o canal estava fora, e um socorro nesse intervalo ficaria invisível.
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') handlers.onSubscribed?.();
+      });
     return () => {
       this.sb.removeChannel(channel);
     };
@@ -393,10 +403,19 @@ function traduzErroPush(msg: string) {
   return `Falha ao registrar este celular para alertas: ${msg}`;
 }
 
-/** Só as falhas que de fato acontecem no `resetPasswordForEmail`: limite de envio, rede, e-mail malformado. */
+/**
+ * Só as falhas que de fato acontecem no `resetPasswordForEmail`: intervalo
+ * mínimo entre dois links para o mesmo e-mail, limite de envio, falha do
+ * servidor de e-mail, rede, e-mail malformado.
+ */
 function traduzErroReset(msg?: string) {
   if (!msg) return 'Não foi possível pedir o link agora. Tente novamente.';
+  // "For security purposes, you can only request this after 60 seconds." — o
+  // "Enviar o link de novo" logo depois de um envio cai aqui.
+  const espera = msg.match(/only request this after (\d+) seconds?/i);
+  if (espera) return `Aguarde ${espera[1]} segundos antes de pedir outro link.`;
   if (/rate limit|too many/i.test(msg)) return 'Muitos pedidos em pouco tempo. Aguarde alguns minutos e tente de novo.';
+  if (/error sending/i.test(msg)) return 'Não conseguimos enviar o e-mail agora. Tente de novo mais tarde ou escreva para irisflowteam@gmail.com.';
   if (/invalid|unable to validate/i.test(msg)) return 'Confira o e-mail digitado.';
   if (/network/i.test(msg)) return 'Sem conexão. Verifique sua internet.';
   return msg;

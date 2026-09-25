@@ -37,6 +37,20 @@ import type { LicencaResposta, PareamentoResposta, VinculoLocal } from '../../cl
 /** Disparado no `window` logo antes de revogar o computador (ver CloudContext). */
 export const EVENTO_ANTES_DE_SAIR = 'irisflow:cloud-antes-de-sair';
 
+/**
+ * Sistema do computador no vocabulário do banco (`release_os_t`), a partir de
+ * `process.platform` (`win32`, `darwin`, `linux`) ou, fora do Electron, de
+ * `navigator.platform` (`Win32`, `MacIntel`, `Linux x86_64`).
+ *
+ * O macOS é testado ANTES do Windows: "darwin" contém "win", e o teste antigo
+ * (`/win/i` primeiro) registrava todo Mac como Windows.
+ */
+export function sistemaDoComputador(platform: string): 'windows' | 'macos' | 'linux' {
+  if (/darwin|mac/i.test(platform)) return 'macos';
+  if (/^win/i.test(platform)) return 'windows';
+  return 'linux';
+}
+
 const UNREACHABLE = /failed to fetch|network|fetch failed|load failed|timeout|aborted/i;
 
 function planoDe(l: LicencaResposta): Plan {
@@ -109,7 +123,7 @@ export function createSupabaseLicenseService(op: OpcoesDoServico = {}): LicenseS
     const { data, error } = await cliente().rpc('pair_device', {
       p_beneficiary_id: beneficiaryId,
       p_name: device.deviceName,
-      p_os: /win/i.test(info.platform) ? 'windows' : /mac|darwin/i.test(info.platform) ? 'macos' : 'linux',
+      p_os: sistemaDoComputador(info.platform),
       p_app_version: info.version,
       // O id local da máquina vai como hostname: é como o servidor reconhece
       // "este mesmo computador" num novo login sem gastar uma ativação.
@@ -295,7 +309,11 @@ export function createSupabaseLicenseService(op: OpcoesDoServico = {}): LicenseS
       try {
         if (vinculo?.device_id) await sb.rpc('revoke_device', { p_device_id: vinculo.device_id });
       } catch { /* offline: o cuidador ainda pode desvincular pelo celular ou pelo site */ }
-      try { await sb.auth.signOut(); } catch { /* idem */ }
+      // `local`: sai só DESTE computador. O padrão do supabase-js é `global`,
+      // que revoga a sessão da conta em todo lugar — a conta é da família, e
+      // sair aqui derrubava o app dos celulares dos cuidadores (sem alarme de
+      // socorro até alguém digitar a senha de novo).
+      try { await sb.auth.signOut({ scope: 'local' }); } catch { /* idem */ }
       await Promise.all([cofre.remover(CHAVES.vinculo), cofre.remover(CHAVES.filaDeEnvio)]);
     },
   };
