@@ -12,8 +12,13 @@ type Props = {
  * O traço de progresso é um segmento por etapa, entre o rótulo de uma e o
  * círculo da seguinte — e não uma linha única atrás da trilha inteira, que
  * passava por cima dos rótulos e os deixava com cara de riscados.
+ *
+ * No celular os rótulos não cabem ao lado das bolinhas: somem da tela (mas
+ * continuam para o leitor de tela) e a linha de baixo diz "Etapa 2 de 4 ·
+ * Confirmar e-mail" — só números não diziam onde a pessoa estava.
  */
 export function Stepper({ steps, current }: Props) {
+  const atual = steps[Math.min(Math.max(current, 0), steps.length - 1)]
   return (
     <nav className="stepper" aria-label="Progresso do cadastro">
       <ol>
@@ -48,6 +53,9 @@ export function Stepper({ steps, current }: Props) {
           )
         })}
       </ol>
+      <p className="stepper__agora" aria-hidden="true">
+        Etapa {Math.min(current + 1, steps.length)} de {steps.length} · <strong>{atual}</strong>
+      </p>
     </nav>
   )
 }

@@ -1,0 +1,177 @@
+/* Página /perfil ("Meu perfil"). Blocos de fluxo, resumo e download vêm de
+   checkout.css e sucesso.css. */
+
+.perfil__cabeca {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-5);
+}
+
+.perfil__titulo {
+  margin-bottom: var(--sp-2);
+}
+
+.perfil__email {
+  margin: 0;
+  color: var(--text-dim);
+  word-break: break-word;
+}
+
+/* --- situação da inscrição --- */
+.perfil__situacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+  flex-wrap: wrap;
+  padding: clamp(var(--sp-5), 4vw, var(--sp-6));
+  margin-bottom: var(--sp-5);
+}
+
+.perfil__situacao-texto {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.perfil__situacao-titulo {
+  font-size: clamp(1.3rem, 2.4vw, 1.7rem);
+  margin: var(--sp-3) 0 var(--sp-2);
+}
+
+.perfil__situacao-texto p {
+  margin: 0;
+  color: var(--text-soft);
+  max-width: 62ch;
+}
+
+.perfil__situacao-acao {
+  flex: none;
+}
+
+/* --- seções (dados da conta, quem vai usar, segurança) --- */
+.perfil__grade {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+  align-items: start;
+  margin-bottom: var(--sp-5);
+}
+
+.perfil__secao {
+  padding: clamp(var(--sp-5), 3.5vw, var(--sp-6));
+  min-width: 0;
+}
+
+/* a edição da pesquisa precisa da largura inteira (opções em grade) */
+.perfil__secao.is-editando {
+  grid-column: 1 / -1;
+}
+
+.perfil__secao-cabeca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.perfil__secao-cabeca h2 {
+  flex: 1 1 12ch;
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.perfil__secao-cabeca .btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+.perfil__secao .summary {
+  margin-bottom: 0;
+}
+
+.perfil__confirmado {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.perfil__vazio {
+  display: grid;
+  gap: var(--sp-4);
+  justify-items: start;
+}
+
+.perfil__vazio p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.perfil__form {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.perfil__form .field,
+.perfil__form .check {
+  margin-bottom: 0;
+}
+
+.perfil__nota {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
+.perfil__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  justify-content: flex-end;
+}
+
+.perfil__download {
+  margin-bottom: var(--sp-5);
+}
+
+.perfil__seguranca {
+  margin-top: var(--sp-5);
+}
+
+.perfil__seguranca p {
+  color: var(--text-soft);
+  margin: 0 0 var(--sp-4);
+}
+
+.perfil__seguranca .perfil__acoes {
+  justify-content: flex-start;
+}
+
+.perfil__link-botao {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 860px) {
+  .perfil__grade {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .perfil__acoes .btn {
+    width: 100%;
+  }
+  .perfil__situacao-acao,
+  .perfil__situacao-acao .btn {
+    width: 100%;
+  }
+}

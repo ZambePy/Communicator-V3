@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from 'react'
 import { supabase } from '@/lib/supabase'
-import { apagarRascunhoBeta, limparRascunhoVencido } from '@/lib/rascunhoBeta'
 import * as api from '@/services/api'
 import type { PlanId } from '@/data/content'
 
@@ -20,10 +19,28 @@ import type { PlanId } from '@/data/content'
    ao sair e ao recarregar a página.
 
    Nada aqui grava em localStorage. Quem persiste a sessão é o próprio
-   supabase-js; a conta é sempre relida do banco. O único rastro local da
-   inscrição (o rascunho sem dados sensíveis de lib/rascunhoBeta.ts, usado
-   enquanto o e-mail não é confirmado) é apagado aqui ao concluir e ao sair.
+   supabase-js; a conta é sempre relida do banco.
+
+   Na beta, "sessão aberta" e "conta" são coisas diferentes: a conta
+   (`account`, da view my_account) só existe depois da pesquisa rápida, que
+   abre a assinatura 'beta'. Entre criar a conta e responder a pesquisa, a
+   pessoa está `authenticated` com `account` nulo — e o site a trata como
+   logada (cabeçalho com "Meu perfil", /beta na etapa da pesquisa).
    ============================================================ */
+
+/* A inscrição antiga guardava um rascunho da pesquisa no navegador enquanto o
+   e-mail não era confirmado. A pesquisa agora vem depois da confirmação e
+   nada fica guardado; esta chave só é apagada, para não sobrar em quem usou
+   a versão anterior do site. */
+const RASCUNHO_ANTIGO = 'irisflow:rascunho-beta'
+
+function apagarRascunhoAntigo() {
+  try {
+    window.localStorage.removeItem(RASCUNHO_ANTIGO)
+  } catch {
+    // modo privado ou armazenamento bloqueado: não havia rascunho
+  }
+}
 
 export type Profile = {
   /** Quem paga: familiar responsável ou cuidador principal. */
@@ -40,19 +57,6 @@ export type Profile = {
   prescriberName?: string
   prescriberRole?: string
   newsletter: boolean
-}
-
-/**
- * Inscrição no programa beta (README da raiz, seção "Site (site/)"). Mesmos dados do Profile, com
- * o CPF opcional (string vazia = não informado) e o que é só da beta.
- */
-export type BetaProfile = Profile & {
-  /** Quer o app do cuidador no celular além do desktop? */
-  wantsCaregiverApp: boolean
-  /** Aceita ser contatado(a) para dar retorno sobre a beta. */
-  feedbackConsent: boolean
-  /** Como soube da IrisFlow (texto livre, opcional). */
-  howFound?: string
 }
 
 export type Payment = {
@@ -84,9 +88,9 @@ type Ctx = {
   account: Account | null
   /**
    * Há sessão do Supabase aberta. Pode ser verdadeiro com `account`
-   * nulo: é o caso de quem criou o usuário mas não concluiu a inscrição
-   * (abandonou no meio, ou acabou de confirmar o e-mail), e precisa ir
-   * para /beta (/cadastro fora da beta) concluir, não para o login.
+   * nulo: é o caso de quem criou a conta e ainda não respondeu a pesquisa
+   * rápida (acabou de confirmar o e-mail, ou parou no meio). Essa pessoa
+   * está logada: vai para /beta responder a pesquisa, não para o login.
    */
   authenticated: boolean
   /**
@@ -104,16 +108,28 @@ type Ctx = {
   sessionError: string | null
   /** Cria a conta, autentica e abre o período de avaliação no plano escolhido. */
   register: (profile: Profile, password: string, planId: PlanId) => Promise<Account>
-  /** Inscreve no programa beta: cria a conta e a assinatura 'beta', sem cobrança. */
-  registerBeta: (profile: BetaProfile, password: string) => Promise<Account>
+  /**
+   * Beta, etapa 1: cria a conta. 'confirmar' = o link foi para o e-mail;
+   * 'sessao' = o projeto não exige confirmação e a pessoa já está logada.
+   */
+  criarContaBeta: (nova: api.NovaContaBeta) => Promise<api.ResultadoNovaConta>
+  /**
+   * Beta, etapa 3: grava a pesquisa rápida e abre a assinatura 'beta' (sem
+   * cobrança). Também serve para editar as respostas no /perfil.
+   */
+  responderPesquisa: (respostas: api.RespostasPesquisa) => Promise<Account>
+  /** Troca nome, telefone e novidades da conta (seção "Dados da conta" do /perfil). */
+  atualizarDadosDaConta: (dados: api.DadosDaConta) => Promise<void>
   /** Guarda a forma de pagamento. A cobrança só ocorre ao fim da avaliação. */
   attachPayment: (payment: Payment) => Promise<void>
   /**
    * Entra com e-mail e senha. Rejeita só quando o login falha (senha errada,
    * e-mail não confirmado); se a leitura da conta falhar depois, a sessão fica
-   * de pé e o motivo vai para `sessionError`.
+   * de pé e o motivo vai para `sessionError`. Resolve com a conta lida (null
+   * = logada, mas sem a pesquisa respondida), para a tela de acesso saber
+   * para onde seguir.
    */
-  signIn: (email: string, password: string) => Promise<void>
+  signIn: (email: string, password: string) => Promise<Account | null>
   signOut: () => Promise<void>
   cancel: () => Promise<void>
   reactivate: () => Promise<void>
@@ -141,24 +157,30 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const [recuperandoSenha, setRecuperandoSenha] = useState(false)
   const concluirRecuperacaoDeSenha = useCallback(() => setRecuperandoSenha(false), [])
 
-  /** Lê a conta da sessão aberta, separando "sessão acabou" de "rede caiu". */
-  const lerConta = useCallback(async () => {
+  /**
+   * Lê a conta da sessão aberta, separando "sessão acabou" de "rede caiu".
+   * Devolve o que leu (null também quando a leitura falhou).
+   */
+  const lerConta = useCallback(async (): Promise<Account | null> => {
     try {
-      setAccount(await api.fetchAccount())
+      const conta = await api.fetchAccount()
+      setAccount(conta)
       setSessionError(null)
+      return conta
     } catch (e) {
       if (api.ehErroDeAutenticacao(e)) {
         // Token recusado pelo servidor: a sessão de fato acabou.
         setAuthenticated(false)
         setAccount(null)
         setSessionError(null)
-        return
+        return null
       }
       // Rede fora, banco fora, 500: o estado anterior continua valendo. A conta
       // que já estava carregada segue na tela e o aviso explica o que houve.
       setSessionError(
         e instanceof Error ? e.message : 'Não foi possível falar com o servidor agora.',
       )
+      return null
     }
   }, [])
 
@@ -196,8 +218,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   // que acontecem em outra aba.
   useEffect(() => {
     let vivo = true
-    // rascunho de inscrição vencido não fica esquecido no navegador
-    limparRascunhoVencido()
+    apagarRascunhoAntigo()
 
     refresh().finally(() => {
       if (vivo) setLoading(false)
@@ -239,14 +260,32 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     return nova
   }, [])
 
-  const registerBeta = useCallback(async (profile: BetaProfile, password: string) => {
-    const nova = await api.signUpBeta(profile, password)
-    // inscrição concluída: o rascunho da espera pela confirmação não serve mais
-    apagarRascunhoBeta()
-    setAccount(nova)
+  const criarContaBeta = useCallback(
+    async (nova: api.NovaContaBeta) => {
+      const resultado = await api.criarContaBeta(nova)
+      // Sem confirmação de e-mail no projeto, a sessão já veio: relê para a
+      // /beta seguir direto para a pesquisa.
+      if (resultado === 'sessao') await refresh()
+      return resultado
+    },
+    [refresh],
+  )
+
+  const responderPesquisa = useCallback(async (respostas: api.RespostasPesquisa) => {
+    const conta = await api.responderPesquisa(respostas)
+    setAccount(conta)
     setAuthenticated(true)
-    return nova
+    setSessionError(null)
+    return conta
   }, [])
+
+  const atualizarDadosDaConta = useCallback(
+    async (dados: api.DadosDaConta) => {
+      await api.atualizarDadosDaConta(dados)
+      await lerConta()
+    },
+    [lerConta],
+  )
 
   const attachPayment = useCallback(async (payment: Payment) => {
     await api.attachPaymentMethod(payment)
@@ -257,19 +296,18 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     async (email: string, password: string) => {
       await api.signIn(email, password)
       // A sessão já existe: marca antes de ler a conta. Sem isto, a tela que
-      // vem depois (/conta) podia ver `authenticated` ainda falso numa conta
-      // sem inscrição concluída e devolver a pessoa para /entrar, em vez de
-      // levá-la para concluir. Falha de rede na leitura vira `sessionError`,
+      // vem depois podia ver `authenticated` ainda falso numa conta sem a
+      // pesquisa respondida e devolver a pessoa para /entrar, em vez de
+      // levá-la à pesquisa. Falha de rede na leitura vira `sessionError`,
       // não "senha errada".
       setAuthenticated(true)
-      await lerConta()
+      return lerConta()
     },
     [lerConta],
   )
 
   const signOut = useCallback(async () => {
     await api.signOut()
-    apagarRascunhoBeta()
     setAccount(null)
     setAuthenticated(false)
     setSessionError(null)
@@ -292,7 +330,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       loading,
       sessionError,
       register,
-      registerBeta,
+      criarContaBeta,
+      responderPesquisa,
+      atualizarDadosDaConta,
       attachPayment,
       signIn,
       signOut,
@@ -308,7 +348,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       loading,
       sessionError,
       register,
-      registerBeta,
+      criarContaBeta,
+      responderPesquisa,
+      atualizarDadosDaConta,
       attachPayment,
       signIn,
       signOut,

@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/Button'
 import { useScrollProgress } from '@/hooks/useScrollProgress'
 import { useAccount } from '@/context/AccountContext'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
+import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
+import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
 import { BETA, BETA_CTA, TRIAL_DAYS } from '@/data/content'
 import './header.css'
 
@@ -15,7 +17,8 @@ const NAV: NavItem[] = [
   { to: '/como-funciona', label: 'Como funciona' },
   { to: '/acessibilidade', label: 'Acessibilidade' },
   { to: '/planos', label: 'Planos' },
-  // Só aparece com a beta ligada; ganha um destaque leve ("novo").
+  // Só aparece com a beta ligada. Até o lançamento leva a etiqueta vermelha
+  // com o dia ("10/11"); depois dele, o selo "novo".
   ...(BETA.ativo ? [{ to: BETA_CTA.to, label: 'Beta', beta: true }] : []),
   { to: '/sobre', label: 'A empresa' },
   { to: '/contato', label: 'Contato' },
@@ -31,13 +34,25 @@ const SOLID_ROUTES = [
   '/recuperar-senha',
   '/nova-senha',
   '/conta',
+  '/perfil',
+  '/confirmar-email',
 ]
 
 export function Header() {
   const { scrolled, progress } = useScrollProgress()
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
-  const { account, loading } = useAccount()
+  // Logado é ter sessão, mesmo antes da pesquisa (sem `account`): quem acabou
+  // de confirmar o e-mail vê "Meu perfil", e não "Entrar" como se estivesse
+  // fora da conta.
+  const { authenticated, loading } = useAccount()
+  const program = useBetaProgram()
+  const lancou = useJaLancou(program.launchAt)
+  const seloDaBeta = lancou ? (
+    <span className="header__badge">novo</span>
+  ) : (
+    <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
+  )
   // A barra de progresso de leitura é movimento contínuo ao rolar: some
   // quando o sistema pede menos movimento.
   const reduced = useReducedMotion()
@@ -78,18 +93,18 @@ export function Header() {
               className={`header__link underline-grow${item.beta ? ' header__link--beta' : ''}`}
             >
               {item.label}
-              {item.beta && <span className="header__badge">novo</span>}
+              {item.beta && seloDaBeta}
             </NavLink>
           ))}
         </nav>
 
         <div className="header__actions">
-          {/* Enquanto a sessão carrega não mostramos nem "Entrar" nem "Minha
-              conta": exibir o par errado por um instante e trocar depois
+          {/* Enquanto a sessão carrega não mostramos nem "Entrar" nem "Meu
+              perfil": exibir o par errado por um instante e trocar depois
               chama mais atenção do que o espaço vazio. */}
-          {loading ? null : account ? (
-            <Button to="/conta" variant="secondary">
-              Minha conta
+          {loading ? null : authenticated ? (
+            <Button to="/perfil" variant="secondary">
+              Meu perfil
             </Button>
           ) : (
             <>
@@ -129,14 +144,14 @@ export function Header() {
               style={{ animationDelay: `${i * 55}ms` }}
             >
               {item.label}
-              {item.beta && <span className="header__badge">novo</span>}
+              {item.beta && seloDaBeta}
             </NavLink>
           ))}
         </nav>
         <div className="drawer__actions">
-          {loading ? null : account ? (
-            <Button to="/conta" full variant="secondary">
-              Minha conta
+          {loading ? null : authenticated ? (
+            <Button to="/perfil" full variant="secondary">
+              Meu perfil
             </Button>
           ) : (
             <>

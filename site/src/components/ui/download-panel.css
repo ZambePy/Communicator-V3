@@ -132,3 +132,30 @@
   margin-top: 3px;
   color: var(--accent);
 }
+
+/* Travado até o lançamento da beta: o sistema está publicado, mas o
+   download só abre no dia da etiqueta vermelha. */
+.dl__card.is-locked {
+  border-color: rgba(214, 41, 58, 0.45);
+}
+
+.dl__card.is-locked.is-mine {
+  box-shadow: 0 0 0 1px rgba(214, 41, 58, 0.45), var(--shadow-md);
+}
+
+.dl__card.is-locked .dl__main:disabled {
+  opacity: 1;
+  color: var(--text-soft);
+  cursor: not-allowed;
+}
+
+/* Vitrine (páginas públicas): o sistema está liberado para inscritos. */
+.dl__detail--ok {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  margin-top: auto;
+  color: var(--ok);
+  font-weight: 650;
+}

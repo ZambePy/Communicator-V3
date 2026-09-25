@@ -352,7 +352,9 @@ export const RELEASES_REPO = normalizeRepo(import.meta.env.VITE_RELEASES_REPO)
 export const RELEASES_AVAILABLE = parseAvailable(import.meta.env.VITE_RELEASES_AVAILABLE)
 export const RELEASES_PAGE = releasesPageUrl(RELEASES_REPO)
 
-const OS_NAMES: Record<OS, string> = { windows: 'Windows 10/11', macos: 'macOS', linux: 'Linux' }
+// "Windows 10 e 11", e não "Windows 10/11": ao lado da etiqueta do lançamento
+// da beta ("10/11"), a barra fazia a versão do Windows parecer uma data.
+const OS_NAMES: Record<OS, string> = { windows: 'Windows 10 e 11', macos: 'macOS', linux: 'Linux' }
 
 function joinPt(items: string[]): string {
   if (items.length <= 1) return items.join('')

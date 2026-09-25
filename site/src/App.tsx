@@ -24,6 +24,8 @@ const Entrar = lazy(ROUTE_LOADERS['/entrar'])
 const RecuperarSenha = lazy(ROUTE_LOADERS['/recuperar-senha'])
 const NovaSenha = lazy(ROUTE_LOADERS['/nova-senha'])
 const Conta = lazy(ROUTE_LOADERS['/conta'])
+const Perfil = lazy(ROUTE_LOADERS['/perfil'])
+const ConfirmarEmail = lazy(ROUTE_LOADERS['/confirmar-email'])
 const NotFound = lazy(() => import('@/pages/NotFound'))
 const Privacidade = lazy(ROUTE_LOADERS['/privacidade'])
 const Termos = lazy(ROUTE_LOADERS['/termos'])
@@ -44,8 +46,14 @@ export default function App() {
             <Route path="sobre" element={<Sobre />} />
             <Route path="contato" element={<Contato />} />
 
-            {/* programa beta (README da raiz, seção "Site (site/)") */}
+            {/* programa beta (README da raiz, seção "Site (site/)"): criar conta →
+                confirmar e-mail → pesquisa rápida → download */}
             <Route path="beta" element={<Beta />} />
+            {/* destino do link de confirmação do e-mail: abre a sessão no
+                aparelho onde o link foi clicado e agradece */}
+            <Route path="confirmar-email" element={<ConfirmarEmail />} />
+            {/* "Meu perfil": dados da conta, respostas da pesquisa e download */}
+            <Route path="perfil" element={<Perfil />} />
 
             {/* fluxo de contratação. Durante a beta a compra fica
                 indisponível e as três telas mandam para /beta; os
@@ -67,7 +75,13 @@ export default function App() {
             <Route path="recuperar-senha" element={<RecuperarSenha />} />
             {/* destino do link do e-mail de redefinição (redirectTo) */}
             <Route path="nova-senha" element={<NovaSenha />} />
-            <Route path="conta" element={<Conta />} />
+            {/* Durante a beta o painel da conta é o /perfil. O endereço /conta
+                continua valendo: o aplicativo desktop e e-mails antigos
+                apontam para ele. */}
+            <Route
+              path="conta"
+              element={BETA.ativo ? <Navigate to="/perfil" replace /> : <Conta />}
+            />
 
             {/* legal */}
             <Route path="privacidade" element={<Privacidade />} />

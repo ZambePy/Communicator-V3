@@ -1,29 +1,28 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Beta from './Beta'
 import type { Account } from '@/context/AccountContext'
+import { esquecerBetaProgram } from '@/hooks/useBetaProgram'
 import { BETA_PROGRAM_RESERVA, type BetaProgram, type PerfilBasico } from '@/services/api'
-import { RASCUNHO_KEY, salvarRascunhoBeta } from '@/lib/rascunhoBeta'
 
 /* ============================================================
-   Página /beta (README da raiz, seção "Site (site/)").
+   Página /beta: as quatro etapas decididas pela sessão.
 
-   Estados decididos pela sessão: sem conta mostra o formulário; com
-   conta mostra o painel de download com "acesso beta até"; com as
-   inscrições fechadas, o aviso sem formulário. Regras que mudam em
-   relação ao /cadastro: CPF e telefone são opcionais — vazios passam,
-   inválidos não. Com "Confirm email" ligado, o envio dá lugar ao aviso
-   de confirmação; quem volta com sessão e sem inscrição conclui sem
-   digitar de novo nome, e-mail e senha.
+   sem sessão → criar conta (e, com "Confirm email", a tela de confirmar);
+   sessão sem conta → pesquisa rápida; conta → download, travado até o
+   lançamento (beta_program.launch_at) e liberado depois dele.
    ============================================================ */
+
+const ANTES = '2099-11-10T03:00:00Z' // lançamento no futuro: download travado
+const DEPOIS = '2020-11-10T03:00:00Z' // lançamento no passado: liberado
 
 const contaBeta: Account = {
   id: 'sub-beta',
   profile: {
     buyerName: 'Maria Aparecida Souza',
     email: 'maria@exemplo.com.br',
-    phone: '(11) 90000-0000',
+    phone: '11900000000',
     document: '',
     userName: 'João',
     relation: 'conjuge',
@@ -39,27 +38,39 @@ const contaBeta: Account = {
   planId: 'beta',
 }
 
-// vi.hoisted: as fábricas dos vi.mock abaixo são içadas e precisam enxergar isto
-const { sessao, registerBeta, signOut, apiFake } = vi.hoisted(() => {
+const perfil: PerfilBasico = {
+  buyerName: 'Maria Aparecida Souza',
+  email: 'maria@exemplo.com.br',
+  phone: '',
+  newsletter: true,
+  createdAt: '2026-09-24T22:37:43Z',
+  emailConfirmedAt: '2026-09-24T22:38:02Z',
+}
+
+const { sessao, acoes, apiFake } = vi.hoisted(() => {
   const sessao = {
     account: null as Account | null,
     authenticated: false,
     loading: false,
     sessionError: null as string | null,
   }
-  const registerBeta = vi.fn()
-  const signOut = vi.fn(async () => {})
+  const acoes = {
+    criarContaBeta: vi.fn(async (): Promise<'confirmar' | 'sessao'> => 'confirmar'),
+    responderPesquisa: vi.fn(async () => ({}) as Account),
+    signOut: vi.fn(async () => {}),
+    refresh: vi.fn(async () => {}),
+  }
   const apiFake = {
     programa: null as BetaProgram | null,
     perfil: null as PerfilBasico | null,
-    markBetaDownload: vi.fn(async () => {}),
+    markBetaDownload: vi.fn(async (_os: string) => {}),
     reenviarConfirmacao: vi.fn(async (_email: string) => {}),
   }
-  return { sessao, registerBeta, signOut, apiFake }
+  return { sessao, acoes, apiFake }
 })
 
 vi.mock('@/context/AccountContext', () => ({
-  useAccount: () => ({ ...sessao, registerBeta, signOut, refresh: vi.fn() }),
+  useAccount: () => ({ ...sessao, ...acoes }),
 }))
 
 vi.mock('@/hooks/useDownloads', async () => {
@@ -90,362 +101,235 @@ vi.mock('@/services/api', async (importOriginal) => {
 
 function montar() {
   return render(
-    // as flags só calam os avisos de migração para o v7
     <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Beta />
     </MemoryRouter>,
   )
 }
 
-/** Preenche a etapa 1 com dados válidos; CPF e telefone variam. */
-function preencherEtapa1(cpf: string, telefone = '11900000000') {
-  fireEvent.change(screen.getByLabelText('Nome completo'), {
-    target: { value: 'Maria Aparecida Souza' },
-  })
-  fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'maria@exemplo.com.br' } })
-  fireEvent.change(screen.getByLabelText('Telefone (opcional)'), { target: { value: telefone } })
-  fireEvent.change(screen.getByLabelText('CPF'), { target: { value: cpf } })
+/** Programa com a data de lançamento pedida. */
+function programa(launchAt: string, extra: Partial<BetaProgram> = {}) {
+  apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt, ...extra }
+}
+
+function preencherConta(p: { confirmacao?: string } = {}) {
+  fireEvent.change(screen.getByLabelText('Nome completo'), { target: { value: 'Maria Aparecida Souza' } })
+  fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: '  Maria@Exemplo.com.br ' } })
   fireEvent.change(screen.getByLabelText('Senha'), { target: { value: 'segredo123' } })
-  fireEvent.change(screen.getByLabelText('Confirmar senha'), { target: { value: 'segredo123' } })
-}
-
-/** Etapa 2 com dados válidos. */
-function preencherEtapa2() {
-  fireEvent.change(screen.getByLabelText('Nome da pessoa que vai usar'), { target: { value: 'João' } })
-  fireEvent.change(screen.getByLabelText('Sua relação com ela'), { target: { value: 'conjuge' } })
-  fireEvent.change(screen.getByLabelText('Condição principal'), { target: { value: 'ela' } })
-  fireEvent.change(screen.getByLabelText('Sistema do computador onde a IrisFlow será instalada'), {
-    target: { value: 'windows' },
-  })
-}
-
-/** Da etapa 1 já preenchida até o envio, marcando o aceite dos termos. */
-function avancarEEnviar() {
-  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
-  preencherEtapa2()
-  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+  fireEvent.change(screen.getByLabelText('Confirmar senha'), { target: { value: p.confirmacao ?? 'segredo123' } })
   fireEvent.click(screen.getByLabelText(/Li e aceito/))
-  fireEvent.click(screen.getByRole('button', { name: 'Entrar na beta' }))
-}
-
-// O jsdom não navega: um clique em <a target="_blank"> só vira aviso de
-// "not implemented". Cancelar o padrão SÓ nos links evita o ruído sem
-// afetar o teste — em botão de envio e caixa de seleção, cancelar o clique
-// impediria o envio e a marcação.
-const cancelarNavegacao = (e: Event) => {
-  if ((e.target as Element | null)?.closest?.('a')) e.preventDefault()
 }
 
 beforeEach(() => {
-  vi.clearAllMocks()
-  sessao.account = null
-  sessao.authenticated = false
-  sessao.loading = false
-  sessao.sessionError = null
+  esquecerBetaProgram()
+  Object.assign(sessao, { account: null, authenticated: false, loading: false, sessionError: null })
   apiFake.programa = null
-  apiFake.perfil = null
-  window.localStorage.clear()
-  window.scrollTo = vi.fn()
-  window.addEventListener('click', cancelarNavegacao)
+  apiFake.perfil = perfil
+  vi.clearAllMocks()
+  acoes.criarContaBeta.mockResolvedValue('confirmar')
+  // o jsdom não implementa scrollTo
+  window.scrollTo = vi.fn() as never
 })
 
-afterEach(() => {
-  window.removeEventListener('click', cancelarNavegacao)
-})
-
-describe('<Beta /> sem sessão', () => {
-  it('mostra o cabeçalho da beta e o formulário na primeira etapa', () => {
+describe('etapa 1 — criar conta (sem sessão)', () => {
+  it('abre com a etiqueta vermelha do lançamento, o texto da data e a trilha na etapa 1', async () => {
+    programa(ANTES)
     montar()
-
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/durante a beta/i)
-    expect(screen.getByLabelText('Nome completo')).toBeInTheDocument()
-    expect(screen.getByLabelText('CPF')).toBeInTheDocument()
-    expect(screen.getByLabelText('Telefone (opcional)')).toBeInTheDocument()
-    expect(screen.getByText(/Opcional na beta/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', '/entrar')
-    // nada de painel de download sem conta
-    expect(screen.queryByText(/Acesso beta até/)).not.toBeInTheDocument()
+    await screen.findByText(/A beta fica disponível em/)
+    expect(screen.getAllByText(/10 de novembro/).length).toBeGreaterThan(0)
+    expect(document.querySelector('.etiqueta-lancamento')).toHaveTextContent(/Lançamento 10\/11/)
+    expect(screen.getByRole('heading', { name: 'Crie sua conta' })).toBeInTheDocument()
+    expect(screen.getByText(/Etapa 1 de 4/)).toBeInTheDocument()
+    // a conta é só nome, e-mail e senha: nada de pesquisa nesta etapa
+    expect(screen.queryByText('Quem vai usar o IrisFlow?')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('CPF')).not.toBeInTheDocument()
   })
 
-  it('exibe a data e a versão que vieram de beta_program', async () => {
-    apiFake.programa = { ...BETA_PROGRAM_RESERVA, currentVersion: '1.0.0-beta.7' }
+  it('enviar vazio não trava: mostra o que falta, os erros e leva o foco ao primeiro campo', async () => {
     montar()
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
 
-    await waitFor(() => expect(screen.getByText('1.0.0-beta.7')).toBeInTheDocument())
+    expect(
+      await screen.findByText(
+        /falta preencher ou corrigir: nome completo, e-mail, senha, confirmação da senha e aceite dos termos/,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Informe seu nome.')).toBeInTheDocument()
+    expect(document.activeElement).toBe(screen.getByLabelText('Nome completo'))
+    expect(acoes.criarContaBeta).not.toHaveBeenCalled()
   })
 
-  it('CPF vazio passa na etapa 1', () => {
+  it('senhas diferentes não passam', async () => {
     montar()
-    preencherEtapa1('')
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
-
-    expect(screen.getByText(/Dados de quem vai usar/)).toBeInTheDocument()
-    expect(screen.queryByText(/CPF inválido/)).not.toBeInTheDocument()
+    preencherConta({ confirmacao: 'outra-senha' })
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    expect(await screen.findByText('As duas senhas precisam ser iguais.')).toBeInTheDocument()
+    expect(acoes.criarContaBeta).not.toHaveBeenCalled()
   })
 
-  it('CPF válido também passa', () => {
+  it('conta criada com "Confirm email": etapa 2 com o e-mail normalizado e o caminho de volta ao computador', async () => {
     montar()
-    preencherEtapa1('123.456.789-09')
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    preencherConta()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    })
 
-    expect(screen.getByText(/Dados de quem vai usar/)).toBeInTheDocument()
-  })
-
-  it('CPF inválido não passa: o erro aparece e o Continuar fica desabilitado', async () => {
-    montar()
-    preencherEtapa1('111.111.111-11')
-
-    // validação em tempo real: o botão já nasce desabilitado com o CPF inválido
-    const continuar = screen.getByRole('button', { name: 'Continuar' })
-    expect(continuar).toBeDisabled()
-    fireEvent.click(continuar)
-    expect(screen.queryByText(/Dados de quem vai usar/)).not.toBeInTheDocument()
-
-    // e a mensagem aparece ao sair do campo, sem precisar clicar em nada
-    fireEvent.blur(screen.getByLabelText('CPF'))
-    expect(await screen.findByText(/CPF inválido/)).toBeInTheDocument()
-    expect(screen.getByLabelText('CPF')).toHaveAttribute('aria-invalid', 'true')
-  })
-
-  it('com o Continuar desabilitado, a dica NOMEIA o que falta (leitor de tela e teclado)', () => {
-    montar()
-    preencherEtapa1('')
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
-    // Etapa 2 em branco: as quatro coisas que faltam aparecem pelo nome.
-    expect(screen.getByRole('button', { name: 'Continuar' })).toBeDisabled()
-    const dica = screen.getByText(/Para continuar, falta corrigir ou preencher:/)
-    expect(dica).toHaveTextContent(
-      'nome da pessoa que vai usar, relação com ela, condição principal e sistema do computador',
-    )
-    // Preenchido um, ele sai da lista.
-    fireEvent.change(screen.getByLabelText('Nome da pessoa que vai usar'), { target: { value: 'João' } })
-    expect(screen.getByText(/Para continuar/)).not.toHaveTextContent('nome da pessoa')
-  })
-
-  it('telefone vazio passa na etapa 1', () => {
-    montar()
-    preencherEtapa1('', '')
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
-
-    expect(screen.getByText(/Dados de quem vai usar/)).toBeInTheDocument()
-  })
-
-  it('telefone preenchido pela metade não passa: o formato continua validado', async () => {
-    montar()
-    preencherEtapa1('', '11900')
-
-    expect(screen.getByRole('button', { name: 'Continuar' })).toBeDisabled()
-    fireEvent.blur(screen.getByLabelText('Telefone (opcional)'))
-    expect(await screen.findByText(/telefone com DDD/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Telefone (opcional)')).toHaveAttribute('aria-invalid', 'true')
-  })
-
-  it('sem telefone, o resumo diz "Não informado" e a inscrição segue com telefone vazio', async () => {
-    registerBeta.mockResolvedValueOnce(contaBeta)
-    montar()
-    preencherEtapa1('', '')
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
-    preencherEtapa2()
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
-
-    expect(screen.getByText('Não informado')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByLabelText(/Li e aceito/))
-    fireEvent.click(screen.getByRole('button', { name: 'Entrar na beta' }))
-
-    await waitFor(() => expect(registerBeta).toHaveBeenCalledTimes(1))
-    const [perfil, senha] = registerBeta.mock.calls[0]
-    // quem converte para dígitos/null é o api.ts (ver api.test.ts)
-    expect(perfil.phone).toBe('')
-    expect(senha).toBe('segredo123')
-    // a senha nunca vai junto do perfil
-    expect(perfil).not.toHaveProperty('password')
-    expect(perfil).not.toHaveProperty('passwordConfirm')
-  })
-})
-
-describe('<Beta /> com "Confirm email" ligado', () => {
-  async function enviarAteAConfirmacao() {
-    const { ConfirmacaoDeEmailPendente } = await import('@/services/api')
-    registerBeta.mockRejectedValueOnce(new ConfirmacaoDeEmailPendente('maria@exemplo.com.br'))
-    montar()
-    preencherEtapa1('123.456.789-09')
-    avancarEEnviar()
-    await screen.findByRole('heading', { name: /Falta confirmar o seu e-mail/ })
-  }
-
-  it('troca o formulário pelo aviso de confirmação, com o e-mail e o reenvio', async () => {
-    await enviarAteAConfirmacao()
-
+    // (o campo type="email" já apara os espaços; a normalização final é do api.ts)
+    expect(acoes.criarContaBeta).toHaveBeenCalledWith({
+      nome: 'Maria Aparecida Souza',
+      email: 'Maria@Exemplo.com.br',
+      senha: 'segredo123',
+      newsletter: true,
+    })
+    expect(await screen.findByRole('heading', { name: /Confirme seu e-mail para continuar/ })).toBeInTheDocument()
     expect(screen.getByText('maria@exemplo.com.br')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Nome completo')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Já confirmei, entrar/ })).toHaveAttribute('href', '/entrar')
-
-    fireEvent.click(screen.getByRole('button', { name: /Reenviar o link/ }))
-    await waitFor(() =>
-      expect(apiFake.reenviarConfirmacao).toHaveBeenCalledWith('maria@exemplo.com.br'),
+    expect(screen.getByText(/Etapa 2 de 4/)).toBeInTheDocument()
+    // quem confirmou no celular continua aqui com a senha, e-mail já preenchido
+    expect(screen.getByRole('link', { name: 'Já confirmei, continuar aqui' })).toHaveAttribute(
+      'href',
+      '/entrar?email=maria%40exemplo.com.br',
     )
-    expect(await screen.findByText(/Enviamos de novo/)).toBeInTheDocument()
   })
 
-  it('guarda um rascunho só com o que não é sensível: sem CPF, condição, telefone ou senha', async () => {
-    await enviarAteAConfirmacao()
+  it('reenviar o link avisa; corrigir o e-mail volta ao formulário com as senhas limpas', async () => {
+    montar()
+    preencherConta()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    })
+    await screen.findByRole('heading', { name: /Confirme seu e-mail/ })
 
-    const bruto = window.localStorage.getItem(RASCUNHO_KEY)
-    expect(bruto).not.toBeNull()
-    const guardado = JSON.parse(bruto as string)
-    expect(guardado.email).toBe('maria@exemplo.com.br')
-    expect(guardado.campos).toMatchObject({ userName: 'João', relation: 'conjuge', os: 'windows' })
-    for (const proibido of ['document', 'condition', 'phone', 'password', 'passwordConfirm']) {
-      expect(guardado.campos).not.toHaveProperty(proibido)
-    }
-    expect(bruto).not.toContain('123.456.789-09')
-    expect(bruto).not.toContain('segredo123')
-    expect(bruto).not.toContain('"ela"')
-  })
-
-  it('"Corrigir o e-mail" volta para a primeira etapa com os dados em memória', async () => {
-    await enviarAteAConfirmacao()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Reenviar o link' }))
+    })
+    expect(apiFake.reenviarConfirmacao).toHaveBeenCalledWith('maria@exemplo.com.br')
+    expect(await screen.findByText(/Enviamos de novo para maria@exemplo.com.br/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Corrigir o e-mail' }))
-    expect(screen.getByLabelText('E-mail')).toHaveValue('maria@exemplo.com.br')
-    expect(screen.getByLabelText('Nome completo')).toHaveValue('Maria Aparecida Souza')
+    expect(await screen.findByRole('heading', { name: 'Crie sua conta' })).toBeInTheDocument()
+    expect(screen.getByLabelText('E-mail')).toHaveValue('Maria@Exemplo.com.br')
+    expect(screen.getByLabelText('Senha')).toHaveValue('')
+  })
+
+  it('falha ao criar a conta aparece acima do formulário', async () => {
+    acoes.criarContaBeta.mockRejectedValueOnce(new Error('Não conseguimos enviar o e-mail agora.'))
+    montar()
+    preencherConta()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    })
+    expect(await screen.findByText('Não conseguimos enviar o e-mail agora.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Crie sua conta' })).toBeInTheDocument()
+  })
+
+  it('inscrições fechadas: aviso sem formulário', async () => {
+    programa(ANTES, { open: false })
+    montar()
+    expect(await screen.findByText(/As inscrições da beta estão fechadas/)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Crie sua conta' })).not.toBeInTheDocument()
   })
 })
 
-describe('<Beta /> com sessão aberta e sem inscrição (voltou pelo link do e-mail)', () => {
+describe('etapa 3 — pesquisa rápida (sessão sem conta)', () => {
   beforeEach(() => {
     sessao.authenticated = true
-    apiFake.perfil = {
-      buyerName: 'Maria Aparecida Souza',
-      email: 'maria@exemplo.com.br',
-      phone: '11900000000',
-      newsletter: false,
-    }
   })
 
-  it('não pede nome, e-mail nem senha: mostra os da conta e avisa que ficou pela metade', async () => {
+  it('chama pelo primeiro nome e não deixa enviar vazio', async () => {
     montar()
+    expect(await screen.findByRole('heading', { name: /Maria, falta só a pesquisa rápida/ })).toBeInTheDocument()
+    expect(screen.getByText(/Etapa 3 de 4/)).toBeInTheDocument()
 
-    expect(await screen.findByText('maria@exemplo.com.br')).toBeInTheDocument()
-    expect(screen.getByText('Maria Aparecida Souza')).toBeInTheDocument()
-    expect(screen.getByText(/ficou pela metade/)).toBeInTheDocument()
-    expect(screen.queryByLabelText('Nome completo')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Senha')).not.toBeInTheDocument()
-    // o telefone do perfil volta mascarado, e CPF segue opcional
-    expect(screen.getByLabelText('Telefone (opcional)')).toHaveValue('(11) 90000-0000')
-    expect(screen.getByLabelText('CPF')).toHaveValue('')
-    // o que é sensível é pedido de novo, e a tela diz por quê
-    expect(screen.getByText(/nunca ficam guardados/)).toBeInTheDocument()
-    // em vez de "Já tem conta? Entrar", a saída é sair desta conta
-    expect(screen.getByRole('button', { name: 'Sair' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Concluir inscrição' }))
+    expect(
+      await screen.findByText(
+        'Para continuar, falta responder: quem vai usar, condição principal, sistema do computador e app do cuidador.',
+      ),
+    ).toBeInTheDocument()
+    expect(acoes.responderPesquisa).not.toHaveBeenCalled()
   })
 
-  it('traz de volta o rascunho do mesmo e-mail e conclui sem senha', async () => {
-    salvarRascunhoBeta('maria@exemplo.com.br', {
-      userName: 'João',
-      relation: 'conjuge',
+  it('"Eu mesmo(a)": não pede o nome de novo e grava o nome da conta', async () => {
+    montar()
+    await screen.findByRole('heading', { name: /falta só a pesquisa/ })
+
+    fireEvent.click(screen.getByLabelText(/Eu mesmo\(a\)/))
+    expect(screen.queryByLabelText(/gosta de ser chamad/)).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Condição principal'), { target: { value: 'prefiro-nao' } })
+    fireEvent.click(screen.getByLabelText('Windows'))
+    fireEvent.click(screen.getByLabelText('Agora não'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Concluir inscrição' }))
+    })
+
+    expect(acoes.responderPesquisa).toHaveBeenCalledWith({
+      relation: 'proprio',
+      userName: 'Maria Aparecida Souza',
+      condition: 'prefiro-nao',
       os: 'windows',
       wantsCaregiverApp: false,
       feedbackConsent: true,
-      howFound: 'Indicação',
+      howFound: '',
+      phone: '',
     })
-    registerBeta.mockResolvedValueOnce(contaBeta)
+  })
+
+  it('outra pessoa: pede como ela gosta de ser chamada', async () => {
     montar()
+    await screen.findByRole('heading', { name: /falta só a pesquisa/ })
 
-    expect(await screen.findByText(/Recuperamos o que ficou salvo/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
-
-    expect(screen.getByLabelText('Nome da pessoa que vai usar')).toHaveValue('João')
-    expect(screen.getByLabelText('Sua relação com ela')).toHaveValue('conjuge')
-    // a condição de saúde nunca é guardada: continua em branco e obrigatória
-    expect(screen.getByLabelText('Condição principal')).toHaveValue('')
-    expect(screen.getByRole('button', { name: 'Continuar' })).toBeDisabled()
+    fireEvent.click(screen.getByLabelText('Meu cônjuge'))
     fireEvent.change(screen.getByLabelText('Condição principal'), { target: { value: 'ela' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
+    fireEvent.click(screen.getByLabelText('Não sei'))
+    fireEvent.click(screen.getByLabelText('Sim, quero'))
+    fireEvent.click(screen.getByRole('button', { name: 'Concluir inscrição' }))
+    expect(await screen.findByText(/falta responder: como a pessoa gosta de ser chamada/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByLabelText(/Li e aceito/))
+    fireEvent.change(screen.getByLabelText('Como essa pessoa gosta de ser chamada?'), { target: { value: 'João' } })
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Entrar na beta' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Concluir inscrição' }))
     })
-
-    expect(registerBeta).toHaveBeenCalledTimes(1)
-    const [perfil, senha] = registerBeta.mock.calls[0]
-    expect(senha).toBe('')
-    expect(perfil).toMatchObject({
-      buyerName: 'Maria Aparecida Souza',
-      email: 'maria@exemplo.com.br',
-      phone: '(11) 90000-0000',
-      userName: 'João',
-      relation: 'conjuge',
-      condition: 'ela',
-      os: 'windows',
-      wantsCaregiverApp: false,
-      howFound: 'Indicação',
-      newsletter: false,
-    })
+    expect(acoes.responderPesquisa).toHaveBeenCalledWith(
+      expect.objectContaining({ relation: 'conjuge', userName: 'João', os: 'nao-sei', wantsCaregiverApp: true }),
+    )
   })
 
-  it('rascunho de outro e-mail não é usado', async () => {
-    salvarRascunhoBeta('outra@exemplo.com.br', { userName: 'Pedro', relation: 'filho', os: 'linux' })
-    montar()
-
-    await screen.findByText('maria@exemplo.com.br')
-    expect(screen.queryByText(/Recuperamos o que ficou salvo/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }))
-    expect(screen.getByLabelText('Nome da pessoa que vai usar')).toHaveValue('')
-  })
-
-  it('com falha de rede ao ler a conta, não afirma que a inscrição ficou pela metade', () => {
+  it('falha de rede ao ler a conta: avisa em vez de afirmar que falta a pesquisa', async () => {
     sessao.sessionError = 'Failed to fetch'
     montar()
-
-    expect(screen.getByText(/Não foi possível carregar os dados da sua conta/)).toBeInTheDocument()
-    expect(screen.queryByText(/ficou pela metade/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Tentar de novo' })).toBeInTheDocument()
+    expect(await screen.findByText(/Não foi possível carregar os dados da sua conta/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Concluir inscrição' })).not.toBeInTheDocument()
   })
 })
 
-describe('<Beta /> com inscrições fechadas', () => {
-  it('mostra o aviso com link para o contato, sem formulário', async () => {
-    apiFake.programa = { ...BETA_PROGRAM_RESERVA, open: false }
-    montar()
-
-    await waitFor(() =>
-      expect(screen.getByText(/inscrições da beta estão fechadas/)).toBeInTheDocument(),
-    )
-    expect(screen.getByRole('link', { name: /Deixar meu contato/ })).toHaveAttribute(
-      'href',
-      '/contato',
-    )
-    expect(screen.queryByLabelText('Nome completo')).not.toBeInTheDocument()
-  })
-})
-
-describe('<Beta /> com conta', () => {
-  it('mostra o painel de download com "Acesso beta até" e registra o clique no instalador', () => {
-    sessao.account = contaBeta
+describe('etapa 4 — download (conta beta)', () => {
+  beforeEach(() => {
     sessao.authenticated = true
+    sessao.account = contaBeta
+  })
+
+  it('antes do lançamento: inscrição concluída, Windows travado em 10/11 e nenhum link de arquivo', async () => {
+    programa(ANTES)
     montar()
+    expect(await screen.findByRole('heading', { name: 'Inscrição concluída, Maria!' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText(/Disponível em 10\/11/).length).toBeGreaterThan(0))
+    expect(document.querySelector('a[href*="/download/"]')).toBeNull()
+    expect(screen.queryByText('Todas as versões')).not.toBeInTheDocument()
+    expect(screen.getByText(/Também abre em 10\/11/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ver meu perfil' })).toHaveAttribute('href', '/perfil')
+  })
 
-    expect(screen.getByText(/Acesso beta até/)).toBeInTheDocument()
-    expect(screen.queryByLabelText('Nome completo')).not.toBeInTheDocument()
-    // sem VITE_APP_CUIDADOR_URL, o link do app do cuidador chega por e-mail
-    expect(screen.getByText(/chega por e-mail/)).toBeInTheDocument()
-
-    const windows = screen.getByRole('link', { name: /Baixar para Windows/ })
-    expect(windows).toHaveAttribute(
-      'href',
-      'https://github.com/dono/repo/releases/latest/download/IrisFlow-Setup.exe',
-    )
-    fireEvent.click(windows)
+  it('depois do lançamento: "Tudo pronto", o instalador liberado e o clique registrado', async () => {
+    programa(DEPOIS)
+    montar()
+    expect(await screen.findByRole('heading', { name: /Tudo pronto, Maria! Baixe o IrisFlow/ })).toBeInTheDocument()
+    const painel = document.querySelector('.dl') as HTMLElement
+    const baixar = within(painel)
+      .getAllByRole('link')
+      .find((a) => a.getAttribute('href')?.includes('/download/'))
+    expect(baixar).toBeTruthy()
+    fireEvent.click(baixar!)
     expect(apiFake.markBetaDownload).toHaveBeenCalledWith('windows')
-
-    // sistema sem instalador publicado: botão desabilitado e legível, "Em breve"
-    expect(screen.getByRole('button', { name: /macOS — Em breve/ })).toBeDisabled()
-    expect(screen.getByRole('link', { name: /Todas as versões/ })).toHaveAttribute(
-      'href',
-      'https://github.com/dono/repo/releases',
-    )
+    expect(screen.getByText('Todas as versões')).toBeInTheDocument()
   })
 })

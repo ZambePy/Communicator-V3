@@ -14,6 +14,8 @@ const HIDDEN_ON = [
   '/recuperar-senha',
   '/nova-senha',
   '/conta',
+  '/perfil',
+  '/confirmar-email',
 ]
 
 const DISMISS_KEY = 'irisflow:sticky-cta-fechado'

@@ -10,6 +10,8 @@ import { DownloadPanel } from '@/components/ui/DownloadPanel'
 import { BETA, BETA_CTA, BRAND } from '@/data/content'
 import { Button } from '@/components/ui/Button'
 import { useDownloads } from '@/hooks/useDownloads'
+import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
+import { diaPorExtenso } from '@/lib/lancamento'
 import './solucao.css'
 
 const LIMITS = [
@@ -61,6 +63,10 @@ const ADOPTION: { icon: IconName; title: string; text: string }[] = [
 export default function Solucao() {
   // Sistemas com instalador: os mesmos do painel de download desta página.
   const { platformsText } = useDownloads()
+  // Na beta, esta faixa é vitrine: o download fica depois da inscrição
+  // (conta → pesquisa rápida → download), e só abre no lançamento.
+  const program = useBetaProgram()
+  const lancou = useJaLancou(program.launchAt)
 
   return (
     <>
@@ -150,20 +156,23 @@ export default function Solucao() {
             </h2>
             <p className="lead section-lead section-lead--center">
               Uma base de código única gera os instaladores de todos os sistemas.{' '}
-              {BETA.ativo
-                ? 'Para usar, inscreva-se na beta gratuita: o login no aplicativo é o mesmo e-mail e senha da conta.'
-                : 'Para usar, crie a conta: o login no aplicativo é o mesmo e-mail e senha.'}
+              {!BETA.ativo
+                ? 'Para usar, crie a conta: o login no aplicativo é o mesmo e-mail e senha.'
+                : lancou
+                  ? 'Para baixar, inscreva-se na beta gratuita: crie a conta, responda a pesquisa rápida e o download aparece em seguida.'
+                  : `A beta fica disponível em ${diaPorExtenso(program.launchAt)}, primeiro para ${BETA.sistemaDoLancamento}. Inscreva-se desde já: no dia, o download aparece na sua conta.`}
             </p>
           </Reveal>
           <Reveal anim="up" delay={160}>
-            <DownloadPanel />
-            {BETA.ativo && (
-              <p className="download-strip__fine">
-                Ainda sem conta?{' '}
-                <Button to={BETA_CTA.to} variant="ghost">
-                  {BETA_CTA.label}
-                </Button>
-              </p>
+            {BETA.ativo ? (
+              <>
+                <DownloadPanel vitrine liberaEm={program.launchAt} />
+                <p className="download-strip__fine">
+                  <Button to={BETA_CTA.to}>{BETA_CTA.labelLong}</Button>
+                </p>
+              </>
+            ) : (
+              <DownloadPanel />
             )}
           </Reveal>
         </div>

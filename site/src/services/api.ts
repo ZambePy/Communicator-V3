@@ -10,7 +10,7 @@
    ============================================================ */
 
 import { client, mensagemDeErro } from '@/lib/supabase'
-import type { Account, BetaProfile, Payment, Profile } from '@/context/AccountContext'
+import type { Account, Payment, Profile } from '@/context/AccountContext'
 import { BETA, getPlan, PLANS, SITE_URL, type Plan, type PlanId } from '@/data/content'
 import { absoluteUrl } from '@/seo/site'
 import { phoneDigits } from '@/utils/format'
@@ -25,10 +25,20 @@ export const API_URL = import.meta.env.VITE_API_URL ?? ''
  * duas URLs precisam estar em Authentication > URL Configuration >
  * Redirect URLs no painel — fora da lista, o Supabase ignora o destino e
  * manda para a Site URL.
+ *
+ * Os modelos de e-mail de ../supabase/templates/ montam o link direto para
+ * o site, com o token_hash ({{ .SiteURL }}/confirmar-email?token_hash=…), e
+ * a verificação acontece na própria página (verificarLinkDoEmail). Estes
+ * destinos valem para o modelo padrão do Supabase ({{ .ConfirmationURL }}),
+ * que verifica no servidor e redireciona com a sessão no endereço.
  */
 export const AUTH_REDIRECT = {
-  /** Link de confirmação do cadastro: volta para o acesso, já com a sessão aberta. */
-  confirmacao: absoluteUrl(SITE_URL, '/entrar'),
+  /**
+   * Link de confirmação do cadastro: a página de "obrigado", que abre a
+   * sessão no aparelho onde o link foi clicado (celular ou computador) e
+   * leva à pesquisa rápida.
+   */
+  confirmacao: absoluteUrl(SITE_URL, '/confirmar-email'),
   /** Link de redefinição de senha. */
   novaSenha: absoluteUrl(SITE_URL, '/nova-senha'),
 }
@@ -185,8 +195,8 @@ function paraAccount(row: MyAccountRow): Account {
  * Uma tentativa anterior pode ter criado o usuário e falhado adiante.
  * Nesse caso a sessão já existe, e repetir o signUp só daria
  * "User already registered", travando o cadastro. Então só criamos o
- * usuário quando ainda não há sessão aberta. Compartilhado pelo cadastro
- * pago (`signUp`) e pelo da beta (`signUpBeta`).
+ * usuário quando ainda não há sessão aberta. Usado pelo cadastro pago
+ * (`signUp`); a beta cria a conta sozinha, antes da pesquisa (`criarContaBeta`).
  */
 async function criarUsuarioSeNecessario(profile: Profile, password: string): Promise<void> {
   const sb = client()
@@ -199,8 +209,8 @@ async function criarUsuarioSeNecessario(profile: Profile, password: string): Pro
     password,
     options: {
       data: { buyer_name: profile.buyerName, newsletter: profile.newsletter },
-      // Só é usado com "Confirm email" ligado: o link do e-mail abre /entrar
-      // já autenticado, e de lá a conta sem inscrição volta para concluir.
+      // Só é usado com "Confirm email" ligado: o link do e-mail abre a página
+      // de confirmação já autenticado, e de lá a pessoa segue.
       emailRedirectTo: AUTH_REDIRECT.confirmacao,
     },
   })
@@ -262,45 +272,216 @@ export async function signUp(profile: Profile, password: string, planId: PlanId)
 
 /* ---------------- programa beta ----------------
    Contrato no README da raiz (seções "Conta IrisFlow e nuvem" e "Site
-   (site/)"); banco em ../supabase/migrations/20260923022616_beta.sql.
-   Mesmo desenho do cadastro pago, com três diferenças: o CPF é opcional,
-   não há plano a escolher (é sempre 'beta', sem cobrança) e a inscrição
-   grava a linha de beta_registrations.
+   (site/)"); banco em ../supabase/migrations/20260923022616_beta.sql e
+   20260924230017_beta_lancamento.sql.
+
+   A inscrição tem quatro etapas, e cada uma é uma chamada daqui:
+   1. criarContaBeta — só a conta (nome, e-mail e senha). Com "Confirm
+      email" ligado, volta sem sessão e o Supabase manda o link;
+   2. verificarLinkDoEmail — a página /confirmar-email troca o token_hash
+      do link por uma sessão no aparelho onde ele foi aberto;
+   3. responderPesquisa — a pesquisa rápida sobre quem vai usar, que roda
+      complete_beta_registration (plano 'beta', sem cobrança) e grava
+      beta_registrations. A condição de saúde entra só aqui, já com sessão,
+      e nunca no signUp (o que vai em options.data viaja dentro do JWT);
+   4. download — liberado em beta_program.launch_at (fetchBetaProgram).
    ------------------------------------------------ */
 
-/**
- * Cria a conta da beta: `auth.signUp` (se ainda não há sessão) seguido de
- * `complete_beta_registration`. CPF e telefone são opcionais: vazios viram
- * null, que o banco aceita. O telefone vai só com os dígitos — nunca a
- * máscara nem uma string fora do formato —, e null mantém o número que a
- * conta já tiver (migração 20260923022800_telefone_opcional.sql).
- *
- * Com uma sessão já aberta (conta criada numa tentativa anterior, ou que
- * acabou de confirmar o e-mail), o signUp é pulado e a senha não é usada.
- */
-export async function signUpBeta(profile: BetaProfile, password: string): Promise<Account> {
-  const sb = client()
-  await criarUsuarioSeNecessario(profile, password)
+/** O que o formulário "Criar conta" da /beta manda. */
+export type NovaContaBeta = {
+  nome: string
+  email: string
+  senha: string
+  newsletter: boolean
+}
 
-  const { error: erroRpc } = await sb.rpc('complete_beta_registration', {
-    p_phone: phoneDigits(profile.phone),
-    p_user_name: profile.userName,
-    p_relation: profile.relation,
-    p_condition: profile.condition,
-    p_os: profile.os,
-    p_document: profile.document.trim() || null,
-    p_wants_caregiver_app: profile.wantsCaregiverApp,
-    p_feedback_consent: profile.feedbackConsent,
-    p_how_found: profile.howFound?.trim() || null,
-    p_newsletter: profile.newsletter,
-    p_prescriber_name: profile.prescriberName ?? null,
-    p_prescriber_role: profile.prescriberRole ?? null,
+/**
+ * 'sessao' quando o projeto não exige confirmar o e-mail (a pessoa já entra
+ * e segue para a pesquisa); 'confirmar' quando o link foi enviado.
+ */
+export type ResultadoNovaConta = 'sessao' | 'confirmar'
+
+/**
+ * Etapa 1: cria o usuário no Supabase Auth. Nome e preferência de novidades
+ * vão em `options.data`, que o gatilho on_auth_user_created copia para
+ * `profiles`; o aceite dos termos fica registrado com a data e a hora.
+ *
+ * Com um e-mail que já tem conta, o Supabase responde igual a uma conta
+ * nova (sem sessão e sem erro) de propósito, para não revelar quem é
+ * cliente — e não manda link. A tela de "confirme o e-mail" avisa isso.
+ */
+export async function criarContaBeta(nova: NovaContaBeta): Promise<ResultadoNovaConta> {
+  const { data, error } = await client().auth.signUp({
+    email: nova.email.trim().toLowerCase(),
+    password: nova.senha,
+    options: {
+      data: {
+        buyer_name: nova.nome.trim().replace(/\s+/g, ' '),
+        newsletter: nova.newsletter,
+        terms_accepted_at: new Date().toISOString(),
+      },
+      emailRedirectTo: AUTH_REDIRECT.confirmacao,
+    },
   })
-  if (erroRpc) erro(erroRpc)
+  if (error) erro(error)
+  return data.session ? 'sessao' : 'confirmar'
+}
+
+/** Tipos de link de e-mail que o site verifica pelo token_hash. */
+export type TipoDeLink = 'email' | 'signup' | 'recovery' | 'email_change' | 'magiclink' | 'invite'
+
+const verificacoes = new Map<string, Promise<void>>()
+
+/**
+ * Etapa 2 (e o link de nova senha): troca o token_hash do e-mail por uma
+ * sessão NESTE aparelho — é o que faz o celular já entrar logado. A
+ * verificação só acontece quando a página roda, então um antivírus que
+ * "visita" o link antes da pessoa não gasta o token, como gastava com o
+ * link padrão do Supabase.
+ *
+ * O mesmo link processado duas vezes (StrictMode, F5, duas abas do mesmo
+ * clique) faz uma verificação só: a segunda falharia com "link já usado".
+ */
+export function verificarLinkDoEmail(tokenHash: string, tipo: TipoDeLink): Promise<void> {
+  const chave = `${tipo}:${tokenHash}`
+  let pedido = verificacoes.get(chave)
+  if (!pedido) {
+    pedido = (async () => {
+      const { error } = await client().auth.verifyOtp({ token_hash: tokenHash, type: tipo })
+      if (error) erro(error)
+    })()
+    verificacoes.set(chave, pedido)
+  }
+  return pedido
+}
+
+/** Respostas da pesquisa rápida (etapa 3), com os valores dos enums do banco. */
+export type RespostasPesquisa = {
+  /** relation_t — 'proprio' quando quem se inscreve é quem vai usar. */
+  relation: string
+  /** Como a pessoa que vai usar gosta de ser chamada. */
+  userName: string
+  /** condition_t — 'prefiro-nao' é uma resposta válida. */
+  condition: string
+  /** os_t do computador onde a IrisFlow vai ser instalada ('nao-sei' vale). */
+  os: string
+  wantsCaregiverApp: boolean
+  feedbackConsent: boolean
+  /** Opcional. */
+  howFound: string
+  /** Opcional, com ou sem máscara. Vazio mantém o número que a conta tiver. */
+  phone: string
+}
+
+/**
+ * Etapa 3 — e a edição das respostas no /perfil: grava a pesquisa por
+ * `complete_beta_registration`, que na primeira vez também abre a
+ * assinatura 'beta' (é ela que o desktop consulta para liberar o login).
+ *
+ * A função do banco sobrescreve `profiles.newsletter` e os campos de
+ * profissional do beneficiário. Por isso o que a conta já tem é lido antes
+ * e devolvido: responder a pesquisa não desmarca as novidades escolhidas ao
+ * criar a conta nem apaga o profissional de uma inscrição antiga.
+ */
+export async function responderPesquisa(r: RespostasPesquisa): Promise<Account> {
+  const sb = client()
+  const perfil = await fetchPerfilBasico()
+  const atual = await fetchAccount().catch(() => null)
+
+  const { error } = await sb.rpc('complete_beta_registration', {
+    // só dígitos (ou null, que mantém o número atual): o CHECK de
+    // profiles.phone aceita 10–11 dígitos
+    p_phone: phoneDigits(r.phone),
+    p_user_name: r.userName.trim().replace(/\s+/g, ' '),
+    p_relation: r.relation,
+    p_condition: r.condition,
+    p_os: r.os,
+    p_document: null,
+    p_wants_caregiver_app: r.wantsCaregiverApp,
+    p_feedback_consent: r.feedbackConsent,
+    p_how_found: r.howFound.trim() || null,
+    p_newsletter: perfil?.newsletter ?? false,
+    p_prescriber_name: atual?.profile.prescriberName ?? null,
+    p_prescriber_role: atual?.profile.prescriberRole ?? null,
+  })
+  if (error) erro(error)
 
   const conta = await fetchAccount()
-  if (!conta) erro('A inscrição foi feita, mas não foi possível carregar a conta.')
+  if (!conta) erro('A pesquisa foi salva, mas não foi possível carregar a conta.')
   return conta
+}
+
+/** A parte da inscrição que é só da beta (tabela beta_registrations). */
+export type InscricaoBeta = {
+  wantsCaregiverApp: boolean
+  feedbackConsent: boolean
+  /** Vazio quando não respondido. */
+  howFound: string
+  registeredAt: string
+  /** Primeiro clique em "baixar", se já houve. */
+  downloadedAt: string | null
+}
+
+/**
+ * A linha de beta_registrations da conta (a RLS só deixa ver a própria), ou
+ * null quando a pesquisa ainda não foi respondida. Nunca rejeita: sem rede,
+ * o /perfil mostra o resto e esconde só estes campos.
+ */
+export async function fetchInscricaoBeta(): Promise<InscricaoBeta | null> {
+  try {
+    const { data, error } = await client()
+      .from('beta_registrations')
+      .select('wants_caregiver_app, feedback_consent, how_found, registered_at, downloaded_at')
+      .maybeSingle()
+    if (error || !data) return null
+    const row = data as {
+      wants_caregiver_app: boolean
+      feedback_consent: boolean
+      how_found: string | null
+      registered_at: string
+      downloaded_at: string | null
+    }
+    return {
+      wantsCaregiverApp: Boolean(row.wants_caregiver_app),
+      feedbackConsent: Boolean(row.feedback_consent),
+      howFound: row.how_found ?? '',
+      registeredAt: row.registered_at,
+      downloadedAt: row.downloaded_at ?? null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/** O que a pessoa pode trocar na seção "Dados da conta" do /perfil. */
+export type DadosDaConta = {
+  nome: string
+  /** Com ou sem máscara. Vazio apaga o número. */
+  telefone: string
+  newsletter: boolean
+}
+
+/**
+ * Atualiza nome, telefone e preferência de novidades em `profiles` (a RLS
+ * só deixa escrever a própria linha). O CHECK do banco aceita telefone com
+ * 10 ou 11 dígitos, que é o que o formulário valida antes. O e-mail não
+ * muda por aqui: ele é o login do site, do desktop e do app do cuidador.
+ */
+export async function atualizarDadosDaConta(d: DadosDaConta): Promise<void> {
+  const sb = client()
+  const { data: sessao } = await sb.auth.getSession()
+  const uid = sessao.session?.user.id
+  if (!uid) erro('Sua sessão terminou. Entre de novo para salvar.')
+
+  const { error } = await sb
+    .from('profiles')
+    .update({
+      buyer_name: d.nome.trim().replace(/\s+/g, ' '),
+      phone: phoneDigits(d.telefone),
+      newsletter: d.newsletter,
+    })
+    .eq('id', uid)
+  if (error) erro(error)
 }
 
 /** Estado do programa beta, lido de `beta_program` (uma linha, pública). */
@@ -313,6 +494,8 @@ export type BetaProgram = {
   currentVersion: string
   /** Limite de inscrições, ou null para sem limite. */
   maxRegistrations: number | null
+  /** Quando o download abre (ISO). Antes disso os botões mostram a data. */
+  launchAt: string
 }
 
 /** Usado enquanto a consulta não volta, e em qualquer falha. */
@@ -321,6 +504,7 @@ export const BETA_PROGRAM_RESERVA: BetaProgram = {
   endsAt: BETA.fimReserva,
   currentVersion: BETA.versaoReserva,
   maxRegistrations: null,
+  launchAt: BETA.lancamentoReserva,
 }
 
 type BetaProgramRow = {
@@ -328,19 +512,19 @@ type BetaProgramRow = {
   ends_at: string
   current_version: string | null
   max_registrations: number | null
+  /** Ausente num banco anterior à migração 20260924230017. */
+  launch_at?: string | null
 }
 
 /**
  * Nunca rejeita: em qualquer falha (sem rede, sem .env.local, migração não
  * aplicada) devolve a reserva, para a página /beta continuar aparecendo.
+ * `select('*')` e não a lista de colunas: um banco sem `launch_at` ainda
+ * responde, e a data cai na reserva do content.ts.
  */
 export async function fetchBetaProgram(): Promise<BetaProgram> {
   try {
-    const { data, error } = await client()
-      .from('beta_program')
-      .select('open, ends_at, current_version, max_registrations')
-      .eq('id', 1)
-      .maybeSingle()
+    const { data, error } = await client().from('beta_program').select('*').eq('id', 1).maybeSingle()
 
     if (error || !data) return BETA_PROGRAM_RESERVA
     const row = data as BetaProgramRow
@@ -349,6 +533,7 @@ export async function fetchBetaProgram(): Promise<BetaProgram> {
       endsAt: row.ends_at || BETA.fimReserva,
       currentVersion: row.current_version || BETA.versaoReserva,
       maxRegistrations: typeof row.max_registrations === 'number' ? row.max_registrations : null,
+      launchAt: row.launch_at || BETA.lancamentoReserva,
     }
   } catch {
     return BETA_PROGRAM_RESERVA
@@ -433,21 +618,26 @@ export async function fetchAccount(): Promise<Account | null> {
   return data ? paraAccount(data as MyAccountRow) : null
 }
 
-/** O que a conta já tem antes de concluir a inscrição (nome e e-mail do signUp). */
+/** O que a conta tem desde o signUp, antes da pesquisa (tabela profiles). */
 export type PerfilBasico = {
   buyerName: string
   email: string
   /** Só dígitos; vazio quando não informado (a coluna aceita NULL). */
   phone: string
   newsletter: boolean
+  /** Quando a conta foi criada (ISO). */
+  createdAt: string
+  /** Quando o e-mail foi confirmado (ISO), ou null se ainda não foi. */
+  emailConfirmedAt: string | null
 }
 
 /**
  * Perfil da sessão atual, lido de `profiles` (a RLS só deixa ver o próprio).
- * Existe desde o signUp, pelo gatilho on_auth_user_created, mesmo quando a
- * inscrição não foi concluída — é o que a /beta usa para não pedir de novo
- * nome e e-mail a quem voltou depois de confirmar o endereço. Nunca rejeita:
- * sem sessão, sem rede ou sem linha, devolve null e o formulário segue vazio.
+ * Existe desde o signUp, pelo gatilho on_auth_user_created, mesmo antes da
+ * pesquisa — é o que a pesquisa usa para saber o nome de quem se inscreveu
+ * (e as novidades escolhidas) e o que o /perfil mostra enquanto a pesquisa
+ * não foi respondida. Nunca rejeita: sem sessão, sem rede ou sem linha,
+ * devolve null.
  */
 export async function fetchPerfilBasico(): Promise<PerfilBasico | null> {
   try {
@@ -458,17 +648,26 @@ export async function fetchPerfilBasico(): Promise<PerfilBasico | null> {
 
     const { data, error } = await sb
       .from('profiles')
-      .select('buyer_name, email, phone, newsletter')
+      .select('buyer_name, email, phone, newsletter, created_at')
       .eq('id', uid)
       .maybeSingle()
     if (error || !data) return null
 
-    const row = data as { buyer_name: string; email: string; phone: string | null; newsletter: boolean }
+    const row = data as {
+      buyer_name: string
+      email: string
+      phone: string | null
+      newsletter: boolean
+      created_at: string
+    }
     return {
       buyerName: row.buyer_name ?? '',
       email: row.email ?? '',
       phone: phoneDigits(row.phone) ?? '',
       newsletter: Boolean(row.newsletter),
+      createdAt: row.created_at ?? '',
+      // vem da sessão (auth.users), não de profiles
+      emailConfirmedAt: sessao.session?.user.email_confirmed_at ?? null,
     }
   } catch {
     return null

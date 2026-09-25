@@ -1,10 +1,58 @@
-/* Estilos só da página /beta. O resto (fluxo, sucesso, download,
-   verificação de compatibilidade) vem de checkout.css e sucesso.css. */
+/* Estilos só da página /beta (e da /confirmar-email, que usa os mesmos
+   blocos de etapa). O resto (fluxo, sucesso, download, verificação de
+   compatibilidade) vem de checkout.css e sucesso.css. */
 
-/* --- resumo do programa: custo, data, versão, sistemas --- */
+/* --- etapa 1: abertura em duas colunas (texto | formulário) --- */
+/* Ordem de leitura: texto → formulário → o que a pessoa recebe. No
+   computador a lista do que recebe sobe para baixo do texto (coluna da
+   esquerda) e o formulário ocupa a direita inteira; no celular fica tudo
+   em uma coluna, com o formulário logo depois do resumo. */
+.beta__abertura {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-areas:
+    'pitch cartao'
+    'recebe cartao';
+  column-gap: clamp(var(--sp-6), 5vw, var(--sp-8));
+  row-gap: var(--sp-6);
+  align-items: start;
+}
+
+.beta__pitch {
+  grid-area: pitch;
+}
+
+.beta__pitch .beta__facts {
+  margin-bottom: 0;
+}
+
+.beta__cartao-area {
+  grid-area: cartao;
+}
+
+.beta__titulo {
+  max-width: 18ch;
+}
+
+/* "LANÇAMENTO 10/11  A beta fica disponível em 10 de novembro…" */
+.beta__lancamento {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
+  margin: 0 0 var(--sp-4);
+  font-size: 1.02rem;
+  color: var(--text);
+}
+
+.beta__lancamento--centro {
+  justify-content: center;
+}
+
+/* --- resumo do programa: custo, lançamento, sistema, fim --- */
 .beta__facts {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-3);
   list-style: none;
   margin: 0 0 var(--sp-6);
@@ -34,20 +82,134 @@
   color: var(--text);
 }
 
-.beta__receives {
-  margin-bottom: var(--sp-6);
+/* o dia do lançamento, no mesmo vermelho da etiqueta */
+.beta__facts .beta__fact--lancamento {
+  border-color: rgba(214, 41, 58, 0.55);
+  background: rgba(214, 41, 58, 0.12);
 }
 
-.beta__receives h3 {
-  font-size: 1.08rem;
+.beta__facts .beta__fact--lancamento strong {
+  color: #ff8a93;
 }
 
-.beta__receives p {
-  font-size: 0.94rem;
+/* --- o que a pessoa recebe (lista compacta, ao lado do formulário) --- */
+.beta__recebe {
+  grid-area: recebe;
+  list-style: none;
   margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-4);
 }
 
-/* --- app do cuidador, no painel de download --- */
+.beta__recebe li {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: flex-start;
+}
+
+.beta__recebe-icone {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.beta__recebe h2 {
+  font-size: 1.02rem;
+  margin: 0 0 4px;
+}
+
+.beta__recebe p {
+  margin: 0;
+  font-size: 0.93rem;
+  color: var(--text-soft);
+}
+
+/* --- cartão do formulário --- */
+.beta__cartao-titulo {
+  font-size: 1.5rem;
+  margin: 0 0 var(--sp-2);
+}
+
+.beta__cartao-texto {
+  margin: 0 0 var(--sp-5);
+  font-size: 0.95rem;
+  color: var(--text-dim);
+}
+
+.beta__cartao form > .btn {
+  margin-top: var(--sp-5);
+}
+
+/* --- etapas 2 e 3 (e a página de confirmação): cartão único --- */
+.beta__icone-grande {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: var(--sp-4);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.beta__icone-grande--ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.beta__etapa-titulo {
+  max-width: none;
+  font-size: clamp(1.6rem, 3.2vw, 2.2rem);
+}
+
+.beta__etapa-titulo:focus {
+  outline: none;
+}
+
+.beta__etapa-texto {
+  margin-bottom: var(--sp-5);
+  max-width: 60ch;
+}
+
+.beta__confirme-acoes {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.beta__confirme-secundarias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.beta__confirme-secundarias .btn {
+  flex: 1 1 200px;
+}
+
+/* --- etapa 4: download --- */
+.beta__trilha-final {
+  margin-bottom: var(--sp-6);
+  padding-block: var(--sp-5) var(--sp-2);
+}
+
+.beta__trilha-final .stepper {
+  margin-bottom: var(--sp-3);
+}
+
+.beta__summary {
+  margin-bottom: var(--sp-5);
+}
+
+.beta__summary .summary {
+  margin-bottom: 0;
+}
+
 .beta__cuidador {
   display: flex;
   align-items: center;
@@ -70,6 +232,18 @@
   max-width: 56ch;
 }
 
+.beta__steps {
+  margin-top: var(--sp-7);
+}
+
+.beta__fim {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-7);
+}
+
 /* --- inscrições fechadas --- */
 .beta__closed-actions {
   display: flex;
@@ -77,43 +251,7 @@
   flex-wrap: wrap;
 }
 
-@media (max-width: 720px) {
-  .beta__facts {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.beta__summary {
-  margin-bottom: var(--sp-5);
-}
-
-.beta__summary .summary {
-  margin-bottom: 0;
-}
-
-.beta__ok {
-  color: var(--ok);
-}
-
-.beta__steps {
-  margin-top: var(--sp-7);
-}
-
-/* --- e-mail a confirmar ("Confirm email" ligado) --- */
-.beta__pendente-privacidade {
-  margin: 0 0 var(--sp-5);
-  font-size: 0.93rem;
-  color: var(--text-dim);
-}
-
-.beta__pendente-acoes {
-  display: flex;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-/* "Sair" no rodapé do modo "concluir": botão com cara de link */
+/* "Sair" no rodapé da pesquisa: botão com cara de link */
 .beta__sair {
   background: none;
   border: 0;
@@ -122,12 +260,61 @@
   cursor: pointer;
 }
 
+@media (max-width: 960px) {
+  .beta__abertura {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'pitch'
+      'cartao'
+      'recebe';
+  }
+}
+
 @media (max-width: 640px) {
-  .beta__pendente-acoes {
-    flex-direction: column-reverse;
+  .beta__confirme-secundarias {
+    flex-direction: column;
+  }
+  .beta__fim .btn {
     width: 100%;
   }
-  .beta__pendente-acoes .btn {
-    width: 100%;
-  }
+}
+
+/* --- /confirmar-email --- */
+.confirmar__carregando {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  min-height: 180px;
+  color: var(--text-soft);
+}
+
+.confirmar__carregando p {
+  margin: 0;
+}
+
+.confirmar__reenvio {
+  display: grid;
+  gap: var(--sp-3);
+  margin-top: var(--sp-6);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line);
+}
+
+.confirmar__reenvio .flow__optional-title {
+  margin-bottom: 0;
+}
+
+.confirmar__reenvio .field {
+  margin-bottom: 0;
+}
+
+.confirmar__reenvio .btn {
+  justify-self: start;
+}
+
+/* Títulos que recebem o foco ao trocar de etapa (para o leitor de tela
+   anunciar a tela nova) não são interativos: sem o anel de foco. */
+.flow h1[tabindex='-1']:focus {
+  outline: none;
 }

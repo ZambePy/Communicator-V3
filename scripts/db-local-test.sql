@@ -167,15 +167,19 @@ begin
   end;
 end $$;
 
--- 12. Anon lê beta_program e plans (RLS), não lê beta_registrations.
+-- 12. Anon lê beta_program (com a data do lançamento, que o site usa para
+--     travar o download até o dia) e plans (RLS), não lê beta_registrations.
 reset request.jwt.claim.sub;
 set role anon;
-select open, current_version from public.beta_program;
+select open, current_version, launch_at from public.beta_program;
 select id, purchasable from public.plans order by 1;
 do $$
 begin
   if (select count(*) from public.beta_registrations) <> 0 then
     raise exception 'anon não deveria enxergar beta_registrations';
+  end if;
+  if (select launch_at from public.beta_program) <> '2026-11-10 00:00:00-03'::timestamptz then
+    raise exception 'launch_at deveria nascer em 10/11/2026 00:00 (Brasília)';
   end if;
 end $$;
 reset role;

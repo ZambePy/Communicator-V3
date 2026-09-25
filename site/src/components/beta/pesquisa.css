@@ -1,0 +1,178 @@
+/* Pesquisa rápida da beta: grupos de opções de um toque. Mesmo desenho do
+   seletor de meio de pagamento (.method, checkout.css), mais compacto. */
+
+.pesquisa {
+  display: grid;
+  gap: var(--sp-5);
+}
+
+.pesquisa .field,
+.pesquisa .check {
+  margin-bottom: 0;
+}
+
+.escolhas {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.escolhas__legenda {
+  padding: 0;
+  margin-bottom: var(--sp-3);
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  color: var(--text);
+}
+
+.escolhas__nota {
+  margin: calc(-1 * var(--sp-2)) 0 var(--sp-3);
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  max-width: 62ch;
+}
+
+.escolhas__grade {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.escolhas__grade--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.escolhas__grade--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.escolha {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 56px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--r-md);
+  border: 2px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition:
+    border-color var(--dur) var(--ease-out),
+    background var(--dur) var(--ease-out);
+}
+
+.escolha:hover {
+  border-color: var(--line-strong);
+}
+
+.escolha.is-on {
+  border-color: var(--teal);
+  background: var(--ok-soft);
+  color: var(--text);
+}
+
+.escolha__input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+
+.escolha:has(.escolha__input:focus-visible) {
+  outline: 3px solid var(--blue-500);
+  outline-offset: 3px;
+}
+
+/* bolinha do rádio, desenhada (o input fica escondido mas acessível) */
+.escolha__marca {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+}
+
+.escolha.is-on .escolha__marca {
+  border-color: var(--teal-300);
+}
+
+.escolha.is-on .escolha__marca::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--teal-300);
+}
+
+.escolha__texto {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.escolha__titulo {
+  font-weight: 700;
+  font-size: 0.98rem;
+}
+
+.escolha__nota {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.escolhas--erro .escolha:not(.is-on) {
+  border-color: var(--danger-line);
+}
+
+.escolhas .field__error {
+  margin-top: var(--sp-2);
+}
+
+.pesquisa__tempo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 0.92rem;
+  color: var(--text-dim);
+}
+
+.pesquisa .flow__actions {
+  margin-top: 0;
+}
+
+.pesquisa .flow__optional {
+  margin-top: 0;
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.pesquisa .flow__optional-title {
+  margin-bottom: 0;
+}
+
+/* sim/não: cabem numa linha mesmo em duas colunas no celular */
+.escolhas__grade--curta .escolha {
+  padding-inline: var(--sp-3);
+}
+
+.escolhas__grade--curta .escolha__titulo {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .escolhas__grade--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  /* frases longas ("Meu filho ou minha filha") pedem uma coluna; sim/não cabe em duas */
+  .escolhas__grade--2:not(.escolhas__grade--curta) {
+    grid-template-columns: 1fr;
+  }
+}

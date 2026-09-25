@@ -188,3 +188,54 @@ describe('<DownloadPanel /> com o último release do GitHub', () => {
     expect(fetchFake).toHaveBeenCalledTimes(1)
   })
 })
+
+/* ---------------- lançamento da beta e vitrine ---------------- */
+
+describe('<DownloadPanel liberaEm vitrine />', () => {
+  const FUTURO = '2099-11-10T03:00:00Z'
+  const PASSADO = '2020-11-10T03:00:00Z'
+
+  it('antes do lançamento: o Windows fica travado com a etiqueta do dia, sem link de arquivo nem "Todas as versões"', async () => {
+    responder(200, SO_WINDOWS)
+    render(<DownloadPanel liberaEm={FUTURO} />)
+
+    const travado = await screen.findByRole('button', { name: /Disponível em 10\/11/ })
+    expect(travado).toBeDisabled()
+    expect(screen.getByText(/O download abre no lançamento, em 10 de novembro/)).toBeInTheDocument()
+    expect(document.querySelector('.dl__card.is-locked .etiqueta-lancamento')).not.toBeNull()
+    expect(screen.queryByRole('link', { name: /Baixar para Windows/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('Todas as versões')).not.toBeInTheDocument()
+    // macOS e Linux continuam "Em breve", como antes
+    expect(screen.getByRole('button', { name: 'macOS — Em breve' })).toBeDisabled()
+  })
+
+  it('depois do lançamento: volta a ser o painel de sempre', async () => {
+    responder(200, SO_WINDOWS)
+    render(<DownloadPanel liberaEm={PASSADO} />)
+    expect(await screen.findByRole('link', { name: /Baixar para Windows/ })).toBeInTheDocument()
+    expect(screen.getByText('Todas as versões')).toBeInTheDocument()
+    expect(document.querySelector('.dl__card.is-locked')).toBeNull()
+  })
+
+  it('vitrine (páginas públicas): nenhum link de arquivo, mesmo depois do lançamento', async () => {
+    responder(200, SO_WINDOWS)
+    render(<DownloadPanel vitrine liberaEm={PASSADO} />)
+    expect(await screen.findByText(/Disponível para quem se inscreve na beta/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Baixar para Windows/ })).not.toBeInTheDocument()
+    expect(screen.queryByText('Todas as versões')).not.toBeInTheDocument()
+  })
+
+  it('libera sozinho na virada do lançamento, sem recarregar a página', async () => {
+    responder(200, SO_WINDOWS)
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const daqui = new Date(Date.now() + 5_000).toISOString()
+      render(<DownloadPanel liberaEm={daqui} />)
+      expect(screen.getByRole('button', { name: /Disponível em/ })).toBeDisabled()
+      await vi.advanceTimersByTimeAsync(6_000)
+      await waitFor(() => expect(screen.getByRole('link', { name: /Baixar para Windows/ })).toBeInTheDocument())
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

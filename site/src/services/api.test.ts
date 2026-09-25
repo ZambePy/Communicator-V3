@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BETA, PLANS } from '@/data/content'
-import type { BetaProfile } from '@/context/AccountContext'
+import type { Profile } from '@/context/AccountContext'
 // O vi.mock abaixo é içado pelo vitest antes deste import, então o api.ts
 // já nasce enxergando o cliente falso.
 import * as api from './api'
@@ -34,8 +34,13 @@ const { auth, fake, clientMock, estado } = vi.hoisted(() => {
     signUp: vi.fn(),
     resend: vi.fn(async () => ({ data: { user: null, session: null }, error: null })),
     resetPasswordForEmail: vi.fn(async () => ({ data: {}, error: null })),
+    verifyOtp: vi.fn(async (): Promise<{ data: unknown; error: unknown }> => ({
+      data: { session: { user: { id: 'u1' } } },
+      error: null,
+    })),
   }
   const estado = {
+    respostaUpdate: (async () => ({ data: null, error: null })) as () => Resposta,
     respostaPlans: (async () => ({ data: [], error: null })) as () => Resposta,
     respostaSingle: (async (_tabela: string) => ({ data: null, error: null })) as (
       tabela: string,
@@ -55,6 +60,7 @@ const { auth, fake, clientMock, estado } = vi.hoisted(() => {
     rpc: vi.fn(async (): Promise<{ data: unknown; error: unknown }> => ({ data: null, error: null })),
     from: vi.fn((tabela: string) => ({
       select: vi.fn(() => consulta(tabela)),
+      update: vi.fn(() => ({ eq: vi.fn(() => estado.respostaUpdate()) })),
     })),
   }
   const clientMock = vi.fn(() => fake)
@@ -80,6 +86,7 @@ beforeEach(() => {
   fake.rpc.mockResolvedValue({ data: null, error: null })
   estado.respostaPlans = async () => ({ data: [], error: null })
   estado.respostaSingle = async () => ({ data: null, error: null })
+  estado.respostaUpdate = async () => ({ data: null, error: null })
 })
 
 describe('signIn', () => {
@@ -253,131 +260,167 @@ const LINHA_MY_ACCOUNT = {
   holder: null,
 }
 
-const perfilBeta: BetaProfile = {
+/** Perfil do cadastro pago (fechado na beta), usado só pelo teste de signUp. */
+const perfilPago: Profile = {
   buyerName: 'Maria Aparecida Souza',
   email: '  Maria@Exemplo.com.br ',
   phone: '(11) 90000-0000',
-  document: '',
+  document: '123.456.789-09',
   userName: 'João',
   relation: 'conjuge',
   condition: 'ela',
   os: 'windows',
   newsletter: true,
+}
+
+const respostas: api.RespostasPesquisa = {
+  relation: 'conjuge',
+  userName: '  João  ',
+  condition: 'ela',
+  os: 'windows',
   wantsCaregiverApp: true,
   feedbackConsent: true,
   howFound: '  ',
+  phone: '(11) 90000-0000',
 }
 
-describe('signUpBeta', () => {
+describe('criarContaBeta (etapa 1: só a conta)', () => {
+  it('manda nome, novidades e o aceite dos termos datado em options.data, com o link para /confirmar-email', async () => {
+    auth.signUp.mockResolvedValueOnce({ data: { user: { id: 'u1' }, session: null }, error: null })
+
+    await api.criarContaBeta({
+      nome: '  Maria   Aparecida Souza ',
+      email: '  Maria@Exemplo.com.br ',
+      senha: 'segredo123',
+      newsletter: false,
+    })
+
+    const chamada = auth.signUp.mock.calls[0][0]
+    expect(chamada.email).toBe('maria@exemplo.com.br')
+    expect(chamada.password).toBe('segredo123')
+    expect(chamada.options.emailRedirectTo).toBe('https://irisflow-communicator.pages.dev/confirmar-email')
+    expect(chamada.options.data.buyer_name).toBe('Maria Aparecida Souza')
+    expect(chamada.options.data.newsletter).toBe(false)
+    expect(Number.isNaN(Date.parse(chamada.options.data.terms_accepted_at))).toBe(false)
+    // nada de saúde nem de pesquisa no signUp: o que vai aqui viaja no JWT
+    expect(Object.keys(chamada.options.data).sort()).toEqual(['buyer_name', 'newsletter', 'terms_accepted_at'])
+    // e nenhuma RPC: a pesquisa é outra etapa
+    expect(fake.rpc).not.toHaveBeenCalled()
+  })
+
+  it("devolve 'confirmar' sem sessão (Confirm email ligado) e 'sessao' quando o projeto já entrega a sessão", async () => {
+    auth.signUp.mockResolvedValueOnce({ data: { user: { id: 'u1' }, session: null }, error: null })
+    await expect(
+      api.criarContaBeta({ nome: 'Maria Souza', email: 'maria@exemplo.com.br', senha: 'segredo123', newsletter: true }),
+    ).resolves.toBe('confirmar')
+
+    auth.signUp.mockResolvedValueOnce({ data: { user: { id: 'u1' }, session: { user: { id: 'u1' } } }, error: null })
+    await expect(
+      api.criarContaBeta({ nome: 'Maria Souza', email: 'maria@exemplo.com.br', senha: 'segredo123', newsletter: true }),
+    ).resolves.toBe('sessao')
+  })
+
+  it('falha do servidor de e-mail vira a mensagem que a família entende', async () => {
+    auth.signUp.mockResolvedValueOnce({
+      data: { user: null, session: null },
+      error: { message: 'Error sending confirmation email', status: 500, code: 'unexpected_failure' },
+    })
+
+    const erro = await api
+      .criarContaBeta({ nome: 'Maria Souza', email: 'maria@exemplo.com.br', senha: 'segredo123', newsletter: true })
+      .catch((e) => e)
+    expect(erro).toBeInstanceOf(api.ApiError)
+    expect(erro.message).toMatch(/Não conseguimos enviar o e-mail agora/)
+  })
+})
+
+describe('verificarLinkDoEmail (etapa 2: o link abre a sessão no aparelho)', () => {
+  it('troca o token_hash do link por uma sessão com verifyOtp', async () => {
+    await api.verificarLinkDoEmail('hash-1', 'email')
+    expect(auth.verifyOtp).toHaveBeenCalledWith({ token_hash: 'hash-1', type: 'email' })
+  })
+
+  it('o mesmo link processado duas vezes (StrictMode, F5) faz uma verificação só', async () => {
+    await Promise.all([api.verificarLinkDoEmail('hash-2', 'email'), api.verificarLinkDoEmail('hash-2', 'email')])
+    await api.verificarLinkDoEmail('hash-2', 'email')
+    expect(auth.verifyOtp).toHaveBeenCalledTimes(1)
+  })
+
+  it('link vencido ou já usado vira mensagem em português', async () => {
+    auth.verifyOtp.mockResolvedValueOnce({
+      data: { session: null },
+      error: { message: 'Email link is invalid or has expired', status: 403, code: 'otp_expired' },
+    })
+    const erro = await api.verificarLinkDoEmail('hash-3', 'email').catch((e) => e)
+    expect(erro).toBeInstanceOf(api.ApiError)
+    expect(erro.message).toBe('O link expirou ou já foi usado.')
+  })
+})
+
+describe('responderPesquisa (etapa 3: abre a assinatura beta)', () => {
   beforeEach(() => {
-    // primeiro getSession (antes do signUp): sem sessão; depois: com sessão
-    auth.getSession
-      .mockResolvedValueOnce({ data: { session: null } })
-      .mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
-    auth.signUp.mockResolvedValue({ data: { session: { user: { id: 'u1' } } }, error: null })
+    auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
     fake.rpc.mockResolvedValue({
       data: { subscription_id: 'sub-beta', beta_ends_at: LINHA_MY_ACCOUNT.next_charge_at, current_version: '1.0.0-beta.1' },
       error: null,
     })
-    estado.respostaSingle = async (tabela) =>
-      tabela === 'my_account' ? { data: LINHA_MY_ACCOUNT, error: null } : { data: null, error: null }
+    let chamadasMyAccount = 0
+    estado.respostaSingle = async (tabela) => {
+      if (tabela === 'profiles') {
+        return {
+          data: { buyer_name: 'Maria Souza', email: 'maria@exemplo.com.br', phone: null, newsletter: true, created_at: '2026-09-24T22:37:43Z' },
+          error: null,
+        }
+      }
+      if (tabela === 'my_account') {
+        // antes da pesquisa não há conta; depois dela, a conta beta
+        chamadasMyAccount += 1
+        return chamadasMyAccount === 1 ? { data: null, error: null } : { data: LINHA_MY_ACCOUNT, error: null }
+      }
+      return { data: null, error: null }
+    }
   })
 
-  it('cria o usuário, chama complete_beta_registration com p_document null quando o CPF está vazio e devolve a conta beta', async () => {
-    const conta = await api.signUpBeta(perfilBeta, 'segredo123')
+  it('grava as respostas com CPF null, telefone só dígitos, nome aparado e as novidades escolhidas ao criar a conta', async () => {
+    const conta = await api.responderPesquisa(respostas)
 
-    expect(auth.signUp).toHaveBeenCalledWith(
-      expect.objectContaining({ email: 'maria@exemplo.com.br', password: 'segredo123' }),
-    )
-    expect(fake.rpc).toHaveBeenCalledWith(
-      'complete_beta_registration',
-      expect.objectContaining({
-        p_document: null,
-        // só os dígitos: a máscara nunca vai para o banco
-        p_phone: '11900000000',
-        p_user_name: 'João',
-        p_os: 'windows',
-        p_wants_caregiver_app: true,
-        p_feedback_consent: true,
-        p_how_found: null,
-        p_newsletter: true,
-        p_prescriber_name: null,
-      }),
-    )
-    // nunca o RPC do fluxo pago
+    expect(fake.rpc).toHaveBeenCalledWith('complete_beta_registration', {
+      p_phone: '11900000000',
+      p_user_name: 'João',
+      p_relation: 'conjuge',
+      p_condition: 'ela',
+      p_os: 'windows',
+      p_document: null,
+      p_wants_caregiver_app: true,
+      p_feedback_consent: true,
+      p_how_found: null,
+      p_newsletter: true,
+      p_prescriber_name: null,
+      p_prescriber_role: null,
+    })
     expect(fake.rpc).not.toHaveBeenCalledWith('complete_registration', expect.anything())
-
     expect(conta.planId).toBe('beta')
     expect(conta.priceBRL).toBe(0)
-    expect(conta.status).toBe('ativa')
-    expect(conta.nextChargeAt).toBe(LINHA_MY_ACCOUNT.next_charge_at)
   })
 
-  it('telefone vazio vai como null (a RPC mantém o que existir), nunca como string vazia', async () => {
-    await api.signUpBeta({ ...perfilBeta, phone: '' }, 'segredo123')
+  it('editar as respostas no perfil não apaga o profissional de uma inscrição antiga', async () => {
+    estado.respostaSingle = async (tabela) =>
+      tabela === 'my_account'
+        ? { data: { ...LINHA_MY_ACCOUNT, prescriber_name: 'Dra. Ana', prescriber_role: 'Fonoaudiologia' }, error: null }
+        : { data: { buyer_name: 'Maria Souza', email: 'm@x.com', phone: null, newsletter: false, created_at: '' }, error: null }
+
+    await api.responderPesquisa({ ...respostas, phone: '' })
+
     expect(fake.rpc).toHaveBeenCalledWith(
       'complete_beta_registration',
-      expect.objectContaining({ p_phone: null }),
-    )
-  })
-
-  it('telefone fora do formato (DDD + 8 ou 9 dígitos) também vai como null, nunca inválido', async () => {
-    await api.signUpBeta({ ...perfilBeta, phone: '(11) 9000' }, 'segredo123')
-    expect(fake.rpc).toHaveBeenCalledWith(
-      'complete_beta_registration',
-      expect.objectContaining({ p_phone: null }),
-    )
-
-    fake.rpc.mockClear()
-    await api.signUpBeta({ ...perfilBeta, phone: '(11) 3333-4444' }, 'segredo123')
-    expect(fake.rpc).toHaveBeenCalledWith(
-      'complete_beta_registration',
-      expect.objectContaining({ p_phone: '1133334444' }),
-    )
-  })
-
-  it('o link de confirmação do e-mail aponta para /entrar do site público', async () => {
-    await api.signUpBeta(perfilBeta, 'segredo123')
-    expect(auth.signUp).toHaveBeenCalledWith(
       expect.objectContaining({
-        options: expect.objectContaining({
-          emailRedirectTo: 'https://irisflow-communicator.pages.dev/entrar',
-        }),
+        p_prescriber_name: 'Dra. Ana',
+        p_prescriber_role: 'Fonoaudiologia',
+        // telefone vazio vai como null: a função mantém o número que existir
+        p_phone: null,
+        p_newsletter: false,
       }),
     )
-    // e os dados sensíveis não vão no signUp (viram metadado e viajam no JWT)
-    const opcoes = auth.signUp.mock.calls[0][0].options
-    expect(Object.keys(opcoes.data)).toEqual(['buyer_name', 'newsletter'])
-  })
-
-  it('"Confirm email" ligado: signUp sem sessão vira ConfirmacaoDeEmailPendente e a RPC não roda', async () => {
-    auth.signUp.mockResolvedValueOnce({ data: { user: { id: 'u1' }, session: null }, error: null })
-
-    const erro = await api.signUpBeta(perfilBeta, 'segredo123').catch((e) => e)
-
-    expect(erro).toBeInstanceOf(api.ConfirmacaoDeEmailPendente)
-    expect(erro.email).toBe('maria@exemplo.com.br')
-    expect(erro.message).toMatch(/Confirme o e-mail/)
-    expect(fake.rpc).not.toHaveBeenCalled()
-  })
-
-  it('manda o CPF quando preenchido', async () => {
-    await api.signUpBeta({ ...perfilBeta, document: '123.456.789-09', howFound: 'Indicação' }, 'segredo123')
-
-    expect(fake.rpc).toHaveBeenCalledWith(
-      'complete_beta_registration',
-      expect.objectContaining({ p_document: '123.456.789-09', p_how_found: 'Indicação' }),
-    )
-  })
-
-  it('não repete o signUp quando já há sessão (tentativa anterior abandonada)', async () => {
-    auth.getSession.mockReset()
-    auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
-
-    await api.signUpBeta(perfilBeta, 'segredo123')
-
-    expect(auth.signUp).not.toHaveBeenCalled()
-    expect(fake.rpc).toHaveBeenCalledWith('complete_beta_registration', expect.anything())
   })
 
   it('rejeita com a mensagem do banco quando as inscrições estão fechadas', async () => {
@@ -385,20 +428,88 @@ describe('signUpBeta', () => {
       data: null,
       error: { message: 'As inscrições da beta estão fechadas no momento.', code: 'P0001' },
     })
-
-    const erro = await api.signUpBeta(perfilBeta, 'segredo123').catch((e) => e)
-
+    const erro = await api.responderPesquisa(respostas).catch((e) => e)
     expect(erro).toBeInstanceOf(api.ApiError)
     expect(erro.message).toBe('As inscrições da beta estão fechadas no momento.')
   })
 })
 
+describe('fetchInscricaoBeta', () => {
+  it('lê a própria linha de beta_registrations', async () => {
+    estado.respostaSingle = async (tabela) =>
+      tabela === 'beta_registrations'
+        ? {
+            data: {
+              wants_caregiver_app: true,
+              feedback_consent: false,
+              how_found: null,
+              registered_at: '2026-09-25T10:00:00Z',
+              downloaded_at: null,
+            },
+            error: null,
+          }
+        : { data: null, error: null }
+
+    await expect(api.fetchInscricaoBeta()).resolves.toEqual({
+      wantsCaregiverApp: true,
+      feedbackConsent: false,
+      howFound: '',
+      registeredAt: '2026-09-25T10:00:00Z',
+      downloadedAt: null,
+    })
+    expect(fake.from).toHaveBeenCalledWith('beta_registrations')
+  })
+
+  it('sem linha, com erro ou sem cliente, devolve null', async () => {
+    await expect(api.fetchInscricaoBeta()).resolves.toBeNull()
+    estado.respostaSingle = async () => ({ data: null, error: { message: 'boom' } })
+    await expect(api.fetchInscricaoBeta()).resolves.toBeNull()
+    clientMock.mockImplementation(() => {
+      throw new Error('sem cliente')
+    })
+    await expect(api.fetchInscricaoBeta()).resolves.toBeNull()
+  })
+})
+
+describe('atualizarDadosDaConta', () => {
+  it('grava nome aparado, telefone só com dígitos (vazio apaga) e novidades na própria linha de profiles', async () => {
+    auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
+
+    await api.atualizarDadosDaConta({ nome: ' Maria  Souza ', telefone: '', newsletter: false })
+
+    expect(fake.from).toHaveBeenCalledWith('profiles')
+    const tabela = fake.from.mock.results.at(-1)!.value
+    expect(tabela.update).toHaveBeenCalledWith({ buyer_name: 'Maria Souza', phone: null, newsletter: false })
+    expect(tabela.update.mock.results[0].value.eq).toHaveBeenCalledWith('id', 'u1')
+  })
+
+  it('sem sessão, pede para entrar de novo; erro do banco chega traduzido', async () => {
+    const semSessao = await api
+      .atualizarDadosDaConta({ nome: 'Maria Souza', telefone: '', newsletter: true })
+      .catch((e) => e)
+    expect(semSessao.message).toMatch(/Entre de novo/)
+
+    auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
+    estado.respostaUpdate = async () => ({ data: null, error: { message: 'new row violates check constraint', code: '23514' } })
+    const erro = await api
+      .atualizarDadosDaConta({ nome: 'Maria Souza', telefone: '(11) 9000', newsletter: true })
+      .catch((e) => e)
+    expect(erro).toBeInstanceOf(api.ApiError)
+  })
+})
+
 describe('fetchBetaProgram', () => {
-  it('lê a linha de beta_program', async () => {
+  it('lê a linha de beta_program, com a data do lançamento', async () => {
     estado.respostaSingle = async (tabela) =>
       tabela === 'beta_program'
         ? {
-            data: { open: false, ends_at: '2027-06-30T23:59:59-03:00', current_version: '1.0.0-beta.2', max_registrations: 50 },
+            data: {
+              open: false,
+              ends_at: '2027-06-30T23:59:59-03:00',
+              current_version: '1.0.0-beta.2',
+              max_registrations: 50,
+              launch_at: '2026-11-10T03:00:00+00:00',
+            },
             error: null,
           }
         : { data: null, error: null }
@@ -408,8 +519,17 @@ describe('fetchBetaProgram', () => {
       endsAt: '2027-06-30T23:59:59-03:00',
       currentVersion: '1.0.0-beta.2',
       maxRegistrations: 50,
+      launchAt: '2026-11-10T03:00:00+00:00',
     })
     expect(fake.from).toHaveBeenCalledWith('beta_program')
+  })
+
+  it('banco sem a coluna launch_at (migração não aplicada): a data vem da reserva', async () => {
+    estado.respostaSingle = async () => ({
+      data: { open: true, ends_at: '2027-03-31T23:59:59-03:00', current_version: '1.0.0-beta.1', max_registrations: null },
+      error: null,
+    })
+    await expect(api.fetchBetaProgram()).resolves.toMatchObject({ launchAt: BETA.lancamentoReserva })
   })
 
   it('cai na reserva (aberta) em erro, sem linha e sem cliente', async () => {
@@ -425,17 +545,18 @@ describe('fetchBetaProgram', () => {
     await expect(api.fetchBetaProgram()).resolves.toBe(api.BETA_PROGRAM_RESERVA)
     expect(api.BETA_PROGRAM_RESERVA.open).toBe(true)
     expect(api.BETA_PROGRAM_RESERVA.endsAt).toBe(BETA.fimReserva)
+    expect(api.BETA_PROGRAM_RESERVA.launchAt).toBe(BETA.lancamentoReserva)
   })
 })
 
 describe('e-mails de conta (confirmação e nova senha)', () => {
-  it('reenviarConfirmacao reenvia o link do cadastro com o mesmo destino /entrar', async () => {
+  it('reenviarConfirmacao reenvia o link do cadastro com o mesmo destino /confirmar-email', async () => {
     await api.reenviarConfirmacao('  Maria@Exemplo.com.br ')
 
     expect(auth.resend).toHaveBeenCalledWith({
       type: 'signup',
       email: 'maria@exemplo.com.br',
-      options: { emailRedirectTo: 'https://irisflow-communicator.pages.dev/entrar' },
+      options: { emailRedirectTo: 'https://irisflow-communicator.pages.dev/confirmar-email' },
     })
   })
 
@@ -461,7 +582,7 @@ describe('e-mails de conta (confirmação e nova senha)', () => {
       redirectTo: 'https://irisflow-communicator.pages.dev/nova-senha',
     })
     expect(api.AUTH_REDIRECT).toEqual({
-      confirmacao: 'https://irisflow-communicator.pages.dev/entrar',
+      confirmacao: 'https://irisflow-communicator.pages.dev/confirmar-email',
       novaSenha: 'https://irisflow-communicator.pages.dev/nova-senha',
     })
   })
@@ -472,6 +593,7 @@ describe('e-mails de conta (confirmação e nova senha)', () => {
     try {
       const apiComDominio = await import('./api')
       expect(apiComDominio.AUTH_REDIRECT.novaSenha).toBe('https://www.irisflow.com.br/nova-senha')
+      expect(apiComDominio.AUTH_REDIRECT.confirmacao).toBe('https://www.irisflow.com.br/confirmar-email')
 
       await apiComDominio.requestPasswordReset('Maria@Exemplo.com.br')
       expect(auth.resetPasswordForEmail).toHaveBeenLastCalledWith('maria@exemplo.com.br', {
@@ -481,17 +603,6 @@ describe('e-mails de conta (confirmação e nova senha)', () => {
       vi.unstubAllEnvs()
       vi.resetModules()
     }
-  })
-
-  it('falha de envio do servidor de e-mail vira mensagem que a família entende', async () => {
-    auth.signUp.mockResolvedValueOnce({
-      data: { user: null, session: null },
-      error: { message: 'Email address "x@y.com" cannot be used as it is not authorized', code: 'email_address_not_authorized', status: 400 },
-    })
-
-    const erro = await api.signUpBeta(perfilBeta, 'segredo123').catch((e) => e)
-    expect(erro).toBeInstanceOf(api.ApiError)
-    expect(erro.message).toMatch(/Não conseguimos enviar o e-mail agora/)
   })
 })
 
@@ -506,22 +617,40 @@ describe('signUp (fluxo pago, fechado na beta)', () => {
         ? { data: { ...LINHA_MY_ACCOUNT, plan_id: 'completo', status: 'avaliacao' }, error: null }
         : { data: null, error: null }
 
-    await api.signUp({ ...perfilBeta, document: '123.456.789-09' }, 'segredo123', 'completo')
+    await api.signUp(perfilPago, 'segredo123', 'completo')
 
     expect(fake.rpc).toHaveBeenCalledWith(
       'complete_registration',
       expect.objectContaining({ p_phone: '11900000000', p_plan_id: 'completo' }),
     )
   })
+
+  it('"Confirm email" ligado: signUp sem sessão vira ConfirmacaoDeEmailPendente e a RPC não roda', async () => {
+    auth.signUp.mockResolvedValueOnce({ data: { user: { id: 'u1' }, session: null }, error: null })
+
+    const erro = await api.signUp(perfilPago, 'segredo123', 'completo').catch((e) => e)
+
+    expect(erro).toBeInstanceOf(api.ConfirmacaoDeEmailPendente)
+    expect(erro.email).toBe('maria@exemplo.com.br')
+    expect(fake.rpc).not.toHaveBeenCalled()
+  })
 })
 
 describe('fetchPerfilBasico', () => {
-  it('lê nome, e-mail, telefone (só dígitos) e newsletter do próprio perfil', async () => {
-    auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
+  it('lê nome, e-mail, telefone (só dígitos), newsletter e datas do próprio perfil', async () => {
+    auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'u1', email_confirmed_at: '2026-09-24T22:38:02Z' } } },
+    } as never)
     estado.respostaSingle = async (tabela) =>
       tabela === 'profiles'
         ? {
-            data: { buyer_name: 'Maria Souza', email: 'maria@exemplo.com.br', phone: '(11) 90000-0000', newsletter: false },
+            data: {
+              buyer_name: 'Maria Souza',
+              email: 'maria@exemplo.com.br',
+              phone: '(11) 90000-0000',
+              newsletter: false,
+              created_at: '2026-09-24T22:37:43Z',
+            },
             error: null,
           }
         : { data: null, error: null }
@@ -531,18 +660,20 @@ describe('fetchPerfilBasico', () => {
       email: 'maria@exemplo.com.br',
       phone: '11900000000',
       newsletter: false,
+      createdAt: '2026-09-24T22:37:43Z',
+      emailConfirmedAt: '2026-09-24T22:38:02Z',
     })
     expect(fake.from).toHaveBeenCalledWith('profiles')
   })
 
-  it('telefone NULL no banco vira string vazia', async () => {
+  it('telefone NULL no banco vira string vazia; e-mail não confirmado vira null', async () => {
     auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)
     estado.respostaSingle = async () => ({
-      data: { buyer_name: 'Maria Souza', email: 'maria@exemplo.com.br', phone: null, newsletter: true },
+      data: { buyer_name: 'Maria Souza', email: 'maria@exemplo.com.br', phone: null, newsletter: true, created_at: '' },
       error: null,
     })
 
-    await expect(api.fetchPerfilBasico()).resolves.toMatchObject({ phone: '' })
+    await expect(api.fetchPerfilBasico()).resolves.toMatchObject({ phone: '', emailConfirmedAt: null })
   })
 
   it('sem sessão, com erro ou sem cliente, devolve null em vez de rejeitar', async () => {

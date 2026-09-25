@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Field } from '@/components/ui/Field'
@@ -29,15 +29,20 @@ function ehEmailNaoConfirmado(e: unknown): boolean {
 }
 
 /* ============================================================
-   Tela de acesso. Também é o destino do link de confirmação do cadastro
-   (emailRedirectTo em services/api.ts): o supabase-js abre a sessão a
-   partir da URL e esta tela segue para /conta, que leva uma conta sem
-   inscrição concluída de volta para /beta. Link vencido ou já usado
-   volta para cá com o motivo na URL, dito acima do formulário.
+   Tela de acesso. Depois de entrar, cada um segue para a etapa em que
+   está: quem ainda não respondeu a pesquisa da beta vai para /beta (a
+   pesquisa); quem já respondeu, para /perfil.
+
+   `?email=` preenche o e-mail — é o caminho do botão "Já confirmei,
+   continuar aqui" da /beta, para quem confirmou no celular e voltou ao
+   computador. Links de confirmação antigos (de antes da /confirmar-email)
+   ainda caem aqui com a sessão no endereço, ou com o motivo quando o link
+   venceu, dito acima do formulário.
    ============================================================ */
 
 export default function Entrar() {
-  const [email, setEmail] = useState('')
+  const [busca] = useSearchParams()
+  const [email, setEmail] = useState(() => busca.get('email')?.trim() ?? '')
   const [password, setPassword] = useState('')
   const values = useMemo(() => ({ email, password }), [email, password])
   const v = useFormValidation(values, RULES)
@@ -47,15 +52,17 @@ export default function Entrar() {
   const [naoConfirmado, setNaoConfirmado] = useState(false)
   const [reenviando, setReenviando] = useState(false)
   const [reenvio, setReenvio] = useState<{ ok: boolean; texto: string } | null>(null)
-  const { signIn, authenticated, loading: carregandoSessao } = useAccount()
+  const { signIn, authenticated, account, loading: carregandoSessao } = useAccount()
   const navigate = useNavigate()
   const motivo = useMemo(() => motivoDoLinkNaUrl(), [])
 
-  // Já há sessão (inclusive quem acabou de chegar pelo link de confirmação):
-  // não faz sentido pedir a senha. O painel decide o resto.
+  // Já há sessão (inclusive quem chegou por um link de confirmação antigo):
+  // não faz sentido pedir a senha. Segue para a etapa em que a pessoa está.
   useEffect(() => {
-    if (!carregandoSessao && authenticated && !loading) navigate('/conta', { replace: true })
-  }, [carregandoSessao, authenticated, loading, navigate])
+    if (!carregandoSessao && authenticated && !loading) {
+      navigate(account ? '/perfil' : '/beta', { replace: true })
+    }
+  }, [carregandoSessao, authenticated, account, loading, navigate])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -67,8 +74,8 @@ export default function Entrar() {
 
     setLoading(true)
     try {
-      await signIn(email, password)
-      navigate('/conta')
+      const conta = await signIn(email, password)
+      navigate(conta ? '/perfil' : '/beta', { replace: true })
     } catch (e) {
       setNaoConfirmado(ehEmailNaoConfirmado(e))
       setError(e instanceof Error ? e.message : 'Não foi possível entrar.')

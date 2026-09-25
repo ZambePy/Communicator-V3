@@ -31,7 +31,7 @@ export type Downloads = {
   /** Página do GitHub com todas as versões. */
   releasesPage: string
   status: DownloadsStatus
-  /** Frases de plataforma coerentes com os botões ("Windows 10/11 (macOS e Linux em preparação)"). */
+  /** Frases de plataforma coerentes com os botões ("Windows 10 e 11 (macOS e Linux em preparação)"). */
   platformsText: ReturnType<typeof platformsText>
 }
 

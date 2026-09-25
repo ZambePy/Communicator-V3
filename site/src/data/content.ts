@@ -19,7 +19,7 @@ export const SITE_URL = resolveSiteUrl(import.meta.env.VITE_SITE_URL)
 
 /** Plataformas suportadas hoje — uma frase só, usada em todo o site.
     Derivada de VITE_RELEASES_AVAILABLE (src/lib/releases.ts): com o padrão
-    (só Windows) fica "Windows 10/11 (macOS e Linux em preparação)". */
+    (só Windows) fica "Windows 10 e 11 (macOS e Linux em preparação)". */
 export const PLATFORMS = platformsText(RELEASES_AVAILABLE)
 
 /** As condições atendidas, na forma curta usada em títulos e chamadas. */
@@ -442,9 +442,9 @@ export const TRIAL_DAYS = 15
    A ÚNICA chave que liga e desliga o modo beta no site (README da raiz,
    seção "Site (site/)").
    Com `ativo` verdadeiro: /cadastro, /pagamento e /sucesso redirecionam
-   para /beta, os CTAs de "Testar grátis" viram "Entrar na beta" e a grade
-   de planos aparece como indisponível. Desligar é trocar para false —
-   nenhum arquivo é apagado.
+   para /beta, /conta vira /perfil, os CTAs de "Testar grátis" viram
+   "Entrar na beta" e a grade de planos aparece como indisponível.
+   Desligar é trocar para false — nenhum arquivo é apagado.
    ------------------------------------------------ */
 
 export const BETA = {
@@ -453,7 +453,23 @@ export const BETA = {
   versaoReserva: '1.0.0-beta.1',
   /** Fim do acesso beta enquanto `beta_program` não responde. */
   fimReserva: '2027-03-31T23:59:59-03:00',
+  /**
+   * Lançamento — o dia em que o download abre — enquanto `beta_program`
+   * não responde. A data de verdade é `beta_program.launch_at`
+   * (migração 20260924230017_beta_lancamento.sql): antes dela a inscrição
+   * funciona e os botões de download mostram o dia; depois, liberam sozinhos.
+   */
+  lancamentoReserva: '2026-11-10T00:00:00-03:00',
+  /** O sistema que abre no lançamento (os outros seguem "em preparação"). */
+  sistemaDoLancamento: 'Windows',
 }
+
+/**
+ * As quatro etapas da beta, na ordem em que a pessoa passa por elas. A trilha
+ * aparece no topo de cada tela do fluxo (/beta e /confirmar-email) para quem
+ * está no meio do caminho saber onde está e o que falta.
+ */
+export const ETAPAS_DA_BETA = ['Criar conta', 'Confirmar e-mail', 'Pesquisa rápida', 'Download']
 
 /** Rótulos de chamada usados no cabeçalho, no hero e nas chamadas finais. */
 export const BETA_CTA = {

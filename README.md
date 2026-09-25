@@ -1173,8 +1173,10 @@ supabase/
 │                  (planos, perfis, pacientes, assinaturas, pagamentos, RLS) e as
 │                  migrações seguintes; o nome começa pela versão do histórico
 ├── functions/     desktop-sync (publicada), payment-webhook (esqueleto)
+├── templates/     os e-mails do Auth em português e com a marca (confirmação,
+│                  nova senha, troca de e-mail, link de acesso, convite, código)
 ├── seed.sql       conta de teste da beta
-└── config.toml    project_id do CLI; verify_jwt = false na desktop-sync
+└── config.toml    project_id do CLI; verify_jwt = false na desktop-sync; modelos de e-mail
 ```
 
 **Quem pode o quê.** RLS em todas as tabelas: a chave anon é pública e quem
@@ -1236,16 +1238,17 @@ resposta. `payment-webhook` é
 `gateway_events` → `register_charge()`. Na beta não há gateway: todo plano tem
 `purchasable = false`.
 
-**Estado em produção (24/09/2026).** As 16 migrações do repositório
+**Estado em produção (24/09/2026).** As 17 migrações do repositório
 aplicadas, com as versões do histórico remoto exatamente iguais às do nome dos
-arquivos. As três últimas entraram em 24/09 e os arquivos foram renomeados
+arquivos. As quatro últimas entraram em 24/09 e os arquivos foram renomeados
 para a versão que o projeto registrou: `20260924020011_help_requests_received_at`
 (prazo de escalonamento contado da chegada),
 `20260924022100_pair_device_mesmo_computador` (novo login no mesmo PC
-substitui o vínculo dele em vez de acumular chaves válidas) e
+substitui o vínculo dele em vez de acumular chaves válidas),
 `20260924022108_conta_de_teste_protegida` (ninguém troca a senha nem o e-mail
-da [conta de teste](#conta-de-teste)). A `desktop-sync` foi publicada
-depois delas.
+da [conta de teste](#conta-de-teste)) e `20260924230017_beta_lancamento` (a data
+em que o download da beta abre no site). A `desktop-sync` foi publicada
+depois das três primeiras.
 
 **Migração nova:** `supabase migration new <nome>` e `supabase db push` — a
 versão do nome do arquivo vira a do histórico. Aplicada por fora do CLI (MCP,
@@ -1292,7 +1295,7 @@ login no mesmo computador, inscrições fechadas, RLS de `beta_registrations` e
 `support_reports`, sessões órfãs, `patient_settings` sem padrões de
 rastreamento, telefone opcional, o escalonamento (prazo contado da chegada,
 push só com celular cadastrado) e, depois do seed, a conta de teste e a
-proteção dela. Passou em 24/09/2026 (PostgreSQL 16) com as 16 migrações, já
+proteção dela. Passou em 24/09/2026 (PostgreSQL 16) com as 17 migrações, já
 com os nomes novos. Fora
 dele: as Edge Functions (o horário dos eventos tem teste Deno próprio).
 
@@ -1307,18 +1310,39 @@ fechada: os planos aparecem como indisponíveis e o fluxo pago leva a `/beta`.
 | rota | o que faz | banco |
 |---|---|---|
 | `/`, `/solucao`, `/como-funciona`, `/acessibilidade`, `/planos`, `/sobre` | institucional; preço de `plans`, com reserva em `content.ts` | `plans` |
-| `/beta` | inscrição em 3 etapas; logado, instaladores, app do cuidador e verificação de compatibilidade | `complete_beta_registration()`, `beta_program`, `mark_beta_download()` |
-| `/entrar`, `/recuperar-senha`, `/nova-senha` | login e nova senha | Auth |
-| `/conta` | "Programa beta · acesso até…" e *Aplicativo e computadores*: a licença do desktop, computadores (online = visto há < 90 s), desvincular | `my_account`, `desktop_license()`, `devices`, `revoke_device()` |
+| `/beta` | a inscrição em 4 etapas com a trilha à vista: criar conta → confirmar e-mail → pesquisa rápida → download (travado até o lançamento) | Auth, `complete_beta_registration()`, `beta_program`, `mark_beta_download()` |
+| `/confirmar-email` | destino do link de confirmação: verifica o `token_hash`, abre a sessão **no aparelho do clique** e agradece, com o próximo passo | Auth (`verifyOtp`) |
+| `/perfil` | "Meu perfil": situação da inscrição e dia do lançamento, dados da conta e respostas da pesquisa (editáveis), download e, depois do lançamento, *Aplicativo e computadores* | `profiles`, `my_account`, `beta_registrations`, `desktop_license()`, `devices` |
+| `/entrar`, `/recuperar-senha`, `/nova-senha` | login (leva à pesquisa ou ao perfil) e nova senha (aceita o link com `token_hash`) | Auth |
+| `/conta` | durante a beta, vai para `/perfil` (o desktop e e-mails antigos apontam para cá); fora dela, o painel da assinatura | `my_account`, `desktop_license()`, `devices`, `revoke_device()` |
 | `/contato` | formulário | `contact_messages` |
 | `/cadastro`, `/pagamento`, `/sucesso` | fluxo pago, fechado (vão para `/beta`); sem gateway, `/pagamento` só grava titular, bandeira e 4 dígitos | `complete_registration()`, `attach_payment_method()` |
 
-**Inscrição na beta.** O `signUp` leva só nome e newsletter (vão para o JWT);
-CPF, condição e telefone entram pela RPC. **Telefone e CPF são opcionais**:
-`validar.telefoneOpcional` ([`validation.ts`](site/src/utils/validation.ts))
-aceita vazio e, preenchido, exige DDD + número; vazio vira `null` e a RPC mantém
-o número já gravado. Com "Confirm email" ligado, o link volta a `/entrar` e a
-inscrição termina em `/beta`.
+**Inscrição na beta** ([`Beta.tsx`](site/src/pages/Beta.tsx)). A etapa sai da
+sessão, não de um estado da página — F5, outro dia ou outro aparelho caem no
+lugar certo: sem sessão, **criar conta** (nome, e-mail, senha e o aceite dos
+termos; o `signUp` leva só nome, newsletter e a data do aceite, que viajam no
+JWT); logo depois, com *Confirm email* ligado, **confirmar e-mail**; com sessão e
+sem conta, a **pesquisa rápida**
+([`FormularioPesquisa.tsx`](site/src/components/beta/FormularioPesquisa.tsx):
+quem vai usar, como a pessoa gosta de ser chamada, condição, computador, app do
+cuidador; telefone e "como conheceu" opcionais), que chama
+`complete_beta_registration` e abre a assinatura `beta`; com conta, o
+**download**. Os botões de enviar ficam sempre habilitados: o clique mostra o
+que falta e leva o foco ao primeiro campo. O link do e-mail abre
+`/confirmar-email`, que faz o login **no aparelho onde foi clicado** — conta
+criada no computador, e-mail aberto no celular: o celular entra logado e agradece;
+no computador, "Já confirmei, continuar aqui" leva a `/entrar?email=…`. Quem
+tem sessão vê "Meu perfil" no cabeçalho mesmo antes da pesquisa.
+
+**Lançamento.** O download abre em `beta_program.launch_at` (10/11/2026 00:00 de
+Brasília, migração `20260924230017_beta_lancamento.sql`); até lá a inscrição
+funciona, os botões mostram "Disponível em 10/11" sem nenhum link de arquivo, e a
+aba Beta do menu leva a etiqueta vermelha com o dia (depois, o selo "novo"). Na
+virada, tudo libera sozinho, sem novo deploy; adiantar ou adiar é
+`update public.beta_program set launch_at = '…' where id = 1`. A página Solução
+mostra os sistemas como vitrine, sem link de arquivo: o download fica para quem
+passou pela inscrição.
 
 **Instaladores** ([`releases.ts`](site/src/lib/releases.ts),
 [`latestRelease.ts`](site/src/lib/latestRelease.ts),
@@ -1722,11 +1746,11 @@ Projeto **IrisFlow Communicator**, ref `xouznaqxhqzjdgeshlmh`, São Paulo (`sa-e
 | Authentication → | valor | por quê |
 |---|---|---|
 | URL Configuration → Site URL | `https://irisflow-communicator.pages.dev` | de fábrica é `http://localhost:3000`, e é o destino de qualquer link sem `redirectTo` e o `{{ .SiteURL }}` dos modelos de e-mail; o site e o app passam `redirectTo` em todos os fluxos |
-| URL Configuration → Redirect URLs | `https://irisflow-communicator.pages.dev/entrar`, `…/nova-senha`, os mesmos dois de `https://irisflow.pages.dev` (builds antigos do app) e `http://localhost:5173/**` | fora da lista o destino é ignorado; as prévias usam `VITE_SITE_URL` |
+| URL Configuration → Redirect URLs | `https://irisflow-communicator.pages.dev/entrar`, `…/nova-senha`, `…/confirmar-email`, os dois primeiros também de `https://irisflow.pages.dev` (builds antigos do app) e `http://localhost:5173/**` | fora da lista o destino é ignorado; as prévias usam `VITE_SITE_URL` |
 | Emails → SMTP Settings | Gmail: `smtp.gmail.com`, porta 465, usuário e remetente = o Gmail, senha de app | o SMTP padrão só entrega à equipe do projeto, 2 por hora |
 | Rate Limits → e-mails | 20/h | com SMTP próprio o padrão é 30/h, que passaria dos 500/dia do Gmail |
 | Sign In / Providers | *Confirm email* ligado; Email → *Minimum password length* 8, sem exigir tipos de caractere | o mesmo `SENHA_MINIMA` do site; sem SMTP ninguém de fora recebe o link |
-| Emails → Templates | *Confirm sign up*, *Reset password* e *Change email address* em português | os outros modelos seguem os do Supabase (em inglês) e não são usados pelo site nem pelo app |
+| Emails → Templates | os seis modelos de [`supabase/templates/`](supabase/templates), em português e com a marca; confirmação e nova senha com o link `{{ .SiteURL }}/confirmar-email?token_hash=…` e `…/nova-senha?token_hash=…` | a página verifica o link ao abrir e a sessão nasce no aparelho do clique; um antivírus que "visita" o link antes da pessoa não gasta o token, como gastava com o `{{ .ConfirmationURL }}` |
 
 Assim desde 24/09/2026. Quem troca a senha de app do Gmail (ou a revoga em
 myaccount.google.com/apppasswords) precisa colá-la de novo em *Emails → SMTP Settings*: sem
@@ -1877,11 +1901,11 @@ gravação. Os instaladores dos três sistemas saem de
 `.github/workflows/release.yml` ([Instalador](#instalador-e-atualização-automática)).
 
 **Estado medido nesta versão (24/09/2026):** núcleo com **1968 testes (mais 2 pulados) em 178 arquivos**,
-interface com **1205 em 136 arquivos**, site com **180 em 18 arquivos** e app do
-cuidador com **103 em 12 suítes** — 3456 testes ao todo; checagem de tipos sem
+interface com **1205 em 136 arquivos**, site com **213 em 22 arquivos** e app do
+cuidador com **103 em 12 suítes** — 3489 testes ao todo; checagem de tipos sem
 erro nos cinco projetos (núcleo, Electron, interface, site e app), configuração
 pública sem segredo, os builds de produção da interface e do site passando;
-banco local com as 16 migrações, o cenário e o seed passando; teste Deno da
+banco local com as 17 migrações, o cenário e o seed passando; teste Deno da
 `desktop-sync` (15) passando.
 
 Os testes do núcleo cobrem os módulos puros, onde os limiares e as leis de
