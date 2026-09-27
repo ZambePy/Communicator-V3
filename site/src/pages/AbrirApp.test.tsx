@@ -7,7 +7,7 @@ import AbrirApp from './AbrirApp'
 const { aparelho, lojas } = vi.hoisted(() => ({
   aparelho: { ios: false, android: false },
   lojas: {
-    googlePlay: 'https://play.google.com/store/apps/details?id=br.com.irisflow.cuidador',
+    googlePlay: 'https://play.google.com/store/apps/details?id=br.com.irisflow.cuidador' as string | null,
     appStore: null as string | null,
     apk: null as string | null,
   },
@@ -26,6 +26,7 @@ const replace = vi.fn()
 beforeEach(() => {
   Object.assign(aparelho, { ios: false, android: false })
   lojas.appStore = null
+  lojas.googlePlay = 'https://play.google.com/store/apps/details?id=br.com.irisflow.cuidador'
   replace.mockReset()
   Object.defineProperty(window, 'location', { value: { ...window.location, replace }, writable: true })
 })
@@ -35,6 +36,13 @@ describe('/app', () => {
     aparelho.android = true
     render(<AbrirApp />)
     expect(replace).toHaveBeenCalledWith(lojas.googlePlay)
+  })
+
+  it('no Android, sem o app no Google Play ainda, vai para a disponibilidade (e não para a página "não encontrado")', () => {
+    aparelho.android = true
+    lojas.googlePlay = null
+    render(<AbrirApp />)
+    expect(replace).toHaveBeenCalledWith('/cuidador#disponibilidade')
   })
 
   it('no iPhone, sem o app na App Store ainda, vai para a disponibilidade', () => {

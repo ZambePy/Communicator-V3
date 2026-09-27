@@ -1,5 +1,5 @@
 /* Peças das páginas de dentro (Blocos.tsx). Tudo sai dos tokens, então
-   funciona igual nas faixas escuras (.on-dark) e claras (.on-light). */
+   funciona igual nas faixas de destaque (.on-dark) e nas elevadas (.on-raised). */
 
 /* ---------- recursos ---------- */
 .recursos {

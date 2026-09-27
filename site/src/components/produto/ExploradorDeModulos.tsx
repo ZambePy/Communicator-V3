@@ -91,6 +91,7 @@ export function ExploradorDeModulos({ modulos }: { modulos: ModuloEmTela[] }) {
               <li key={p}>{p}</li>
             ))}
           </ul>
+          {m.nota && <p className="explorador__nota">{m.nota}</p>}
         </div>
       </div>
     </div>

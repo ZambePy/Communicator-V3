@@ -19,12 +19,20 @@ type Common = {
 type ButtonProps = Common &
   ButtonHTMLAttributes<HTMLButtonElement> & { to?: undefined; href?: undefined }
 
-type LinkProps = Common & { to: string; href?: undefined }
+type LinkProps = Common & {
+  to: string
+  href?: undefined
+  /** Chamado no clique sem impedir a navegação (ex.: fechar a gaveta). */
+  onClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void
+}
 type AnchorProps = Common & {
   href: string
   to?: undefined
   /** Chamado no clique sem impedir a navegação — serve para métricas. */
   onClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void
+  /** Abre em outra aba. Padrão: só endereço absoluto (http/https) — uma
+   *  âncora da própria página (#downloads) rola na mesma aba. */
+  externo?: boolean
 }
 
 type Props = ButtonProps | LinkProps | AnchorProps
@@ -75,28 +83,29 @@ export function Button(props: Props) {
 
   if ('to' in props && props.to) {
     return (
-      <Link to={props.to} className={cls} onMouseMove={onMove}>
+      <Link to={props.to} className={cls} onMouseMove={onMove} onClick={props.onClick}>
         {inner}
       </Link>
     )
   }
 
   if ('href' in props && props.href) {
+    const externo = props.externo ?? /^https?:\/\//i.test(props.href)
     return (
       <a
         href={props.href}
         className={cls}
         onMouseMove={onMove}
         onClick={props.onClick}
-        target="_blank"
-        rel="noreferrer noopener"
+        {...(externo ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
       >
         {inner}
       </a>
     )
   }
 
-  const { to: _to, href: _href, ...buttonRest } = rest as Record<string, unknown>
+  const { to: _to, href: _href, externo: _externo, ...buttonRest } = rest as Record<string, unknown>
+  void _externo
   void _to
   void _href
 

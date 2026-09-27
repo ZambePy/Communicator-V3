@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { NavPilula } from './NavPilula'
 import { Logo } from './Logo'
@@ -9,6 +9,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
 import { BETA, BETA_CTA, TRIAL_DAYS } from '@/data/content'
+import { naRota } from '@/routes'
 import './header.css'
 
 type NavItem = { to: string; label: string; beta?: boolean }
@@ -50,6 +51,8 @@ export function Header() {
   const { scrolled, progress } = useScrollProgress()
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
+  const botaoRef = useRef<HTMLButtonElement>(null)
+  const gavetaRef = useRef<HTMLDivElement>(null)
   // Logado é ter sessão, mesmo antes da pesquisa (sem `account`): quem acabou
   // de confirmar o e-mail vê "Meu perfil", e não "Entrar" como se estivesse
   // fora da conta.
@@ -67,20 +70,40 @@ export function Header() {
 
   useEffect(() => setOpen(false), [pathname])
 
+  /* Gaveta aberta: a página atrás não rola nem recebe foco (inert em main e
+     footer), o foco entra no primeiro item, Esc fecha e devolve o foco ao
+     botão do menu. */
   useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : ''
+    if (!open) return
+    document.body.style.overflow = 'hidden'
+    const atras = Array.from(document.querySelectorAll<HTMLElement>('main, footer'))
+    atras.forEach((el) => el.setAttribute('inert', ''))
+    gavetaRef.current?.querySelector<HTMLElement>('a, button')?.focus()
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setOpen(false)
+      botaoRef.current?.focus()
+    }
+    document.addEventListener('keydown', aoTeclar)
     return () => {
       document.body.style.overflow = ''
+      atras.forEach((el) => el.removeAttribute('inert'))
+      document.removeEventListener('keydown', aoTeclar)
     }
   }, [open])
+
+  /* Um toque em qualquer destino da gaveta fecha — também quando o destino é
+     a página em que a pessoa já está (aí a rota não muda). */
+  const fechar = () => setOpen(false)
 
   // As páginas de conteúdo abrem com a faixa de destaque, sob a qual o
   // cabeçalho fica transparente; nas de fluxo (beta, conta, acesso) e
   // depois de rolar, ele ganha fundo sólido para separar do conteúdo.
-  const opensSolid = SOLID_ROUTES.some((r) => pathname.startsWith(r))
+  const opensSolid = naRota(pathname, SOLID_ROUTES)
   const solid = scrolled || open || opensSolid
 
   return (
+    <>
     <header className={`header${solid ? ' is-scrolled' : ''}`}>
       {!reduced && (
         <span
@@ -132,6 +155,7 @@ export function Header() {
         </div>
 
         <button
+          ref={botaoRef}
           type="button"
           className={`burger${open ? ' is-open' : ''}`}
           onClick={() => setOpen((v) => !v)}
@@ -144,13 +168,23 @@ export function Header() {
           <span />
         </button>
       </div>
+    </header>
 
-      <div id="menu-mobile" className={`drawer${open ? ' is-open' : ''}`} hidden={!open}>
+    {/* A gaveta fica FORA do <header>: o vidro do cabeçalho (backdrop-filter)
+        vira bloco de contenção de filhos position: fixed, e a gaveta
+        encolhia para a altura do próprio cabeçalho entre 721 e 1080 px. */}
+    <div
+      ref={gavetaRef}
+      id="menu-mobile"
+      className={`drawer${open ? ' is-open' : ''}`}
+      hidden={!open}
+    >
         <nav aria-label="Navegação mobile">
           {[...NAV, ...NAV_SECUNDARIA].map((item, i) => (
             <NavLink
               key={item.to}
               to={item.to}
+              onClick={fechar}
               className={`drawer__link${item.beta ? ' drawer__link--beta' : ''}`}
               style={{ animationDelay: `${i * 55}ms` }}
             >
@@ -161,27 +195,27 @@ export function Header() {
         </nav>
         <div className="drawer__actions">
           {loading ? null : authenticated ? (
-            <Button to="/perfil" full variant="secondary">
+            <Button to="/perfil" full variant="secondary" onClick={fechar}>
               Meu perfil
             </Button>
           ) : (
             <>
-              <Button to="/entrar" full variant="secondary">
+              <Button to="/entrar" full variant="secondary" onClick={fechar}>
                 Entrar
               </Button>
               {BETA.ativo ? (
-                <Button to={BETA_CTA.to} full>
+                <Button to={BETA_CTA.to} full onClick={fechar}>
                   {BETA_CTA.labelLong}
                 </Button>
               ) : (
-                <Button to="/cadastro" full>
+                <Button to="/cadastro" full onClick={fechar}>
                   Testar grátis por {TRIAL_DAYS} dias
                 </Button>
               )}
             </>
           )}
         </div>
-      </div>
-    </header>
+    </div>
+    </>
   )
 }

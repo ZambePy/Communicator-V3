@@ -1,0 +1,13 @@
+/* "Abra este endereço no computador" (LevarAoComputador.tsx): no celular
+   não se instala o app do computador. Usado em /baixar, na etapa final da
+   /beta e no /perfil. */
+
+.levar-ao-computador p {
+  margin-bottom: var(--sp-4);
+}
+
+.levar-ao-computador__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}

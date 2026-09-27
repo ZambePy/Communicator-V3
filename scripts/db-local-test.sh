@@ -91,6 +91,9 @@ do $$ begin
 do $$ begin
   create role service_role nologin; exception when duplicate_object then null; end $$;
 grant usage on schema public to anon, authenticated, service_role;
+-- Como no Supabase: os papéis enxergam o schema auth (para auth.uid() nas
+-- políticas e nas consultas do próprio usuário), mas não as tabelas dele.
+grant usage on schema auth to anon, authenticated, service_role;
 create publication supabase_realtime;
 -- Privilégios padrão do Supabase: toda tabela nova em public é legível pelos
 -- papéis (a RLS é quem filtra).

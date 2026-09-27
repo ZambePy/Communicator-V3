@@ -100,14 +100,43 @@ export interface GazeSample {
  * mostrar mensagem explícita — antes desta transição o app ficava em
  * `'tracking'` com o cursor congelado, indistinguível de travamento para quem
  * não tem como abrir o console.
+ *
+ * `sem_camera` — a câmera parou de entregar quadros por mais de
+ * `CAMERA_PARADA_MS` (cabo solto, hub USB que reiniciou, driver travado,
+ * notebook que dormiu, câmera tomada por outro programa). O engine emite
+ * amostras `hasFace: false` enquanto isso, para o dwell zerar e o cursor
+ * reagir, e sai sozinho do estado no primeiro quadro novo. Antes, sem quadro
+ * novo o laço não fazia nada: o estado ficava em `tracking` para sempre, nada
+ * era emitido e o heartbeat dizia ao cuidador que estava tudo bem.
  */
-export type EngineState = 'idle' | 'loading' | 'tracking' | 'calibrating' | 'no_face' | 'degraded' | 'uncalibrated' | 'error';
+export type EngineState = 'idle' | 'loading' | 'tracking' | 'calibrating' | 'no_face' | 'degraded' | 'uncalibrated' | 'error' | 'sem_camera';
 
 // Quanto tempo mapGaze pode devolver null antes de considerarmos que
 // a predição está degradada. 500 ms = ~15 frames a 30 fps — tolera glitch
 // isolado de 1-2 frames mas pega bug persistente (features degeneradas,
 // exceção repetida silenciada por _dimErrorLogged em calibration.ts).
 export const DEGRADED_THRESHOLD_MS = 500;
+
+/**
+ * Sem quadro novo da câmera por mais que isto, o engine declara `sem_camera`.
+ * 1,5 s = ~45 quadros a 30 fps: muito acima de qualquer engasgo do decoder, e
+ * curto o bastante para o dwell e a tela reagirem antes de o paciente achar
+ * que o programa travou.
+ */
+export const CAMERA_PARADA_MS = 1500;
+/** Cadência das amostras `hasFace: false` emitidas em `sem_camera` (~30 Hz). */
+const INTERVALO_SEM_CAMERA_MS = 30;
+
+/**
+ * Recuperação do detector (perda de contexto WebGL): esperas entre as
+ * tentativas depois da primeira, que é imediata. A última se repete enquanto o
+ * engine rodar.
+ */
+export const ESPERAS_DA_RECUPERACAO_MS = [1000, 2000, 5000, 10_000, 30_000] as const;
+/** Falhas seguidas na GPU a partir das quais o detector passa para a CPU. */
+export const FALHAS_DE_GPU_PARA_CPU = 2;
+/** Falha fatal a menos disto de uma recuperação bem-sucedida é recaída. */
+export const JANELA_DE_RECAIDA_MS = 60_000;
 
 // Lógica pura do timer de degradação, testável sem rAF/DOM/worker.
 // Retorna o novo `nullSinceMs` (null se o timer foi zerado) e se o estado
@@ -183,6 +212,11 @@ export interface CalibrationApi {
   /** Avisa quando a calibração foi descartada em tempo de execução por
    *  incompatibilidade de pipeline. A UI deve pedir recalibração. */
   onInvalidated(cb: (e: import('../calibration').CalibrationInvalidated) => void): () => void;
+  /** Calibração suspensa porque a janela não cobre a área em que ela foi feita
+   *  (`null` quando vale). Enquanto suspensa, as amostras saem degradadas. */
+  getSuspensao(): import('../calibration').SuspensaoDaCalibracao | null;
+  /** Avisa quando a calibração é suspensa pela janela ou volta a valer. */
+  onSuspensao(cb: (s: import('../calibration').SuspensaoDaCalibracao | null) => void): () => void;
   // Outcome tipado. Callback opcional; se fornecido, recebe { ok: true }
   // no sucesso ou { ok: false, reason, detail } em qualquer falha do treino
   // (matriz singular, features degeneradas, amostras insuficientes, etc.).
@@ -398,6 +432,10 @@ export interface EngineDiagnostics {
     errorsTotal: number;
     /** Exceções seguidas, sem sucesso no meio. Zera no primeiro frame bom. */
     errorsConsecutive: number;
+    /** Delegate do detector em uso (`CPU` depois de a GPU falhar). */
+    delegate?: 'GPU' | 'CPU';
+    /** Tentativas de recriar o detector no episódio corrente de falha. */
+    tentativasDeRecuperacao?: number;
   };
 }
 
@@ -530,6 +568,13 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   let videoEl: HTMLVideoElement | null = null;
   let rafHandle = 0;
   let lastVideoTime = -1;
+  /**
+   * `performance.now()` do último quadro NOVO da câmera. `null` fora de uma
+   * sessão. É a entrada do vigia de quadros (`CAMERA_PARADA_MS`).
+   */
+  let ultimoQuadroNovoMs: number | null = null;
+  /** Última amostra `hasFace: false` emitida em `sem_camera` (cadência própria). */
+  let ultimaAmostraSemCameraMs = -Infinity;
   let running = false;
   // Marca do `performance.now()` no start bem-sucedido. Consumido por
   // getSessionUptimeMs() para o AUTO_TEST_META refletir o tempo real de uso
@@ -775,6 +820,8 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
    */
   function resetSessionState(): void {
     lastVideoTime = -1;
+    ultimoQuadroNovoMs = null;
+    ultimaAmostraSemCameraMs = -Infinity;
     framesSeen = 0;
     framesWithFace = 0;
     framesEmitted = 0;
@@ -871,6 +918,15 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   }
 
   function emit(sample: GazeSample): void {
+    // Calibração SUSPENSA porque a janela não cobre a área em que ela foi feita
+    // (saiu da tela cheia, monitor rearranjado — ver `checarMudancaDeViewport`):
+    // o modelo continua carregado e prevendo, mas a amostra sai degradada, e o
+    // dwell só aceita a Emergência e os alvos de recuperação. Quando a janela
+    // volta ao tamanho da calibração, a suspensão acaba sozinha.
+    if (sample.hasFace && !sample.uncalibrated && !sample.degraded && !calibration.isCalibrating
+      && calibration.getSuspensaoDaCalibracao() !== null) {
+      sample = { ...sample, degraded: true };
+    }
     if (sample.hasFace) {
       lastEmittedX = sample.x;
       lastEmittedY = sample.y;
@@ -889,23 +945,56 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
    */
   let initMediaPipePromise: Promise<void> | null = null;
 
-  async function initMediaPipe(): Promise<void> {
+  /**
+   * Delegate do MediaPipe em uso. Começa na GPU; passa para a CPU (mais lenta,
+   * mas não depende do contexto WebGL) quando a GPU falha: no boot, na primeira
+   * falha; na recuperação, depois de `FALHAS_DE_GPU_PARA_CPU` seguidas. Fica na
+   * CPU pelo resto da vida deste engine — uma GPU que caiu duas vezes seguidas
+   * tende a cair de novo.
+   */
+  let delegateDoDetector: 'GPU' | 'CPU' = 'GPU';
+  /** Criações (ou recaídas logo depois de recriar) seguidas que falharam na GPU. */
+  let falhasSeguidasNaGpu = 0;
+
+  async function initMediaPipe(opcoes?: { recorrerACpu?: boolean }): Promise<void> {
     if (faceLandmarker) return;
     if (initMediaPipePromise) return initMediaPipePromise;
 
     initMediaPipePromise = (async () => {
       const base = mediapipeBaseUrl ?? new URL('./mediapipe', location.href).href;
       const vision = await FilesetResolver.forVisionTasks(`${base}/wasm`);
-      const criado = await FaceLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: `${base}/models/face_landmarker.task`,
-          delegate: 'GPU',
-        },
-        outputFaceBlendshapes: false,
-        outputFacialTransformationMatrixes: true,
-        runningMode: 'VIDEO',
-        numFaces: 1,
-      });
+      const criar = async (delegate: 'GPU' | 'CPU'): Promise<FaceLandmarker> => {
+        const d = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: `${base}/models/face_landmarker.task`,
+            delegate,
+          },
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: true,
+          runningMode: 'VIDEO',
+          numFaces: 1,
+        });
+        if (!d) throw new Error(`FaceLandmarker (${delegate}) não foi criado.`);
+        return d;
+      };
+      let criado: FaceLandmarker;
+      if (delegateDoDetector === 'GPU') {
+        try {
+          criado = await criar('GPU');
+          falhasSeguidasNaGpu = 0;
+        } catch (e) {
+          falhasSeguidasNaGpu++;
+          if (!opcoes?.recorrerACpu && falhasSeguidasNaGpu < FALHAS_DE_GPU_PARA_CPU) throw e;
+          console.warn(
+            `[IrisFlow] o detector de rosto não subiu na GPU (${falhasSeguidasNaGpu}× seguidas); ` +
+            'passando para a CPU — mais lento, mas não depende da placa de vídeo.', e,
+          );
+          delegateDoDetector = 'CPU';
+          criado = await criar('CPU');
+        }
+      } else {
+        criado = await criar('CPU');
+      }
       // `dispose()` pode ter rodado durante a criação. Fechar aqui é melhor
       // que publicar uma instância que ninguém pediu mais.
       if (disposed) {
@@ -992,6 +1081,13 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     if (r.fatal) void recoverFromFatalLoopErrors();
   }
 
+  /** Tentativas de recriar o detector no episódio corrente (1 = a imediata). */
+  let tentativasDeRecuperacao = 0;
+  /** Próxima tentativa agendada; cancelada em `stop()`. */
+  let timerDaRecuperacao: ReturnType<typeof setTimeout> | null = null;
+  /** Quando a última recuperação deu certo (uma falha logo depois é recaída). */
+  let ultimaRecuperacaoOkMs = -Infinity;
+
   /**
    * Reação a uma sequência de exceções no loop. A causa dominante é perda do
    * contexto WebGL (troca de GPU, sleep/wake), que faz `detectForVideo` lançar
@@ -999,18 +1095,49 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
    *
    * O estado vai para `'error'` antes da tentativa, para o cuidador ver que
    * algo está errado em vez de um cursor parado.
+   *
+   * A recuperação é um LAÇO, não um evento único: a primeira tentativa é
+   * imediata; se falhar (a GPU ainda voltando de um TDR ou de um resume), outra
+   * vem depois de 1, 2, 5, 10 e então a cada 30 s, enquanto o engine estiver
+   * rodando. Depois de `FALHAS_DE_GPU_PARA_CPU` falhas seguidas na GPU, o
+   * detector passa para a CPU. Antes, uma única tentativa que falhasse deixava
+   * o rastreamento morto até alguém fechar e abrir o app.
    */
   async function recoverFromFatalLoopErrors(): Promise<void> {
     setState('error');
     console.warn('[IrisFlow] tentando reinicializar o FaceLandmarker após falha persistente do loop.');
-    const geracao = startGeneration;
+    if (rafHandle) cancelAnimationFrame(rafHandle);
+    rafHandle = 0;
+    if (faceLandmarker) {
+      try { faceLandmarker.close(); } catch { /* contexto já perdido */ }
+      faceLandmarker = null;
+    }
+    // Recaída: o detector recriado há pouco voltou a falhar. A espera continua
+    // de onde parou (sem martelar a GPU) e, na GPU, conta como mais uma falha.
+    const recaida = performance.now() - ultimaRecuperacaoOkMs < JANELA_DE_RECAIDA_MS;
+    if (!recaida) {
+      tentativasDeRecuperacao = 0;
+      await tentarRecuperar(startGeneration);
+      return;
+    }
+    if (delegateDoDetector === 'GPU') falhasSeguidasNaGpu++;
+    agendarRecuperacao(startGeneration);
+  }
+
+  function agendarRecuperacao(geracao: number): void {
+    if (timerDaRecuperacao) clearTimeout(timerDaRecuperacao);
+    const i = Math.min(Math.max(0, tentativasDeRecuperacao - 1), ESPERAS_DA_RECUPERACAO_MS.length - 1);
+    const espera = ESPERAS_DA_RECUPERACAO_MS[i];
+    timerDaRecuperacao = setTimeout(() => {
+      timerDaRecuperacao = null;
+      void tentarRecuperar(geracao);
+    }, espera);
+  }
+
+  async function tentarRecuperar(geracao: number): Promise<void> {
+    if (geracao !== startGeneration || !running || disposed) return;
+    tentativasDeRecuperacao++;
     try {
-      if (rafHandle) cancelAnimationFrame(rafHandle);
-      rafHandle = 0;
-      if (faceLandmarker) {
-        try { faceLandmarker.close(); } catch { /* contexto já perdido */ }
-        faceLandmarker = null;
-      }
       await initMediaPipe();
       // Outro `start()`/`stop()` aconteceu durante o await: não pisar no ciclo
       // de vida novo.
@@ -1026,18 +1153,24 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         throw new Error('initMediaPipe() resolveu sem publicar o FaceLandmarker.');
       }
       resetLoopErrorState();
+      ultimaRecuperacaoOkMs = performance.now();
+      // O tempo parado na recuperação não é câmera parada.
+      ultimoQuadroNovoMs = ultimaRecuperacaoOkMs;
       setState('tracking');
       // Enquanto `faceLandmarker` era null o `loop()` saiu sem se reagendar,
       // então o rAF precisa ser rearmado aqui.
       rafHandle = requestAnimationFrame(loop);
-      console.log('[IrisFlow] FaceLandmarker reinicializado; rastreamento retomado.');
+      console.log(`[IrisFlow] FaceLandmarker reinicializado (${delegateDoDetector}); rastreamento retomado.`);
     } catch (e) {
+      if (geracao !== startGeneration || !running || disposed) return;
+      setState('error');
+      const i = Math.min(tentativasDeRecuperacao - 1, ESPERAS_DA_RECUPERACAO_MS.length - 1);
       console.error(
-        '[IrisFlow] falha ao reinicializar o detector. O rastreamento não vai se recuperar sozinho — ' +
-        'é necessário recarregar o aplicativo.',
+        `[IrisFlow] falha ao reinicializar o detector (tentativa ${tentativasDeRecuperacao}); ` +
+        `nova tentativa em ${Math.round(ESPERAS_DA_RECUPERACAO_MS[i] / 1000)} s.`,
         e,
       );
-      setState('error');
+      agendarRecuperacao(geracao);
     }
   }
 
@@ -1059,6 +1192,13 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     if (lastVideoTime !== videoEl.currentTime) {
       lastVideoTime = videoEl.currentTime;
       framesSeen++;
+      ultimoQuadroNovoMs = startTimeMs;
+      // A câmera voltou a entregar quadros: sai de `sem_camera` para o estado
+      // de base, e os ramos abaixo ajustam (no_face, degraded…) neste quadro.
+      if (state === 'sem_camera') {
+        setState(calibration.isCalibrating ? 'calibrating' : calibration.isCalibrated() ? 'tracking' : 'uncalibrated');
+        console.log('[IrisFlow] a câmera voltou a entregar quadros.');
+      }
 
       stageTimer.begin(STAGE.mediapipe);
       const results = faceLandmarker.detectForVideo(videoEl, startTimeMs);
@@ -1559,7 +1699,8 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             setState('calibrating');
           } else if (semCalibracao) {
             setState('uncalibrated');
-          } else if (isDegraded) {
+          } else if (isDegraded || calibration.getSuspensaoDaCalibracao() !== null) {
+            // Suspensa pela janela fora do tamanho: `emit` marca a amostra.
             setState('degraded');
           } else {
             setState('tracking');
@@ -1772,6 +1913,47 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       stageTimer.end(STAGE.loopTotal);
     }
 
+    // ── Vigia de quadros ─────────────────────────────────────────────────
+    //
+    // FORA do ramo de quadro novo, porque é justamente a falta de quadro que
+    // ele vigia. A track que termina (cabo solto, hub USB reiniciando, notebook
+    // que dormiu) ou um driver travado congelam o `currentTime` do <video>; sem
+    // este vigia o laço seguia girando sem fazer nada, em `tracking`, e nenhuma
+    // amostra saía — nem a de rosto perdido que faz o dwell zerar.
+    if (ultimoQuadroNovoMs !== null && startTimeMs - ultimoQuadroNovoMs > CAMERA_PARADA_MS) {
+      if (state !== 'sem_camera') {
+        console.warn(
+          `[IrisFlow] a câmera não entrega quadro há ${Math.round(startTimeMs - ultimoQuadroNovoMs)} ms ` +
+          `(videoTime=${videoEl.currentTime.toFixed(3)} paused=${videoEl.paused}) — estado sem_camera.`,
+        );
+        setState('sem_camera');
+        // O rosto que estava lá não descreve o que vier depois.
+        latestHasFace = false;
+        mapGazeNullSinceMs = null;
+        ultimoRollRad = null;
+        rollSuavizado = null;
+        ultimoYawDeg = null;
+        ultimoPitchDeg = null;
+        estabilizadorOneEuro?.reset();
+        blinkHold.update(false, startTimeMs, { predict: () => ({ x: 0, y: 0 }), ready: false });
+        calibration.alimentarReferenciaLenta(startTimeMs, false);
+        calibration.setContraluzAtual(null);
+      }
+      // Amostra de "sem rosto" na cadência de câmera: o dwell pausa e depois
+      // zera (500 ms), o fallback esconde o cursor, e quem assina sabe que não
+      // há olhar sendo medido.
+      if (startTimeMs - ultimaAmostraSemCameraMs >= INTERVALO_SEM_CAMERA_MS) {
+        ultimaAmostraSemCameraMs = startTimeMs;
+        emit({
+          x: lastEmittedX,
+          y: lastEmittedY,
+          timestamp: performance.now(),
+          hasFace: false,
+          uncalibrated: !calibration.isCalibrated(),
+        });
+      }
+    }
+
     // Fora do ramo de quadro novo: se a câmera congelar, o fps tem que cair
     // para zero em vez de ficar preso no último valor.
     atualizarDiagnosticos();
@@ -1838,7 +2020,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       setState('loading');
 
       if (!faceLandmarker) {
-        await initMediaPipe();
+        // No boot, GPU recusada (driver bloqueado, contexto indisponível) cai
+        // direto para a CPU: antes o `start()` rejeitava e a tela dizia que a
+        // CÂMERA tinha falhado.
+        await initMediaPipe({ recorrerACpu: true });
       }
 
       // Entre o `await` acima e esta linha podem ter passado segundos, e o
@@ -1853,6 +2038,9 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       resetSessionState();
       running = true;
       sessionStartMs = performance.now();
+      // O vigia de quadros conta a partir daqui: o provider só chama `start()`
+      // depois do primeiro quadro do <video>.
+      ultimoQuadroNovoMs = sessionStartMs;
       setState('tracking');
       rafHandle = requestAnimationFrame(loop);
     },
@@ -1863,6 +2051,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       running = false;
       if (rafHandle) cancelAnimationFrame(rafHandle);
       rafHandle = 0;
+      // Uma tentativa de recuperação agendada pertence à sessão que acabou.
+      if (timerDaRecuperacao) clearTimeout(timerDaRecuperacao);
+      timerDaRecuperacao = null;
+      tentativasDeRecuperacao = 0;
       resetSessionState();
       // Preserva `l2csClient` e `cropCtx` entre start/stop de propósito:
       // recarregar o ONNX de 91 MB a cada troca de rota seria pior que o
@@ -2141,6 +2333,8 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         loop: {
           errorsTotal: getLoopErrorCount(),
           errorsConsecutive: getConsecutiveLoopErrors(),
+          delegate: delegateDoDetector,
+          tentativasDeRecuperacao,
         },
       };
     },
@@ -2210,6 +2404,12 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       },
       onInvalidated(cb) {
         return calibration.onCalibrationInvalidated(cb);
+      },
+      getSuspensao() {
+        return calibration.getSuspensaoDaCalibracao();
+      },
+      onSuspensao(cb) {
+        return calibration.onSuspensaoDaCalibracao(cb);
       },
       startCollectingPoint(x: number, y: number, onDone: (success: boolean) => void): void {
         calibration.startCollectingPoint(x, y, onDone);

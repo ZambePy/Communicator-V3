@@ -122,6 +122,14 @@ export const CANAIS = {
   sobreposicaoAcao: 'irisflow:overlay-action',
   /** main → app: dwell concluído num alvo da sobreposição (ver `SelecaoDaSobreposicao`). */
   selecao: 'irisflow:desktop-selection',
+  /**
+   * app → main: o estado do rastreador mudou (`EngineState`). Em `sem_camera`
+   * o engine continua emitindo amostras "sem rosto" (para o dwell zerar), e
+   * elas manteriam viva uma sessão que o vigia de "sem amostra" encerrava:
+   * com este aviso o main encerra do mesmo jeito, e a janela do app volta
+   * mostrando que a câmera parou.
+   */
+  rastreamento: 'irisflow:desktop-tracking-state',
 } as const;
 
 const NUMERO = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);

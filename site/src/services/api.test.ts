@@ -355,6 +355,28 @@ describe('verificarLinkDoEmail (etapa 2: o link abre a sessão no aparelho)', ()
     expect(erro).toBeInstanceOf(api.ApiError)
     expect(erro.message).toBe('O link expirou ou já foi usado.')
   })
+
+  it('uma falha não fica guardada: a nova tentativa refaz o pedido', async () => {
+    auth.verifyOtp.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await expect(api.verificarLinkDoEmail('hash-4', 'email')).rejects.toBeTruthy()
+    await api.verificarLinkDoEmail('hash-4', 'email')
+    expect(auth.verifyOtp).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('definirSenhaAposConfirmar (a senha digitada na /beta vale)', () => {
+  it('grava a senha com updateUser e ignora "mesma senha"', async () => {
+    const updateUser = vi.fn(async () => ({ data: {}, error: null as unknown }))
+    ;(auth as Record<string, unknown>).updateUser = updateUser
+    await api.definirSenhaAposConfirmar('segredo123')
+    expect(updateUser).toHaveBeenCalledWith({ password: 'segredo123' })
+
+    updateUser.mockResolvedValueOnce({ data: {}, error: { code: 'same_password', status: 422, message: 'x' } })
+    await expect(api.definirSenhaAposConfirmar('segredo123')).resolves.toBeUndefined()
+
+    updateUser.mockResolvedValueOnce({ data: {}, error: { code: 'weak_password', status: 422, message: 'x' } })
+    await expect(api.definirSenhaAposConfirmar('curta')).rejects.toBeInstanceOf(api.ApiError)
+  })
 })
 
 describe('conferirCodigo (etapa 2: os 4 dígitos do e-mail)', () => {
@@ -445,6 +467,20 @@ describe('responderPesquisa (etapa 3: abre a assinatura beta)', () => {
         p_phone: null,
         p_newsletter: false,
       }),
+    )
+  })
+
+  it('campo esvaziado na edição vai como \'\' (apaga); vazio sem resposta anterior continua null (mantém)', async () => {
+    await api.responderPesquisa({ ...respostas, phone: '', howFound: '', apagarTelefone: true, apagarComoConheceu: true })
+    expect(fake.rpc).toHaveBeenCalledWith(
+      'complete_beta_registration',
+      expect.objectContaining({ p_phone: '', p_how_found: '' }),
+    )
+    fake.rpc.mockClear()
+    await api.responderPesquisa({ ...respostas, phone: '', howFound: '' })
+    expect(fake.rpc).toHaveBeenCalledWith(
+      'complete_beta_registration',
+      expect.objectContaining({ p_phone: null, p_how_found: null }),
     )
   })
 

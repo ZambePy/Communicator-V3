@@ -230,6 +230,26 @@ hr {
   margin-bottom: var(--sp-3);
 }
 
+/* Pílula de aviso acima do título das aberturas (home e /baixar): a
+   etiqueta do lançamento e uma frase curta. Mora aqui porque as duas
+   páginas carregam separadas — no CSS da home ela faltava em /baixar. */
+.aviso-pilula {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-5);
+  padding: 6px 16px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.92rem;
+  color: var(--text-soft);
+}
+
+.aviso-pilula > span:only-child {
+  padding-left: 10px;
+}
+
 
 /* ---------- lista com check e link com seta ---------- */
 .lista-check {
@@ -413,5 +433,48 @@ hr {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ---------- impressão (política, termos e qualquer página) ----------
+   Papel branco e texto escuro — o navegador não imprime o fundo marinho —,
+   tudo o que entra em cena ao rolar já visível e nada fixo por cima do
+   texto (cabeçalho, avisos, barra de chamada, fundo animado). */
+@media print {
+  :root,
+  .on-dark,
+  .on-raised {
+    --bg: #fff;
+    --bg-soft: #fff;
+    --surface: #fff;
+    --surface-2: #fff;
+    --surface-3: #f2f2f2;
+    --text: #000;
+    --text-soft: #1a1a1a;
+    --text-dim: #444;
+    --accent: #1b54a8;
+    --line: #ccc;
+    color-scheme: light;
+  }
+  html,
+  body,
+  .on-dark,
+  .on-raised {
+    background: #fff !important;
+    color: #000;
+  }
+  .reveal,
+  .headline__word {
+    opacity: 1 !important;
+    animation: none !important;
+    transform: none !important;
+  }
+  .header,
+  .drawer,
+  .cookie-notice,
+  .sticky-cta,
+  .ambient,
+  .skip-link {
+    display: none !important;
   }
 }

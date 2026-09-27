@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { AvisoDeFalha } from '@/components/ui/AvisoDeFalha'
 import { Button } from '@/components/ui/Button'
 import { CheckField, Field, SelectField } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
@@ -7,7 +8,7 @@ import { diaEMes, jaLancou } from '@/lib/lancamento'
 import { BETA } from '@/data/content'
 import type { RespostasPesquisa } from '@/services/api'
 import { CONDICAO_LABELS, isPhone, maskPhone } from '@/utils/format'
-import { validar } from '@/utils/validation'
+import { APELIDO_MINIMO, validar } from '@/utils/validation'
 import './pesquisa.css'
 
 /* ============================================================
@@ -119,12 +120,15 @@ export function FormularioPesquisa({
   const rules = useMemo<Rules<Form>>(
     () => ({
       relation: (v) => validar.escolha(v, 'Escolha quem vai usar o IrisFlow.'),
+      // O mínimo é o mesmo do CHECK do banco (APELIDO_MINIMO): "Vó" e "Zé" valem.
       userName: (v, all) =>
         !all.relation || (all.relation === 'proprio' && nomeProprio)
           ? undefined
-          : v.trim().length < 2
+          : !v.trim()
             ? 'Diga como a pessoa gosta de ser chamada.'
-            : undefined,
+            : v.trim().length < APELIDO_MINIMO
+              ? `Use ao menos ${APELIDO_MINIMO} letras (um apelido como “Zé” vale).`
+              : undefined,
       condition: (v) =>
         validar.escolha(v, 'Escolha a condição principal (ou “Prefiro não informar”).'),
       os: (v) => validar.escolha(v, 'Escolha o sistema do computador (ou “Não sei”).'),
@@ -168,6 +172,9 @@ export function FormularioPesquisa({
         feedbackConsent: form.feedbackConsent,
         howFound: form.howFound,
         phone: form.phone,
+        // "Salvas" tem de ser verdade: esvaziar um campo que tinha resposta apaga.
+        apagarTelefone: Boolean(inicial?.phone) && !form.phone.trim(),
+        apagarComoConheceu: Boolean(inicial?.howFound?.trim()) && !form.howFound.trim(),
       })
     } catch (err) {
       setFalha(err instanceof Error ? err.message : 'Não foi possível salvar as respostas agora.')
@@ -178,14 +185,6 @@ export function FormularioPesquisa({
 
   return (
     <form ref={formRef} onSubmit={enviar} noValidate className="pesquisa">
-      {falha && (
-        <div className="notice notice--warn" role="alert">
-          <span className="notice__icon">
-            <Icon name="alerta" size={20} />
-          </span>
-          <p>{falha}</p>
-        </div>
-      )}
 
       <Escolhas
         campo="relation"
@@ -294,6 +293,10 @@ export function FormularioPesquisa({
           onChange={(e) => setForm((f) => ({ ...f, feedbackConsent: e.target.checked }))}
         />
       </div>
+
+      {/* Junto do botão, com foco: no topo de um formulário longo, o aviso
+          ficava fora da tela. */}
+      <AvisoDeFalha mensagem={falha} />
 
       <div className="flow__actions">
         {onCancelar ? (

@@ -29,7 +29,7 @@ export default function ComoFunciona() {
         visual={<PassosComTela passos={PASSOS_DO_PRIMEIRO_USO} />}
       />
 
-      <section className="faixa on-light" aria-labelledby="estagios-titulo">
+      <section className="faixa on-raised" aria-labelledby="estagios-titulo">
         <div className="container">
           <Capitulo
             id="estagios-titulo"
@@ -66,7 +66,7 @@ export default function ComoFunciona() {
         <DwellDemo />
       </div>
 
-      <section className="faixa on-light" aria-labelledby="travas-titulo">
+      <section className="faixa on-raised" aria-labelledby="travas-titulo">
         <div className="container">
           <Capitulo
             id="travas-titulo"

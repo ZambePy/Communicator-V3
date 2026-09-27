@@ -42,10 +42,15 @@ export function loadAnalytics(
 }
 
 /**
- * Tira o beacon da página quando a pessoa recusa depois de já tê-lo
- * carregado. O script que já rodou não "desroda", mas a próxima visita
- * não o carrega, e a remoção impede novos envios de rota nesta.
+ * A pessoa recusou as estatísticas. Tirar a tag não basta: o beacon que já
+ * rodou continua acompanhando as trocas de rota (spa: true) até a página
+ * recarregar. Por isso, se ele chegou a carregar, a página recarrega — a
+ * recusa já está guardada e o beacon não volta. Devolve se recarregou.
  */
-export function unloadAnalytics(): void {
-  document.getElementById(SCRIPT_ID)?.remove()
+export function unloadAnalytics(recarregar: () => void = () => window.location.reload()): boolean {
+  const script = document.getElementById(SCRIPT_ID)
+  if (!script) return false
+  script.remove()
+  recarregar()
+  return true
 }

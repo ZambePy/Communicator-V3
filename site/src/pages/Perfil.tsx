@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { FormularioPesquisa } from '@/components/beta/FormularioPesquisa'
 import { LinkedDevices } from '@/components/sections/LinkedDevices'
 import { Button } from '@/components/ui/Button'
 import { DownloadPanel } from '@/components/ui/DownloadPanel'
+import { LevarAoComputador } from '@/components/ui/LevarAoComputador'
+import { ehCelular } from '@/lib/aparelho'
 import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
 import { CheckField, Field } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
@@ -55,7 +57,12 @@ export default function Perfil() {
   const [inscricao, setInscricao] = useState<InscricaoBeta | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [editando, setEditando] = useState<'conta' | 'pesquisa' | null>(null)
-  const [aviso, setAviso] = useState<Aviso>(null)
+  // "Senha trocada" (e o que mais uma tela mandar ao voltar para cá).
+  const location = useLocation()
+  const [aviso, setAviso] = useState<Aviso>(() => {
+    const texto = (location.state as { aviso?: unknown } | null)?.aviso
+    return typeof texto === 'string' ? { ok: true, texto } : null
+  })
 
   const carregar = useCallback(async () => {
     const [p, i] = await Promise.all([fetchPerfilBasico(), fetchInscricaoBeta()])
@@ -74,6 +81,9 @@ export default function Perfil() {
   if (carregando && !account) return <SessionLoading />
 
   const completa = Boolean(account)
+  // Sem conta E com erro de leitura: não sabemos se a pesquisa foi respondida.
+  // Dizer "falta a pesquisa" levava quem já se inscreveu a responder de novo.
+  const semLeitura = !account && Boolean(sessionError)
   const nome = account?.profile.buyerName || perfil?.buyerName || ''
   const email = account?.profile.email || perfil?.email || ''
   const primeiroNome = nome.split(' ')[0]
@@ -108,7 +118,7 @@ export default function Perfil() {
             </span>
             <p>
               Não foi possível atualizar os dados agora ({sessionError}). Você continua conectado(a)
-              e o que aparece abaixo é a última leitura que deu certo.{' '}
+              {account ? ' e o que aparece abaixo é a última leitura que deu certo' : ''}.{' '}
               <button type="button" className="perfil__link-botao" onClick={() => void refresh()}>
                 Tentar de novo
               </button>
@@ -128,18 +138,22 @@ export default function Perfil() {
         {/* ---- situação da inscrição ---- */}
         <section className="panel perfil__situacao" aria-labelledby="perfil-situacao">
           <div className="perfil__situacao-texto">
-            <span className={`tag ${completa ? 'tag--ok' : 'tag--wip'}`}>
-              {completa ? 'Inscrição completa' : 'Falta a pesquisa rápida'}
+            <span className={`tag ${completa ? 'tag--ok' : semLeitura ? 'tag--neutral' : 'tag--wip'}`}>
+              {completa ? 'Inscrição completa' : semLeitura ? 'Não carregou' : 'Falta a pesquisa rápida'}
             </span>
             <h2 id="perfil-situacao" className="perfil__situacao-titulo">
-              {!completa
+              {semLeitura
+                ? 'Não conseguimos ler a sua inscrição agora'
+                : !completa
                 ? 'Complete sua inscrição na beta'
                 : lancou
                   ? 'A beta está aberta: baixe o aplicativo'
                   : `A beta abre em ${diaPorExtenso(program.launchAt)}`}
             </h2>
             <p>
-              {!completa
+              {semLeitura
+                ? 'Nada foi perdido: é a conexão com o servidor. Tente de novo em instantes.'
+                : !completa
                 ? 'Sua conta está criada. Responda a pesquisa rápida sobre quem vai usar (cerca de 1 minuto) para liberar o download.'
                 : lancou
                   ? `Acesso completo e gratuito até ${formatDate(account!.nextChargeAt)}. Entre no aplicativo com o mesmo e-mail e senha desta conta.`
@@ -147,7 +161,9 @@ export default function Perfil() {
             </p>
           </div>
           <div className="perfil__situacao-acao">
-            {!completa ? (
+            {semLeitura ? (
+              <Button onClick={() => void refresh()}>Tentar de novo</Button>
+            ) : !completa ? (
               <Button to="/beta">Responder a pesquisa rápida</Button>
             ) : lancou ? (
               <Button href="#downloads" variant="teal">
@@ -325,7 +341,11 @@ export default function Perfil() {
                   ? 'Entre no aplicativo com o mesmo e-mail e senha desta conta.'
                   : `O download abre em ${diaPorExtenso(program.launchAt)}, primeiro para ${BETA.sistemaDoLancamento}. macOS e Linux estão em preparação.`}
               </p>
-              <DownloadPanel liberaEm={program.launchAt} onDownload={(os) => void markBetaDownload(os)} />
+              {ehCelular() ? (
+                <LevarAoComputador />
+              ) : (
+                <DownloadPanel liberaEm={program.launchAt} onDownload={(os) => void markBetaDownload(os)} />
+              )}
             </section>
 
             {/* Computadores só existem depois do download: antes do lançamento

@@ -24,7 +24,7 @@
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { screen } from 'electron';
+import { screen, type Display } from 'electron';
 import { buildMonitorSizeQuery } from '../src/displayGeometry';
 import {
   filtrarAtivos,
@@ -36,6 +36,7 @@ import {
   lerTamanhoDoCoreGraphics,
   selecionarPaineis,
   tamanhoFisicoDoEdid,
+  telaEmUsoDoMonitor,
   type TamanhoDoPainel,
   type TelaEmUso,
 } from '../src/displayGeometryEdid';
@@ -62,16 +63,24 @@ function rodar(cmd: string, args: string[], timeoutMs: number, maxBuffer = 4 * 1
   });
 }
 
-function telaPrincipal(): TelaEmUso | null {
+/**
+ * Resolução física do monitor que interessa — o da JANELA do app, passado por
+ * quem pergunta (`main.ts`). Sem ele, o primário. O EDID é filtrado por esta
+ * resolução: com o primário, um monitor externo à frente do paciente recebia a
+ * diagonal do painel do notebook.
+ */
+function telaDoMonitor(monitor?: Display | null): TelaEmUso | null {
   try {
-    const d = screen.getPrimaryDisplay();
-    return {
-      larguraPx: Math.round(d.size.width * d.scaleFactor),
-      alturaPx: Math.round(d.size.height * d.scaleFactor),
-    };
+    return telaEmUsoDoMonitor(monitor ?? screen.getPrimaryDisplay());
   } catch {
     return null;
   }
+}
+
+/** Identidade do monitor (id + resolução física + escala) para notar trocas. */
+export function chaveDoMonitor(monitor: Display): string {
+  const t = telaEmUsoDoMonitor(monitor);
+  return `${monitor.id}:${t.larguraPx}x${t.alturaPx}@${monitor.scaleFactor}`;
 }
 
 function paineisDosBytes(blobs: Iterable<Uint8Array>): TamanhoDoPainel[] {
@@ -136,8 +145,7 @@ async function lerMac(tela: TelaEmUso | null): Promise<TamanhoDoPainel[]> {
   return cg ? selecionarPaineis([cg], tela, true) : [];
 }
 
-async function lerAgora(): Promise<TamanhoDoPainel[]> {
-  const tela = telaPrincipal();
+async function lerAgora(tela: TelaEmUso | null): Promise<TamanhoDoPainel[]> {
   switch (process.platform) {
     case 'win32': return lerWindows(tela);
     case 'linux': return lerLinux(tela);
@@ -147,14 +155,22 @@ async function lerAgora(): Promise<TamanhoDoPainel[]> {
 }
 
 let emCache: Promise<TamanhoDoMonitorIPC[]> | null = null;
+/** Monitor a que o cache se refere: outro monitor, outra leitura. */
+let chaveDoCache: string | null = null;
 
-/** Lê (ou devolve do cache) os tamanhos físicos. Nunca rejeita. */
-export function lerTamanhosDosMonitores(): Promise<TamanhoDoMonitorIPC[]> {
-  if (emCache) return emCache;
+/**
+ * Lê (ou devolve do cache) os tamanhos físicos, escolhendo o painel do
+ * `monitor` informado (o da janela do app). Nunca rejeita.
+ */
+export function lerTamanhosDosMonitores(monitor?: Display | null): Promise<TamanhoDoMonitorIPC[]> {
+  const tela = telaDoMonitor(monitor);
+  const chave = tela ? `${monitor?.id ?? 'primario'}:${tela.larguraPx}x${tela.alturaPx}` : 'desconhecido';
+  if (emCache && chaveDoCache === chave) return emCache;
+  chaveDoCache = chave;
   const leitura = (async () => {
     try {
       const teto = new Promise<TamanhoDoPainel[]>((r) => setTimeout(() => r([]), TETO_TOTAL_MS).unref?.());
-      const paineis = await Promise.race([lerAgora(), teto]);
+      const paineis = await Promise.race([lerAgora(tela), teto]);
       const out = paineis.map((p) => ({
         widthCm: Math.round(p.widthCm * 10) / 10,
         heightCm: Math.round(p.heightCm * 10) / 10,
@@ -177,4 +193,5 @@ export function lerTamanhosDosMonitores(): Promise<TamanhoDoMonitorIPC[]> {
 /** Chamar quando a configuração de telas mudar (monitor ligado/desligado). */
 export function esquecerTamanhosDosMonitores(): void {
   emCache = null;
+  chaveDoCache = null;
 }

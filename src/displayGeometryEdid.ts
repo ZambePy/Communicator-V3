@@ -335,6 +335,19 @@ export interface TelaEmUso {
   alturaPx: number;
 }
 
+/**
+ * Resolução física de um monitor do Electron (`Display`: tamanho em DIP ×
+ * fator de escala). O processo principal passa o monitor da JANELA do app —
+ * não o primário —, e é por esta resolução que o painel do EDID é escolhido.
+ */
+export function telaEmUsoDoMonitor(monitor: { size: { width: number; height: number }; scaleFactor: number }): TelaEmUso {
+  const k = monitor.scaleFactor > 0 ? monitor.scaleFactor : 1;
+  return {
+    larguraPx: Math.round(monitor.size.width * k),
+    alturaPx: Math.round(monitor.size.height * k),
+  };
+}
+
 /** Remove duplicatas (mesmo modelo e mesmo tamanho, comum no registro). */
 export function semDuplicatas(paineis: readonly TamanhoDoPainel[]): TamanhoDoPainel[] {
   const vistos = new Set<string>();

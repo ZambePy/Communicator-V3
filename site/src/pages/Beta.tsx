@@ -8,22 +8,33 @@ import { CompatCheck } from '@/components/sections/CompatCheck'
 import { Button } from '@/components/ui/Button'
 import { Card, CardIcon } from '@/components/ui/Card'
 import { DownloadPanel } from '@/components/ui/DownloadPanel'
+import { LevarAoComputador } from '@/components/ui/LevarAoComputador'
 import { SelosDasLojas } from '@/components/ui/SelosDasLojas'
 import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
 import { CheckField, Field } from '@/components/ui/Field'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { PasswordStrength } from '@/components/ui/PasswordStrength'
 import { SessionLoading } from '@/components/ui/Skeleton'
+import { AvisoDeFalha } from '@/components/ui/AvisoDeFalha'
 import { Stepper } from '@/components/ui/Stepper'
 import { useAccount, type Account } from '@/context/AccountContext'
 import { BETA, BRAND, ETAPAS_DA_BETA, PLATFORMS, PRIVACY_LINE } from '@/data/content'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
 import { diaEMes, diaPorExtenso } from '@/lib/lancamento'
+import { ehCelular } from '@/lib/aparelho'
+import {
+  esperaRestante,
+  esquecerInscricaoPendente,
+  guardarInscricaoPendente,
+  lerInscricaoPendente,
+} from '@/lib/inscricaoPendente'
 import {
   APP_CUIDADOR_URL,
   fetchPerfilBasico,
   markBetaDownload,
+  ApiError,
+  definirSenhaAposConfirmar,
   reenviarConfirmacao,
   verificarLinkDoEmail,
   type BetaProgram,
@@ -152,9 +163,15 @@ function CriarConta({ program }: { program: BetaProgram }) {
   const [tentou, setTentou] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [falha, setFalha] = useState<string | null>(null)
-  // E-mail à espera da confirmação (etapa 2).
-  const [pendente, setPendente] = useState<string | null>(null)
+  // E-mail à espera da confirmação (etapa 2). Vem da aba (F5, Voltar, os
+  // termos lidos na mesma aba): ver lib/inscricaoPendente.ts.
+  const [pendente, setPendente] = useState(lerInscricaoPendente)
   const formRef = useRef<HTMLFormElement>(null)
+
+  const irParaOCodigo = (email: string, enviadoEm = Date.now()) => {
+    guardarInscricaoPendente(email, enviadoEm)
+    setPendente({ email, enviadoEm })
+  }
 
   const set = (key: keyof FormConta) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [key]: e.target.value }))
@@ -184,8 +201,16 @@ function CriarConta({ program }: { program: BetaProgram }) {
       })
       // 'sessao': o projeto não exige confirmar o e-mail; a página já passa
       // para a pesquisa, porque a sessão chegou ao contexto.
-      if (resultado === 'confirmar') setPendente(form.email.trim().toLowerCase())
+      if (resultado === 'confirmar') irParaOCodigo(form.email.trim().toLowerCase())
     } catch (err) {
+      // O Supabase só manda um código a cada 60 s por e-mail: quem refaz a
+      // inscrição logo em seguida (F5 antes desta versão, outra aba) já tem
+      // um código válido na caixa de entrada — segue para ele, com a espera.
+      const espera = err instanceof ApiError ? err.message.match(/^Aguarde (\d+) segundos/) : null
+      if (espera) {
+        irParaOCodigo(form.email.trim().toLowerCase(), Date.now() - (60 - Number(espera[1])) * 1000)
+        return
+      }
       setFalha(err instanceof Error ? err.message : 'Não foi possível criar a conta agora.')
     } finally {
       setEnviando(false)
@@ -195,8 +220,12 @@ function CriarConta({ program }: { program: BetaProgram }) {
   if (pendente) {
     return (
       <ConfirmeOCodigo
-        email={pendente}
+        email={pendente.email}
+        enviadoEm={pendente.enviadoEm}
+        // Só existe nesta aba, antes de recarregar: nunca é guardada.
+        senha={form.senha || undefined}
         onCorrigir={() => {
+          esquecerInscricaoPendente()
           setPendente(null)
           setForm((f) => ({ ...f, senha: '', confirmacao: '' }))
           setTentou(false)
@@ -278,15 +307,6 @@ function CriarConta({ program }: { program: BetaProgram }) {
                 O e-mail e a senha daqui abrem o site, o aplicativo e o app do cuidador.
               </p>
 
-              {falha && (
-                <div className="notice notice--warn" role="alert">
-                  <span className="notice__icon">
-                    <Icon name="alerta" size={20} />
-                  </span>
-                  <p>{falha}</p>
-                </div>
-              )}
-
               <form ref={formRef} onSubmit={enviar} noValidate>
                 <div data-campo="nome">
                   <Field
@@ -349,13 +369,14 @@ function CriarConta({ program }: { program: BetaProgram }) {
                   <CheckField
                     label={
                       <>
+                        {/* Em outra aba: ler os termos não pode apagar o formulário. */}
                         Li e aceito os{' '}
-                        <Link to="/termos" className="link-ok">
-                          termos de uso
+                        <Link to="/termos" className="link-ok" target="_blank" rel="noopener">
+                          termos de uso<span className="sr-only"> (abre em outra aba)</span>
                         </Link>{' '}
                         e a{' '}
-                        <Link to="/privacidade" className="link-ok">
-                          política de privacidade
+                        <Link to="/privacidade" className="link-ok" target="_blank" rel="noopener">
+                          política de privacidade<span className="sr-only"> (abre em outra aba)</span>
                         </Link>
                         .
                       </>
@@ -371,6 +392,8 @@ function CriarConta({ program }: { program: BetaProgram }) {
                   checked={form.newsletter}
                   onChange={marcar('newsletter')}
                 />
+
+                <AvisoDeFalha mensagem={falha} />
 
                 <Button type="submit" full size="lg" loading={enviando} disabled={enviando}>
                   {enviando ? 'Criando a conta…' : 'Criar conta'}
@@ -414,8 +437,19 @@ function CriarConta({ program }: { program: BetaProgram }) {
 
 /* ---------------- etapa 2: o código do e-mail ---------------- */
 
-function ConfirmeOCodigo({ email, onCorrigir }: { email: string; onCorrigir: () => void }) {
-  const { refresh } = useAccount()
+function ConfirmeOCodigo({
+  email,
+  enviadoEm,
+  senha,
+  onCorrigir,
+}: {
+  email: string
+  enviadoEm: number
+  /** A senha digitada nesta aba (some no F5). */
+  senha?: string
+  onCorrigir: () => void
+}) {
+  const { refresh, signIn } = useAccount()
 
   useEffect(() => {
     window.scrollTo?.({ top: 0 })
@@ -432,12 +466,39 @@ function ConfirmeOCodigo({ email, onCorrigir }: { email: string; onCorrigir: () 
 
           <CodigoDeVerificacao
             email={email}
+            esperaInicial={esperaRestante(enviadoEm)}
             aoConfirmar={async (tokenHash) => {
               // A sessão nasce aqui; com ela, a página segue para a pesquisa.
               await verificarLinkDoEmail(tokenHash, 'email')
+              esquecerInscricaoPendente()
+              // Vale a senha desta tela (ver definirSenhaAposConfirmar). Se não
+              // der para gravar agora, a conta segue com a do primeiro cadastro.
+              if (senha) {
+                await definirSenhaAposConfirmar(senha).catch((e) =>
+                  console.warn('[IrisFlow] a senha não foi gravada depois do código:', e),
+                )
+              }
               await refresh()
             }}
-            aoReenviar={() => reenviarConfirmacao(email)}
+            aoRecusar={
+              senha
+                ? async () => {
+                    // Confirmado pelo botão do e-mail, em outro aparelho? Então o
+                    // código daqui não vale mais, mas a senha desta tela entra.
+                    try {
+                      await signIn(email, senha)
+                      esquecerInscricaoPendente()
+                      return true
+                    } catch {
+                      return false
+                    }
+                  }
+                : undefined
+            }
+            aoReenviar={async () => {
+              await reenviarConfirmacao(email)
+              guardarInscricaoPendente(email)
+            }}
           />
 
           <div className="notice beta__codigo-dica" role="note">
@@ -631,7 +692,13 @@ function Download({ account, program }: { account: Account; program: BetaProgram
               ? `Versão ${program.currentVersion}. Entre no aplicativo com o mesmo e-mail e senha desta conta.`
               : `${BETA.sistemaDoLancamento} abre em ${diaEMes(program.launchAt)}. macOS e Linux estão em preparação: avisamos por e-mail quando saírem.`}
           </p>
-          <DownloadPanel liberaEm={program.launchAt} onDownload={(os) => void markBetaDownload(os)} />
+          {/* No celular (o botão do e-mail convida a concluir por lá), o painel
+              avaliaria o celular como "este computador" e ofereceria o .exe. */}
+          {ehCelular() ? (
+            <LevarAoComputador />
+          ) : (
+            <DownloadPanel liberaEm={program.launchAt} onDownload={(os) => void markBetaDownload(os)} />
+          )}
         </div>
 
         <div className="beta__cuidador panel">
@@ -661,7 +728,7 @@ function Download({ account, program }: { account: Account; program: BetaProgram
 
         {lancou && (
           <>
-            <CompatCheck delay={120} />
+            {!ehCelular() && <CompatCheck delay={120} />}
             <div className="grid grid--3 beta__steps">
               {PROXIMOS_PASSOS.map((s, i) => (
                 <Card as="div" key={s.title}>

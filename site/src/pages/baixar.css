@@ -63,7 +63,7 @@
 
 .baixar-app__icone {
   border-radius: 12px;
-  box-shadow: 0 4px 12px -4px rgba(11, 27, 58, 0.35);
+  box-shadow: 0 4px 12px -4px rgba(2, 7, 16, 0.6);
 }
 
 .baixar-app__nome {
@@ -98,20 +98,10 @@
   border-radius: 10px;
 }
 
-/* O painel de download foi desenhado para fundo escuro; no cartão claro, a
-   mesma estrutura com as superfícies do tema claro. */
+/* Dentro do cartão do app, o painel de download sobe um degrau de
+   superfície para não se fundir com o cartão. */
 .baixar-app .dl__card {
   background: var(--surface-2);
-}
-
-.levar-ao-computador p {
-  margin-bottom: var(--sp-4);
-}
-
-.levar-ao-computador__acoes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
 }
 
 /* ---------- para começar ---------- */

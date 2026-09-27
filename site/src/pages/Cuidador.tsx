@@ -9,6 +9,8 @@ import { CUIDADOR, PASSOS_DO_CUIDADOR, RECURSOS_DO_CUIDADOR } from '@/data/cuida
 import { SITE_URL, BETA, BETA_CTA } from '@/data/content'
 import { DEMO_CUIDADOR } from '@/data/home'
 import { LOJAS } from '@/lib/lojas'
+import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
+import { diaEMes } from '@/lib/lancamento'
 import '@/components/home/home.css'
 import './cuidador.css'
 
@@ -18,6 +20,8 @@ import './cuidador.css'
  * QR leva o celular direto para a loja certa (/app).
  */
 export default function Cuidador() {
+  const program = useBetaProgram()
+  const lancou = useJaLancou(program.launchAt)
   return (
     <>
       <section className="cuidador-hero on-dark" aria-labelledby="cuidador-titulo">
@@ -53,14 +57,15 @@ export default function Cuidador() {
         </div>
       </section>
 
-      <section className="cuidador-recursos on-light" aria-labelledby="recursos-titulo">
+      <section className="cuidador-recursos on-raised" aria-labelledby="recursos-titulo">
         <div className="container">
           <Reveal anim="up">
             <h2 id="recursos-titulo" className="titulo-capitulo">
               Tudo o que importa, no bolso.
             </h2>
           </Reveal>
-          <ul className="cuidador-recursos__lista">
+          {/* No celular a lista rola na horizontal: focável, para rolar pelo teclado. */}
+          <ul className="cuidador-recursos__lista" tabIndex={0} aria-label="O que o app faz (no celular, role para o lado)">
             {RECURSOS_DO_CUIDADOR.map((r, i) => (
               <Reveal key={r.id} as="li" anim="up" delay={70 * i} className="recurso">
                 <CelularTela src={r.tela.src} alt={r.tela.alt} />
@@ -107,7 +112,7 @@ export default function Cuidador() {
         </div>
       </section>
 
-      <section className="cuidador-disponivel on-light" id="disponibilidade" aria-labelledby="disponivel-titulo">
+      <section className="cuidador-disponivel on-raised" id="disponibilidade" aria-labelledby="disponivel-titulo">
         <div className="container cuidador-disponivel__inner">
           <div>
             <h2 id="disponivel-titulo" className="titulo-capitulo">
@@ -117,13 +122,18 @@ export default function Cuidador() {
               <li>
                 <strong>Android</strong>
                 <span>
-                  Google Play.
-                  {LOJAS.apk && (
-                    <>
-                      {' '}
-                      Na beta, também como <a href={LOJAS.apk}>arquivo APK</a>, para quem testa antes da loja.
-                    </>
-                  )}
+                  {LOJAS.googlePlay ? 'Google Play.' : 'Chega ao Google Play em breve.'}
+                  {/* A mesma trava dos instaladores do computador: o arquivo sai
+                      no dia do lançamento da beta. */}
+                  {LOJAS.apk &&
+                    (lancou ? (
+                      <>
+                        {' '}
+                        Na beta, como <a href={LOJAS.apk}>arquivo APK</a>, para quem testa antes da loja.
+                      </>
+                    ) : (
+                      <> Na beta, o arquivo APK sai no dia do lançamento, {diaEMes(program.launchAt)}.</>
+                    ))}
                 </span>
               </li>
               <li>

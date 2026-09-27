@@ -34,13 +34,13 @@ export default function Planos() {
         }
       />
 
-      <div className="on-light">
+      <div className="on-raised">
         <Pricing />
       </div>
 
       <ContrastePreco />
 
-      <div className="on-light">
+      <div className="on-raised">
         <Faq />
       </div>
 

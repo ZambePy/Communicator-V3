@@ -27,3 +27,40 @@ export function useReducedMotion(): boolean {
 
   return reduced
 }
+
+/**
+ * Máquina modesta: poucos núcleos ou tela estreita (celular). O fundo
+ * ambiente entra em modo leve — metade das partículas, manchas de luz
+ * paradas e sem a varredura —, porque o blur animado é a camada mais cara
+ * de compor. Movimento reduzido também conta como modo leve (e aí o CSS
+ * ainda esconde as partículas).
+ */
+export function useLowPower(): boolean {
+  const [low, setLow] = useState(detectLowPower)
+
+  useEffect(() => {
+    let quadro = 0
+    const onResize = () => {
+      if (quadro) return
+      quadro = window.requestAnimationFrame(() => {
+        quadro = 0
+        setLow(detectLowPower())
+      })
+    }
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      if (quadro) window.cancelAnimationFrame(quadro)
+    }
+  }, [])
+
+  return low
+}
+
+function detectLowPower(): boolean {
+  if (typeof window === 'undefined') return false
+  if (prefersReducedMotion()) return true
+  const nucleos = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : undefined
+  if (typeof nucleos === 'number' && nucleos > 0 && nucleos <= 4) return true
+  return window.innerWidth < 720
+}

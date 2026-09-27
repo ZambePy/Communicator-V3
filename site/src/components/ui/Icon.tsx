@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
    Todos desenhados na mesma grade de 24 por 24, com traço de 1,6
    e sem preenchimento, para que fiquem coerentes entre si em
    qualquer tamanho. A cor vem sempre do contexto (currentColor),
-   então o mesmo ícone serve nas faixas claras e nas escuras.
+   então o mesmo ícone serve em qualquer faixa.
 
    Ícones são decoração: quem lê por leitor de tela recebe o texto
    ao lado, e por isso todo <svg> sai marcado como aria-hidden.

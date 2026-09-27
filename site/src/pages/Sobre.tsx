@@ -57,7 +57,7 @@ export default function Sobre() {
         }
       />
 
-      <section className="faixa on-light" aria-labelledby="humano-titulo">
+      <section className="faixa on-raised" aria-labelledby="humano-titulo">
         <div className="container sobre-humano">
           <Reveal anim="up">
             <h2 id="humano-titulo" className="titulo-capitulo">
@@ -96,7 +96,7 @@ export default function Sobre() {
         </div>
       </section>
 
-      <section className="faixa on-light" id="equipe" aria-labelledby="origem-titulo">
+      <section className="faixa on-raised" id="equipe" aria-labelledby="origem-titulo">
         <div className="container">
           <div className="sobre-origem">
             <Reveal anim="up">
@@ -159,7 +159,7 @@ export default function Sobre() {
         </div>
       </section>
 
-      <section className="faixa on-light" aria-labelledby="roteiro-titulo">
+      <section className="faixa on-raised" aria-labelledby="roteiro-titulo">
         <div className="container">
           <Capitulo
             id="roteiro-titulo"

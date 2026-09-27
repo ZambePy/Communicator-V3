@@ -14,6 +14,25 @@ export type Rule<V = string> = (value: V) => string | undefined
 /** Mesmo mínimo exigido pelo Supabase Auth por padrão. */
 export const SENHA_MINIMA = 8
 
+/**
+ * Letras mínimas de "como a pessoa gosta de ser chamada" (pesquisa da beta).
+ * É um apelido — "Vó", "Zé", "Lu" —, e o CHECK de beneficiaries.user_name no
+ * banco usa o mesmo número: length(btrim(user_name)) >= 2.
+ */
+export const APELIDO_MINIMO = 2
+
+/**
+ * Limites do formulário de contato: os mesmos CHECKs de contact_messages no
+ * banco (nome de 3 a 120 caracteres, mensagem de 15 a 5.000, sem os espaços
+ * das pontas).
+ */
+export const CONTATO = {
+  nomeMinimo: 3,
+  nomeMaximo: 120,
+  mensagemMinima: 15,
+  mensagemMaxima: 5000,
+} as const
+
 export const validar = {
   nomeCompleto(v: string) {
     const partes = v.trim().split(/\s+/).filter(Boolean)
@@ -21,9 +40,10 @@ export const validar = {
     if (partes.length < 2) return 'Informe nome e sobrenome.'
     return undefined
   },
-  nome(v: string, minimo = 3) {
+  nome(v: string, minimo = 3, maximo = Infinity) {
     if (!v.trim()) return 'Este campo é obrigatório.'
     if (v.trim().length < minimo) return `Use ao menos ${minimo} letras.`
+    if (v.trim().length > maximo) return `Use no máximo ${maximo} caracteres.`
     return undefined
   },
   email(v: string) {
@@ -69,10 +89,11 @@ export const validar = {
   escolha(v: string, mensagem = 'Selecione uma opção.') {
     return v ? undefined : mensagem
   },
-  mensagem(v: string, minimo = 15) {
+  mensagem(v: string, minimo = 15, maximo = Infinity) {
     const n = v.trim().length
     if (!n) return 'Escreva a sua mensagem.'
     if (n < minimo) return `Conte um pouco mais: faltam ${minimo - n} caracteres.`
+    if (n > maximo) return `A mensagem passou do limite de ${maximo.toLocaleString('pt-BR')} caracteres.`
     return undefined
   },
   aceite(v: boolean) {

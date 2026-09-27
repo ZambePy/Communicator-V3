@@ -44,7 +44,7 @@ export function Reveal({
     <Tag
       ref={ref}
       id={id}
-      className={className}
+      className={`reveal${className ? ` ${className}` : ''}`}
       style={{
         ...style,
         opacity: inView ? undefined : 0,

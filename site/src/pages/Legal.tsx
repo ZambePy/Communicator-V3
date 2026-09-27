@@ -17,7 +17,7 @@ import './legal.css'
 type Block = { id: string; h: string; p?: string[]; list?: string[]; after?: string[] }
 
 /** Data da versão em vigor dos dois documentos. */
-const ATUALIZADO_EM = '24 de setembro de 2026'
+const ATUALIZADO_EM = '27 de setembro de 2026'
 
 const PRIVACIDADE: Block[] = [
   {
@@ -42,7 +42,7 @@ const PRIVACIDADE: Block[] = [
     h: '3. O que guardamos e para quê',
     p: ['Guardamos apenas o necessário para a conta, o app do cuidador e o suporte funcionarem:'],
     list: [
-      'Conta e inscrição na beta: nome e e-mail de quem se inscreve; telefone e CPF, se você quiser informar (os dois são opcionais na beta); a senha, que fica com o serviço de autenticação e não é legível pela equipe; nome de quem vai usar, a relação com essa pessoa, a condição principal, o sistema do computador, o profissional que acompanha (opcional), como conheceu a IrisFlow e as suas escolhas de contato. Servem para criar a conta, liberar o aplicativo, ajustar o perfil inicial e falar com você sobre a beta.',
+      'Conta e inscrição na beta: nome e e-mail de quem se inscreve; o telefone, se você quiser informar (é opcional); a senha, que fica com o serviço de autenticação e não é legível pela equipe; nome de quem vai usar, a relação com essa pessoa, a condição principal, o sistema do computador, o profissional que acompanha (opcional), como conheceu a IrisFlow e as suas escolhas de contato. Servem para criar a conta, liberar o aplicativo, ajustar o perfil inicial e falar com você sobre a beta.',
       'Mensagens e alertas: o texto que a pessoa escolheu enviar pelo IrisFlow, as respostas do cuidador e os pedidos de ajuda ou de emergência, para chegarem ao celular do cuidador e ficarem no histórico que a família consulta.',
       'Configurações e frases: ajustes do aplicativo (tempo de fixação, estabilidade do cursor, voz) e as frases rápidas e textos que o cuidador cadastra.',
       'Dados técnicos e de uso agregado: o computador vinculado (nome, sistema, versão do aplicativo e se câmera, rastreamento e calibração estão funcionando) e números de cada sessão — duração, qualidade da calibração, quantidade de frases e de caracteres, pedidos de ajuda e módulos usados. Nunca imagem, vídeo ou o conteúdo digitado fora das mensagens enviadas.',
@@ -90,7 +90,7 @@ const PRIVACIDADE: Block[] = [
     id: 'cookies',
     h: '7. Cookies, armazenamento local e estatísticas',
     p: [
-      'Este site não usa cookies de publicidade nem de rastreamento. No seu navegador ficam apenas: a sessão de login (para você continuar conectado), a sua escolha sobre estatísticas, pequenas preferências de interface, como ter fechado a barra de atalho no celular, a lista de instaladores publicados (por até 10 minutos, só na aba aberta) e, quando o cadastro pede confirmação por e-mail, um rascunho da inscrição na beta — sem CPF, telefone ou condição de saúde —, que é apagado ao concluir a inscrição ou ao sair da conta e perde a validade em 48 horas.',
+      'Este site não usa cookies de publicidade nem de rastreamento. No seu navegador ficam apenas: a sessão de login (para você continuar conectado), a sua escolha sobre estatísticas, pequenas preferências de interface, como ter fechado a barra de atalho no celular, a lista de instaladores publicados (por até 10 minutos, só na aba aberta) e, enquanto você digita o código de confirmação do e-mail, o endereço de e-mail e a hora do envio (só na aba aberta, para a etapa do código sobreviver a uma recarga da página) — nunca a senha —, apagados ao confirmar, ao corrigir o e-mail ou em 24 horas.',
       'Para saber quantas pessoas visitam cada página usamos o Cloudflare Web Analytics, que não grava cookies, não cria identificador do visitante e mostra só números agregados. Você pode recusar essas estatísticas no aviso que aparece na primeira visita ou, depois, em “Preferências de cookies”, no rodapé; com a recusa, o script de estatísticas nem é carregado.',
     ],
   },

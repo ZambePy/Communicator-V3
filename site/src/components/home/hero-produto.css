@@ -1,71 +1,77 @@
-/* Abertura da home (HeroProduto.tsx). Texto centrado em poucas linhas e o
-   monitor logo abaixo, grande, inclinado até a página rolar. */
+/* Abertura da home (HeroProduto.tsx): a mensagem à esquerda e o monitor com
+   a gravação real à direita, com o halo e os anéis por trás, sobre o fundo
+   de partículas. Nunca mais alta que a janela: as chamadas cabem na
+   primeira dobra também em 1280 × 720 e 1366 × 768. */
 
 .hero-produto {
   position: relative;
   overflow: hidden;
-  padding-top: calc(var(--header-h) + clamp(40px, 7vh, 88px));
-  padding-bottom: clamp(56px, 9vh, 112px);
+  min-height: min(100vh, 880px);
+  min-height: min(100svh, 880px);
+  display: flex;
+  align-items: center;
+  /* O cabeçalho é transparente e flutua sobre esta faixa: a altura dele
+     entra no respiro de cima. */
+  padding-block: calc(var(--header-h) + var(--sp-5)) var(--sp-8);
   background: var(--navy-deep);
   isolation: isolate;
 }
 
-.hero-produto__texto {
+.hero-produto__grade {
   position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: clamp(32px, 5vw, 72px);
   align-items: center;
-  text-align: center;
 }
 
-.hero-produto__aviso {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-3);
-  margin: 0 0 var(--sp-5);
-  padding: 6px 16px 6px 6px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 0.92rem;
-  color: var(--text-soft);
+.hero-produto__texto {
+  max-width: 600px;
 }
 
-.hero-produto__aviso > span:only-child {
-  padding-left: 10px;
-}
-
+/* Título curto ("Seu olhar tem voz"), em duas linhas no computador. Sobe
+   de dentro de uma máscara, como nos títulos da versão anterior. */
 .hero-produto__titulo {
-  font-size: var(--fs-display);
-  line-height: 1.02;
-  letter-spacing: -0.038em;
-  max-width: 14ch;
-  margin: 0 0 var(--sp-5);
+  font-size: clamp(2.6rem, 5.2vw, 4.4rem);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  max-width: 12ch;
+  margin: 0 0 var(--sp-4);
+}
+
+.hero-produto__titulo-mascara {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.08em;
+}
+
+.hero-produto__titulo-linha {
+  display: block;
+  animation: word-rise 1s var(--ease-out) 120ms both;
 }
 
 .hero-produto__lead {
-  font-size: clamp(1.1rem, 1.6vw, 1.32rem);
-  line-height: 1.55;
+  font-size: clamp(1.05rem, 1.4vw, 1.25rem);
+  line-height: 1.6;
   color: var(--text-soft);
-  max-width: 44ch;
-  margin: 0 0 var(--sp-6);
+  max-width: 46ch;
+  margin: 0 0 var(--sp-5);
 }
 
 .hero-produto__acoes {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: var(--sp-3);
 }
 
 .hero-produto__fatos {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: var(--sp-2) var(--sp-5);
   list-style: none;
-  margin: var(--sp-6) 0 0;
+  margin: var(--sp-5) 0 0;
   padding: 0;
   font-size: 0.92rem;
   color: var(--text-dim);
@@ -87,26 +93,137 @@
   opacity: 0.8;
 }
 
+/* ---------- o monitor, com o halo e os anéis ---------- */
 .hero-produto__aparelho {
   position: relative;
+  display: grid;
+  place-items: center;
+  padding-block: var(--sp-6);
+  animation: zoom-in 1100ms var(--ease-out) 260ms both;
+}
+
+/* A aura azul e teal por trás: sem ela o monitor escuro some no marinho. */
+.hero-produto__halo {
+  position: absolute;
+  inset: 2% -4%;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgba(47, 102, 194, 0.55) 0%,
+    rgba(47, 102, 194, 0.3) 55%,
+    rgba(63, 214, 194, 0.12) 78%,
+    transparent 100%
+  );
+  filter: blur(26px);
+  animation: iris-pulse 6s var(--ease-in-out) infinite;
+  pointer-events: none;
+}
+
+/* Anéis concêntricos que se expandem a partir do centro do monitor. */
+.hero-produto__anel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(74%, 440px);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  border: 1px solid var(--accent-line);
+  animation: ring-expand 5s var(--ease-out) infinite;
+  pointer-events: none;
+}
+
+.hero-produto__anel--2 {
+  animation-delay: 2.5s;
+  border-color: var(--ok-line);
+}
+
+/* O monitor vira de leve para o texto e flutua; de frente ao passar o
+   mouse. A flutuação usa `translate` e a inclinação, `transform`. */
+.hero-produto__monitor {
+  position: relative;
   z-index: 1;
-  width: min(1120px, calc(100% - 2 * var(--sp-5)));
-  margin: clamp(48px, 8vh, 88px) auto 0;
-  animation: entrada 1100ms var(--ease-out) 380ms both;
+  width: 100%;
+  transform: perspective(1600px) rotateY(-9deg) rotateX(2deg);
+  transform-origin: 40% 50%;
+  transition: transform var(--dur-slow) var(--ease-out);
+  animation: float-slow 9s var(--ease-in-out) infinite;
+}
+
+.hero-produto__aparelho:hover .hero-produto__monitor,
+.hero-produto__aparelho:focus-within .hero-produto__monitor {
+  transform: perspective(1600px) rotateY(0deg) rotateX(0deg);
+}
+
+/* ---------- convite para rolar ---------- */
+.hero-produto__rolar {
+  position: absolute;
+  bottom: var(--sp-5);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.hero-produto__rolar-linha {
+  width: 1px;
+  height: 44px;
+  background: linear-gradient(180deg, transparent, var(--teal-300));
+  animation: float-slow 3s var(--ease-in-out) infinite;
+}
+
+.hero-produto__rolar-texto {
+  font-size: var(--fs-min);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ---------- tablet e celular: o texto primeiro, o monitor embaixo ---------- */
+@media (max-width: 1023px) {
+  .hero-produto {
+    min-height: auto;
+    padding-block: calc(var(--header-h) + var(--sp-6)) var(--sp-8);
+  }
+  .hero-produto__grade {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-6);
+  }
+  .hero-produto__texto {
+    max-width: 640px;
+  }
+  .hero-produto__monitor,
+  .hero-produto__aparelho:hover .hero-produto__monitor {
+    transform: none;
+  }
+  .hero-produto__rolar {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {
+  .hero-produto {
+    padding-block: calc(var(--header-h) + var(--sp-4)) var(--sp-7);
+  }
   .hero-produto__titulo {
-    max-width: 11ch;
+    font-size: clamp(2.3rem, 11vw, 3rem);
+    margin-bottom: var(--sp-3);
+  }
+  .hero-produto__lead {
+    font-size: 1rem;
+    line-height: 1.55;
+    margin-bottom: var(--sp-4);
   }
   .hero-produto__acoes {
-    width: 100%;
     flex-direction: column;
+    gap: var(--sp-2);
   }
   .hero-produto__acoes .btn {
     width: 100%;
   }
   .hero-produto__aparelho {
-    width: calc(100% - 2 * var(--sp-4));
+    padding-block: var(--sp-4);
   }
 }

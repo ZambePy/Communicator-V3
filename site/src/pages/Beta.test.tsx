@@ -59,6 +59,9 @@ const { sessao, acoes, apiFake } = vi.hoisted(() => {
     responderPesquisa: vi.fn(async () => ({}) as Account),
     signOut: vi.fn(async () => {}),
     refresh: vi.fn(async () => {}),
+    signIn: vi.fn(async (_email: string, _senha: string): Promise<Account | null> => {
+      throw new Error('Este e-mail ainda não foi confirmado.')
+    }),
   }
   const apiFake = {
     programa: null as BetaProgram | null,
@@ -67,6 +70,7 @@ const { sessao, acoes, apiFake } = vi.hoisted(() => {
     reenviarConfirmacao: vi.fn(async (_email: string) => {}),
     conferirCodigo: vi.fn(async (_email: string, _codigo: string) => 'hash-do-cadastro'),
     verificarLinkDoEmail: vi.fn(async (_hash: string, _tipo: string) => {}),
+    definirSenhaAposConfirmar: vi.fn(async (_senha: string) => {}),
   }
   return { sessao, acoes, apiFake }
 })
@@ -100,6 +104,7 @@ vi.mock('@/services/api', async (importOriginal) => {
     reenviarConfirmacao: apiFake.reenviarConfirmacao,
     conferirCodigo: apiFake.conferirCodigo,
     verificarLinkDoEmail: apiFake.verificarLinkDoEmail,
+    definirSenhaAposConfirmar: apiFake.definirSenhaAposConfirmar,
   }
 })
 
@@ -130,6 +135,7 @@ beforeEach(() => {
   apiFake.programa = null
   apiFake.perfil = perfil
   vi.clearAllMocks()
+  sessionStorage.clear()
   acoes.criarContaBeta.mockResolvedValue('confirmar')
   // o jsdom não implementa scrollTo
   window.scrollTo = vi.fn() as never
@@ -227,7 +233,57 @@ describe('etapa 1 — criar conta (sem sessão)', () => {
       timeout: 2500,
     })
     expect(acoes.refresh).toHaveBeenCalled()
-    expect(screen.getByText(/E-mail confirmado/)).toBeInTheDocument()
+    // vale a senha desta tela (o Supabase não troca a de um cadastro pendente)
+    expect(apiFake.definirSenhaAposConfirmar).toHaveBeenCalledWith('segredo123')
+    expect(screen.getByText(/Código certo/)).toBeInTheDocument()
+  })
+
+  it('F5 na etapa 2 volta para o código, sem pedir outro e com a espera que falta', async () => {
+    const primeira = montar()
+    preencherConta()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    })
+    await screen.findByRole('heading', { name: 'Digite o código do e-mail' })
+    primeira.unmount()
+
+    montar()
+    expect(await screen.findByRole('heading', { name: 'Digite o código do e-mail' })).toBeInTheDocument()
+    expect(screen.getByText('maria@exemplo.com.br')).toBeInTheDocument()
+    expect(acoes.criarContaBeta).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(/pedir outro em 0:(5\d|60)|pedir outro em 1:00/)).toBeInTheDocument()
+  })
+
+  it('refazer a inscrição dentro do minuto do Supabase leva ao código já enviado', async () => {
+    const { ApiError } = await import('@/services/api')
+    acoes.criarContaBeta.mockRejectedValueOnce(
+      new ApiError({ message: 'For security purposes, you can only request this after 42 seconds.' }),
+    )
+    montar()
+    preencherConta()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    })
+    expect(await screen.findByRole('heading', { name: 'Digite o código do e-mail' })).toBeInTheDocument()
+    expect(screen.getByText(/pedir outro em 0:42/)).toBeInTheDocument()
+  })
+
+  it('confirmado pelo botão em outro aparelho: o código não vale mais, mas a senha desta tela entra', async () => {
+    const { CodigoIncorreto } = await import('@/services/api')
+    apiFake.conferirCodigo.mockRejectedValueOnce(new CodigoIncorreto())
+    acoes.signIn.mockResolvedValueOnce(null)
+    montar()
+    preencherConta()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    })
+    await act(async () => {
+      fireEvent.change(await screen.findByLabelText('Código de 4 dígitos'), { target: { value: '4829' } })
+    })
+    await waitFor(() => expect(acoes.signIn).toHaveBeenCalledWith('maria@exemplo.com.br', 'segredo123'))
+    // nada de "Código incorreto" para quem já confirmou
+    expect(screen.queryByText(/Código incorreto/)).not.toBeInTheDocument()
+    expect(sessionStorage.getItem('irisflow:beta-pendente')).toBeNull()
   })
 
   it('corrigir o e-mail volta ao formulário com as senhas limpas', async () => {
@@ -244,15 +300,25 @@ describe('etapa 1 — criar conta (sem sessão)', () => {
     expect(screen.getByLabelText('Senha')).toHaveValue('')
   })
 
-  it('falha ao criar a conta aparece acima do formulário', async () => {
+  it('falha ao criar a conta aparece junto do botão e recebe o foco', async () => {
     acoes.criarContaBeta.mockRejectedValueOnce(new Error('Não conseguimos enviar o e-mail agora.'))
     montar()
     preencherConta()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
     })
-    expect(await screen.findByText('Não conseguimos enviar o e-mail agora.')).toBeInTheDocument()
+    const aviso = await screen.findByRole('alert')
+    expect(aviso).toHaveTextContent('Não conseguimos enviar o e-mail agora.')
+    expect(document.activeElement).toBe(aviso)
+    // logo antes do botão de enviar, e não no topo do cartão
+    expect(aviso.nextElementSibling).toBe(screen.getByRole('button', { name: 'Criar conta' }))
     expect(screen.getByRole('heading', { name: 'Crie sua conta' })).toBeInTheDocument()
+  })
+
+  it('os termos e a política abrem em outra aba (ler não apaga o formulário)', () => {
+    montar()
+    expect(screen.getByRole('link', { name: /termos de uso/ })).toHaveAttribute('target', '_blank')
+    expect(screen.getByRole('link', { name: /política de privacidade/ })).toHaveAttribute('target', '_blank')
   })
 
   it('inscrições fechadas: aviso sem formulário', async () => {
@@ -304,6 +370,8 @@ describe('etapa 3 — pesquisa rápida (sessão sem conta)', () => {
       feedbackConsent: true,
       howFound: '',
       phone: '',
+      apagarTelefone: false,
+      apagarComoConheceu: false,
     })
   })
 

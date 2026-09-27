@@ -1,8 +1,8 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { DownloadPanel } from '@/components/ui/DownloadPanel'
+import { LevarAoComputador } from '@/components/ui/LevarAoComputador'
 import { QrCode } from '@/components/ui/QrCode'
 import { SelosDasLojas } from '@/components/ui/SelosDasLojas'
 import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
@@ -12,43 +12,6 @@ import { ehCelular } from '@/lib/aparelho'
 import { BETA, BETA_CTA, SITE_URL } from '@/data/content'
 import '@/components/home/home.css'
 import './baixar.css'
-
-/** No celular não se instala o app do computador: mandar o link para ele. */
-function LevarAoComputador() {
-  const link = `${SITE_URL}/baixar`
-  const [copiado, setCopiado] = useState(false)
-  const copiar = async () => {
-    try {
-      await navigator.clipboard.writeText(link)
-      setCopiado(true)
-      window.setTimeout(() => setCopiado(false), 2400)
-    } catch {
-      /* sem permissão de área de transferência: o e-mail continua ali */
-    }
-  }
-  return (
-    <div className="levar-ao-computador">
-      <p>
-        O IrisFlow Communicator é instalado no computador do paciente. Abra este endereço nele:{' '}
-        <strong>{link.replace(/^https?:\/\//, '')}</strong>
-      </p>
-      <div className="levar-ao-computador__acoes">
-        <button type="button" className="btn btn--md btn--secondary" onClick={() => void copiar()}>
-          <span className="btn__content">{copiado ? 'Link copiado' : 'Copiar o link'}</span>
-        </button>
-        <a
-          className="btn btn--md btn--ghost"
-          href={`mailto:?subject=${encodeURIComponent('Baixar o IrisFlow')}&body=${encodeURIComponent(link)}`}
-        >
-          <span className="btn__content">Enviar por e-mail</span>
-        </a>
-      </div>
-      <span className="sr-only" aria-live="polite">
-        {copiado ? 'Link copiado' : ''}
-      </span>
-    </div>
-  )
-}
 
 /**
  * /baixar — os dois aplicativos, como nos produtos que distribuem app pelo
@@ -65,7 +28,7 @@ export default function Baixar() {
   const communicator = (
     <Reveal as="article" anim="up" className="baixar-app" id="communicator">
       <header className="baixar-app__cabeca">
-        <img src="/brand/irisflow-simbolo.svg" alt="" width={48} height={48} />
+        <img src="/brand/irisflow-simbolo-negativo.svg" alt="" width={48} height={48} />
         <div>
           <h2 className="baixar-app__nome">IrisFlow Communicator</h2>
           <p className="baixar-app__para">Para o computador do paciente</p>
@@ -107,7 +70,7 @@ export default function Baixar() {
         <AmbientBackground />
         <div className="container baixar-hero__inner">
           {BETA.ativo && !lancou && (
-            <p className="hero-produto__aviso anim-entrada">
+            <p className="aviso-pilula anim-entrada">
               <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
               <span>Download a partir de {diaPorExtenso(program.launchAt)}</span>
             </p>
@@ -123,7 +86,7 @@ export default function Baixar() {
         </div>
       </section>
 
-      <section className="baixar-apps on-light">
+      <section className="baixar-apps on-raised">
         <div className="container baixar-apps__lista">
           {/* No celular, o que dá para instalar ali vem primeiro. */}
           {celular ? (

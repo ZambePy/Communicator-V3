@@ -6,6 +6,8 @@
    que o aplicativo faz HOJE, conferido no código.
    ============================================================ */
 
+import { RESSALVA_DOS_ALERTAS } from './cuidador'
+
 /** Um vídeo real do produto, com o quadro de abertura como pôster. */
 export type Demo = {
   mp4: string
@@ -113,6 +115,7 @@ export const CUIDADOR_DESTAQUE = {
     'Pedido de socorro em tela cheia, reenviado se ninguém confirmar.',
     'Ajustes do computador feitos a distância.',
   ],
+  ressalva: RESSALVA_DOS_ALERTAS,
 }
 
 export const PRIVACIDADE = {

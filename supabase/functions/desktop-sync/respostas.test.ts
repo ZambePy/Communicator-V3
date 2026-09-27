@@ -1,7 +1,7 @@
 // Testes das decisões de resposta da desktop-sync.
 //   deno test supabase/functions/desktop-sync/
-import { strictEqual } from 'node:assert/strict';
-import { idDoCliente, statusDoErroDoBanco } from './respostas.ts';
+import { deepStrictEqual, strictEqual } from 'node:assert/strict';
+import { idDoCliente, sessoesDoHeartbeat, statusDoErroDoBanco } from './respostas.ts';
 
 Deno.test('dado inválido e restrição violada são culpa do conteúdo: 400', () => {
   strictEqual(statusDoErroDoBanco({ code: '22P02' }), 400); // invalid_text_representation
@@ -34,4 +34,21 @@ Deno.test('id do cliente: só UUID válido, normalizado em minúsculas', () => {
   strictEqual(idDoCliente("3f2504e0-4f89-41d3-9a0c-0305e82c3301' or 1=1"), null);
   strictEqual(idDoCliente(42), null);
   strictEqual(idDoCliente(undefined), null);
+});
+
+Deno.test('heartbeat de desktop antigo (sem session_id): carimba todas as abertas, como antes', () => {
+  deepStrictEqual(sessoesDoHeartbeat({ action: 'heartbeat', app_version: '1.0.0-beta.1' }), { tipo: 'todas' });
+});
+
+Deno.test('heartbeat sem sessão aberta no desktop: não mantém viva nenhuma sessão largada', () => {
+  deepStrictEqual(sessoesDoHeartbeat({ action: 'heartbeat', session_id: null }), { tipo: 'nenhuma' });
+  deepStrictEqual(sessoesDoHeartbeat({ action: 'heartbeat', session_id: 'nao-e-uuid' }), { tipo: 'nenhuma' });
+  deepStrictEqual(sessoesDoHeartbeat({ action: 'heartbeat', session_id: 42 }), { tipo: 'nenhuma' });
+});
+
+Deno.test('heartbeat com a sessão do desktop: carimba só ela', () => {
+  deepStrictEqual(
+    sessoesDoHeartbeat({ action: 'heartbeat', session_id: '3F2504E0-4F89-41D3-9A0C-0305E82C3301' }),
+    { tipo: 'uma', id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301' },
+  );
 });

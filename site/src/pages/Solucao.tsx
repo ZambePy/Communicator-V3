@@ -38,7 +38,7 @@ export default function Solucao() {
         </Button>
       </PageHead>
 
-      <section className="faixa on-light" aria-labelledby="decisoes-titulo">
+      <section className="faixa on-raised" aria-labelledby="decisoes-titulo">
         <div className="container">
           <Capitulo
             id="decisoes-titulo"
@@ -61,7 +61,7 @@ export default function Solucao() {
         </div>
       </section>
 
-      <div className="on-light">
+      <div className="on-raised">
         <Comparison>
           <Detalhe resumo="O que o IrisFlow ainda não entrega">
             <ul className="solucao__limites">

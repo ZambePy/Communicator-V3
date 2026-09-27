@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { SessionLoading } from '@/components/ui/Skeleton'
 import { useAccount } from '@/context/AccountContext'
-import { updatePassword, verificarLinkDoEmail } from '@/services/api'
+import { emailDaSessao, updatePassword, verificarLinkDoEmail } from '@/services/api'
 import { motivoDoLinkNaUrl } from '@/utils/linkDeEmail'
 import './checkout.css'
 
@@ -39,20 +39,25 @@ export default function NovaSenha() {
   // Modelo de e-mail do repositório (supabase/templates/recuperacao.html): o
   // link traz o token_hash e a sessão de recuperação nasce aqui, no aparelho
   // do clique — um antivírus que "visita" o link antes não gasta o token.
+  // O convite da equipe (type=invite) também termina aqui: a pessoa convidada
+  // ainda não tem senha e cria a primeira.
   const [busca] = useSearchParams()
-  const tokenHash = busca.get('type') === 'recovery' ? busca.get('token_hash') : null
+  const tipoNaUrl = busca.get('type')
+  const convite = tipoNaUrl === 'invite' || busca.get('convite') === '1'
+  const tokenHash = tipoNaUrl === 'recovery' || tipoNaUrl === 'invite' ? busca.get('token_hash') : null
   const [verificando, setVerificando] = useState(Boolean(tokenHash))
   const [erroDoLink, setErroDoLink] = useState<string | null>(null)
+  const [emailDaConta, setEmailDaConta] = useState<string | null>(null)
 
   useEffect(() => {
     if (!tokenHash) return
     let vivo = true
-    verificarLinkDoEmail(tokenHash, 'recovery')
+    verificarLinkDoEmail(tokenHash, tipoNaUrl === 'invite' ? 'invite' : 'recovery')
       .then(() => refresh())
       .then(() => {
         if (!vivo) return
         setVerificando(false)
-        navigate({ search: '' }, { replace: true })
+        navigate({ search: convite ? '?convite=1' : '' }, { replace: true })
       })
       .catch((e: unknown) => {
         if (!vivo) return
@@ -63,6 +68,20 @@ export default function NovaSenha() {
       vivo = false
     }
   }, [tokenHash]) // navigate e refresh são estáveis
+
+  // De qual conta é a senha que vai ser trocada: num computador da família
+  // pode haver outra pessoa logada.
+  useEffect(() => {
+    if (!authenticated || erroDoLink) return
+    let vivo = true
+    emailDaSessao()
+      .then((email) => vivo && setEmailDaConta(email))
+      .catch(() => undefined)
+    return () => {
+      vivo = false
+    }
+  }, [authenticated, erroDoLink])
+
   const values = useMemo(() => ({ password, confirm }), [password, confirm])
   const v = useFormValidation(values, RULES)
 
@@ -75,7 +94,14 @@ export default function NovaSenha() {
     setLoading(true)
     try {
       await updatePassword(password)
-      navigate('/perfil', { replace: true })
+      navigate('/perfil', {
+        replace: true,
+        state: {
+          aviso: convite
+            ? 'Senha criada. Use este e-mail e a senha para entrar no site, no computador e no app do cuidador.'
+            : 'Senha trocada. Use a nova senha para entrar no site, no computador e no app do cuidador.',
+        },
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível trocar a senha.')
     } finally {
@@ -99,12 +125,15 @@ export default function NovaSenha() {
         </Reveal>
 
         <Reveal anim="up">
-          <h1 className="flow__title">Criar uma nova senha</h1>
+          <h1 className="flow__title">{convite ? 'Crie sua senha' : 'Criar uma nova senha'}</h1>
         </Reveal>
 
         <Reveal anim="up" delay={140}>
           <div className="flow__card panel">
-            {!authenticated ? (
+            {/* Link que falhou mostra o erro MESMO com alguém logado: senão o
+                formulário trocava a senha de quem estivesse conectado neste
+                computador (outra pessoa da família). */}
+            {!authenticated || erroDoLink ? (
               <>
                 <div className="notice notice--warn" role="alert">
                   <span className="notice__icon">
@@ -124,6 +153,11 @@ export default function NovaSenha() {
               </>
             ) : (
               <form onSubmit={submit} noValidate>
+                {emailDaConta && (
+                  <p className="flow__lead nova-senha__conta">
+                    Senha da conta <strong>{emailDaConta}</strong>.
+                  </p>
+                )}
                 <Field
                   label="Nova senha"
                   type="password"

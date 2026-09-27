@@ -334,6 +334,16 @@
   background: var(--accent-soft);
 }
 
+/* Aviso de falha junto do botão de enviar (AvisoDeFalha): recebe o foco. */
+.aviso-de-falha {
+  margin-block: var(--sp-4);
+}
+
+.aviso-de-falha:focus {
+  outline: 3px solid var(--teal-300);
+  outline-offset: 3px;
+}
+
 .notice--warn {
   border-color: var(--warn-line);
   background: var(--warn-soft);

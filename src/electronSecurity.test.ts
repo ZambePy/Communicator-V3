@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   origemConfiavel, permitirPermissao, permitirNavegacao, CSP, CSP_DEV, cspComNuvem, origemDaNuvem,
   PREFERENCIAS_WEB_SEGURAS, preferenciasWebSeguras, permitirAberturaExterna, hostDoSite,
-  atalhoBloqueadoEmProducao, alternaTelaCheia, decidirRecarga, RECARGA_JANELA_MS, RECARGA_MAXIMO,
+  atalhoBloqueadoEmProducao, alternaTelaCheia, decidirRecarga, RECARGA_JANELA_MS, RECARGA_MAXIMO, RECARGA_ESPERAS_LONGAS_MS,
   HOSTS_EXTERNOS_PERMITIDOS, argumentoDeDepuracao, SWITCHES_DE_DEPURACAO, papeisDoMenuEmpacotado,
 } from './electronSecurity';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -506,15 +506,37 @@ describe('recarga depois de o renderer cair', () => {
   });
 
   it('crash e OOM recarregam, com espera crescente', () => {
-    expect(decidirRecarga('crashed', [], 1e9)).toEqual({ recarregar: true, esperaMs: 1000 });
-    expect(decidirRecarga('oom', [1e9 - 1000], 1e9)).toEqual({ recarregar: true, esperaMs: 2000 });
+    expect(decidirRecarga('crashed', [], 1e9)).toEqual({ recarregar: true, esperaMs: 1000, persistente: false });
+    expect(decidirRecarga('oom', [1e9 - 1000], 1e9)).toEqual({ recarregar: true, esperaMs: 2000, persistente: false });
   });
 
-  it('para de recarregar depois do limite na janela — nada de tela piscando em laço', () => {
+  it('depois do limite na janela NUNCA para: espera 1, 2 e 5 min (sem tela piscando em laço)', () => {
+    // Antes, a 4ª queda em 10 min devolvia `recarregar: false` e o main abria
+    // um diálogo modal sem prazo — que o olhar não aciona.
     const agora = 1e9;
     const hist = Array.from({ length: RECARGA_MAXIMO }, (_, i) => agora - i * 1000);
-    expect(decidirRecarga('crashed', hist, agora).recarregar).toBe(false);
-    // Quedas antigas (fora da janela) não contam.
-    expect(decidirRecarga('crashed', hist.map((t) => t - RECARGA_JANELA_MS), agora).recarregar).toBe(true);
+    expect(decidirRecarga('crashed', hist, agora)).toEqual({ recarregar: true, esperaMs: RECARGA_ESPERAS_LONGAS_MS[0], persistente: true });
+    const mais1 = [...hist, agora - 500];
+    expect(decidirRecarga('crashed', mais1, agora).esperaMs).toBe(RECARGA_ESPERAS_LONGAS_MS[1]);
+    const muitas = Array.from({ length: RECARGA_MAXIMO + 10 }, (_, i) => agora - i * 1000);
+    expect(decidirRecarga('crashed', muitas, agora)).toEqual({
+      recarregar: true, esperaMs: RECARGA_ESPERAS_LONGAS_MS[RECARGA_ESPERAS_LONGAS_MS.length - 1], persistente: true,
+    });
+    // Nenhuma espera longa é curta a ponto de piscar.
+    for (const ms of RECARGA_ESPERAS_LONGAS_MS) expect(ms).toBeGreaterThanOrEqual(60_000);
+    // Quedas antigas (fora da janela) não contam: volta à espera curta.
+    expect(decidirRecarga('crashed', hist.map((t) => t - RECARGA_JANELA_MS), agora))
+      .toEqual({ recarregar: true, esperaMs: 1000, persistente: false });
+  });
+
+  it('o main não para num diálogo modal depois de quedas repetidas', () => {
+    const main = fonte('electron/main.ts');
+    const inicio = main.indexOf("'render-process-gone'");
+    const trecho = main.slice(inicio, main.indexOf("win.on('unresponsive'", inicio));
+    expect(trecho).not.toMatch(/showMessageBox/);
+    expect(trecho).toMatch(/win\.webContents\.reload\(\)/);
+    expect(main).not.toMatch(/dialog\.showMessageBox/);
+    // O aviso é notificação do sistema (não modal).
+    expect(main).toMatch(/new Notification\(/);
   });
 });

@@ -40,7 +40,7 @@ const cellClass = (v: string) =>
 function Cell({ value }: { value: string }) {
   if (value === 'sim') {
     return (
-      <span className="cmp__mark cmp__mark--yes" aria-label="sim">
+      <span className="cmp__mark cmp__mark--yes" role="img" aria-label="sim">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
             d="M4 12.5 9.5 18 20 6.5"
@@ -56,7 +56,7 @@ function Cell({ value }: { value: string }) {
   }
   if (value === 'não') {
     return (
-      <span className="cmp__mark cmp__mark--no" aria-label="não">
+      <span className="cmp__mark cmp__mark--no" role="img" aria-label="não">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
             d="M6 6l12 12M18 6 6 18"

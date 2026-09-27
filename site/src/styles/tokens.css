@@ -8,11 +8,12 @@
                          mas funcional em uma interface operada por
                          fixação ocular"
 
-   O site tem um único tema: o azul-marinho da identidade. As faixas
-   de destaque — hero, chamada final e rodapé — recebem a classe
-   .on-dark, que troca as superfícies sólidas por vidro translúcido
-   dentro daquela subárvore. Nenhum componente precisa saber em que
-   fundo está.
+   O site tem um único tema: o azul-marinho da identidade, sem fundo
+   branco em lugar nenhum. As faixas de destaque — hero, chamada final e
+   rodapé — recebem a classe .on-dark, que troca as superfícies sólidas
+   por vidro translúcido dentro daquela subárvore; as faixas de conteúdo
+   entre elas recebem .on-raised, um degrau acima do marinho. Nenhum
+   componente precisa saber em que fundo está.
    ============================================================ */
 
 /* Fonte de display: Sora (SIL OFL 1.1, self-hosted em public/fonts, só
@@ -205,48 +206,51 @@
 }
 
 /* ============================================================
-   Faixa clara: as seções de produto da home, o app do cuidador e o
-   download. O mesmo truque do .on-dark — só os tokens mudam —, então
-   cartões, textos, botões e ícones se acertam sozinhos. Alternar faixa
-   escura e clara é o que separa um capítulo do outro sem linha nem
-   efeito: é o ritmo das páginas de produto de verdade.
+   Faixa elevada: as seções de conteúdo entre as faixas de destaque (os
+   capítulos da home, o app do cuidador, o download e as seções das
+   páginas de dentro). Também escura — o site não tem fundo branco —, um
+   degrau acima do marinho, com a luz vindo de cima e um fio claro no
+   topo: é isso que separa um capítulo do outro. O mesmo truque do
+   .on-dark — só os tokens mudam —, então cartões, textos, botões e
+   ícones se acertam sozinhos.
    ============================================================ */
-.on-light {
-  color-scheme: light;
+.on-raised {
+  --bg: #0b1c35;
+  --bg-soft: #0e2140;
+  --surface: #11284a;
+  --surface-2: #163057;
+  --surface-3: #1c3963;
+  --line: rgba(174, 201, 240, 0.15);
+  --line-strong: rgba(174, 201, 240, 0.3);
 
-  --bg: #f5f7fb;
-  --bg-soft: #eef2f8;
-  --surface: #ffffff;
-  --surface-2: #f3f6fb;
-  --surface-3: #e8edf5;
-  --line: rgba(11, 27, 58, 0.1);
-  --line-strong: rgba(11, 27, 58, 0.2);
+  --text: #f2f6fd;
+  --text-soft: #c3d2e8;
+  --text-dim: #9aaecb;
 
-  --text: #0b1b3a;
-  --text-soft: #34445f;
-  --text-dim: #5a6a83;
+  --accent: var(--blue-300);
+  --accent-soft: rgba(143, 180, 240, 0.12);
+  --accent-line: rgba(143, 180, 240, 0.3);
+  --ok: var(--teal-300);
+  --ok-soft: rgba(63, 214, 194, 0.12);
+  --ok-line: rgba(63, 214, 194, 0.32);
 
-  --accent: var(--blue);
-  --accent-soft: rgba(27, 84, 168, 0.08);
-  --accent-line: rgba(27, 84, 168, 0.24);
-  --ok: #00796a;
-  --ok-soft: rgba(0, 121, 106, 0.08);
-  --ok-line: rgba(0, 121, 106, 0.26);
+  --warn: #f0c46b;
+  --warn-soft: rgba(240, 196, 107, 0.1);
+  --warn-line: rgba(240, 196, 107, 0.3);
+  --danger: #ff9a9d;
+  --danger-soft: rgba(255, 154, 157, 0.1);
+  --danger-line: rgba(255, 154, 157, 0.28);
 
-  --warn: #8a5a00;
-  --warn-soft: rgba(176, 116, 0, 0.1);
-  --warn-line: rgba(176, 116, 0, 0.28);
-  --danger: #b3261e;
-  --danger-soft: rgba(179, 38, 30, 0.08);
-  --danger-line: rgba(179, 38, 30, 0.26);
-
-  --shadow-sm: 0 1px 2px rgba(11, 27, 58, 0.06), 0 2px 8px rgba(11, 27, 58, 0.05);
-  --shadow-md: 0 10px 30px rgba(11, 27, 58, 0.1);
-  --shadow-lg: 0 30px 70px rgba(11, 27, 58, 0.16);
-  --glow: 0 10px 30px rgba(27, 84, 168, 0.22);
+  --shadow-sm: 0 2px 10px rgba(2, 7, 16, 0.4);
+  --shadow-md: 0 14px 40px rgba(2, 7, 16, 0.5);
+  --shadow-lg: 0 30px 78px rgba(2, 7, 16, 0.6);
+  --glow: 0 14px 40px rgba(27, 84, 168, 0.5);
 
   color: var(--text);
-  background: var(--bg);
+  background:
+    radial-gradient(90% 60% at 50% 0%, rgba(47, 102, 194, 0.12), transparent 70%),
+    var(--bg);
+  box-shadow: inset 0 1px 0 rgba(174, 201, 240, 0.08);
 }
 
 /* Cabeçalho mais baixo no celular: sobra altura para a chamada do hero. */

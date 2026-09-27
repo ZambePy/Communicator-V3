@@ -105,6 +105,13 @@ vi.mock('@/services/api', async (importOriginal) => {
   }
 })
 
+const { aparelho } = vi.hoisted(() => ({ aparelho: { celular: false } }))
+vi.mock('@/lib/aparelho', () => ({
+  ehCelular: () => aparelho.celular,
+  ehAndroid: () => aparelho.celular,
+  ehIOS: () => false,
+}))
+
 function montar() {
   return render(
     <MemoryRouter initialEntries={['/perfil']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -124,6 +131,7 @@ beforeEach(() => {
   apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: ANTES }
   apiFake.perfil = perfil
   apiFake.inscricao = inscricao
+  aparelho.celular = false
 })
 
 describe('<Perfil />', () => {
@@ -144,6 +152,32 @@ describe('<Perfil />', () => {
     expect(screen.getByText(/Você ainda não respondeu/)).toBeInTheDocument()
     expect(screen.getByText('Maria Aparecida Souza')).toBeInTheDocument()
     expect(screen.queryByText('Instaladores da beta')).not.toBeInTheDocument()
+  })
+
+  it('leitura da conta falhou (sem conta e com erro): não diz que falta a pesquisa', async () => {
+    sessao.account = null
+    sessao.sessionError = 'Sem conexão com o servidor. Confira a internet e tente de novo.'
+    montar()
+    expect(await screen.findByRole('heading', { name: 'Não conseguimos ler a sua inscrição agora' })).toBeInTheDocument()
+    expect(screen.queryByText('Falta a pesquisa rápida')).not.toBeInTheDocument()
+    expect(screen.queryByText(/última leitura que deu certo/)).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Tentar de novo' }).length).toBeGreaterThan(0)
+  })
+
+  it('no celular, os downloads viram "abra este endereço no computador" (nada de .exe no celular)', async () => {
+    apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: DEPOIS }
+    aparelho.celular = true
+    montar()
+    expect(await screen.findByText(/é instalado no computador do paciente/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Windows/ })).not.toBeInTheDocument()
+  })
+
+  it('o botão de baixar do perfil rola até os downloads na mesma aba', async () => {
+    apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: DEPOIS }
+    montar()
+    const baixar = await screen.findByRole('link', { name: /Baixar o IrisFlow/ })
+    expect(baixar).toHaveAttribute('href', '#downloads')
+    expect(baixar).not.toHaveAttribute('target')
   })
 
   it('inscrição completa antes do lançamento: dados, respostas, etiqueta vermelha e download travado', async () => {

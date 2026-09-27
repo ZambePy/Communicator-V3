@@ -264,7 +264,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   });
 
-  // Preenche a diagonal a partir do EDID, uma vez no boot.
+  // Preenche a diagonal a partir do EDID: no boot e quando o monitor da janela
+  // muda (ela foi para outro monitor, ou a resolução/escala dele mudou — aviso
+  // `onTelaMudou` do processo principal, que responde pelo monitor em que a
+  // janela ESTÁ, não pelo primário).
   //
   // Só age quando a origem atual é 'default' ou 'auto'. Um valor 'manual' (o
   // cuidador digitou em Configurações) é soberano: o EDID reporta em
@@ -280,6 +283,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             heightPx: number;
             scaleFactor: number;
           }>;
+          onTelaMudou?: (cb: (info: { id: number; scaleFactor: number }) => void) => () => void;
         };
       }
     ).irisflowSystem;
@@ -287,9 +291,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Só lê o sistema depois do consentimento explícito.
     if (settings.systemAccessGranted !== true) return;
     let cancelled = false;
+    const getMonitorSizes = sys.getMonitorSizes;
     // Lê tamanho físico E info do display juntos: a segunda serve para
     // escolher QUAL painel corresponde ao monitor em uso quando há mais de um.
-    void Promise.all([sys.getMonitorSizes(), sys.getDisplayInfo?.() ?? Promise.resolve(null)])
+    const ler = () => void Promise.all([getMonitorSizes(), sys.getDisplayInfo?.() ?? Promise.resolve(null)])
       .then(([sizes, info]) => {
         if (cancelled) return;
         setSettings((prev) => {
@@ -338,8 +343,13 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       .catch(() => {
         /* IPC indisponível: segue com o valor configurado */
       });
+    ler();
+    const pararDeOuvir = sys.onTelaMudou?.(() => {
+      if (!cancelled) ler();
+    });
     return () => {
       cancelled = true;
+      pararDeOuvir?.();
     };
   }, [settings.systemAccessGranted]);
 

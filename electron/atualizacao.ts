@@ -42,7 +42,7 @@
  *     e pede a senha de administrador ao fechar. O AppImage atualiza sozinho.
  */
 
-import { app, ipcMain, type BrowserWindow } from 'electron';
+import { app, ipcMain, powerMonitor, type BrowserWindow } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -122,6 +122,23 @@ export function registrarAtualizacao(janela: () => BrowserWindow | null): void {
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  // Desligamento do Windows (ou fim da sessão): o sistema encerra os processos
+  // logo em seguida, e um instalador disparado agora pode ser interrompido no
+  // meio — versão antiga desinstalada, nova não instalada, e o paciente sem o
+  // app na manhã seguinte. A instalação fica para o próximo fechamento normal.
+  const naoInstalarNoDesligamento = () => {
+    if (!autoUpdater.autoInstallOnAppQuit) return;
+    autoUpdater.autoInstallOnAppQuit = false;
+    console.log('[atualizacao] o sistema está desligando: a instalação fica para o próximo fechamento normal.');
+  };
+  // Windows: `session-end` é evento da janela (desligamento, reinício ou
+  // saída da sessão); macOS e Linux: `powerMonitor` `shutdown`.
+  app.on('browser-window-created', (_e, janela) => janela.on('session-end', naoInstalarNoDesligamento));
+  try {
+    powerMonitor?.on?.('shutdown', naoInstalarNoDesligamento);
+  } catch (erro) {
+    console.warn('[atualizacao] sem aviso de desligamento do sistema:', erro);
+  }
   // `allowPrerelease` fica no PADRÃO do electron-updater: verdadeiro só quando a
   // versão instalada é pré-lançamento (X.Y.Z-beta.N). Forçá-lo em `true` só
   // mudaria as instalações ESTÁVEIS, e para pior: com ele, o provedor GitHub de

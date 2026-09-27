@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import NovaSenha from './NovaSenha'
 import { ApiError } from '@/services/api'
 
@@ -13,6 +13,7 @@ const { sessao, refresh, apiFake } = vi.hoisted(() => ({
   apiFake: {
     verificar: vi.fn(async (_hash: string, _tipo: string) => {}),
     trocar: vi.fn(async (_senha: string) => {}),
+    email: vi.fn(async (): Promise<string | null> => 'maria@exemplo.com.br'),
   },
 }))
 
@@ -22,15 +23,25 @@ vi.mock('@/context/AccountContext', () => ({
 
 vi.mock('@/services/api', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/services/api')>()
-  return { ...real, verificarLinkDoEmail: apiFake.verificar, updatePassword: apiFake.trocar }
+  return {
+    ...real,
+    verificarLinkDoEmail: apiFake.verificar,
+    updatePassword: apiFake.trocar,
+    emailDaSessao: apiFake.email,
+  }
 })
+
+function Perfil() {
+  const aviso = (useLocation().state as { aviso?: string } | null)?.aviso
+  return <p>meu perfil{aviso ? ` — ${aviso}` : ''}</p>
+}
 
 function montar(endereco: string) {
   return render(
     <MemoryRouter initialEntries={[endereco]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/nova-senha" element={<NovaSenha />} />
-        <Route path="/perfil" element={<p>meu perfil</p>} />
+        <Route path="/perfil" element={<Perfil />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -59,7 +70,34 @@ describe('<NovaSenha /> com token_hash', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Salvar nova senha' }))
     })
     expect(apiFake.trocar).toHaveBeenCalledWith('senhanova99')
-    expect(await screen.findByText('meu perfil')).toBeInTheDocument()
+    // o perfil confirma a troca
+    expect(await screen.findByText(/meu perfil — Senha trocada/)).toBeInTheDocument()
+  })
+
+  it('o formulário diz de qual conta é a senha', async () => {
+    sessao.authenticated = true
+    montar('/nova-senha')
+    expect(await screen.findByText('maria@exemplo.com.br')).toBeInTheDocument()
+  })
+
+  it('link inválido com OUTRA conta logada: mostra o erro, não o formulário', async () => {
+    sessao.authenticated = true
+    apiFake.verificar.mockRejectedValueOnce(
+      new ApiError({ message: 'Email link is invalid or has expired', status: 403, code: 'otp_expired' }),
+    )
+    montar('/nova-senha?token_hash=do-filho&type=recovery')
+    expect(await screen.findByText(/O link expirou ou já foi usado\./)).toBeInTheDocument()
+    expect(screen.queryByLabelText('Nova senha')).not.toBeInTheDocument()
+    expect(apiFake.trocar).not.toHaveBeenCalled()
+  })
+
+  it('convite da equipe (type=invite): verifica como convite e pede a primeira senha', async () => {
+    apiFake.verificar.mockImplementationOnce(async () => {
+      sessao.authenticated = true
+    })
+    montar('/nova-senha?token_hash=conv1&type=invite')
+    expect(await screen.findByRole('heading', { name: 'Crie sua senha' })).toBeInTheDocument()
+    expect(apiFake.verificar).toHaveBeenCalledWith('conv1', 'invite')
   })
 
   it('link de recuperação vencido: diz o motivo e oferece pedir outro', async () => {

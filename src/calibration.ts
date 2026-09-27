@@ -974,46 +974,140 @@ function emitirInvalidacao(e: CalibrationInvalidated): void {
   }
 }
 
-/**
- * Viewport em que a calibração ativa foi treinada. `null` sem calibração.
- * Serve para detectar redimensionamento — o modelo mapeia para pixels do
- * viewport, então mudá-lo invalida a escala e o offset aprendidos.
- */
-let viewportDaCalibracao: { w: number; h: number } | null = null;
+/** Viewport em px CSS e a escala do sistema (`devicePixelRatio`) em que ele foi medido. */
+export interface ViewportMedido {
+  w: number;
+  h: number;
+  /** Ausente em perfis anteriores: vale a escala de agora (comparação em px CSS). */
+  dpr?: number;
+}
 
 /**
- * Fração de mudança do viewport tolerada antes de invalidar.
+ * Viewport em que a calibração ativa foi treinada. `null` sem calibração.
+ * Serve para detectar redimensionamento — o modelo prevê em FRAÇÃO do
+ * viewport, e um viewport que não cobre a mesma área física da tela muda o
+ * que essa fração significa.
+ */
+let viewportDaCalibracao: ViewportMedido | null = null;
+
+/** Escala do sistema agora (125 % no Windows = 1,25). */
+function escalaDoSistema(): number {
+  const k = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
+  return typeof k === 'number' && k > 0 ? k : 1;
+}
+
+/**
+ * Fração de mudança do viewport tolerada antes de suspender.
  *
  * Não é zero de propósito: barras de rolagem aparecendo/sumindo, o teclado
  * virtual do SO, e o arredondamento de `clientWidth` sob zoom fracionário
- * produzem variações de poucos pixels que não justificam descartar uma
+ * produzem variações de poucos pixels que não justificam mexer numa
  * calibração de 1–2 min. 2% de 1280 px são ~26 px — bem acima desse ruído e
  * bem abaixo de qualquer redimensionamento intencional.
  */
 const VIEWPORT_TOLERANCIA = 0.02;
 
 /**
- * Verifica se o viewport mudou desde a calibração e invalida se mudou.
- * Chamada pelo listener de `resize` instalado em `init()`.
+ * Os dois viewports cobrem a mesma área FÍSICA (px CSS × escala)? Mudança só
+ * de escala do Windows (100 % → 125 %) muda os px CSS e não muda os pixels
+ * físicos: o modelo, que prevê em fração do viewport, continua valendo — a
+ * mesma regra que o Modo Computador aplica (`reacaoAMudancaDeTela`).
  */
-export function checarMudancaDeViewport(w: number, h: number): boolean {
-  if (!viewportDaCalibracao) return false;
-  if (!isCalibrated()) return false;
-  const { w: w0, h: h0 } = viewportDaCalibracao;
-  if (w0 <= 0 || h0 <= 0) return false;
+export function mesmoTamanhoFisico(a: ViewportMedido, b: ViewportMedido, escalaPadrao = 1): boolean {
+  const ka = a.dpr && a.dpr > 0 ? a.dpr : escalaPadrao;
+  const kb = b.dpr && b.dpr > 0 ? b.dpr : escalaPadrao;
+  const wa = a.w * ka, ha = a.h * ka, wb = b.w * kb, hb = b.h * kb;
+  if (!(wa > 0) || !(ha > 0) || !(wb > 0) || !(hb > 0)) return false;
+  return Math.abs(wb - wa) / wa <= VIEWPORT_TOLERANCIA && Math.abs(hb - ha) / ha <= VIEWPORT_TOLERANCIA;
+}
 
-  const dW = Math.abs(w - w0) / w0;
-  const dH = Math.abs(h - h0) / h0;
-  if (dW <= VIEWPORT_TOLERANCIA && dH <= VIEWPORT_TOLERANCIA) return false;
+/**
+ * A calibração está SUSPENSA porque a janela não cobre a área física em que
+ * ela foi feita (saiu da tela cheia, janelas rearranjadas quando um monitor
+ * dormiu). O modelo continua carregado e prevendo, mas o engine marca as
+ * amostras como degradadas: só a Emergência e os alvos de recuperação são
+ * acionáveis. Quando a janela volta ao tamanho da calibração, a suspensão
+ * acaba sozinha.
+ */
+export interface SuspensaoDaCalibracao {
+  calibracao: ViewportMedido;
+  atual: ViewportMedido;
+  desde: number;
+}
 
-  const detalhe =
-    `O tamanho da janela mudou de ${w0}×${h0} para ${w}×${h} depois da calibração. ` +
-    `O modelo foi treinado em pixels desse viewport, então as predições ficariam ` +
-    `deslocadas sem nenhum aviso visível. Recalibre.`;
-  console.warn(`[calib] calibração invalidada — ${detalhe}`);
-  clearCalibration();
-  emitirInvalidacao({ reason: 'viewport_changed', detail: detalhe, at: Date.now() });
+let suspensaoPorTela: SuspensaoDaCalibracao | null = null;
+const ouvintesDaSuspensao = new Set<(s: SuspensaoDaCalibracao | null) => void>();
+
+/** Suspensão em vigor, ou `null` (sem modelo nunca há suspensão). */
+export function getSuspensaoDaCalibracao(): SuspensaoDaCalibracao | null {
+  return isCalibrated() ? suspensaoPorTela : null;
+}
+
+/** Avisa quando a calibração é suspensa ou volta a valer. Devolve o cancelamento. */
+export function onSuspensaoDaCalibracao(cb: (s: SuspensaoDaCalibracao | null) => void): () => void {
+  ouvintesDaSuspensao.add(cb);
+  return () => ouvintesDaSuspensao.delete(cb);
+}
+
+function definirSuspensao(nova: SuspensaoDaCalibracao | null): void {
+  const antes = suspensaoPorTela;
+  if (nova && antes) {
+    // Continua suspensa, com outro tamanho: atualiza sem novo evento.
+    suspensaoPorTela = { ...nova, desde: antes.desde };
+    return;
+  }
+  if (!nova && !antes) return;
+  suspensaoPorTela = nova;
+  if (nova) {
+    console.warn(
+      `[calib] calibração SUSPENSA: a janela tem ${nova.atual.w}×${nova.atual.h} (escala ${nova.atual.dpr}) e a ` +
+      `calibração foi feita em ${nova.calibracao.w}×${nova.calibracao.h}. O olhar fica em modo degradado ` +
+      `(só Emergência e recuperação) até a janela voltar.`,
+    );
+  } else {
+    console.log('[calib] a janela voltou ao tamanho da calibração — calibração valendo de novo.');
+  }
+  for (const cb of ouvintesDaSuspensao) {
+    try {
+      cb(nova);
+    } catch (err) {
+      console.error('[calib] ouvinte da suspensão lançou:', err);
+    }
+  }
+}
+
+/**
+ * Compara o viewport atual com o da calibração e SUSPENDE (ou retoma) a
+ * calibração. Chamada pelo listener de `resize` instalado em `init()` e
+ * sempre que o modelo em uso muda. Devolve se a calibração ficou suspensa.
+ *
+ * Antes, a primeira variação > 2 % DESCARTAVA o modelo: um F11 duplo do
+ * cuidador, uma mudança de escala do Windows ou o monitor que dorme e
+ * rearranja as janelas deixavam o paciente sem nada clicável — nem a
+ * Emergência — até recalibrar os 13 pontos, com o perfil válido no disco.
+ */
+export function checarMudancaDeViewport(w: number, h: number, dpr: number = escalaDoSistema()): boolean {
+  const v = viewportDaCalibracao;
+  if (!v || !isCalibrated() || v.w <= 0 || v.h <= 0 || !(w > 0) || !(h > 0)) {
+    definirSuspensao(null);
+    return false;
+  }
+  const atual: ViewportMedido = { w, h, dpr };
+  if (mesmoTamanhoFisico(v, atual, dpr)) {
+    definirSuspensao(null);
+    return false;
+  }
+  definirSuspensao({ calibracao: { w: v.w, h: v.h, dpr: v.dpr ?? dpr }, atual, desde: Date.now() });
   return true;
+}
+
+/** Reavalia a suspensão contra o viewport de agora (modelo trocado, carregado ou treinado). */
+function reavaliarSuspensao(): void {
+  if (typeof document === 'undefined' || !document.documentElement) {
+    definirSuspensao(null);
+    return;
+  }
+  checarMudancaDeViewport(document.documentElement.clientWidth, document.documentElement.clientHeight);
 }
 
 /** Última avaliação de faixa de distância. Diagnóstico para a UI e o relatório. */
@@ -1110,7 +1204,7 @@ export function restoreReferenceStateFromProfile(
   // contexto já garantiu que a resolução bate).
   viewportDaCalibracao = ref
     ? ref.viewport ?? (typeof document !== 'undefined'
-        ? { w: document.documentElement.clientWidth, h: document.documentElement.clientHeight }
+        ? { w: document.documentElement.clientWidth, h: document.documentElement.clientHeight, dpr: escalaDoSistema() }
         : null)
     : null;
   calibrationReferencePose     = ref?.pose ?? null;
@@ -1128,6 +1222,10 @@ export function restoreReferenceStateFromProfile(
   // A referência lenta nasce na referência do perfil (ou some com ele).
   if (ref) referenciaLenta.iniciar({ pose: calibrationReferencePose, centro: calibrationReferenceCenter });
   else referenciaLenta.limpar();
+  // Modelo trocado: a suspensão (se houver) passa a ser medida contra o
+  // viewport DELE. Sem modelo, não há suspensão.
+  if (ref) reavaliarSuspensao();
+  else definirSuspensao(null);
 }
 
 /**
@@ -2210,6 +2308,8 @@ export function startCalibrationMode(
   regressorRight = null;
   correcaoLocal = null;
   ultimaPredicaoSemCorrecao = null;
+  // Sem modelo em uso não há o que suspender.
+  definirSuspensao(null);
   // Os regressores acabaram de ser descartados: o instante do treino deles não
   // pode sobreviver a eles (`completeCalibration` grava o novo).
   treinadoEmMs = null;
@@ -3266,8 +3366,10 @@ function trainScalersAndRegressors(trainingProfile: CalibrationPoint[]): Trainin
   const g = currentCalibrationGeometry();
   const vw = g.screenWidthPx;
   const vh = g.screenHeightPx;
-  // O modelo mapeia para este viewport; o detector de resize compara contra ele.
-  viewportDaCalibracao = { w: vw, h: vh };
+  // O modelo mapeia para este viewport; o detector de resize compara contra ele
+  // — em tamanho FÍSICO, por isso a escala do sistema vai junto.
+  viewportDaCalibracao = { w: vw, h: vh, dpr: escalaDoSistema() };
+  definirSuspensao(null);
 
   // Referência de pose = média das amostras que treinam. É contra ela que a
   // compensação mede o desvio, no treino e na inferência.
@@ -4168,16 +4270,27 @@ let removerListenerResize: (() => void) | null = null;
 export function init() {
   loadProfile();
 
-  // O modelo mapeia para pixels do VIEWPORT: maximizar a janela (ou Ctrl+`+`)
-  // deixaria o perfil ativo com escala e offset errados sem virar `degraded`.
-  // `resize` dispara muitas vezes durante o arrasto; o debounce só avalia
-  // quando o usuário para.
+  // O modelo prevê em fração do VIEWPORT: uma janela que não cobre mais a
+  // área da calibração (saiu da tela cheia, monitor rearranjado) SUSPENDE a
+  // calibração — amostras degradadas, só Emergência e recuperação — até a
+  // janela voltar (ver `checarMudancaDeViewport`). `resize` dispara muitas
+  // vezes durante o arrasto; o debounce só avalia quando o usuário para.
   if (typeof window !== 'undefined' && !removerListenerResize) {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const aoRedimensionar = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         const doc = document.documentElement;
+        if (!isCalibrated() && !isCalibrating) {
+          // Sem modelo em memória — o app abriu com a janela de outro tamanho, e
+          // o perfil salvo (escolhido pelo tamanho da janela) não foi
+          // carregado. A janela pode ter chegado agora ao tamanho dele (o
+          // cuidador apertou F11): carrega, sem pedir outra calibração.
+          if (loadProfile()) {
+            console.log(`[calib] a janela chegou ao tamanho de um perfil salvo (${doc.clientWidth}×${doc.clientHeight}) — calibração carregada.`);
+          }
+          return;
+        }
         checarMudancaDeViewport(doc.clientWidth, doc.clientHeight);
       }, 300);
     };

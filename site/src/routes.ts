@@ -43,6 +43,17 @@ export function routeKey(href: string): string {
 }
 
 /**
+ * O endereço é uma destas rotas (ou uma subpágina delas)? A comparação é por
+ * segmento: "/conta" casa "/conta" e "/conta/x", mas não "/contato" — o
+ * `startsWith` puro deixava o cabeçalho sólido e a barra de atalho escondida
+ * na página de contato.
+ */
+export function naRota(pathname: string, rotas: readonly string[]): boolean {
+  const atual = routeKey(pathname)
+  return rotas.some((r) => atual === r || atual.startsWith(`${r}/`))
+}
+
+/**
  * Pré-carrega o pedaço da rota. Resolve quando o módulo está pronto (ou
  * imediatamente, se a rota não existe na tabela). Nunca rejeita.
  */
