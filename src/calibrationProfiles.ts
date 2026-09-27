@@ -70,6 +70,15 @@ export interface CalibrationProfileMeta {
   label: string;            // rótulo humano: "Sem óculos", "Óculos de leitura"
   createdAt: string;        // ISO 8601
   opticalCondition: OpticalCondition;
+  /**
+   * Paciente dono do perfil (o id do perfil de paciente da interface). Cada
+   * paciente tem as próprias calibrações: o mapeamento olho→tela é de UMA
+   * pessoa, e o modelo de outra desloca o cursor sem erro nenhum. Ausente nos
+   * perfis gravados antes da separação por paciente — esses são atribuídos ao
+   * dono registrado pela interface, ou ao primeiro paciente que os carregar
+   * (ver `definirPacienteDaCalibracao` em calibration.ts).
+   */
+  paciente?: string | null;
 }
 
 /**

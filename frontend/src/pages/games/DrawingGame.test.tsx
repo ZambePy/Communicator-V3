@@ -83,31 +83,79 @@ describe('DrawingGame — Desenho com Olhar', () => {
     expect(emitir).not.toThrow();
   });
 
-  it('oferece cores, espessura, apagar e saída para o menu na barra lateral', () => {
+  it('cor, traço e apagar ficam no painel de ferramentas, com alvos grandes (FE-18)', () => {
     renderizar();
+    expect(screen.getByLabelText('Voltar para Lazer e bem-estar')).toBeInTheDocument();
+    // Fechado: as cores não disputam espaço com o canvas na barra estreita.
+    expect(screen.queryByLabelText('Cor Azul')).toBeNull();
 
-    expect(screen.getByLabelText('Cor Azul')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Cor e traço'));
+    expect(screen.getByRole('dialog', { name: 'Ferramentas de desenho' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Cor Azul')).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByLabelText('Cor Vermelho')).toBeInTheDocument();
-    expect(screen.getByLabelText('Cor Verde')).toBeInTheDocument();
     expect(screen.getByLabelText('Cor Amarelo')).toBeInTheDocument();
     expect(screen.getByLabelText('Apagar todo o desenho')).toBeInTheDocument();
-    expect(screen.getByLabelText('Voltar para Lazer e bem-estar')).toBeInTheDocument();
 
-    // A cor selecionada muda de fato.
-    expect(screen.getByLabelText('Cor Azul')).toHaveAttribute('aria-checked', 'true');
+    // Escolher a cor fecha o painel e a cor muda de fato.
     fireEvent.click(screen.getByLabelText('Cor Verde'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Cor e traço'));
     expect(screen.getByLabelText('Cor Verde')).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByLabelText('Cor Azul')).toHaveAttribute('aria-checked', 'false');
+    // O mesmo botão da barra fecha o painel.
+    fireEvent.click(screen.getByLabelText('Fechar as ferramentas'));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('cicla a espessura do pincel', () => {
+  it('todos os controles da barra lateral têm pelo menos 120 px de altura, e o Voltar tem zona ampliada', () => {
     renderizar();
+    for (const nome of ['Ligar o pincel', 'Cor e traço', 'Guardar o desenho no álbum']) {
+      expect(parseInt(screen.getByLabelText(nome).style.height, 10)).toBeGreaterThanOrEqual(120);
+    }
+    const voltar = screen.getByLabelText('Voltar para Lazer e bem-estar');
+    expect(voltar).toHaveAttribute('data-isolado', 'true');
+  });
+
+  it('cicla a espessura do pincel no painel, sem fechá-lo', () => {
+    renderizar();
+    fireEvent.click(screen.getByLabelText('Cor e traço'));
     const botao = () => screen.getByLabelText(/^Espessura /);
     expect(botao().getAttribute('aria-label')).toContain('Média');
     fireEvent.click(botao());
     expect(botao().getAttribute('aria-label')).toContain('Grossa');
     fireEvent.click(botao());
     expect(botao().getAttribute('aria-label')).toContain('Fina');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('com o painel aberto o olhar não pinta o desenho que está embaixo', () => {
+    const stroke = vi.fn();
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke,
+      clearRect: vi.fn(),
+      getImageData: vi.fn(),
+      putImageData: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    const rect = vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect);
+    try {
+      renderizar();
+      fireEvent.click(screen.getByLabelText('Ligar o pincel'));
+      fireEvent.click(screen.getByLabelText('Cor e traço'));
+      gaze.callback?.(amostra(300, 300));
+      gaze.callback?.(amostra(320, 310));
+      expect(stroke).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByLabelText('Fechar as ferramentas'));
+      gaze.callback?.(amostra(300, 300));
+      expect(stroke).toHaveBeenCalled();
+    } finally {
+      getContext.mockRestore();
+      rect.mockRestore();
+    }
   });
 
   // Timeout ampliado: o teste é síncrono e passa em ~460ms isolado, mas quando

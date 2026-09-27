@@ -106,3 +106,10 @@ describe('discrição', () => {
     expect(container.querySelectorAll('[aria-live]')).toHaveLength(0);
   });
 });
+
+describe('FE-18: o botão da faixa é do cuidador (mouse)', () => {
+  it('não é alvo de olhar — o paciente recalibra por Acessibilidade ou pelo aviso', () => {
+    montar();
+    expect(screen.getByRole('button', { name: /recalibrar|calibrar/i })).toHaveAttribute('data-no-dwell', 'true');
+  });
+});

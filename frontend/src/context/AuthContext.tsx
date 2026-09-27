@@ -2,6 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { env } from '../config/env';
 import { definirPerfilAtivo } from '../utils/clinicalLogger';
 import { apagarModeloDoPerfil, definirPerfilDoAssistente } from '../services/assistente/armazenamento';
+import { definirPacienteDaCalibracao, removerCalibracoesDoPaciente } from '@tracker/calibration';
+import { migrarDonoLegadoDaCalibracao } from '../services/local/donoDaCalibracao';
 import {
   listarPerfis,
   criarPerfil,
@@ -101,6 +103,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Já na primeira renderização: as telas filhas podem pedir sugestões
     // antes do efeito abaixo rodar, e leriam o vocabulário sem dono.
     definirPerfilDoAssistente(salvo?.id ?? null);
+    // A calibração também é por paciente, e também já aqui: a abertura decide
+    // a rota por "há calibração?" e o engine carrega a calibração no primeiro
+    // efeito — os dois precisam saber de quem ela é.
+    migrarDonoLegadoDaCalibracao();
+    definirPacienteDaCalibracao(salvo?.id ?? null);
     return salvo;
   });
   const [caregiver, setCaregiver] = useState<CaregiverSession>(loadCaregiverSession);
@@ -114,6 +121,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     definirPerfilAtivo(currentProfile?.id ?? null);
     // O vocabulário do assistente também é por paciente (FE-11).
     definirPerfilDoAssistente(currentProfile?.id ?? null);
+    // E a calibração (idempotente: `selectProfile` já trocou na hora).
+    definirPacienteDaCalibracao(currentProfile?.id ?? null);
   }, [currentProfile]);
 
   useEffect(() => {
@@ -136,7 +145,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [caregiver]);
 
-  const selectProfile = (p: Profile) => setCurrentProfile(p);
+  const selectProfile = (p: Profile) => {
+    // Na hora, não no efeito: a conferência da calibração renderiza logo em
+    // seguida e pergunta se há calibração DESTE paciente para reaproveitar.
+    definirPacienteDaCalibracao(p.id);
+    setCurrentProfile(p);
+  };
 
   const createProfile = useCallback((dados: NovoPerfil): Profile => {
     const criado = paraProfile(criarPerfil(dados));
@@ -149,6 +163,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // O que o assistente aprendeu com esse paciente sai junto: frases faladas
     // são dado de saúde e não podem ficar sem dono no computador.
     apagarModeloDoPerfil(id);
+    // As calibrações dele também (o mapeamento do olhar de uma pessoa).
+    removerCalibracoesDoPaciente(id);
     setProfiles((antes) => antes.filter((p) => p.id !== id));
     // Um perfil removido não pode continuar selecionado: a calibração
     // carregada ficaria sem dono e o app apontaria para algo que não existe.
@@ -170,6 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const logout = () => {
+    definirPacienteDaCalibracao(null);
     setCurrentProfile(null);
     setCaregiver({ isCaregiver: false, authToken: null });
   };

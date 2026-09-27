@@ -164,7 +164,8 @@ export const GamesMenu: React.FC = () => {
           <GazeButton
             onClick={() => navigate('/menu')}
             width={220}
-            height={72}
+            height={96}
+            isolado
             style={{
               borderRadius: '1.75rem',
               border: '2px solid var(--color-card-border)',

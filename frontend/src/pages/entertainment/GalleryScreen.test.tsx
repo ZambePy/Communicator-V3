@@ -37,7 +37,7 @@ describe('GalleryScreen', () => {
     expect(screen.getByLabelText('Tirar a primeira foto')).toBeInTheDocument();
   });
 
-  it('lista as fotos do álbum, abre, e os alvos do modal têm 76 px', () => {
+  it('lista as fotos do álbum, abre, e os alvos do modal têm 96 px (FE-18)', () => {
     localStorage.setItem(
       CHAVE_DO_ALBUM,
       JSON.stringify([
@@ -53,7 +53,7 @@ describe('GalleryScreen', () => {
     const abrir = screen.getByLabelText(/^Ver foto: Desenho de/);
     fireEvent.click(abrir);
     const fechar = screen.getByLabelText('Fechar visualização');
-    expect(fechar.style.height).toBe('76px');
+    expect(fechar.style.height).toBe('96px');
     expect(fechar).toHaveAttribute('data-isolado', 'true');
     // Sem "Baixar": abre diálogo nativo que o olhar não fecha.
     expect(screen.queryByLabelText(/Baixar/)).toBeNull();

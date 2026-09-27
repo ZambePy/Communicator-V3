@@ -155,7 +155,7 @@ export const MeditationScreen: React.FC = () => {
         <GazeButton
           onClick={() => navigate('/games')}
           width={200}
-          height={68}
+          height={96}
           isolado
           style={{
             borderRadius: '1.5rem',
@@ -200,117 +200,134 @@ export const MeditationScreen: React.FC = () => {
         </div>
       </header>
 
-      {/* Duração: dois alvos grandes, escolha antes ou durante. */}
-      <div
-        role="radiogroup"
-        aria-label="Duração da sessão"
-        style={{ display: 'flex', gap: '1.5rem', marginTop: '1.5rem', flexWrap: 'wrap', justifyContent: 'center' }}
-      >
-        {DURACOES_MIN.map((min) => (
-          <GazeButton
-            key={min}
-            role="radio"
-            aria-checked={duracaoMin === min}
-            aria-label={`Sessão de ${min} minutos`}
-            onClick={() => {
-              setDuracaoMin(min);
-              setConcluida(false);
-            }}
-            width={220}
-            height={76}
-            style={{
-              borderRadius: '1.5rem',
-              background: duracaoMin === min ? 'var(--color-primary)' : 'var(--color-card-bg)',
-              color: duracaoMin === min ? '#ffffff' : 'var(--color-text-base)',
-              border: duracaoMin === min ? '3px solid var(--color-primary)' : '2px solid var(--color-card-border)',
-              fontSize: '1.2rem',
-              fontWeight: 800,
-            }}
-          >
-            {min} min
-          </GazeButton>
-        ))}
-      </div>
-
+      {/* Três colunas: a duração à esquerda, o círculo no meio e iniciar /
+          recomeçar à direita. Em fila (duração em cima, controles embaixo), os
+          alvos tinham 76–88 px para caber a 768 p; nas colunas, todos têm pelo
+          menos 120 px (FE-18). */}
       <div
         style={{
           flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
+          width: '100%',
+          display: 'grid',
+          gridTemplateColumns: 'minmax(200px, 260px) auto minmax(200px, 280px)',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '3rem',
-          paddingTop: '2rem',
+          columnGap: 'clamp(1.5rem, 4vw, 4rem)',
+          paddingTop: '1.5rem',
         }}
       >
+        {/* Duração: dois alvos grandes, escolha antes ou durante. */}
         <div
-          role="img"
-          aria-label={ativa ? `Círculo de respiração: ${fase}` : 'Círculo de respiração parado'}
-          data-no-dwell="true"
+          role="radiogroup"
+          aria-label="Duração da sessão"
+          style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}
+        >
+          {DURACOES_MIN.map((min) => (
+            <GazeButton
+              key={min}
+              role="radio"
+              aria-checked={duracaoMin === min}
+              aria-label={`Sessão de ${min} minutos`}
+              onClick={() => {
+                setDuracaoMin(min);
+                setConcluida(false);
+              }}
+              height={130}
+              style={{
+                width: '100%',
+                borderRadius: '1.5rem',
+                background: duracaoMin === min ? 'var(--color-primary)' : 'var(--color-card-bg)',
+                color: duracaoMin === min ? '#ffffff' : 'var(--color-text-base)',
+                border: duracaoMin === min ? '3px solid var(--color-primary)' : '2px solid var(--color-card-border)',
+                fontSize: '1.35rem',
+                fontWeight: 800,
+              }}
+            >
+              {min} min
+            </GazeButton>
+          ))}
+        </div>
+
+        <div
           style={{
-            width: 360,
-            height: 360,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
+            gap: '1.5rem',
           }}
         >
-          <div
-            aria-hidden="true"
+        <div
+            role="img"
+            aria-label={ativa ? `Círculo de respiração: ${fase}` : 'Círculo de respiração parado'}
+            data-no-dwell="true"
             style={{
-              width: 220,
-              height: 220,
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, #60a5fa, var(--color-primary))',
-              // A transição dura o mesmo que a fase: o crescimento do círculo É
-              // o guia da inspiração, então ele precisa acabar quando ela acaba.
-              transition: `transform ${DURACAO_DA_FASE_MS}ms ease-in-out`,
-              transform: `scale(${escala})`,
-              boxShadow: '0 0 60px rgba(27,84,168,0.45)',
+              // Cabe entre as duas colunas de alvos mesmo na janela mínima.
+              width: 'min(360px, 30vw, 52vh)',
+              height: 'min(360px, 30vw, 52vh)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#ffffff',
-              fontSize: '2.1rem',
-              fontWeight: 900,
-              textShadow: '0 2px 6px rgba(0,0,0,0.3)',
             }}
           >
-            {ativa ? fase : concluida ? 'Fim' : 'Pronto'}
+            <div
+              aria-hidden="true"
+              style={{
+                width: 220,
+                height: 220,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, #60a5fa, var(--color-primary))',
+                // A transição dura o mesmo que a fase: o crescimento do círculo É
+                // o guia da inspiração, então ele precisa acabar quando ela acaba.
+                transition: `transform ${DURACAO_DA_FASE_MS}ms ease-in-out`,
+                transform: `scale(${escala})`,
+                boxShadow: '0 0 60px rgba(27,84,168,0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                fontSize: '2.1rem',
+                fontWeight: 900,
+                textShadow: '0 2px 6px rgba(0,0,0,0.3)',
+              }}
+            >
+              {ativa ? fase : concluida ? 'Fim' : 'Pronto'}
+            </div>
           </div>
+
+          {concluida && (
+            <div
+              role="status"
+              aria-live="polite"
+              data-no-dwell="true"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '1rem 1.5rem',
+                borderRadius: '1.25rem',
+                background: 'var(--tint-ok-bg)',
+                border: '2px solid var(--tint-ok-border)',
+                color: 'var(--tint-ok-text)',
+                fontSize: '1.25rem',
+                fontWeight: 800,
+              }}
+            >
+              <CheckCircle2 size={28} aria-hidden="true" />
+              Sessão de {duracaoMin} minutos concluída. Respire no seu ritmo.
+            </div>
+          )}
+
         </div>
 
-        {concluida && (
-          <div
-            role="status"
-            aria-live="polite"
-            data-no-dwell="true"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              padding: '1rem 1.5rem',
-              borderRadius: '1.25rem',
-              background: 'var(--tint-ok-bg)',
-              border: '2px solid var(--tint-ok-border)',
-              color: 'var(--tint-ok-text)',
-              fontSize: '1.25rem',
-              fontWeight: 800,
-            }}
-          >
-            <CheckCircle2 size={28} aria-hidden="true" />
-            Sessão de {duracaoMin} minutos concluída. Respire no seu ritmo.
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <GazeButton
             onClick={iniciarOuPausar}
-            width={300}
-            height={88}
+            height={140}
             aria-pressed={ativa}
             aria-label={ativa ? 'Pausar a sessão de respiração' : 'Iniciar a sessão de respiração'}
             style={{
+              width: '100%',
               borderRadius: '1.75rem',
               background: ativa ? 'var(--color-card-bg)' : 'var(--color-primary)',
               color: ativa ? 'var(--color-primary)' : '#ffffff',
@@ -326,9 +343,9 @@ export const MeditationScreen: React.FC = () => {
 
           <GazeButton
             onClick={reiniciar}
-            width={240}
-            height={88}
+            height={120}
             style={{
+              width: '100%',
               borderRadius: '1.75rem',
               background: 'var(--color-card-bg)',
               border: '2px solid var(--color-card-border)',

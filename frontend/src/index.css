@@ -209,12 +209,23 @@ h3 {
      como "Voltar ao tutorial" e "Galeria (0)" caíam em cima da Emergência. */
   --pagina-margem-x: clamp(1rem, 2.5vw, 3rem);
   --pagina-margem-topo: clamp(1rem, 2.5vh, 2rem);
+  /* Onde começa o conteúdo das telas com o cabeçalho canônico
+     (`GazePageLayout`, padding de cima). */
+  --pagina-conteudo-topo: clamp(6.5rem, 4rem + 7vh, 9.5rem);
   --emergencia-largura: 200px;
-  --emergencia-altura: 64px;
-  --emergencia-folga: 16px;
+  /* Até a altura do Voltar canônico (96 px) — com 64 px a Emergência, o alvo
+     mais importante, na borda de cima, onde o erro do olhar é maior, era uma
+     faixa baixa em que um tremor vertical zerava o dwell (FE-18). Em janela
+     baixa ela encolhe para terminar 16 px antes do conteúdo: logo abaixo
+     começa a grade, e a zona de um cartão (12 px além da borda dele) não pode
+     encostar na dela. ~83 px a 768 p, 96 px a 1080 p, ~77 px na janela mínima. */
+  --emergencia-altura: min(96px, calc(var(--pagina-conteudo-topo) - var(--pagina-margem-topo) - 16px));
+  /* Folga entre a Emergência e o que fica à esquerda dela: maior que as duas
+     zonas de acerto somadas (12 + 12 px), para uma não invadir a outra. */
+  --emergencia-folga: 28px;
   --emergencia-direita: var(--pagina-margem-x);
-  /* Centralizado na linha do cabeçalho canônico (Voltar de 96 px). */
-  --emergencia-topo: calc(var(--pagina-margem-topo) + 16px);
+  /* Alinhada ao topo da linha do cabeçalho canônico. */
+  --emergencia-topo: var(--pagina-margem-topo);
   /* Faixa, a partir da borda DIREITA da janela, que nada no topo pode ocupar. */
   --reserva-emergencia-x: calc(
     var(--emergencia-direita) + var(--emergencia-largura) + var(--emergencia-folga)
@@ -1148,6 +1159,24 @@ select:focus-visible,
   right: calc(-1 * var(--gaze-hit-inset-x, var(--gaze-hit-inset)));
 }
 
+/* Emergência no topo (FE-18): a zona de acerto vai até a borda de CIMA e a da
+ * DIREITA da janela. O olhar que passa da borda é preso nela pelo núcleo
+ * (clamp), então quem mira a Emergência e erra para cima — o erro típico no
+ * topo da tela — continua dentro dela: o alvo fica sem limite nessas duas
+ * direções. Para baixo a zona NÃO cresce (bottom: 0): logo abaixo começa o
+ * conteúdo da tela, e a Emergência não pode roubar o olhar de um cartão. */
+.emergencia-fab--topo .gaze-button-hit-area {
+  /* + 8 px: a zona é medida a partir da caixa de padding do botão (dentro da
+     borda). Sem a sobra, faltavam os 2 px da borda — justamente a linha y = 0
+     e a coluna da direita, onde o olhar preso na borda cai. O que passa da
+     janela é cortado e não conta. */
+  top: calc(-1 * var(--emergencia-topo) - 8px);
+  right: calc(-1 * var(--emergencia-direita) - 8px);
+  bottom: 0;
+  left: calc(-1 * var(--gaze-hit-inset));
+  border-radius: 0;
+}
+
 .gaze-button-content {
   position: relative;
   z-index: 2;
@@ -1569,6 +1598,13 @@ html:not(.dark) .particulas-de-fundo__ponto {
 
 .kb-nav .gaze-button-progress-ring {
   display: none;
+}
+
+/* Camada de símbolos ativa: a tecla de troca ("ABC") fica acesa. É o que diz
+   "você está nos símbolos" sem precisar ler a grade. */
+.kb-nav--camada {
+  color: var(--kb-ember-bright);
+  border-color: var(--kb-ember-edge);
 }
 
 .kb-nav::after {

@@ -116,6 +116,27 @@ const GROUPS = [
 ];
 
 /**
+ * Segunda camada: acentos, "ç", números e pontuação (FE-19).
+ *
+ * Mesma grade 3×2 e os mesmos dois níveis — só muda o que há dentro dos
+ * grupos. Sem ela, "não", "água", "mãe" e "está" saíam sem acento (e a voz lê
+ * "e" e "é" diferente), e dor de 0 a 10, horário e quantidade não tinham como
+ * ser escritos. A tecla de troca fica na barra superior, no lugar do Voltar
+ * (que só existe no nível 2).
+ */
+export const GROUPS_SIMBOLOS = [
+  ['Á', 'Â', 'Ã', 'À', 'É', 'Ê'],
+  ['Í', 'Ó', 'Ô', 'Õ', 'Ú', 'Ç'],
+  ['.', ',', '?', '!', ':', ';'],
+  ['1', '2', '3', '4', '5', '6'],
+  ['7', '8', '9', '0', 'Espaço', 'Apagar'],
+];
+
+type Camada = 'letras' | 'simbolos';
+
+const DIGITOS = new Set(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
+
+/**
  * Glifo de espaço (⌴) em SVG.
  *
  * O caractere U+2423 sai com corpo diferente em cada fonte — encolhia e caía
@@ -192,8 +213,11 @@ export const KeyboardScreen: React.FC = () => {
    * as que continuam o que ele começou.
    */
   const [frasesSugeridas, setFrasesSugeridas] = useState<SugestaoDeFrase[]>([]);
-  // activeGroup: null (nível 1) | 0-4 (letras/ações) | 5 (sugestões)
+  // activeGroup: null (nível 1) | 0-4 (grupos da camada) | 5 (sugestões)
   const [activeGroup, setActiveGroup] = useState<number | null>(null);
+  /** Letras (A–Z e ações) ou símbolos (acentos, ç, números, pontuação). */
+  const [camada, setCamada] = useState<Camada>('letras');
+  const gruposDaCamada = camada === 'letras' ? GROUPS : GROUPS_SIMBOLOS;
 
   /**
    * Recalcula as sugestões só quando o TEXTO muda.
@@ -308,23 +332,24 @@ export const KeyboardScreen: React.FC = () => {
   const handleHomeClick = () => navigate('/menu');
 
   const handleItemClick = (item: string) => {
-    if (item === 'Espaço') {
-      space();
-      setActiveGroup(null);
-    } else if (item === 'Falar') {
-      speak();
-      setActiveGroup(null);
-    } else if (item === 'Apagar') {
+    if (item === 'Apagar') {
       backspace();
-      // Permanece no grupo de ações para permitir apagar várias letras
-    } else if (item === 'Limpar') {
-      clear();
-      setActiveGroup(null);
-    } else {
-      append(item);
-      setActiveGroup(null);
+      // Permanece no grupo para permitir apagar várias letras
+      return;
     }
+    if (item === 'Espaço') space();
+    else if (item === 'Falar') speak();
+    else if (item === 'Limpar') clear();
+    else append(item);
+    setActiveGroup(null);
+    // Na camada de símbolos o número continua nela (um número tem vários
+    // dígitos); acento, pontuação e espaço devolvem às letras, como no teclado
+    // do celular — o que vem depois de "Á" ou de "?" é quase sempre letra.
+    if (camada === 'simbolos' && !DIGITOS.has(item)) setCamada('letras');
   };
+
+  /** Troca de camada, no nível 1. */
+  const alternarCamada = () => setCamada((c) => (c === 'letras' ? 'simbolos' : 'letras'));
 
   const currentSuggestions =
     text.trim().length > 0 && suggestions.length > 0 ? suggestions : DEFAULT_WORDS;
@@ -385,12 +410,20 @@ export const KeyboardScreen: React.FC = () => {
   };
 
   const renderMainGrid = () => {
-    const grupos = [
-      ['A B C', 'D E F'],
-      ['G H I', 'J K L'],
-      ['M N O', 'P Q R'],
-      ['S T U', 'V W X'],
-    ];
+    const grupos =
+      camada === 'letras'
+        ? [
+            ['A B C', 'D E F'],
+            ['G H I', 'J K L'],
+            ['M N O', 'P Q R'],
+            ['S T U', 'V W X'],
+          ]
+        : [
+            ['Á Â Ã', 'À É Ê'],
+            ['Í Ó Ô', 'Õ Ú Ç'],
+            ['. , ?', '! : ;'],
+            ['1 2 3', '4 5 6'],
+          ];
 
     return (
       <GazeGrid columns={3} rows={2} gap={GRID_GAP}>
@@ -410,7 +443,8 @@ export const KeyboardScreen: React.FC = () => {
           </GazeButton>
         ))}
 
-        {/* Grupo 5: Y, Z e as três ações. A prévia mostra o que há dentro. */}
+        {/* Grupo 5: nas letras, Y, Z e as ações; nos símbolos, 7–0, espaço e
+            apagar. A prévia mostra o que há dentro. */}
         <GazeButton
           key="group-4"
           className={keyClass('group')}
@@ -418,19 +452,29 @@ export const KeyboardScreen: React.FC = () => {
           noWarn
           style={cell}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4em', ...groupLabel }}>
-              <span>Y Z</span>
-              <span style={{ paddingBottom: '0.34em' }}>
-                <EspacoGlifo width={40} />
-              </span>
+          {camada === 'letras' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4em', ...groupLabel }}>
+                <span>Y Z</span>
+                <span style={{ paddingBottom: '0.34em' }}>
+                  <EspacoGlifo width={40} />
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', opacity: 0.75 }}>
+                <Speech size={44} />
+                <Delete size={44} />
+                <Trash2 size={44} />
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', opacity: 0.75 }}>
-              <Speech size={44} />
-              <Delete size={44} />
-              <Trash2 size={44} />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={groupLabel}>7 8 9 0</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', opacity: 0.75 }}>
+                <EspacoGlifo width={52} />
+                <Delete size={44} />
+              </div>
             </div>
-          </div>
+          )}
         </GazeButton>
 
         {/* Grupo 6: palavras. Única tecla que escreve uma palavra inteira — o
@@ -485,7 +529,7 @@ export const KeyboardScreen: React.FC = () => {
   const renderSubGrid = () => {
     let items: string[] = [];
     if (activeGroup === 5) items = itensDeSugestao.map((i) => i.texto);
-    else if (activeGroup !== null && activeGroup < 5) items = GROUPS[activeGroup];
+    else if (activeGroup !== null && activeGroup < 5) items = gruposDaCamada[activeGroup];
 
     const ehFrase = (texto: string) => itensDeSugestao.some((i) => i.frase && i.texto === texto);
 
@@ -651,22 +695,47 @@ export const KeyboardScreen: React.FC = () => {
             {navContent(<Home size={46} />, 'Início')}
           </GazeButton>
 
-          {/* Voltar só existe quando há nível para subir. No nível 1 ele não
-              teria função, e alvo sem função é alvo para errar. */}
-          {activeGroup !== null && (
-            <GazeButton
-              className="kb-nav"
-              onClick={handleBackClick}
-              aria-label="Voltar"
-              data-dwell-ms={DWELL_BACK_MS}
-              data-dwell-mult={MULT_BACK}
-              width={NAV_W}
-              height={NAV_H}
-              style={{ flex: '0 0 auto' }}
-            >
-              {navContent(<ArrowLeft size={46} />, 'Voltar')}
-            </GazeButton>
-          )}
+          {/* Segundo lugar da barra: Voltar no nível 2; no nível 1 (onde
+              Voltar não teria função) a troca entre letras e símbolos. É o
+              MESMO botão nos dois papéis, de propósito: depois de um Voltar
+              pelo olhar ele continua bloqueado até o olhar sair dele (rearme
+              por saída), e a troca de camada não dispara por quem só
+              continuou olhando para o mesmo lugar. */}
+          <GazeButton
+            key="kb-nav-2"
+            className={'kb-nav' + (activeGroup === null && camada === 'simbolos' ? ' kb-nav--camada' : '')}
+            onClick={activeGroup !== null ? handleBackClick : alternarCamada}
+            aria-label={
+              activeGroup !== null
+                ? 'Voltar'
+                : camada === 'letras'
+                  ? 'Acentos, números e pontuação'
+                  : 'Voltar às letras'
+            }
+            data-dwell-ms={DWELL_BACK_MS}
+            data-dwell-mult={MULT_BACK}
+            data-testid="kb-nav-2"
+            width={NAV_W}
+            height={NAV_H}
+            style={{ flex: '0 0 auto' }}
+          >
+            {activeGroup !== null
+              ? navContent(<ArrowLeft size={46} />, 'Voltar')
+              : navContent(
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      fontSize: camada === 'letras' ? '2.3rem' : '2.6rem',
+                      fontWeight: 700,
+                      lineHeight: 1,
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    {camada === 'letras' ? 'Á 1 ?' : 'ABC'}
+                  </span>,
+                  camada === 'letras' ? 'Símbolos' : 'Letras',
+                )}
+          </GazeButton>
 
           {/* Falar direto da barra: só existe com texto escrito. Sem texto não
               teria função — e alvo sem função é alvo para errar. */}
@@ -714,8 +783,10 @@ export const KeyboardScreen: React.FC = () => {
             }}
           >
             {text === '' ? (
+              // Curto: no nível 1 a barra tem Início e a troca de camada, e a
+              // frase longa de antes era cortada a 1366 px.
               <span style={{ color: KB.glyphDim, opacity: 0.6, fontSize: '2.4rem', letterSpacing: '0.06em' }}>
-                Escolha um grupo para começar
+                Escolha um grupo
               </span>
             ) : (
               <>

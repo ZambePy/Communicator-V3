@@ -577,8 +577,28 @@ interface ModeloEmUso {
   treinadoEmMs: number | null;
   perfil: PerfilDeCalibracao;
   meta: CalibrationProfileMeta | null;
+  /** Paciente dono do modelo (ver `donoDoModeloEmUso`). */
+  dono: string | null;
 }
 let modeloAntesDaCalibracao: ModeloEmUso | null = null;
+
+// ── Calibração por paciente ─────────────────────────────────────────────────
+//
+// O mapeamento olho→tela é de UMA pessoa. Antes o núcleo guardava as
+// calibrações sem dono e restaurava a mais recente para quem estivesse na
+// frente da câmera: depois de o paciente B calibrar, o paciente A perdia a
+// dele (a conferência só não a oferecia porque a interface guardava o "dono"
+// da última). Agora cada perfil gravado leva o paciente, e o carregamento só
+// considera os do paciente em uso.
+
+/** Paciente em uso (id do perfil de paciente da interface), ou `null`. */
+let pacienteDaCalibracao: string | null = null;
+/** Dono do modelo carregado em memória (`null` sem modelo ou sem paciente). */
+let donoDoModeloEmUso: string | null = null;
+/** Calibrações guardadas por paciente (as mais recentes). */
+export const PERFIS_POR_PACIENTE = 3;
+/** Teto total no disco (~30–50 KB cada). */
+export const PERFIS_NO_DISCO = 12;
 
 /** Resumo dos pesos do último treino, para o diagnóstico de ajuste. */
 let ultimoResumoDePesos: ReturnType<typeof resumoDePesos> = null;
@@ -1356,6 +1376,7 @@ function retratarModeloEmUso(): ModeloEmUso | null {
     treinadoEmMs,
     perfil: perfilAtivo,
     meta: ultimaMetaPersistida,
+    dono: donoDoModeloEmUso,
   };
 }
 
@@ -1376,6 +1397,7 @@ function restaurarModeloAntesDaCalibracao(motivo: string, consumir: boolean): bo
   restoreReferenceStateFromProfile(b.referencia);
   treinadoEmMs = b.treinadoEmMs;
   ultimaMetaPersistida = b.meta;
+  donoDoModeloEmUso = b.dono;
   // A meta pendente era da calibração que não terminou (rótulo, condição
   // óptica escolhidos para ELA): não pode ir parar no perfil do modelo antigo.
   pendingProfileMeta = null;
@@ -1386,6 +1408,7 @@ function restaurarModeloAntesDaCalibracao(motivo: string, consumir: boolean): bo
 export function clearCalibration() {
   // Descartar é descartar: nada de restaurar o modelo anterior no abort abaixo.
   modeloAntesDaCalibracao = null;
+  donoDoModeloEmUso = null;
   abortCalibration();
   profile = [];
   tempoUtilPorAlvoMs = [];
@@ -1534,6 +1557,11 @@ export function buildContextKeyFrom(ctx: CalibrationContext): string {
   return `${ctx.viewportW}x${ctx.viewportH}_${ctx.featureVectorId}_v${ctx.formatVersion}_${expKey}${perfil}`;
 }
 
+/** Chave do contexto em vigor (a que um perfil precisa ter para carregar). */
+export function chaveDoContextoAtual(): string {
+  return buildContextKey();
+}
+
 function buildContextKey(): string {
   const doc = typeof document !== 'undefined' ? document.documentElement : null;
   return buildContextKeyFrom({
@@ -1622,8 +1650,101 @@ export function haCalibracaoNoDisco(): boolean {
   // menu quem "tem calibração" e o engine sobe sem modelo nenhum.
   if (!EXPERIMENT.persistirCalibracao) return false;
   return tryParseStoredProfiles().some(
-    p => p !== null && typeof p === 'object' && p.meta !== null && typeof p.meta === 'object',
+    p => p !== null && typeof p === 'object' && p.meta !== null && typeof p.meta === 'object'
+      && perfilPodeSerDoPaciente(p),
   );
+}
+
+/**
+ * O perfil pode ser usado pelo paciente em uso? Os dele, sim; os de outro
+ * paciente, nunca; os sem dono (gravados antes da separação por paciente),
+ * sim — e passam a ser dele no primeiro carregamento. Sem paciente definido,
+ * qualquer um (o comportamento de antes, para a abertura e os testes).
+ */
+function perfilPodeSerDoPaciente(p: StoredCalibrationProfile): boolean {
+  const dono = p.meta?.paciente ?? null;
+  return pacienteDaCalibracao === null || dono === null || dono === pacienteDaCalibracao;
+}
+
+/**
+ * Define o paciente em uso — a interface chama ao escolher, trocar ou sair do
+ * paciente. Troca o modelo em memória pelo do paciente novo (o mais recente
+ * dele que sirva ao contexto atual), ou fica sem modelo quando ele ainda não
+ * calibrou. Devolve se há modelo carregado depois da troca.
+ */
+export function definirPacienteDaCalibracao(id: string | null): boolean {
+  const novo = typeof id === 'string' && id.length > 0 ? id : null;
+  if (novo === pacienteDaCalibracao) return isCalibrated();
+  pacienteDaCalibracao = novo;
+  // O modelo em uso já é deste paciente (acabou de calibrar sem paciente
+  // definido e agora o paciente chegou): mantém.
+  if (novo !== null && isCalibrated() && donoDoModeloEmUso === novo) return true;
+  // Uma coleta em curso era de outro paciente: não pode terminar no perfil
+  // deste. `clearCalibration` a encerra sem treinar.
+  clearCalibration();
+  return loadProfile();
+}
+
+export function getPacienteDaCalibracao(): string | null {
+  return pacienteDaCalibracao;
+}
+
+/**
+ * O modelo em memória é deste paciente? É o que decide se a conferência pode
+ * oferecer "Usar a calibração salva". Sem paciente, vale qualquer modelo.
+ */
+export function calibracaoEmUsoEhDoPaciente(id: string | null): boolean {
+  if (!isCalibrated()) return false;
+  if (!id) return true;
+  return donoDoModeloEmUso === null ? pacienteDaCalibracao === id : donoDoModeloEmUso === id;
+}
+
+/**
+ * Atribui ao `dono` os perfis gravados sem paciente (calibrações de antes da
+ * separação por paciente, cujo dono a interface guardava à parte). Chamada uma
+ * vez, na migração. Devolve quantos perfis passaram a ter dono.
+ */
+export function atribuirCalibracoesSemDono(dono: string): number {
+  if (!dono || typeof localStorage === 'undefined') return 0;
+  const perfis = tryParseStoredProfiles();
+  let n = 0;
+  for (const p of perfis) {
+    if (p && typeof p === 'object' && p.meta && typeof p.meta === 'object' && !p.meta.paciente) {
+      p.meta = { ...p.meta, paciente: dono };
+      n++;
+    }
+  }
+  for (const entrada of profileRegistry.list()) {
+    const p = profileRegistry.get(entrada.meta.id);
+    if (p && !p.meta.paciente) p.meta = { ...p.meta, paciente: dono };
+  }
+  if (n > 0) {
+    try {
+      localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(perfis));
+    } catch (e) {
+      console.warn('[calib] falha ao atribuir o dono das calibrações antigas:', e);
+    }
+  }
+  return n;
+}
+
+/**
+ * Apaga as calibrações de um paciente (o perfil dele foi removido). O modelo
+ * em memória sai junto se era dele.
+ */
+export function removerCalibracoesDoPaciente(id: string): number {
+  if (!id) return 0;
+  const doDisco = tryParseStoredProfiles().filter(
+    p => p && typeof p === 'object' && p.meta && p.meta.paciente === id,
+  );
+  const ids = new Set(doDisco.map(p => p.meta.id));
+  for (const entrada of profileRegistry.list()) {
+    if (entrada.meta.paciente === id) ids.add(entrada.meta.id);
+  }
+  for (const pid of ids) profileRegistry.delete(pid);
+  if (donoDoModeloEmUso === id) clearCalibration();
+  if (ids.size > 0) saveProfile([...ids]);
+  return ids.size;
 }
 
 export function loadProfile(): boolean {
@@ -1655,6 +1776,8 @@ export function loadProfile(): boolean {
         console.warn('[calib] perfil salvo malformado — ignorado');
         return false;
       }
+      // De outro paciente: nunca (ver `definirPacienteDaCalibracao`).
+      if (!perfilPodeSerDoPaciente(p)) return false;
       // Validação de contexto: tela ou pipeline diferente → incompatível
       const chave = p.contextKey ?? (p as unknown as Record<string, unknown>)._contextKey;
       if (chave !== contextKey) {
@@ -1674,11 +1797,27 @@ export function loadProfile(): boolean {
       }
       return true;
     })
-    .sort((a, b) => new Date(b.meta.createdAt).getTime() - new Date(a.meta.createdAt).getTime());
+    .sort((a, b) => {
+      // Os do próprio paciente antes dos sem dono (antigos): um perfil antigo
+      // mais recente não passa na frente da calibração que ELE fez.
+      if (pacienteDaCalibracao !== null) {
+        const aDele = a.meta.paciente === pacienteDaCalibracao ? 0 : 1;
+        const bDele = b.meta.paciente === pacienteDaCalibracao ? 0 : 1;
+        if (aDele !== bDele) return aDele - bDele;
+      }
+      return new Date(b.meta.createdAt).getTime() - new Date(a.meta.createdAt).getTime();
+    });
 
   if (valid.length === 0) return false;
 
   const best = valid[0];
+  // Perfil antigo, sem dono, carregado por um paciente: passa a ser dele — e
+  // deixa de aparecer para os outros.
+  let reivindicado = false;
+  if (pacienteDaCalibracao !== null && !best.meta.paciente) {
+    best.meta = { ...best.meta, paciente: pacienteDaCalibracao };
+    reivindicado = true;
+  }
   const age = nowMs - new Date(best.meta.createdAt).getTime();
   if (age > PROFILES_MAX_AGE_MS) {
     console.warn(`[calib] perfil ${best.meta.id} tem ${Math.round(age / 3600000)} h — mais antigo que 24 h. Recomendado recalibrar.`);
@@ -1700,6 +1839,8 @@ export function loadProfile(): boolean {
     // O modelo em uso é o deste perfil, treinado quando o perfil foi criado —
     // não agora. `minutosDesdeCalibracao` mede a deriva desde o TREINO.
     treinadoEmMs = treinoDoPerfilMs(best.meta.createdAt);
+    donoDoModeloEmUso = best.meta.paciente ?? null;
+    if (reivindicado) saveProfile();
     console.log(
       `[calib] perfil restaurado: ${best.meta.label} (${best.meta.opticalCondition}), ` +
       `${age > PROFILES_MAX_AGE_MS ? '>24h' : 'válido'} — ` +
@@ -1719,8 +1860,10 @@ export function loadProfile(): boolean {
   }
 }
 
-function saveProfile() {
-  // Persiste todos os perfis do registry no localStorage.
+function saveProfile(remover: readonly string[] = []) {
+  // Persiste os perfis do registry no localStorage, JUNTO com os que já estão
+  // no disco (de outros pacientes, de outras janelas): o registry só tem os
+  // desta sessão, e regravar só ele apagava a calibração dos outros pacientes.
   // Chamado após `persistActiveProfileToRegistry` em `completeCalibration`.
   if (typeof localStorage === 'undefined') return;
   // Simétrico ao `loadProfile`: desligada a persistência, a calibração recém
@@ -1731,14 +1874,31 @@ function saveProfile() {
     return;
   }
   try {
-    const all = profileRegistry.list();
+    const porId = new Map<string, StoredCalibrationProfile>();
+    for (const p of tryParseStoredProfiles()) {
+      if (p && typeof p === 'object' && p.meta && typeof p.meta.id === 'string') porId.set(p.meta.id, p);
+    }
     // Cada perfil guarda a chave do contexto em que FOI treinado; recarimbar
     // com a chave atual faria um perfil de outro viewport renascer compatível.
-    const profiles = all.map(entry => profileRegistry.get(entry.meta.id)!);
-    // Mantém no máximo 5 perfis para não estourar o localStorage
-    const latest = profiles
-      .sort((a, b) => new Date(b.meta.createdAt).getTime() - new Date(a.meta.createdAt).getTime())
-      .slice(0, 5);
+    for (const entry of profileRegistry.list()) {
+      const p = profileRegistry.get(entry.meta.id);
+      if (p) porId.set(p.meta.id, p);
+    }
+    for (const id of remover) porId.delete(id);
+    // Os mais recentes: até PERFIS_POR_PACIENTE de cada paciente e
+    // PERFIS_NO_DISCO no total, para não estourar o localStorage.
+    const porPaciente = new Map<string, number>();
+    const latest: StoredCalibrationProfile[] = [];
+    for (const p of [...porId.values()].sort(
+      (a, b) => new Date(b.meta.createdAt).getTime() - new Date(a.meta.createdAt).getTime(),
+    )) {
+      const chave = p.meta.paciente ?? '';
+      const n = porPaciente.get(chave) ?? 0;
+      if (n >= PERFIS_POR_PACIENTE) continue;
+      porPaciente.set(chave, n + 1);
+      latest.push(p);
+      if (latest.length >= PERFIS_NO_DISCO) break;
+    }
     localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(latest));
     console.log(`[calib] ${latest.length} perfil(s) salvo(s) no localStorage`);
   } catch (e) {
@@ -4152,8 +4312,10 @@ function persistActiveProfileToRegistry(summary: TrainingSummary): void {
     console.warn('[calib] detectOutlierPoints falhou (não afeta salvar perfil):', e);
   }
 
+  // O perfil é do paciente em uso (ver `definirPacienteDaCalibracao`).
+  const metaDoPaciente: CalibrationProfileMeta = { ...meta, paciente: pacienteDaCalibracao };
   const stored: StoredCalibrationProfile = {
-    meta,
+    meta: metaDoPaciente,
     contextKey: buildContextKey(),
     schemaVersion: PROFILE_SCHEMA_VERSION,
     modelLeft: modelL,
@@ -4177,6 +4339,7 @@ function persistActiveProfileToRegistry(summary: TrainingSummary): void {
     },
   };
   profileRegistry.save(stored);
+  donoDoModeloEmUso = pacienteDaCalibracao;
   // Fonte ÚNICA do instante do treino. O caminho de restauração (app reaberto)
   // só tem `meta.createdAt` para ler, então o caminho de treino usa o mesmo
   // campo — senão os dois divergem por alguns milissegundos e a contagem de
@@ -4225,6 +4388,7 @@ export function switchActiveProfile(id: string): CalibrationProfileMeta | null {
   // calibração anterior faria o relatório dizer "2 min desde a calibração"
   // sobre um modelo treinado horas antes.
   treinadoEmMs = treinoDoPerfilMs(stored.meta.createdAt);
+  donoDoModeloEmUso = stored.meta.paciente ?? null;
   if (!stored.reference) {
     console.warn(
       `[calib] perfil '${stored.meta.id}' não traz estado de referência ` +
@@ -4259,8 +4423,11 @@ export function deleteCalibrationProfile(id: string): boolean {
     regressorRight = null;
     restoreReferenceStateFromProfile(null);
     treinadoEmMs = null;
+    donoDoModeloEmUso = null;
   }
-  if (ok) saveProfile();
+  // `saveProfile` junta o disco com o registry: sem a remoção explícita, o
+  // perfil apagado voltava do disco na gravação.
+  if (ok) saveProfile([id]);
   return ok;
 }
 

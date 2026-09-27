@@ -30,7 +30,11 @@ interface EmergencyContextValue {
  * `--emergencia-altura` em index.css — o teste `reservaDaEmergencia` confere.
  */
 export const EMERGENCIA_LARGURA_PX = 200;
-export const EMERGENCIA_ALTURA_PX = 64;
+/** Altura MÁXIMA no topo: a do Voltar canônico. Era 64 px, uma faixa baixa na
+ *  borda de cima, onde o erro do olhar é maior (FE-18). A altura em vigor é
+ *  `--emergencia-altura` (encolhe em janela baixa para não encostar no
+ *  conteúdo). Ver também `.emergencia-fab--topo`. */
+export const EMERGENCIA_ALTURA_PX = 96;
 
 /** Camada normal do botão flutuante. */
 export const Z_EMERGENCIA = 99990;
@@ -407,6 +411,10 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       {showEmergencyButton && !isConfirming && (
         <div
           ref={fabRef}
+          // No topo, a zona de acerto vai até as bordas de cima e da direita
+          // da janela (index.css, `.emergencia-fab--topo`). No canto de baixo,
+          // durante a medição, fica a zona comum: ali há alvos de calibração.
+          className={medindo ? 'emergencia-fab' : 'emergencia-fab emergencia-fab--topo'}
           style={{
             position: 'fixed',
             // No topo, a posição vem das MESMAS variáveis que os cabeçalhos
@@ -432,7 +440,11 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                botão. 176 px cabe sem mudar a tipografia; quando ainda
                assim cobrir um alvo, o `fabOculto` esconde o botão. */
             width={medindo ? 176 : EMERGENCIA_LARGURA_PX}
-            height={medindo ? 52 : EMERGENCIA_ALTURA_PX}
+            height={medindo ? 52 : undefined}
+            // No topo, a altura vem do CSS (`--emergencia-altura`): até 96 px,
+            // menos em janela baixa. As telas reservam o espaço pela mesma
+            // variável.
+            style={medindo ? undefined : { height: 'var(--emergencia-altura)' }}
             onClick={startEmergencyCountdown}
             data-dwell-ms={isDegraded ? 3600 : 2000}
             // Nunca mais fácil de acionar que uma tecla comum: para quem usa

@@ -133,7 +133,7 @@ export const MyOptionsScreen: React.FC = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '1rem',
-                maxHeight: '400px',
+                maxHeight: '420px',
                 overflowY: 'auto',
               }}
             >
@@ -161,13 +161,14 @@ export const MyOptionsScreen: React.FC = () => {
                     {fav.text}
                   </span>
 
-                  {/* Falar - GazeButton. 230×96: era 180×60, abaixo do alvo
-                      mínimo de 5°. Sem `isolado`: o item de baixo é vizinho. */}
+                  {/* Falar - GazeButton. 230×120 (o mínimo declarado de 160×120;
+                      era 180×60 e depois 230×96 — FE-18). Sem `isolado`: o item
+                      de baixo é vizinho. */}
                   <GazeButton
                     onClick={() => speak(fav.text)}
                     variante="primaria"
                     width={230}
-                    height={96}
+                    height={120}
                     noWarn
                     style={{ borderRadius: 'var(--radius-md)' }}
                     aria-label={`Falar: ${fav.text}`}

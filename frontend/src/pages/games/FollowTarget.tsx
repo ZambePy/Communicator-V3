@@ -170,7 +170,7 @@ export const FollowTarget: React.FC = () => {
         <GazeButton
           onClick={() => navigate('/games')}
           width={200}
-          height={68}
+          height={96}
           isolado
           style={{
             borderRadius: '1.5rem',
@@ -327,7 +327,7 @@ export const FollowTarget: React.FC = () => {
               <GazeButton
                 onClick={reiniciar}
                 width={280}
-                height={84}
+                height={120}
                 style={{
                   borderRadius: '1.75rem',
                   background: 'linear-gradient(135deg, #dc2626, #b91c1c)',
@@ -344,7 +344,7 @@ export const FollowTarget: React.FC = () => {
               <GazeButton
                 onClick={() => navigate('/games')}
                 width={260}
-                height={84}
+                height={120}
                 style={{
                   borderRadius: '1.75rem',
                   background: 'rgba(248,250,252,0.12)',

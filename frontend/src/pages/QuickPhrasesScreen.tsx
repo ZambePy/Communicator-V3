@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { emitirFalaDoPaciente } from '../cloud/eventos';
 import { falar } from '../services/voz';
-import { MessageSquare, AlertCircle, Tv, Wind, Activity, ChevronRight, ChevronLeft, LayoutGrid } from 'lucide-react';
+import { MessageSquare, AlertCircle, Tv, Wind, Activity, ChevronRight, ChevronLeft, LayoutGrid, Heart } from 'lucide-react';
 import { GazePageLayout } from '../components/ui/GazePageLayout';
 import { GazeGrid } from '../components/ui/GazeGrid';
 import { GazeButton } from '../components/ui/GazeButton';
@@ -211,10 +211,10 @@ export const QuickPhrasesScreen: React.FC = () => {
               </GazeButton>
             )}
 
-            {/* Na última página: o caminho para os pictogramas (o cartão
-                "Comunicação" do menu promete "frases rápidas e pictogramas", e a
-                tela existia sem nenhum caminho pela interface — FE-23) e uma
-                célula vazia, que ocupa a grade 3×2 sem oferecer alvo. */}
+            {/* Na última página: os caminhos para os pictogramas (o cartão
+                "Comunicação" do menu promete "frases rápidas e pictogramas") e
+                para as frases favoritas — as duas telas existiam sem nenhum
+                caminho pela interface (FE-23). */}
             {currentPage === 1 && (
               <>
                 <GazeButton
@@ -237,7 +237,29 @@ export const QuickPhrasesScreen: React.FC = () => {
                     </span>
                   </div>
                 </GazeButton>
-                <div aria-hidden="true" style={{ borderRadius: 'var(--radius-xl)', border: '2px dashed var(--color-card-border)', opacity: 0.5 }} />
+                {/* As frases favoritas do paciente, cadastradas pelo cuidador
+                    ("Minhas opções"): a tela existia sem nenhum caminho pela
+                    interface (FE-23). */}
+                <GazeButton
+                  onClick={() => navigate('/options')}
+                  style={{
+                    height: '100%',
+                    borderRadius: 'var(--radius-xl)',
+                    border: '2px solid var(--state-hover-border)',
+                    background: 'var(--state-active-bg)',
+                    color: 'var(--color-primary)',
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%' }}>
+                    <Heart size={56} aria-hidden="true" style={{ marginBottom: '0.5rem' }} />
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.015em' }}>
+                      Minhas opções
+                    </span>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 600, opacity: 0.8, marginTop: '0.25rem' }}>
+                      frases favoritas
+                    </span>
+                  </div>
+                </GazeButton>
               </>
             )}
           </GazeGrid>

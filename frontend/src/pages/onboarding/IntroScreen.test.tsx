@@ -49,19 +49,19 @@ describe('o que a tela conta', () => {
   });
 });
 
-describe('escolha de idioma', () => {
-  it('oferece o seletor', () => {
+describe('idioma (FE-24)', () => {
+  it('sem seletor enquanto só o português está completo', () => {
+    // Oferecer "English" com metade das telas em português era pior do que
+    // não oferecer a escolha (ver i18n/index.ts).
     montar();
-    expect(screen.getByRole('button', { name: /portugu|português/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /english|inglês/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /english|inglês/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /idioma|language/i })).not.toBeInTheDocument();
   });
 
-  it('troca o texto da própria tela ao mudar o idioma', () => {
-    // O seletor precisa valer já aqui. Se só valesse depois, o cuidador
-    // escolheria "English" e continuaria lendo português.
+  it('a tela sai em português mesmo num sistema em inglês', () => {
     montar();
-    fireEvent.click(screen.getByRole('button', { name: /english|inglês/i }));
-    expect(screen.getByText('Your voice begins with your gaze.')).toBeInTheDocument();
+    expect(screen.queryByText('Your voice begins with your gaze.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /começar/i })).toBeInTheDocument();
   });
 });
 

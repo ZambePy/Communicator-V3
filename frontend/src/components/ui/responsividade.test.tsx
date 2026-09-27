@@ -101,7 +101,10 @@ describe('as causas estruturais do corte foram removidas', () => {
   it('o padding do layout acompanha a altura da tela', () => {
     const src = ler('src/components/ui/GazePageLayout.tsx');
     expect(src).not.toContain("'9.5rem 3rem 3rem 3rem'");
-    expect(src).toMatch(/clamp\(6\.5rem,[^)]*9\.5rem\)/);
+    // O topo vem de `--pagina-conteudo-topo` (index.css), a mesma variável que
+    // limita a altura da Emergência.
+    expect(src).toContain("'var(--pagina-conteudo-topo)");
+    expect(ler('src/index.css')).toMatch(/--pagina-conteudo-topo:\s*clamp\(6\.5rem,[^)]*9\.5rem\)/);
   });
 
   it('o conteúdo pode encolher dentro do layout (flex + minHeight 0)', () => {

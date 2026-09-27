@@ -31,3 +31,20 @@ describe('Frases rápidas → pictogramas', () => {
     expect(screen.getByText('tela de pictogramas')).toBeInTheDocument();
   });
 });
+
+describe('Frases rápidas → frases favoritas (FE-23)', () => {
+  it('a última página leva a "Minhas opções"', () => {
+    render(
+      <MemoryRouter initialEntries={['/phrases']}>
+        <Routes>
+          <Route path="/phrases" element={<QuickPhrasesScreen />} />
+          <Route path="/options" element={<div>tela de favoritas</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.queryByText('Minhas opções')).toBeNull();
+    fireEvent.click(screen.getByText('Mais frases'));
+    fireEvent.click(screen.getByText('Minhas opções'));
+    expect(screen.getByText('tela de favoritas')).toBeInTheDocument();
+  });
+});

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { ArrowRight } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { LanguageSwitcher } from '../../components/ui/LanguageSwitcher';
+import { haEscolhaDeIdioma } from '../../i18n';
 import { INTRO_SEEN_KEY } from './bootDestination';
 import { AvisoDeTelaCheia } from '../../components/AvisoDeTelaCheia';
 
@@ -17,8 +18,9 @@ import { AvisoDeTelaCheia } from '../../components/AvisoDeTelaCheia';
  * explicação que convence é a experiência dos próximos três minutos — a
  * câmera entendendo a pessoa, o primeiro alvo preenchendo, a calibração.
  *
- * O idioma continua escolhível aqui, discreto no rodapé: escolher "English" e
- * continuar lendo português seria pior do que não oferecer a escolha.
+ * O idioma seria escolhível aqui, discreto no rodapé — quando houver mais de
+ * um completo. Hoje só o português está (ver i18n/index.ts): oferecer
+ * "English" e continuar lendo português seria pior do que não oferecer.
  */
 export const IntroScreen: React.FC = () => {
   const { t } = useTranslation();
@@ -130,21 +132,25 @@ export const IntroScreen: React.FC = () => {
         <AvisoDeTelaCheia style={{ maxWidth: 560 }} />
       </div>
 
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '1.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.75rem',
-          opacity: 0.75,
-        }}
-      >
-        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
-          {t('onboarding.intro.language')}
-        </span>
-        <LanguageSwitcher />
-      </div>
+      {/* Rodapé do idioma só quando há o que escolher (hoje, só português —
+          ver i18n/index.ts). */}
+      {haEscolhaDeIdioma && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            opacity: 0.75,
+          }}
+        >
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+            {t('onboarding.intro.language')}
+          </span>
+          <LanguageSwitcher />
+        </div>
+      )}
     </main>
   );
 };

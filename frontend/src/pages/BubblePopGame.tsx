@@ -235,7 +235,8 @@ export const BubblePopGame: React.FC = () => {
         <GazeButton
           onClick={() => navigate('/games')}
           width={200}
-          height={68}
+          height={96}
+          isolado
           style={{
             borderRadius: '1.5rem',
             background: 'var(--color-card-bg)',
@@ -348,7 +349,7 @@ export const BubblePopGame: React.FC = () => {
               <GazeButton
                 onClick={comecar}
                 width={280}
-                height={84}
+                height={120}
                 style={{
                   borderRadius: '1.75rem',
                   background: 'var(--color-primary)',
@@ -366,7 +367,7 @@ export const BubblePopGame: React.FC = () => {
               <GazeButton
                 onClick={() => navigate('/games')}
                 width={260}
-                height={84}
+                height={120}
                 style={{
                   borderRadius: '1.75rem',
                   background: 'var(--color-card-bg)',

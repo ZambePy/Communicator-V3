@@ -210,7 +210,7 @@ export const TutorialWizard: React.FC = () => {
           <GazeButton
             type="button"
             width={220}
-            height={76}
+            height={96}
             isolado
             onClick={() => sair(false)}
             style={{
@@ -255,7 +255,7 @@ export const TutorialWizard: React.FC = () => {
             <GazeButton
               type="button"
               width={260}
-              height={76}
+              height={96}
               isolado
               onClick={() => navigate('/calibration-check')}
               style={{ borderRadius: '1rem', fontWeight: 800, flexShrink: 0 }}
@@ -363,9 +363,9 @@ export const TutorialWizard: React.FC = () => {
           são acionados pelo olhar. O `PrimaryButton` mede ~163×46 px — mais
           fino que a pílula de 180×64 que o `BackButton` já teve de aposentar,
           e pelo mesmo motivo registrado lá: "uma faixa fina é exatamente o
-          formato em que o dwell zera por um tremor vertical". Altura de 76 px
-          é a mesma dos outros alvos de olhar do app (modal de lembrete, FAB
-          de emergência).
+          formato em que o dwell zera por um tremor vertical". Altura de 120 px:
+          o mínimo declarado para alvos de olhar (160×120) — os 76 px de antes
+          ficavam abaixo dele (FE-18).
         */}
         {/* Rodapé preso à borda de baixo da caixa que rola: o "Continuar" do
             passo 1 ficava abaixo da dobra em 1366×768, 1280×720 e 1920×1080 a
@@ -385,7 +385,7 @@ export const TutorialWizard: React.FC = () => {
         >
           <GazeButton
             type="button"
-            height={76}
+            height={120}
             disabled={anterior === null}
             onClick={() => anterior && setPasso(anterior)}
             style={{
@@ -401,7 +401,7 @@ export const TutorialWizard: React.FC = () => {
 
           <GazeButton
             type="button"
-            height={76}
+            height={120}
             onClick={avancar}
             disabled={travado}
             style={{ flex: 1, opacity: travado ? 0.4 : 1 }}
@@ -434,7 +434,7 @@ export const TutorialWizard: React.FC = () => {
  *
  * Então a trilha mostra "Passo N de M — <nome>" e as marcas de progresso, sem
  * `role="button"`, sem `onClick` e fora do `DWELL_SELECTOR` do GazeContext.
- * A navegação fica onde os alvos têm tamanho: Voltar e Continuar (76 px) e
+ * A navegação fica onde os alvos têm tamanho: Voltar e Continuar (120 px) e
  * Pular. Voltar nunca tem condição, então a jornada continua livre.
  */
 const Trilha: React.FC<{ atual: PassoDoTutorial }> = ({ atual }) => {

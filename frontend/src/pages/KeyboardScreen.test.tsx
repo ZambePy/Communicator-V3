@@ -112,3 +112,81 @@ describe('KeyboardScreen — rascunho que sobrevive a sair e voltar (FE-6)', () 
     expect(sessionStorage.getItem('irisflow.rascunhoDoTeclado')).toBe('C');
   });
 });
+
+describe('KeyboardScreen — acentos, ç, números e pontuação (FE-19)', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  const montar = () =>
+    render(
+      <BrowserRouter>
+        <SettingsProvider>
+          <KeyboardScreen />
+        </SettingsProvider>
+      </BrowserRouter>
+    );
+  const rascunho = () => sessionStorage.getItem('irisflow.rascunhoDoTeclado') ?? '';
+
+  it('a troca de camada fica no lugar do Voltar e mostra os grupos de símbolos', () => {
+    montar();
+    const troca = screen.getByLabelText('Acentos, números e pontuação');
+    expect(troca).toHaveAttribute('data-testid', 'kb-nav-2');
+    fireEvent.click(troca);
+    expect(screen.getByText('Á Â Ã')).toBeInTheDocument();
+    expect(screen.getByText('Õ Ú Ç')).toBeInTheDocument();
+    expect(screen.getByText('. , ?')).toBeInTheDocument();
+    expect(screen.getByText('1 2 3')).toBeInTheDocument();
+    expect(screen.getByText('7 8 9 0')).toBeInTheDocument();
+    // Nos símbolos a mesma tecla volta às letras.
+    fireEvent.click(screen.getByLabelText('Voltar às letras'));
+    expect(screen.getByText('A B C')).toBeInTheDocument();
+  });
+
+  it('escreve "NÃO?" — acento e pontuação voltam às letras sozinhos', () => {
+    montar();
+    fireEvent.click(screen.getByText('M N O'));
+    fireEvent.click(screen.getByText('N'));
+    fireEvent.click(screen.getByLabelText('Acentos, números e pontuação'));
+    fireEvent.click(screen.getByText('Á Â Ã'));
+    fireEvent.click(screen.getByText('Ã'));
+    // Voltou às letras depois do acento.
+    expect(screen.getByText('M N O')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('M N O'));
+    fireEvent.click(screen.getByText('O'));
+    fireEvent.click(screen.getByLabelText('Acentos, números e pontuação'));
+    fireEvent.click(screen.getByText('. , ?'));
+    fireEvent.click(screen.getByText('?'));
+    expect(rascunho()).toBe('NÃO?');
+    expect(screen.getByText('A B C')).toBeInTheDocument();
+  });
+
+  it('números continuam na camada de símbolos até o espaço', () => {
+    montar();
+    fireEvent.click(screen.getByLabelText('Acentos, números e pontuação'));
+    fireEvent.click(screen.getByText('1 2 3'));
+    fireEvent.click(screen.getByText('1'));
+    // Continua nos símbolos: dá para escrever o segundo dígito direto.
+    expect(screen.getByText('7 8 9 0')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('7 8 9 0'));
+    fireEvent.click(screen.getByText('0'));
+    fireEvent.click(screen.getByText('7 8 9 0'));
+    fireEvent.click(screen.getByText('Espaço'));
+    expect(rascunho()).toBe('10 ');
+    // O espaço devolve às letras.
+    expect(screen.getByText('A B C')).toBeInTheDocument();
+  });
+
+  it('Apagar na camada de símbolos apaga e continua no grupo', () => {
+    montar();
+    fireEvent.click(screen.getByLabelText('Acentos, números e pontuação'));
+    fireEvent.click(screen.getByText('Í Ó Ô'));
+    fireEvent.click(screen.getByText('Ç'));
+    expect(rascunho()).toBe('Ç');
+    fireEvent.click(screen.getByLabelText('Acentos, números e pontuação'));
+    fireEvent.click(screen.getByText('7 8 9 0'));
+    fireEvent.click(screen.getByText('Apagar'));
+    expect(rascunho()).toBe('');
+    expect(screen.getByText('Apagar')).toBeInTheDocument();
+    // No nível 2 o segundo lugar da barra é o Voltar.
+    expect(screen.getByLabelText('Voltar')).toHaveAttribute('data-testid', 'kb-nav-2');
+  });
+});
