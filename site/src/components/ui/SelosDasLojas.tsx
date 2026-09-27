@@ -12,7 +12,8 @@ function IconeCelular() {
 }
 
 type Props = {
-  /** `claro` para fundo escuro (selos com contorno claro). */
+  /** `claro` (padrão) para fundo escuro — o site inteiro é escuro — com o
+   *  contorno cinza do selo oficial; `escuro` só para um fundo claro. */
   tom?: 'escuro' | 'claro'
   className?: string
 }
@@ -24,12 +25,15 @@ type Props = {
  * "em breve" até existir o endereço do app lá (src/lib/lojas.ts). Os rótulos
  * para leitor de tela são os mesmos nos dois modos.
  */
-export function SelosDasLojas({ tom = 'escuro', className = '' }: Props) {
+export function SelosDasLojas({ tom = 'claro', className = '' }: Props) {
   const appStore = LOJAS.appStore ?? '/cuidador#disponibilidade'
   const emBreve = LOJAS.appStore === null
+  // Sem ficha na Play ainda: "em breve", como o da Apple.
+  const googlePlay = LOJAS.googlePlay ?? '/cuidador#disponibilidade'
+  const googleEmBreve = LOJAS.googlePlay === null
   const externo = { target: '_blank', rel: 'noopener noreferrer' } as const
   const rotuloApple = emBreve ? 'App Store, para iPhone: em breve' : 'Baixar na App Store, para iPhone'
-  const rotuloGoogle = 'Baixar no Google Play, para Android'
+  const rotuloGoogle = googleEmBreve ? 'Google Play, para Android: em breve' : 'Baixar no Google Play, para Android'
 
   return (
     <div className={`selos selos--${tom} ${className}`.trim()}>
@@ -44,8 +48,14 @@ export function SelosDasLojas({ tom = 'escuro', className = '' }: Props) {
             <img src="/badges/app-store.svg" alt="" width={134} height={44} />
             {emBreve && <span className="selo__breve">em breve</span>}
           </a>
-          <a className="selo selo--oficial selo--google" href={LOJAS.googlePlay} {...externo} aria-label={rotuloGoogle}>
+          <a
+            className="selo selo--oficial selo--google"
+            href={googlePlay}
+            {...(googleEmBreve ? {} : externo)}
+            aria-label={rotuloGoogle}
+          >
             <img src="/badges/google-play.png" alt="" width={134} height={44} />
+            {googleEmBreve && <span className="selo__breve">em breve</span>}
           </a>
         </>
       ) : (
@@ -63,12 +73,18 @@ export function SelosDasLojas({ tom = 'escuro', className = '' }: Props) {
             </span>
             {emBreve && <span className="selo__breve">em breve</span>}
           </a>
-          <a className="selo selo--proprio" href={LOJAS.googlePlay} {...externo} aria-label={rotuloGoogle}>
+          <a
+            className="selo selo--proprio"
+            href={googlePlay}
+            {...(googleEmBreve ? {} : externo)}
+            aria-label={rotuloGoogle}
+          >
             <IconeCelular />
             <span className="selo__textos">
               <span className="selo__linha">Android</span>
               <span className="selo__loja">Google Play</span>
             </span>
+            {googleEmBreve && <span className="selo__breve">em breve</span>}
           </a>
         </>
       )}

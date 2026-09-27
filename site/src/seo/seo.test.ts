@@ -78,7 +78,32 @@ describe('sitemap.xml e robots.txt', () => {
     const txt = buildRobots(origin, PAGES)
     expect(txt).toContain('User-agent: *')
     expect(txt).toContain(`Sitemap: ${origin}/sitemap.xml`)
-    expect(txt).toContain('Disallow: /conta')
+    expect(txt).toContain('Disallow: /conta$')
     expect(txt).not.toContain('Disallow: /planos')
+  })
+
+  /** Casamento do RFC 9309: prefixo, `*` qualquer sequência, `$` fim. */
+  function bloqueia(regra: string, caminho: string): boolean {
+    const fim = regra.endsWith('$')
+    const corpo = (fim ? regra.slice(0, -1) : regra)
+      .split('*')
+      .map((t) => t.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+      .join('.*')
+    return new RegExp(`^${corpo}${fim ? '$' : ''}`).test(caminho)
+  }
+
+  it('nenhuma página indexável casa com um Disallow (robots casa por prefixo)', () => {
+    const regras = buildRobots(origin, PAGES)
+      .split('\n')
+      .filter((l) => l.startsWith('Disallow: '))
+      .map((l) => l.slice('Disallow: '.length))
+    const caminhos = [...PAGES.filter((p) => p.index).map((p) => p.path), '/apple-touch-icon.png']
+    for (const c of caminhos) {
+      expect(regras.filter((r) => bloqueia(r, c)), c).toEqual([])
+    }
+    // e as telas de conta continuam fechadas, com subpágina e parâmetros
+    for (const c of ['/conta', '/conta/', '/conta?x=1', '/confirmar-email?token_hash=abc']) {
+      expect(regras.some((r) => bloqueia(r, c)), c).toBe(true)
+    }
   })
 })

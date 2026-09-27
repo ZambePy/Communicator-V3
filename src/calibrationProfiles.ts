@@ -43,9 +43,11 @@ export interface CalibrationReferenceState {
    *  ao PERFIL: um perfil "com óculos" com olho direito ruim não pode emprestar
    *  seus pesos para o perfil "sem óculos". */
   eyeReliability: { left: number; right: number } | null;
-  /** Viewport em px CSS em que o modelo foi treinado. O detector de resize
-   *  compara contra ele. Ausente em perfis anteriores. */
-  viewport?: { w: number; h: number } | null;
+  /** Viewport em px CSS em que o modelo foi treinado, e a escala do sistema
+   *  (`dpr`) da hora. O detector de resize compara o tamanho FÍSICO (px CSS ×
+   *  escala). Ausente em perfis anteriores; `dpr` ausente nos anteriores à
+   *  comparação física (valem os px CSS). */
+  viewport?: { w: number; h: number; dpr?: number } | null;
   /** Correção local dos cantos (`correcaoLocal.ts`), ajustada no treino junto
    *  com o modelo. Ausente em perfis anteriores a ela: vale o modelo global. */
   correcaoLocal?: CorrecaoLocal | null;

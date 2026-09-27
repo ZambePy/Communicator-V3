@@ -70,6 +70,8 @@ interface Sessao {
   /** Relógio do vigia: quando chegou a última amostra e desde quando vem sem calibração. */
   ultimaAmostraEm: number;
   semCalibracaoDesde: number | null;
+  /** Desde quando o app diz que a câmera parou (`sem_camera`); `null` com imagem. */
+  semCameraDesde: number | null;
   vigia: NodeJS.Timeout | null;
   /** Para desligar os ouvintes da janela principal ao sair. */
   desligar: Array<() => void>;
@@ -389,7 +391,7 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
     const s: Sessao = {
       sobreposicao, principal, quadro, idDoMonitor: display.id, controle, config,
       ultimaAmostra: null, pressionadoEm: null,
-      ultimaAmostraEm: Date.now(), semCalibracaoDesde: null, vigia: null, desligar: [], encerrando: false,
+      ultimaAmostraEm: Date.now(), semCalibracaoDesde: null, semCameraDesde: null, vigia: null, desligar: [], encerrando: false,
     };
     sessao = s;
 
@@ -432,6 +434,8 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
       if (sessao !== s) return;
       const agora = Date.now();
       if (agora - s.ultimaAmostraEm > VIGIA_SEM_AMOSTRA_MS) { parar('rastreamento_parou'); return; }
+      // Câmera parada: as amostras "sem rosto" do engine não contam como vida.
+      if (s.semCameraDesde !== null && agora - s.semCameraDesde > VIGIA_SEM_AMOSTRA_MS) { parar('rastreamento_parou'); return; }
       if (s.semCalibracaoDesde !== null && agora - s.semCalibracaoDesde > VIGIA_SEM_CALIBRACAO_MS) parar('sem_calibracao');
     }, 1000);
 
@@ -483,6 +487,14 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
     if (principal && evento.sender === principal.webContents) parar('voltar');
   });
   ipcMain.on(CANAIS.olhar, aoReceberOlhar);
+  ipcMain.on(CANAIS.rastreamento, (evento: IpcMainEvent, estado: unknown) => {
+    const s = sessao;
+    if (!s) return;
+    const principal = opcoes.janelaPrincipal();
+    if (!principal || evento.sender !== principal.webContents || typeof estado !== 'string') return;
+    if (estado === 'sem_camera') s.semCameraDesde ??= Date.now();
+    else s.semCameraDesde = null;
+  });
   ipcMain.handle(CANAIS.sobreposicaoAcao, aoReceberAcao);
 
   return { parar };

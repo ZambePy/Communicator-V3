@@ -2,14 +2,13 @@
   display: block;
 }
 
-/* Cada palavra ganha sua própria janela para o efeito de subida.
-   O espaço entre palavras vem da margem, e não de um no de texto:
-   dentro de um inline-block com overflow hidden ele seria colapsado. */
+/* Cada palavra ganha sua própria janela para o efeito de subida. O espaço
+   entre as palavras é um nó de texto de verdade, fora das máscaras (dentro
+   de um inline-block com overflow hidden ele seria colapsado). */
 .headline__mask {
   display: inline-block;
   overflow: hidden;
   vertical-align: bottom;
-  margin-right: 0.26em;
   padding-bottom: 0.14em;
   margin-bottom: -0.04em;
 }

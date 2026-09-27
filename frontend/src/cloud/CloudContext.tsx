@@ -20,6 +20,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { useGaze } from '../context/GazeContext';
+import { saudeDoRastreamento } from './saudeDoRastreamento';
 import { useSettings } from '../context/SettingsContext';
 import { useLicense } from '../context/LicenseContext';
 import { limitarDwellMs } from '../dwellMs';
@@ -454,8 +455,8 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       void sync.enviar({
         action: 'heartbeat',
         app_version: versao,
-        camera_ok: !g.cameraError && g.getCameraStream() !== null,
-        tracker_ok: g.state === 'tracking' || g.state === 'calibrating' || g.state === 'uncalibrated',
+        // Imagem chegando AGORA, não só uma stream aberta (ver `saudeDoRastreamento`).
+        ...saudeDoRastreamento(g),
         calibrated: g.calibration?.isCalibrated?.() ?? false,
         session_id: sessaoEnviada,
       }).then((r) => {

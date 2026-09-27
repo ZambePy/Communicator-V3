@@ -9,8 +9,10 @@ import { MonitorDemo } from './Aparelhos'
 import './hero-produto.css'
 
 /**
- * Abertura da home: uma frase, uma linha de apoio, duas chamadas — e o
- * produto funcionando, num monitor, com a gravação real da tela.
+ * Abertura da home: a mensagem e as chamadas à esquerda (sempre na primeira
+ * dobra, no computador e no celular) e, à direita, o produto funcionando —
+ * a gravação real da tela num monitor, com o halo e os anéis que se
+ * expandem por trás, sobre o fundo de partículas.
  */
 export function HeroProduto() {
   const program = useBetaProgram()
@@ -19,52 +21,70 @@ export function HeroProduto() {
 
   return (
     <section className="hero-produto on-dark" aria-labelledby="hero-titulo">
-      <AmbientBackground />
+      <AmbientBackground particulas={18} varredura />
 
-      <div className="container hero-produto__texto">
-        {BETA.ativo && (
-          <p className="hero-produto__aviso anim-entrada">
-            {lancou ? (
-              <span>Beta gratuita, com download aberto.</span>
-            ) : (
-              <>
-                <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
-                <span>Beta gratuita. Download a partir de {diaPorExtenso(program.launchAt)}.</span>
-              </>
-            )}
-          </p>
-        )}
-
-        <h1 id="hero-titulo" className="hero-produto__titulo anim-entrada anim-entrada--2">
-          {antes} <span className="accent-text">{destaque}</span>
-        </h1>
-
-        <p className="hero-produto__lead anim-entrada anim-entrada--3">{HERO.lead}</p>
-
-        <div className="hero-produto__acoes anim-entrada anim-entrada--4">
-          {BETA.ativo ? (
-            <Button to={lancou ? '/baixar' : BETA_CTA.to} size="lg">
-              {lancou ? 'Baixar grátis' : BETA_CTA.label}
-            </Button>
-          ) : (
-            <Button to="/planos" size="lg">
-              {HERO.primary}
-            </Button>
+      <div className="container hero-produto__grade">
+        <div className="hero-produto__texto">
+          {BETA.ativo && (
+            <p className="aviso-pilula anim-entrada">
+              {lancou ? (
+                <span>Beta gratuita, com download aberto.</span>
+              ) : (
+                <>
+                  <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
+                  <span>Beta gratuita. Download a partir de {diaPorExtenso(program.launchAt)}.</span>
+                </>
+              )}
+            </p>
           )}
-          <Button to="/como-funciona" size="lg" variant="secondary">
-            {HERO.secondary}
-          </Button>
+
+          <h1 id="hero-titulo" className="hero-produto__titulo">
+            <span className="hero-produto__titulo-mascara">
+              <span className="hero-produto__titulo-linha">
+                {antes} <span className="accent-text">{destaque}</span>
+              </span>
+            </span>
+          </h1>
+
+          <p className="hero-produto__lead anim-entrada anim-entrada--3">{HERO.lead}</p>
+
+          {/* data-sticky-hide: enquanto estes botões estão na tela, a barra fixa
+              de chamada do celular fica escondida (StickyCta). */}
+          <div className="hero-produto__acoes anim-entrada anim-entrada--4" data-sticky-hide>
+            {BETA.ativo ? (
+              <Button to={lancou ? '/baixar' : BETA_CTA.to} size="lg">
+                {lancou ? 'Baixar grátis' : BETA_CTA.label}
+              </Button>
+            ) : (
+              <Button to="/planos" size="lg">
+                {HERO.primary}
+              </Button>
+            )}
+            <Button to="/como-funciona" size="lg" variant="secondary">
+              {HERO.secondary}
+            </Button>
+          </div>
+
+          <ul className="hero-produto__fatos anim-entrada anim-entrada--5" aria-label="Em resumo">
+            <li>Webcam comum</li>
+            <li>Nenhuma imagem sai do computador</li>
+            <li>{PLATFORMS.short}</li>
+          </ul>
         </div>
 
-        <ul className="hero-produto__fatos anim-entrada anim-entrada--5" aria-label="Em resumo">
-          <li>Webcam comum</li>
-          <li>Nenhuma imagem sai do computador</li>
-          <li>{PLATFORMS.short}</li>
-        </ul>
+        <div className="hero-produto__aparelho">
+          <span className="hero-produto__halo" aria-hidden="true" />
+          <span className="hero-produto__anel" aria-hidden="true" />
+          <span className="hero-produto__anel hero-produto__anel--2" aria-hidden="true" />
+          <div className="hero-produto__monitor">
+            <MonitorDemo demo={DEMO_COMMUNICATOR} inclinar={false} />
+          </div>
+        </div>
       </div>
 
-      <div className="hero-produto__aparelho">
-        <MonitorDemo demo={DEMO_COMMUNICATOR} />
+      <div className="hero-produto__rolar" aria-hidden="true">
+        <span className="hero-produto__rolar-linha" />
+        <span className="hero-produto__rolar-texto">role</span>
       </div>
     </section>
   )

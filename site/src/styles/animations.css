@@ -1,11 +1,12 @@
 /* ============================================================
-   Animações do site. Poucas e curtas: entrada dos blocos ao rolar,
-   subida das palavras do título, transição de página, carregamento
-   e os retornos de fixação. Tudo respeita prefers-reduced-motion
-   (ver global.css).
+   Animações do site: o movimento ambiente do fundo (gradiente,
+   manchas de luz, partículas e varredura), a entrada dos blocos ao
+   rolar, a subida do título, a transição de página, o carregamento e
+   os retornos de fixação. Tudo respeita prefers-reduced-motion (ver
+   global.css).
    ============================================================ */
 
-/* ---------- gradiente do fundo do checkout ---------- */
+/* ---------- gradiente que se desloca (fundo ambiente e checkout) ---------- */
 @keyframes gradient-drift {
   0% {
     background-position: 0% 50%;
@@ -18,7 +19,7 @@
   }
 }
 
-/* ---------- anel que se expande (confirmação de sucesso) ---------- */
+/* ---------- anel que se expande (confirmação de sucesso e abertura) ---------- */
 @keyframes ring-expand {
   0% {
     transform: scale(0.6);
@@ -27,6 +28,85 @@
   100% {
     transform: scale(1.9);
     opacity: 0;
+  }
+}
+
+/* ---------- movimento ambiente do fundo (AmbientBackground) ----------
+   Manchas de luz que mudam de forma devagar, partículas à deriva e a
+   linha de varredura que lembra a leitura contínua da webcam. */
+@keyframes blob-morph {
+  0%,
+  100% {
+    border-radius: 62% 38% 44% 56% / 48% 56% 44% 52%;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
+  33% {
+    border-radius: 38% 62% 58% 42% / 62% 38% 62% 38%;
+    transform: translate3d(3%, -4%, 0) rotate(60deg) scale(1.06);
+  }
+  66% {
+    border-radius: 55% 45% 34% 66% / 40% 62% 38% 60%;
+    transform: translate3d(-3%, 3%, 0) rotate(120deg) scale(0.96);
+  }
+}
+
+@keyframes drift-particle {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--p-opacity, 0.6);
+  }
+  90% {
+    opacity: var(--p-opacity, 0.6);
+  }
+  100% {
+    transform: translate3d(var(--p-dx, 30px), var(--p-dy, -120px), 0) scale(1.4);
+    opacity: 0;
+  }
+}
+
+@keyframes scan-line {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.55;
+  }
+  88% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+/* Flutuação lenta (o monitor da abertura e a linha "role"). Usa a
+   propriedade `translate`, e não `transform`, para somar com a inclinação
+   3D de quem flutua. */
+@keyframes float-slow {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -12px;
+  }
+}
+
+/* Halo que pulsa atrás do produto. */
+@keyframes iris-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
   }
 }
 
@@ -150,8 +230,7 @@
 
 /* ============================================================
    Classes utilitarias construidas sobre os keyframes acima.
-   Todas leem os tokens, então funcionam igual no fundo claro e
-   dentro de uma faixa .on-dark.
+   Todas leem os tokens, então funcionam igual em qualquer faixa.
    ============================================================ */
 
 .anim-page {
@@ -210,8 +289,16 @@ html.vt .anim-page {
   animation: spin 900ms linear infinite;
 }
 
-/* Superfície elevada padrão. No claro e um cartão branco com sombra
-   suave; dentro de .on-dark vira um painel translúcido. */
+.anim-blob {
+  animation: blob-morph 20s var(--ease-in-out) infinite;
+}
+
+.anim-float {
+  animation: float-slow 9s var(--ease-in-out) infinite;
+}
+
+/* Superfície elevada padrão: cartão sólido com sombra; dentro de
+   .on-dark vira um painel translúcido. */
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);

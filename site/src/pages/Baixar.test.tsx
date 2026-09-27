@@ -72,11 +72,11 @@ describe('/baixar', () => {
     expect(await screen.findByText(/Download a partir de 10 de novembro/)).toBeInTheDocument()
   })
 
-  it('os selos das lojas levam ao Google Play e à disponibilidade do iPhone', () => {
+  it('sem o app publicado nas lojas, os dois selos ficam "em breve" e levam à disponibilidade', () => {
     montar()
-    expect(screen.getByRole('link', { name: 'Baixar no Google Play, para Android' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Google Play, para Android: em breve' })).toHaveAttribute(
       'href',
-      'https://play.google.com/store/apps/details?id=br.com.irisflow.cuidador',
+      '/cuidador#disponibilidade',
     )
     expect(screen.getByRole('link', { name: 'App Store, para iPhone: em breve' })).toHaveAttribute(
       'href',

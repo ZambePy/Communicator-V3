@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { prefersReducedMotion } from '@/hooks/useReducedMotion'
-import { CodigoIncorreto, DIGITOS_DO_CODIGO, conferirCodigo } from '@/services/api'
+import { ApiError, CODIGO_BLOQUEADO, CodigoIncorreto, DIGITOS_DO_CODIGO, conferirCodigo } from '@/services/api'
 import './codigo.css'
 
 /* ============================================================
@@ -11,10 +11,13 @@ import './codigo.css'
    leitor de tela funcionam como em qualquer campo. Com o quarto dígito, o
    código é conferido sozinho.
 
-   Deu certo: as caixas sobem para uma órbita, dão uma volta e um quarto e
-   se fundem no centro num bloco verde com o check — só então a sessão é
-   aberta (aoConfirmar), e a página segue. Cor, só para o veredito: verde no
-   acerto, vermelho no erro. Com movimento reduzido, o check aparece direto.
+   Código certo: as caixas sobem para uma órbita, dão uma volta e um quarto
+   e se fundem no centro num bloco verde com o check — só então a sessão é
+   aberta (aoConfirmar), e a página segue. "E-mail confirmado" só aparece
+   quando a sessão abriu: um código vencido (vale 1 hora) ou a rede caindo
+   nesse instante desfazem a animação e explicam o que houve. Cor, só para o
+   veredito: verde no acerto, vermelho no erro. Com movimento reduzido, o
+   check aparece direto.
    ============================================================ */
 
 type Estado = 'digitando' | 'conferindo' | 'confirmado' | 'entrando' | 'erro'
@@ -23,6 +26,12 @@ type Props = {
   email: string
   /** Abre a sessão com o token_hash do cadastro. Roda depois da animação. */
   aoConfirmar: (tokenHash: string) => Promise<void>
+  /**
+   * Código recusado (errado ou bloqueado): outra chance de seguir antes de
+   * mostrar o erro — ex.: o e-mail já foi confirmado pelo botão, em outro
+   * aparelho, e a senha desta tela entra. Devolve `true` se resolveu.
+   */
+  aoRecusar?: () => Promise<boolean>
   /** Manda um código novo para o e-mail. */
   aoReenviar: () => Promise<void>
   /** Segundos até o primeiro reenvio (o Supabase exige 60 s entre envios). */
@@ -42,9 +51,11 @@ function naOrbita(angulo: number, raio: number, dx: number, dy: number) {
 
 /**
  * As quatro caixas sobem para a órbita (24 %), giram uma volta e um quarto
- * (até 72 %) e espiralam para o centro, sumindo (100 %).
+ * (até 72 %) e espiralam para o centro, sumindo (100 %). As animações ficam
+ * com o estado final (fill: forwards) até alguém cancelar — é o que devolve
+ * as caixas ao lugar se a sessão não abrir.
  */
-function animarOrbita(palco: HTMLElement, caixas: HTMLElement[]): Promise<void> {
+function animarOrbita(palco: HTMLElement, caixas: HTMLElement[]): Animation[] {
   const centro = palco.getBoundingClientRect()
   const cx = centro.left + centro.width / 2
   const cy = centro.top + centro.height / 2
@@ -77,12 +88,23 @@ function animarOrbita(palco: HTMLElement, caixas: HTMLElement[]): Promise<void> 
     quadros[1].easing = 'cubic-bezier(0.3, 0, 0.2, 1)'
     return caixa.animate(quadros, { duration: DURACAO_DA_ORBITA, easing: 'cubic-bezier(0.4, 0, 0.3, 1)', fill: 'forwards' })
   })
-  return Promise.all(animacoes.map((an) => an.finished)).then(() => undefined)
+  return animacoes
+}
+
+/** Texto do erro depois do código certo, no contexto do código (não do link). */
+function mensagemDoErro(e: unknown): string {
+  if (e instanceof CodigoIncorreto) return e.message
+  const codigo = e instanceof ApiError ? e.code : undefined
+  if (codigo === 'otp_expired' || codigo === 'flow_state_expired') {
+    return 'Este código venceu (ele vale por 1 hora) ou já foi usado. Peça outro abaixo.'
+  }
+  return e instanceof Error ? e.message : 'Não foi possível conferir o código agora.'
 }
 
 export function CodigoDeVerificacao({
   email,
   aoConfirmar,
+  aoRecusar,
   aoReenviar,
   esperaInicial = ESPERA_ENTRE_ENVIOS,
   instrucao,
@@ -97,6 +119,7 @@ export function CodigoDeVerificacao({
   const campo = useRef<HTMLInputElement>(null)
   const palco = useRef<HTMLDivElement>(null)
   const caixas = useRef<(HTMLSpanElement | null)[]>([])
+  const animacoes = useRef<Animation[]>([])
   const idInstrucao = useId()
   const idMensagem = useId()
   const vivo = useRef(true)
@@ -121,12 +144,22 @@ export function CodigoDeVerificacao({
       setMensagem(null)
       setAviso(null)
       try {
-        const hash = await conferirCodigo(email, codigo)
+        let hash: string
+        try {
+          hash = await conferirCodigo(email, codigo)
+        } catch (e) {
+          const recusado = e instanceof CodigoIncorreto || (e instanceof ApiError && e.message === CODIGO_BLOQUEADO)
+          // O e-mail pode já ter sido confirmado por outro caminho: quem
+          // chamou tenta seguir antes de dizer que o código está errado.
+          if (recusado && aoRecusar && (await aoRecusar().catch(() => false))) return
+          throw e
+        }
         if (!vivo.current) return
         setEstado('confirmado')
         if (!prefersReducedMotion() && palco.current && typeof Element.prototype.animate === 'function') {
           const lista = caixas.current.filter((c): c is HTMLSpanElement => Boolean(c))
-          await animarOrbita(palco.current, lista).catch(() => undefined)
+          animacoes.current = animarOrbita(palco.current, lista)
+          await Promise.all(animacoes.current.map((a) => a.finished)).catch(() => undefined)
         }
         // O bloco verde se forma no fim da órbita (CSS); um instante para ele ser visto.
         await new Promise((ok) => window.setTimeout(ok, prefersReducedMotion() ? 250 : 650))
@@ -135,14 +168,11 @@ export function CodigoDeVerificacao({
         await aoConfirmar(hash)
       } catch (e) {
         if (!vivo.current) return
+        // As caixas voltam ao lugar (a órbita ficava presa no estado final).
+        animacoes.current.forEach((a) => a.cancel())
+        animacoes.current = []
         setEstado('erro')
-        setMensagem(
-          e instanceof CodigoIncorreto
-            ? e.message
-            : e instanceof Error
-              ? e.message
-              : 'Não foi possível conferir o código agora.',
-        )
+        setMensagem(mensagemDoErro(e))
         window.setTimeout(() => {
           if (!vivo.current) return
           setValor('')
@@ -151,7 +181,7 @@ export function CodigoDeVerificacao({
         }, 520)
       }
     },
-    [email, aoConfirmar],
+    [email, aoConfirmar, aoRecusar],
   )
 
   const digitar = (e: ChangeEvent<HTMLInputElement>) => {
@@ -249,9 +279,9 @@ export function CodigoDeVerificacao({
         {estado === 'conferindo'
           ? 'Conferindo…'
           : estado === 'confirmado'
-            ? 'E-mail confirmado'
+            ? 'Código certo'
             : estado === 'entrando'
-              ? 'E-mail confirmado. Entrando…'
+              ? 'Código certo. Confirmando o e-mail…'
               : ''}
       </p>
 

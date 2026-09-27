@@ -210,3 +210,10 @@
     margin-top: var(--sp-5);
   }
 }
+
+/* Ressalva do módulo (ex.: alertas com o app aberto na beta). */
+.explorador__nota {
+  margin: var(--sp-3) 0 0;
+  font-size: 0.92rem;
+  color: var(--text-dim);
+}

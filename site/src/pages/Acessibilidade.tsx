@@ -25,7 +25,7 @@ export default function Acessibilidade() {
         lead="Quem navega pelo olhar não tem a barra do sistema como referência. Por isso estas regras são requisito de projeto, no app e neste site."
       />
 
-      <section className="faixa on-light" aria-label="Os quatro princípios">
+      <section className="faixa on-raised" aria-label="Os quatro princípios">
         <div className="container">
           <Recursos
             itens={A11Y_PRINCIPLES.map((p) => ({ titulo: p.title, texto: p.text }))}
@@ -60,7 +60,7 @@ export default function Acessibilidade() {
         </div>
       </section>
 
-      <section className="faixa on-light" aria-labelledby="site-titulo">
+      <section className="faixa on-raised" aria-labelledby="site-titulo">
         <div className="container">
           <Capitulo id="site-titulo" titulo="O que este site cumpre." />
           <Recursos itens={COMPROMISSOS_DO_SITE} />

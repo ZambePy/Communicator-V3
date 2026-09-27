@@ -5,6 +5,7 @@ import { Footer } from './Footer'
 import { NavigationEnhancer } from './NavigationEnhancer'
 import { CookieNotice } from './CookieNotice'
 import { StickyCta } from './StickyCta'
+import { FronteiraDeErro } from './FronteiraDeErro'
 import { RouteMeta } from '@/hooks/useDocumentMeta'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import './layout.css'
@@ -100,9 +101,13 @@ export function Layout() {
           Sem padding-top: cada rota abre com a própria faixa escura, que
           corre por baixo do cabeçalho transparente. */}
       <main id="conteudo" key={pathname} className="main anim-page">
-        <Suspense fallback={<RouteFallback />}>
-          <Outlet />
-        </Suspense>
+        {/* Uma página que quebra (ou cujo pedaço sumiu num deploy) não leva
+            junto o cabeçalho e o rodapé: ver FronteiraDeErro. */}
+        <FronteiraDeErro>
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
+        </FronteiraDeErro>
       </main>
       <Footer />
       <StickyCta />

@@ -1,4 +1,6 @@
-/* Luz de fundo das faixas escuras (ver AmbientBackground.tsx). */
+/* Movimento ambiente de fundo (ver AmbientBackground.tsx). Os tons são
+   calibrados para o azul-marinho do site; a variante suave entra com
+   opacidade bem menor, para não competir com o texto. */
 
 .ambient {
   position: absolute;
@@ -6,11 +8,175 @@
   overflow: hidden;
   pointer-events: none;
   z-index: 0;
-  background:
-    radial-gradient(70% 55% at 50% -8%, rgba(47, 102, 194, 0.32), transparent 70%),
-    radial-gradient(45% 40% at 88% 12%, rgba(0, 166, 147, 0.08), transparent 70%);
 }
 
-.ambient--suave {
-  background: radial-gradient(70% 50% at 50% -10%, rgba(47, 102, 194, 0.14), transparent 70%);
+.ambient__mesh {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(50% 46% at 18% 22%, rgba(27, 84, 168, 0.5), transparent 62%),
+    radial-gradient(46% 42% at 82% 16%, rgba(0, 166, 147, 0.26), transparent 64%),
+    radial-gradient(58% 52% at 60% 88%, rgba(45, 100, 190, 0.34), transparent 66%);
+  background-size: 190% 190%;
+  animation: gradient-drift 26s var(--ease-in-out) infinite;
+  filter: blur(6px);
+}
+
+.ambient__blob {
+  position: absolute;
+  filter: blur(72px);
+  opacity: 0.4;
+  /* O blur é rasterizado uma vez e depois só transformado. */
+  will-change: transform;
+}
+
+.ambient__blob--a {
+  width: 42vw;
+  height: 42vw;
+  left: -10vw;
+  top: -8vw;
+  background: radial-gradient(circle at 34% 34%, #1b54a8, transparent 70%);
+  animation-duration: 24s;
+}
+
+.ambient__blob--b {
+  width: 34vw;
+  height: 34vw;
+  right: -8vw;
+  top: 12vh;
+  background: radial-gradient(circle at 62% 40%, #00a693, transparent 70%);
+  animation-duration: 30s;
+  animation-direction: reverse;
+  opacity: 0.26;
+}
+
+.ambient__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(174, 201, 240, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(174, 201, 240, 0.07) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 78% 62% at 50% 42%, #000 25%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 78% 62% at 50% 42%, #000 25%, transparent 78%);
+}
+
+/* Linha de varredura — alusão à leitura contínua da webcam. */
+.ambient__scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 180px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(0, 166, 147, 0.09) 45%,
+    rgba(0, 166, 147, 0.17) 50%,
+    rgba(0, 166, 147, 0.09) 55%,
+    transparent
+  );
+  animation: scan-line 11s linear infinite;
+}
+
+.ambient__particles {
+  position: absolute;
+  inset: 0;
+}
+
+.ambient__dot {
+  position: absolute;
+  border-radius: 50%;
+  background: #a8c8ff;
+  box-shadow: 0 0 10px rgba(168, 200, 255, 0.85);
+  animation-name: drift-particle;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.ambient__dot--teal {
+  background: var(--teal-300);
+  box-shadow: 0 0 12px rgba(63, 214, 194, 0.9);
+}
+
+/* ---------- variante suave: páginas de fluxo e faixas de conteúdo ---------- */
+.ambient--suave .ambient__mesh {
+  opacity: 0.38;
+  filter: blur(10px);
+}
+
+.ambient--suave .ambient__blob {
+  opacity: 0.16;
+}
+
+.ambient--suave .ambient__grid {
+  opacity: 0.55;
+}
+
+.ambient--suave .ambient__dot {
+  box-shadow: 0 0 6px rgba(168, 200, 255, 0.55);
+}
+
+.ambient--suave .ambient__dot--teal {
+  box-shadow: 0 0 7px rgba(63, 214, 194, 0.6);
+}
+
+/* ---------- só partículas: faixas de conteúdo ----------
+   Mais discretas que as da abertura: atrás de texto corrido. */
+.ambient--particulas .ambient__particles {
+  opacity: 0.75;
+}
+
+.ambient--particulas .ambient__dot {
+  box-shadow: 0 0 6px rgba(168, 200, 255, 0.5);
+}
+
+.ambient--particulas .ambient__dot--teal {
+  box-shadow: 0 0 7px rgba(63, 214, 194, 0.55);
+}
+
+/* Faixa com fundo animado atrás do conteúdo: o fundo vai para baixo de
+   tudo (z-index -1 dentro do próprio contexto de empilhamento), sem exigir
+   z-index de nenhum filho. */
+.com-fundo {
+  position: relative;
+  isolation: isolate;
+}
+
+.com-fundo > .ambient {
+  z-index: -1;
+}
+
+/* ---------- modo leve: máquina modesta ou tela estreita ----------
+   Sem blur animado nem varredura; o gradiente fica parado, com o custo de
+   uma imagem de fundo, e as partículas (metade) continuam. */
+.ambient--leve .ambient__mesh {
+  animation: none;
+  filter: none;
+  background-size: 100% 100%;
+}
+
+.ambient--leve .ambient__blob {
+  animation: none;
+  filter: blur(40px);
+  will-change: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient__scan,
+  .ambient__dot {
+    display: none;
+  }
+  .ambient__mesh,
+  .ambient__blob {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .ambient__blob {
+    filter: blur(40px);
+  }
+  .ambient__grid {
+    background-size: 48px 48px;
+  }
 }

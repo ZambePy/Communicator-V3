@@ -10,7 +10,8 @@ import './passos.css'
  */
 export function PassosComTela({ passos }: { passos: PassoComTela[] }) {
   return (
-    <ol className="passos-tela">
+    // No celular a lista rola na horizontal: focável, para rolar pelo teclado.
+    <ol className="passos-tela" tabIndex={0} aria-label="Os passos (no celular, role para o lado)">
       {passos.map((p, i) => (
         <Reveal key={p.titulo} as="li" anim="up" delay={90 * i} className="passos-tela__item">
           <figure className="passos-tela__figura">

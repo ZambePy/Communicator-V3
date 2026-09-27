@@ -42,6 +42,52 @@ describe('<CodigoDeVerificacao />', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Muitas tentativas')
   })
 
+  it('código certo mas a sessão não abre (rede caiu): explica, limpa e a nova tentativa refaz tudo', async () => {
+    conferir.mockResolvedValue('hash')
+    const aoConfirmar = vi
+      .fn(async (_hash: string) => {})
+      .mockRejectedValueOnce(new Error('Sem conexão com o servidor. Confira a internet e tente de novo.'))
+    render(<CodigoDeVerificacao email="maria@exemplo.com" aoConfirmar={aoConfirmar} aoReenviar={vi.fn()} />)
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Código de 4 dígitos'), { target: { value: '4829' } })
+    })
+    expect(await screen.findByRole('alert', {}, { timeout: 2500 })).toHaveTextContent('Sem conexão')
+    // nunca disse "E-mail confirmado" antes de a sessão abrir
+    expect(screen.queryByText(/E-mail confirmado/)).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Código de 4 dígitos')).toHaveValue(''))
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Código de 4 dígitos'), { target: { value: '4829' } })
+    })
+    await waitFor(() => expect(aoConfirmar).toHaveBeenCalledTimes(2), { timeout: 2500 })
+  })
+
+  it('código vencido: diz que venceu e pede outro, em vez de "link"', async () => {
+    const { ApiError } = await import('@/services/api')
+    conferir.mockResolvedValue('hash')
+    const aoConfirmar = vi.fn(async () => {
+      throw new ApiError({ code: 'otp_expired', status: 403, message: 'Email link is invalid or has expired' })
+    })
+    render(<CodigoDeVerificacao email="maria@exemplo.com" aoConfirmar={aoConfirmar} aoReenviar={vi.fn()} />)
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Código de 4 dígitos'), { target: { value: '4829' } })
+    })
+    expect(await screen.findByRole('alert', {}, { timeout: 2500 })).toHaveTextContent(/Este código venceu/)
+  })
+
+  it('código recusado com outro caminho resolvido (confirmado em outro aparelho): sem erro', async () => {
+    const { CodigoIncorreto } = await import('@/services/api')
+    conferir.mockRejectedValue(new CodigoIncorreto())
+    const aoRecusar = vi.fn(async () => true)
+    render(
+      <CodigoDeVerificacao email="maria@exemplo.com" aoConfirmar={vi.fn()} aoRecusar={aoRecusar} aoReenviar={vi.fn()} />,
+    )
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Código de 4 dígitos'), { target: { value: '4829' } })
+    })
+    await waitFor(() => expect(aoRecusar).toHaveBeenCalled())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('o reenvio espera 1 minuto e depois manda um código novo, recomeçando a contagem', async () => {
     vi.useFakeTimers()
     const aoReenviar = vi.fn(async () => {})

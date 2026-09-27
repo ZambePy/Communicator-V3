@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { Header } from './Header'
 import { esquecerBetaProgram } from '@/hooks/useBetaProgram'
@@ -23,10 +23,12 @@ vi.mock('@/services/api', async (importOriginal) => {
   return { ...real, fetchBetaProgram: async () => apiFake.programa ?? real.BETA_PROGRAM_RESERVA }
 })
 
-function montar() {
+function montar(rota = '/') {
   return render(
-    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+    <MemoryRouter initialEntries={[rota]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Header />
+      <main>conteúdo</main>
+      <footer>rodapé</footer>
     </MemoryRouter>,
   )
 }
@@ -94,5 +96,46 @@ describe('<Header />', () => {
     montar()
     expect(screen.queryByRole('link', { name: 'Entrar' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Meu perfil' })).not.toBeInTheDocument()
+  })
+
+  describe('gaveta do menu (tablet e celular)', () => {
+    function abrir() {
+      fireEvent.click(screen.getByRole('button', { name: 'Abrir menu' }))
+      return document.getElementById('menu-mobile')!
+    }
+
+    it('fica fora do <header>: o vidro do cabeçalho não pode virar o bloco de contenção dela', () => {
+      montar()
+      const gaveta = abrir()
+      expect(gaveta.closest('header')).toBeNull()
+      expect(gaveta).not.toHaveAttribute('hidden')
+    })
+
+    it('aberta, a página atrás fica inerte e o foco entra no primeiro item; Esc fecha e devolve o foco', () => {
+      montar()
+      const gaveta = abrir()
+      expect(document.querySelector('main')).toHaveAttribute('inert')
+      expect(document.querySelector('footer')).toHaveAttribute('inert')
+      expect(document.activeElement).toBe(within(gaveta).getAllByRole('link')[0])
+
+      fireEvent.keyDown(document, { key: 'Escape' })
+      expect(gaveta).toHaveAttribute('hidden')
+      expect(document.querySelector('main')).not.toHaveAttribute('inert')
+      expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Abrir menu' }))
+    })
+
+    it('um toque no destino da página atual também fecha (a rota não muda)', () => {
+      montar('/planos')
+      const gaveta = abrir()
+      fireEvent.click(within(gaveta).getByRole('link', { name: 'Planos' }))
+      expect(gaveta).toHaveAttribute('hidden')
+    })
+  })
+
+  it('/contato não é tratado como /conta (cabeçalho transparente na abertura)', () => {
+    const { container } = montar('/contato')
+    expect(container.querySelector('header')).not.toHaveClass('is-scrolled')
+    montar('/conta')
+    expect(document.querySelectorAll('header')[1]).toHaveClass('is-scrolled')
   })
 })

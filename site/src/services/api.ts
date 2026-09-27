@@ -345,15 +345,31 @@ const verificacoes = new Map<string, Promise<void>>()
  */
 export function verificarLinkDoEmail(tokenHash: string, tipo: TipoDeLink): Promise<void> {
   const chave = `${tipo}:${tokenHash}`
-  let pedido = verificacoes.get(chave)
-  if (!pedido) {
-    pedido = (async () => {
-      const { error } = await client().auth.verifyOtp({ token_hash: tokenHash, type: tipo })
-      if (error) erro(error)
-    })()
-    verificacoes.set(chave, pedido)
-  }
+  const existente = verificacoes.get(chave)
+  if (existente) return existente
+  const pedido = (async () => {
+    const { error } = await client().auth.verifyOtp({ token_hash: tokenHash, type: tipo })
+    if (error) erro(error)
+  })()
+  verificacoes.set(chave, pedido)
+  // Falhou (rede caiu, link vencido): a próxima tentativa refaz o pedido.
+  // Guardar a falha deixava o código travado com "sem conexão" até recarregar.
+  pedido.catch(() => {
+    if (verificacoes.get(chave) === pedido) verificacoes.delete(chave)
+  })
   return pedido
+}
+
+/**
+ * Grava a senha digitada na /beta logo depois de o código confirmar o e-mail.
+ * O Supabase não troca a senha de um cadastro ainda não confirmado: quem
+ * refaz a inscrição com outra senha (ou quem cadastrou o e-mail antes da
+ * dona dele) ficava com a senha do primeiro cadastro. O código prova o
+ * e-mail, então vale a senha desta tela. "Mesma senha" não é erro.
+ */
+export async function definirSenhaAposConfirmar(senha: string): Promise<void> {
+  const { error } = await client().auth.updateUser({ password: senha })
+  if (error && (error as { code?: string }).code !== 'same_password') erro(error)
 }
 
 /* ---------------- código de 4 dígitos ----------------
@@ -414,6 +430,12 @@ export type RespostasPesquisa = {
   howFound: string
   /** Opcional, com ou sem máscara. Vazio mantém o número que a conta tiver. */
   phone: string
+  /**
+   * Na edição: a pessoa esvaziou o telefone / o "como conheceu" que já tinha
+   * resposta — apaga no banco ('' na função; null continua mantendo).
+   */
+  apagarTelefone?: boolean
+  apagarComoConheceu?: boolean
 }
 
 /**
@@ -433,8 +455,8 @@ export async function responderPesquisa(r: RespostasPesquisa): Promise<Account> 
 
   const { error } = await sb.rpc('complete_beta_registration', {
     // só dígitos (ou null, que mantém o número atual): o CHECK de
-    // profiles.phone aceita 10–11 dígitos
-    p_phone: phoneDigits(r.phone),
+    // profiles.phone aceita 10–11 dígitos. '' apaga (campo esvaziado na edição).
+    p_phone: r.apagarTelefone ? '' : phoneDigits(r.phone),
     p_user_name: r.userName.trim().replace(/\s+/g, ' '),
     p_relation: r.relation,
     p_condition: r.condition,
@@ -442,7 +464,7 @@ export async function responderPesquisa(r: RespostasPesquisa): Promise<Account> 
     p_document: null,
     p_wants_caregiver_app: r.wantsCaregiverApp,
     p_feedback_consent: r.feedbackConsent,
-    p_how_found: r.howFound.trim() || null,
+    p_how_found: r.apagarComoConheceu ? '' : r.howFound.trim() || null,
     p_newsletter: perfil?.newsletter ?? false,
     p_prescriber_name: atual?.profile.prescriberName ?? null,
     p_prescriber_role: atual?.profile.prescriberRole ?? null,
@@ -641,6 +663,12 @@ export async function requestPasswordReset(
 }
 
 /** Troca a senha do usuário da sessão atual (a de recuperação, ou a normal). */
+/** E-mail da sessão aberta neste aparelho (para dizer de qual conta é a senha). */
+export async function emailDaSessao(): Promise<string | null> {
+  const { data } = await client().auth.getSession()
+  return data.session?.user.email ?? null
+}
+
 export async function updatePassword(password: string): Promise<void> {
   const { error } = await client().auth.updateUser({ password })
   if (error) erro(error)

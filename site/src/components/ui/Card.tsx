@@ -12,9 +12,9 @@ type Props = {
 }
 
 /**
- * Cartão base do site. A classe .panel lê os tokens do contexto: no
- * fundo claro é um cartão branco com sombra suave; dentro de uma faixa
- * .on-dark vira um painel translúcido, sem nenhuma troca de prop.
+ * Cartão base do site. A classe .panel lê os tokens do contexto: numa
+ * faixa elevada (.on-raised) é um cartão sólido com sombra; dentro de uma
+ * faixa .on-dark vira um painel translúcido, sem nenhuma troca de prop.
  */
 export function Card({
   children,

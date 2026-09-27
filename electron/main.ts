@@ -1,18 +1,23 @@
-import { app, BrowserWindow, Menu, dialog, session, ipcMain, screen, safeStorage, shell, type WebContents } from 'electron';
+import {
+  app, BrowserWindow, Menu, Notification, session, ipcMain, screen, safeStorage, shell, powerSaveBlocker,
+  type Display, type WebContents,
+} from 'electron';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   permitirPermissao, permitirNavegacao, permitirAberturaExterna, hostDoSite, CSP, CSP_DEV, cspComNuvem,
-  preferenciasWebSeguras, atalhoBloqueadoEmProducao, alternaTelaCheia, decidirRecarga,
+  preferenciasWebSeguras, atalhoBloqueadoEmProducao, alternaTelaCheia, decidirRecarga, RECARGA_JANELA_MS,
   argumentoDeDepuracao, SWITCHES_DE_DEPURACAO, papeisDoMenuEmpacotado,
 } from '../src/electronSecurity';
 import { registrarModoComputador } from './computador/sessao';
 import { registrarVoz } from './voz';
+import { segurarSaidaAteOMotorSair } from './voz/sidecar';
 import { registrarAtualizacao } from './atualizacao';
 import { iniciarDiagnostico, pastaDosLogs, registrarNoLog } from './diagnostico';
-import { esquecerTamanhosDosMonitores, lerTamanhosDosMonitores } from './monitores';
+import { chaveDoMonitor, esquecerTamanhosDosMonitores, lerTamanhosDosMonitores } from './monitores';
+import { criarCofre, type Cofre } from './cofre';
 
 // ---------------------------------------------------------------------
 // Antes de qualquer outra coisa.
@@ -97,24 +102,14 @@ function lerVariavelDoFrontend(nome: string): string | undefined {
 // exemplo) o valor é gravado em claro com aviso, para o app não ficar sem
 // login em vez de sem segurança adicional.
 // ---------------------------------------------------------------------
-type Cofre = Record<string, { enc: boolean; v: string }>;
 const COFRE_CHAVES_PERMITIDAS = /^irisflow\.[a-z0-9_.-]{1,64}$/i;
 
-function caminhoDoCofre(): string {
-  return path.join(app.getPath('userData'), 'cloud-store.json');
-}
-function lerCofre(): Cofre {
-  try {
-    const raw = fs.readFileSync(caminhoDoCofre(), 'utf-8');
-    const parsed: unknown = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? (parsed as Cofre) : {};
-  } catch {
-    return {};
-  }
-}
-function gravarCofre(c: Cofre): void {
-  fs.mkdirSync(path.dirname(caminhoDoCofre()), { recursive: true });
-  fs.writeFileSync(caminhoDoCofre(), JSON.stringify(c), { encoding: 'utf-8', mode: 0o600 });
+// Gravação atômica com cópia `.bak`; um cofre ilegível nunca é regravado
+// (ver `cofre.ts`). O log vai para o arquivo de registros via `console.warn`.
+let cofreDoApp: Cofre | null = null;
+function cofre(): Cofre {
+  cofreDoApp ??= criarCofre(path.join(app.getPath('userData'), 'cloud-store.json'));
+  return cofreDoApp;
 }
 function chaveValida(chave: unknown): chave is string {
   return typeof chave === 'string' && COFRE_CHAVES_PERMITIDAS.test(chave);
@@ -143,7 +138,7 @@ function daJanelaPrincipal(e: Electron.IpcMainInvokeEvent): boolean {
 
 ipcMain.handle('irisflow:secure-get', (e, chave: unknown): string | null => {
   if (!daJanelaPrincipal(e) || !chaveValida(chave)) return null;
-  const item = lerCofre()[chave];
+  const item = cofre().ler(chave);
   if (!item) return null;
   try {
     if (!item.enc) return item.v;
@@ -158,23 +153,16 @@ ipcMain.handle('irisflow:secure-get', (e, chave: unknown): string | null => {
 ipcMain.handle('irisflow:secure-set', (e, chave: unknown, valor: unknown): boolean => {
   // 2 MB: a fila offline pode acumular relatórios; safeStorage lida com isso.
   if (!daJanelaPrincipal(e) || !chaveValida(chave) || typeof valor !== 'string' || valor.length > 2_000_000) return false;
-  const cofre = lerCofre();
   if (safeStorage.isEncryptionAvailable()) {
-    cofre[chave] = { enc: true, v: safeStorage.encryptString(valor).toString('base64') };
-  } else {
-    console.warn('[cofre] safeStorage indisponível neste sistema — gravando sem cifra');
-    cofre[chave] = { enc: false, v: valor };
+    return cofre().definir(chave, { enc: true, v: safeStorage.encryptString(valor).toString('base64') });
   }
-  gravarCofre(cofre);
-  return true;
+  console.warn('[cofre] safeStorage indisponível neste sistema — gravando sem cifra');
+  return cofre().definir(chave, { enc: false, v: valor });
 });
 
 ipcMain.handle('irisflow:secure-remove', (e, chave: unknown): boolean => {
   if (!daJanelaPrincipal(e) || !chaveValida(chave)) return false;
-  const cofre = lerCofre();
-  delete cofre[chave];
-  gravarCofre(cofre);
-  return true;
+  return cofre().remover(chave);
 });
 
 // Identidade do computador para o pareamento (nome exibido no app do cuidador).
@@ -195,7 +183,7 @@ ipcMain.handle('irisflow:app-info', () => ({
 // diagonal entra no erro angular dos relatórios; depender do cuidador digitar
 // o valor funciona até ele trocar de monitor. Na dúvida a lista volta vazia e
 // o app segue com o valor configurado à mão (passo opcional na UI).
-ipcMain.handle('irisflow:monitor-sizes', () => lerTamanhosDosMonitores());
+ipcMain.handle('irisflow:monitor-sizes', () => lerTamanhosDosMonitores(monitorDaJanela()));
 
 // Pasta dos registros (log do processo principal), para o cuidador anexar
 // num pedido de suporte. Só a janela do app pede; abre no gerenciador de
@@ -207,12 +195,31 @@ ipcMain.handle('irisflow:abrir-pasta-dos-logs', async (e): Promise<boolean> => {
   return (await shell.openPath(pasta)) === '';
 });
 
-// Resolução e escala da tela primária. `window.screen` do renderer não expõe
-// o fator de escala do Windows (125%, 150%), e a conversão px→cm do erro
-// angular precisa dele.
+/**
+ * Monitor em que a janela do app está — NÃO o primário. Num notebook com um
+ * monitor externo à frente do paciente, o primário costuma ser o painel do
+ * notebook, e a diagonal, a escala e o EDID lidos dele descreviam outra tela
+ * (alvos de calibração fora do orçamento angular, compensações de pose e de
+ * translação mal escaladas). Mesma escolha do Modo Computador
+ * (`computador/sessao.ts`).
+ */
+function monitorDaJanela(): Display {
+  const w = janelaPrincipal;
+  if (w && !w.isDestroyed()) {
+    try {
+      return screen.getDisplayMatching(w.getBounds());
+    } catch { /* janela sem geometria ainda: cai no primário */ }
+  }
+  return screen.getPrimaryDisplay();
+}
+
+// Resolução e escala do monitor da janela. `window.screen` do renderer não
+// expõe o fator de escala do Windows (125%, 150%), e a conversão px→cm do erro
+// angular precisa dele. `id` identifica o monitor para quem compara consultas.
 ipcMain.handle('irisflow:display-info', () => {
-  const d = screen.getPrimaryDisplay();
+  const d = monitorDaJanela();
   return {
+    id: d.id,
     widthPx: d.size.width,
     heightPx: d.size.height,
     scaleFactor: d.scaleFactor,
@@ -220,6 +227,36 @@ ipcMain.handle('irisflow:display-info', () => {
     physicalHeightPx: Math.round(d.size.height * d.scaleFactor),
   };
 });
+
+/**
+ * Avisa o renderer quando o monitor da janela muda (a janela foi para outro
+ * monitor, ou a resolução/escala do monitor dela mudou), para ele reconsultar
+ * `display-info` e `monitor-sizes`. Canal `irisflow:tela-mudou`, exposto no
+ * preload como `irisflowSystem.onTelaMudou`.
+ */
+function vigiarMonitorDaJanela(win: BrowserWindow): void {
+  let anterior = chaveDoMonitor(monitorDaJanela());
+  const reavaliar = () => {
+    if (win.isDestroyed()) return;
+    const d = monitorDaJanela();
+    const chave = chaveDoMonitor(d);
+    if (chave === anterior) return;
+    anterior = chave;
+    esquecerTamanhosDosMonitores();
+    win.webContents.send('irisflow:tela-mudou', { id: d.id, scaleFactor: d.scaleFactor });
+  };
+  win.on('moved', reavaliar);
+  win.on('enter-full-screen', reavaliar);
+  win.on('leave-full-screen', reavaliar);
+  screen.on('display-metrics-changed', reavaliar);
+  screen.on('display-added', reavaliar);
+  screen.on('display-removed', reavaliar);
+  win.on('closed', () => {
+    screen.removeListener('display-metrics-changed', reavaliar);
+    screen.removeListener('display-added', reavaliar);
+    screen.removeListener('display-removed', reavaliar);
+  });
+}
 
 /**
  * Tela cheia — no desenvolvimento E no app empacotado.
@@ -341,6 +378,30 @@ function configurarMenu(): void {
 
 /** Instantes das recargas automáticas depois de queda do renderer (ver `decidirRecarga`). */
 const recargasAposQueda: number[] = [];
+/** Último aviso de quedas repetidas: um por janela de recarga, não um a cada queda. */
+let ultimoAvisoDeQuedas = -Infinity;
+
+/**
+ * Aviso NÃO modal de que a página caiu várias vezes: notificação do sistema
+ * (some sozinha, não segura a janela) e linha no registro. O app segue
+ * tentando reabrir a tela sozinho.
+ */
+function avisarQuedasRepetidas(esperaMs: number, agora: number): void {
+  registrarNoLog('erro', `[janela] quedas repetidas da página; nova tentativa em ${Math.round(esperaMs / 1000)} s`);
+  if (agora - ultimoAvisoDeQuedas < RECARGA_JANELA_MS) return;
+  ultimoAvisoDeQuedas = agora;
+  try {
+    if (!Notification.isSupported()) return;
+    new Notification({
+      title: 'IrisFlow',
+      body:
+        'A tela do IrisFlow parou várias vezes seguidas e está sendo reaberta sozinha. ' +
+        'Se não voltar, reinicie o computador e envie a pasta de registros ao suporte.',
+    }).show();
+  } catch (erro) {
+    console.warn('[janela] aviso de quedas repetidas não pôde ser mostrado:', erro);
+  }
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -381,6 +442,7 @@ function createWindow(): void {
   });
   janelaPrincipal = win;
   win.on('closed', () => { if (janelaPrincipal === win) janelaPrincipal = null; });
+  vigiarMonitorDaJanela(win);
 
   // Zoom travado em 1: o Modo Computador converte px CSS do app em DIP da
   // tela, e um Ctrl+roda acidental desalinharia o cursor sobre o Windows sem
@@ -403,30 +465,20 @@ function createWindow(): void {
   });
 
   // O processo da página morreu (crash do driver de vídeo, falta de memória,
-  // antivírus...): registra e recarrega a página com calma, sem fechar o app.
-  // O perfil de calibração está salvo em disco; o que se perde é só a tela
-  // em que a pessoa estava. Quedas repetidas param de recarregar (laço) e
-  // mostram um aviso ao cuidador.
+  // antivírus...): registra e recarrega a página, sem fechar o app. O perfil
+  // de calibração está salvo em disco; o que se perde é só a tela em que a
+  // pessoa estava. Quedas repetidas NÃO param de recarregar — só esperam mais
+  // (1, 2, 5 min; ver `decidirRecarga`) — e o cuidador recebe um aviso do
+  // sistema que não bloqueia nada. Antes, passado o limite, o app parava num
+  // diálogo modal que o olhar não aciona.
   win.webContents.on('render-process-gone', (_e, detalhes) => {
     registrarNoLog('erro', '[janela] processo da página caiu:', { motivo: detalhes.reason, codigo: detalhes.exitCode });
-    const decisao = decidirRecarga(detalhes.reason, recargasAposQueda, Date.now());
-    if (decisao.recarregar) {
-      recargasAposQueda.push(Date.now());
-      setTimeout(() => { if (!win.isDestroyed()) win.webContents.reload(); }, decisao.esperaMs);
-      return;
-    }
-    if (detalhes.reason === 'clean-exit' || win.isDestroyed()) return;
-    void dialog.showMessageBox(win, {
-      type: 'error',
-      title: 'IrisFlow',
-      message: 'O IrisFlow parou de responder várias vezes seguidas.',
-      detail: 'Tente reiniciar o computador. Se continuar, envie a pasta de registros ao suporte (Configurações → Suporte).',
-      buttons: ['Tentar de novo', 'Fechar o IrisFlow'],
-      defaultId: 0,
-    }).then(({ response }) => {
-      if (win.isDestroyed()) return;
-      if (response === 0) { recargasAposQueda.length = 0; win.webContents.reload(); } else app.quit();
-    });
+    const agora = Date.now();
+    const decisao = decidirRecarga(detalhes.reason, recargasAposQueda, agora);
+    if (!decisao.recarregar || win.isDestroyed()) return;
+    recargasAposQueda.push(agora);
+    if (decisao.persistente) avisarQuedasRepetidas(decisao.esperaMs, agora);
+    setTimeout(() => { if (!win.isDestroyed()) win.webContents.reload(); }, decisao.esperaMs);
   });
   win.on('unresponsive', () => registrarNoLog('aviso', '[janela] a página não responde há alguns segundos'));
   win.on('responsive', () => registrarNoLog('info', '[janela] a página voltou a responder'));
@@ -473,6 +525,18 @@ if (PRIMEIRA_INSTANCIA) {
 
   app.whenReady().then(async () => {
     configurarMenu();
+
+    // Tela sempre acesa enquanto o app está aberto — inclusive no Modo
+    // Computador, com a janela do app escondida. Quem usa só o olhar não gera
+    // entrada de teclado nem de mouse para o sistema (o clique por dwell é um
+    // `.click()` da página), então o temporizador de energia do Windows corria:
+    // "desligar a tela após 10 min" e "suspender após 30 min" deixavam o
+    // paciente sem comunicação, sem emergência e sem heartbeat. O
+    // `prevent-display-sleep` também impede a suspensão do sistema.
+    const travaDaTela = powerSaveBlocker.start('prevent-display-sleep');
+    app.on('will-quit', () => {
+      if (powerSaveBlocker.isStarted(travaDaTela)) powerSaveBlocker.stop(travaDaTela);
+    });
 
     // Corretor ortográfico do Chromium: nenhum dicionário, nenhum download.
     // `spellcheck: false` nas janelas (`preferenciasWebSeguras`) NÃO basta:
@@ -536,7 +600,10 @@ if (PRIMEIRA_INSTANCIA) {
     // Voz clonada local (sidecar Python / executável em resources/voice-engine).
     const voz = registrarVoz({ raizDoProjeto: RAIZ_DO_PROJETO, janelaPrincipal: () => janelaPrincipal });
     registrarAtualizacao(() => janelaPrincipal);
-    app.on('before-quit', () => voz.encerrar());
+    // Fechar o app espera o motor de voz sair (no máximo a cortesia e o kill).
+    // Sem isso o Electron saía antes do kill e o motor seguia órfão até o fim
+    // do comando em curso — síntese, carga do modelo ou download.
+    segurarSaidaAteOMotorSair(app, voz);
 
     createWindow();
 

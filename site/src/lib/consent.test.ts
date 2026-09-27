@@ -6,7 +6,7 @@ const beacon = () => document.querySelector<HTMLScriptElement>(`script[src="${BE
 
 beforeEach(() => {
   window.localStorage.clear()
-  unloadAnalytics()
+  unloadAnalytics(() => {})
 })
 
 afterEach(() => {
@@ -59,9 +59,17 @@ describe('beacon do Cloudflare Web Analytics', () => {
     expect(JSON.parse(beacon()!.getAttribute('data-cf-beacon')!)).toMatchObject({ token: 'tok123' })
   })
 
-  it('sai da página ao recusar depois', () => {
+  it('recusar depois tira o beacon e recarrega a página (o que já rodou continuaria acompanhando as rotas)', () => {
+    const recarregar = vi.fn()
     loadAnalytics('tok123', 'accepted')
-    unloadAnalytics()
+    expect(unloadAnalytics(recarregar)).toBe(true)
     expect(beacon()).toBeNull()
+    expect(recarregar).toHaveBeenCalledTimes(1)
+  })
+
+  it('recusa já guardada numa visita nova: nada a tirar, nada de recarregar (sem laço)', () => {
+    const recarregar = vi.fn()
+    expect(unloadAnalytics(recarregar)).toBe(false)
+    expect(recarregar).not.toHaveBeenCalled()
   })
 })

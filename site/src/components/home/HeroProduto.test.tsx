@@ -43,6 +43,26 @@ describe('<HeroProduto />', () => {
     expect(await screen.findByRole('link', { name: 'Baixar grátis' })).toHaveAttribute('href', '/baixar')
   })
 
+  it('texto à esquerda e o monitor à direita, sobre o fundo de partículas', () => {
+    const { container } = montar()
+    const grade = container.querySelector('.hero-produto__grade')!
+    const [texto, aparelho] = Array.from(grade.children)
+    expect(texto).toHaveClass('hero-produto__texto')
+    expect(texto.querySelector('h1')).not.toBeNull()
+    expect(aparelho).toHaveClass('hero-produto__aparelho')
+    expect(aparelho.querySelector('.monitor video')).not.toBeNull()
+    // Halo e anéis por trás do monitor, fora do leitor de tela.
+    expect(aparelho.querySelectorAll('.hero-produto__anel[aria-hidden="true"]')).toHaveLength(2)
+    // Fundo animado com partículas e a varredura.
+    const fundo = container.querySelector('.hero-produto > .ambient')!
+    expect(fundo.querySelectorAll('.ambient__dot').length).toBeGreaterThan(0)
+  })
+
+  it('as chamadas escondem a barra fixa do celular enquanto estão na tela', () => {
+    const { container } = montar()
+    expect(container.querySelector('.hero-produto__acoes')).toHaveAttribute('data-sticky-hide')
+  })
+
   it('a demonstração tem descrição e botão de pausa', () => {
     montar()
     expect(screen.getByRole('button', { name: /Pausar a demonstração|Reproduzir a demonstração/ })).toBeInTheDocument()

@@ -56,7 +56,7 @@ import {
   type CameraState,
   type TuningStep,
 } from '@tracker/cameraTuner';
-import { getSaturacaoDoOlhar } from '@tracker/calibration';
+import { getSaturacaoDoOlhar, type SuspensaoDaCalibracao } from '@tracker/calibration';
 import { detectFlicker, inferPowerLineHz } from '@tracker/flickerDetector';
 import { AvisoDeDistancia } from '@tracker/distanceAdvisory';
 import { useSettings } from './SettingsContext';
@@ -131,6 +131,13 @@ interface GazeContextValue {
    *  — não abrir uma segunda captura, que muitos drivers recusam e que
    *  dobraria o custo de decode. */
   getCameraStream: () => MediaStream | null;
+  /**
+   * A câmera está entregando imagem AGORA: track `live` e não muda, engine
+   * fora de `sem_camera` e com quadros no último diagnóstico. É o `camera_ok`
+   * do heartbeat — antes ele conferia só a existência do objeto `MediaStream`,
+   * e uma câmera desconectada seguia "ok" no celular do cuidador.
+   */
+  cameraAtiva: () => boolean;
   /** Resultado do ajuste automático da câmera. `null` enquanto não rodou.
    *  Consumido pela pré-calibração para dizer ao cuidador o que o software já
    *  resolveu e o que ainda exige ação física. */
@@ -321,15 +328,18 @@ async function openCameraWithFallback(): Promise<MediaStream> {
     }
   }
 
+  // Sem "recarregue": o app empacotado bloqueia F5/Ctrl+R, e o provider tenta
+  // abrir a câmera de novo sozinho (com espera crescente e a cada câmera
+  // conectada). A frase diz o que a pessoa pode resolver.
   const nome = (ultimoErro as DOMException)?.name ?? 'Error';
   const causa =
     nome === 'NotAllowedError' || nome === 'SecurityError'
-      ? 'Permissão de câmera negada. Autorize o acesso nas configurações do navegador e recarregue.'
+      ? 'O acesso à câmera foi negado. Confira nas configurações de privacidade do sistema se os aplicativos podem usar a câmera.'
       : nome === 'NotFoundError' || nome === 'DevicesNotFoundError'
-        ? 'Nenhuma câmera encontrada. Conecte a webcam e recarregue.'
+        ? 'Nenhuma câmera encontrada. Conecte a webcam.'
         : nome === 'NotReadableError' || nome === 'TrackStartError'
           ? 'A câmera existe mas não pôde ser iniciada — quase sempre porque OUTRO PROGRAMA está usando ela ' +
-            '(OBS, Teams, Zoom, Meet, ou outra aba deste navegador). Feche o outro programa e recarregue.'
+            '(OBS, Teams, Zoom, Meet, ou outra aba deste navegador). Feche o outro programa.'
           : nome === 'OverconstrainedError'
             ? 'A câmera não suporta nenhum dos formatos solicitados.'
             : `Falha ao abrir a câmera (${nome}).`;
@@ -346,6 +356,16 @@ async function openCameraWithFallback(): Promise<MediaStream> {
  * nasceria um segundo engine com um segundo `getUserMedia`.
  */
 let provedorAtivo = 0;
+
+/** Esperas entre tentativas de abrir a câmera depois de uma falha (a última se repete). */
+const ESPERAS_DA_CAMERA_MS = [1000, 2000, 5000, 10_000, 30_000] as const;
+/** Track muda (sem quadros) por mais que isto: a câmera é reaberta. */
+const CAMERA_MUDA_MS = 3000;
+/**
+ * Engine em `sem_camera` por mais que isto: a câmera é reaberta. Somado ao
+ * limiar do engine (1,5 s), a reabertura começa ~4,5 s depois do último quadro.
+ */
+const REABRIR_SEM_QUADROS_MS = 3000;
 
 export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings, updateSettings } = useSettings();
@@ -400,6 +420,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   /** Reajuste rápido (alvo único de 2 s) em curso. */
   const [reancorando, setReancorando] = useState(false);
   const [calibrationInvalidated, setCalibrationInvalidated] = useState<string | null>(null);
+  /** Calibração suspensa pela janela fora do tamanho em que foi feita (texto do banner). */
+  const [avisoDeTela, setAvisoDeTela] = useState<string | null>(null);
   const isDegradedRef = useRef(false);
   const wasDwellingRef = useRef(false);
 
@@ -850,6 +872,21 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     let cancelled = false;
 
+    // ── Estado do ciclo de vida da câmera (ver `abrirCamera`) ──────────────
+    /** O engine já recebeu `start()` com o <video> (ele segue o mesmo elemento
+     *  quando a câmera é reaberta; só a stream muda). */
+    let engineIniciado = false;
+    /** Uma abertura em curso: pedidos repetidos (evento + vigia) não empilham. */
+    let abrindoCamera = false;
+    /** Tentativas seguidas que falharam, para a espera crescente. */
+    let falhasDaCamera = 0;
+    /** Próxima tentativa agendada depois de uma falha. */
+    let timerDaCamera: ReturnType<typeof setTimeout> | null = null;
+    /** Vigia do estado `sem_camera`: se ele durar, a câmera é reaberta. */
+    let timerSemQuadros: ReturnType<typeof setTimeout> | null = null;
+    /** Desliga os ouvintes da track corrente. */
+    let desligarTrack: (() => void) | null = null;
+
     const engine = createGazeEngine();
     engineRef.current = engine;
 
@@ -947,8 +984,45 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       );
     });
 
+    // A janela não cobre mais a área da calibração (saiu da tela cheia, monitor
+    // rearranjado): a calibração fica SUSPENSA — o olhar só aciona a Emergência
+    // e os botões de recuperação — e volta sozinha com a janela. Antes ela era
+    // descartada, e nada era clicável até calibrar de novo.
+    const textoDaSuspensao = (s: SuspensaoDaCalibracao | null): string | null =>
+      s
+        ? `A janela do IrisFlow não está do tamanho em que a calibração foi feita ` +
+          `(${s.calibracao.w}×${s.calibracao.h}; agora ${s.atual.w}×${s.atual.h}). Até ela voltar — ` +
+          'em geral, com F11 para a tela cheia —, o olhar só aciona a Emergência e os botões de ' +
+          'recuperação. Não é preciso calibrar de novo.'
+        : null;
+    // Engines de teste (dublês) podem não ter os dois métodos.
+    const calSuspensao = engine.calibration as Partial<
+      Pick<GazeEngine['calibration'], 'onSuspensao' | 'getSuspensao'>
+    >;
+    const unsubSuspensao =
+      calSuspensao.onSuspensao?.((s) => {
+        if (!cancelled) setAvisoDeTela(textoDaSuspensao(s));
+      }) ?? (() => {});
+    setAvisoDeTela(textoDaSuspensao(calSuspensao.getSuspensao?.() ?? null));
+
     const unsubState = engine.onStateChange((s) => {
-      if (!cancelled) setState(s);
+      if (cancelled) return;
+      setState(s);
+      // Recalibrando (ou com um modelo válido de novo): o aviso "a calibração
+      // deixou de valer" já cumpriu o papel. Antes ele ficava no topo de todas
+      // as telas até fechar o app, mesmo depois de calibrar.
+      if (s === 'calibrating' || s === 'tracking') setCalibrationInvalidated(null);
+      // Modo Computador: o main encerra a sessão se a câmera ficar parada, e a
+      // janela do app volta mostrando o aviso — as amostras "sem rosto" que o
+      // engine emite em `sem_camera` não podem manter a sessão viva.
+      (window as unknown as { irisflowSystem?: { desktop?: { rastreamento?: (e: string) => void } } })
+        .irisflowSystem?.desktop?.rastreamento?.(s);
+      // A câmera parou de entregar quadros: se continuar assim, reabre.
+      if (s === 'sem_camera') vigiarSemQuadros();
+      else if (timerSemQuadros !== null) {
+        clearTimeout(timerSemQuadros);
+        timerSemQuadros = null;
+      }
     });
 
     const unsubL2CSStatus = engine.onL2CSStatusChange((s) => {
@@ -1511,7 +1585,14 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     });
 
-    async function boot() {
+    /**
+     * O <video> do engine: um só pela vida do provider. Reabrir a câmera troca
+     * só a stream (`srcObject`); o engine segue lendo o mesmo elemento, com o
+     * FaceLandmarker e a calibração intactos.
+     */
+    let videoDoEngine: HTMLVideoElement | null = null;
+
+    function boot(): void {
       // Video capture is owned by the provider (single source of truth).
       // Mantém o elemento visível (canto, opacidade ~0) para o Chromium não
       // suspender o pipeline de decoding — vídeos totalmente offscreen podem
@@ -1533,9 +1614,107 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ].join(';');
       document.body.appendChild(video);
       videoRef.current = video;
+      videoDoEngine = video;
+      void abrirCamera('boot');
+    }
 
+    /**
+     * Solta a stream corrente e os ouvintes da track. Vem ANTES de pedir outra:
+     * vários drivers recusam uma segunda captura com a primeira aberta.
+     */
+    function soltarStreamAtual(): void {
+      desligarTrack?.();
+      desligarTrack = null;
+      const antiga = streamRef.current;
+      streamRef.current = null;
+      antiga?.getTracks().forEach((t) => {
+        try {
+          t.stop();
+        } catch {
+          /* já parada */
+        }
+      });
+    }
+
+    /**
+     * Ouve a track da câmera: `ended` (cabo solto, hub USB que reinicia,
+     * notebook que dormiu — uma track terminada não revive) reabre na hora;
+     * `mute` que dura mais que `CAMERA_MUDA_MS` também reabre.
+     */
+    function vigiarTrack(stream: MediaStream): void {
+      desligarTrack?.();
+      desligarTrack = null;
+      const track = stream.getVideoTracks?.()[0] as MediaStreamTrack | undefined;
+      if (!track || typeof track.addEventListener !== 'function') return;
+      let timerMudo: ReturnType<typeof setTimeout> | null = null;
+      const aoTerminar = () => {
+        if (cancelled || streamRef.current !== stream) return;
+        console.warn('[camera] a track da câmera terminou (desconectada ou parou) — reabrindo.');
+        setCameraError('A câmera foi desconectada ou parou de responder. O IrisFlow está tentando reconectar.');
+        void abrirCamera('reabrir');
+      };
+      const aoSilenciar = () => {
+        if (timerMudo !== null) return;
+        timerMudo = setTimeout(() => {
+          timerMudo = null;
+          if (!cancelled && streamRef.current === stream && track.muted) {
+            console.warn(`[camera] a câmera ficou muda por mais de ${CAMERA_MUDA_MS / 1000} s — reabrindo.`);
+            void abrirCamera('reabrir');
+          }
+        }, CAMERA_MUDA_MS);
+      };
+      const aoVoltar = () => {
+        if (timerMudo !== null) clearTimeout(timerMudo);
+        timerMudo = null;
+      };
+      track.addEventListener('ended', aoTerminar);
+      track.addEventListener('mute', aoSilenciar);
+      track.addEventListener('unmute', aoVoltar);
+      desligarTrack = () => {
+        track.removeEventListener('ended', aoTerminar);
+        track.removeEventListener('mute', aoSilenciar);
+        track.removeEventListener('unmute', aoVoltar);
+        aoVoltar();
+      };
+    }
+
+    /**
+     * O engine está em `sem_camera` (nenhum quadro novo): se continuar assim
+     * por `REABRIR_SEM_QUADROS_MS`, a câmera é reaberta. Cobre o que o evento
+     * `ended` não cobre: driver travado com a track "viva".
+     */
+    function vigiarSemQuadros(): void {
+      if (timerSemQuadros !== null || cancelled) return;
+      timerSemQuadros = setTimeout(() => {
+        timerSemQuadros = null;
+        if (cancelled || engine.getState() !== 'sem_camera') return;
+        console.warn('[camera] o rastreador está sem quadros da câmera há alguns segundos — reabrindo a câmera.');
+        void abrirCamera('reabrir');
+      }, REABRIR_SEM_QUADROS_MS);
+    }
+
+    /**
+     * Abre a câmera e, na primeira vez, inicia o engine. Usada no boot e para
+     * REABRIR (track terminada, câmera muda ou sem quadros, câmera conectada
+     * depois). Se falhar, agenda outra tentativa com espera crescente
+     * (`ESPERAS_DA_CAMERA_MS`) enquanto o provider existir — antes, uma câmera
+     * ausente no boot ou perdida no meio da sessão só voltava fechando e
+     * abrindo o app (o F5 é bloqueado no app empacotado).
+     */
+    async function abrirCamera(motivo: 'boot' | 'reabrir'): Promise<void> {
+      if (cancelled || abrindoCamera || !videoDoEngine) return;
+      abrindoCamera = true;
+      if (timerDaCamera !== null) {
+        clearTimeout(timerDaCamera);
+        timerDaCamera = null;
+      }
+      const video = videoDoEngine;
       try {
-        console.log('[IrisFlow] solicitando getUserMedia...');
+        if (motivo === 'reabrir') {
+          soltarStreamAtual();
+          video.srcObject = null;
+        }
+        console.log(`[IrisFlow] solicitando getUserMedia (${motivo})...`);
         const stream = await openCameraWithFallback();
         // Registra a stream ANTES de qualquer outra coisa: a partir daqui o
         // cleanup consegue pará-la mesmo que nunca cheguemos ao <video>.
@@ -1603,8 +1782,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             reject(
               new Error(
                 'A câmera foi aberta mas não entregou nenhum quadro em 10 segundos. ' +
-                  'Feche outros programas que usem a webcam (Teams, Zoom, OBS), ' +
-                  'desconecte e reconecte a câmera, e recarregue.'
+                  'Feche outros programas que usem a webcam (Teams, Zoom, OBS) ' +
+                  'ou desconecte e reconecte a câmera.'
               )
             );
           }, LOADEDDATA_TIMEOUT_MS);
@@ -1646,7 +1825,24 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           console.log('[IrisFlow] stream parada — provider desmontado durante o warm-up.');
           return;
         }
-        await engine.start(video);
+        vigiarTrack(stream);
+        if (engineIniciado) {
+          // Reaberta: o engine segue rodando no mesmo <video>, agora com a
+          // stream nova — e sai sozinho de `sem_camera` no primeiro quadro.
+          console.log(`[camera] câmera reaberta (${motivo}); o rastreamento segue.`);
+          aberturaConcluida(stream);
+          return;
+        }
+        try {
+          await engine.start(video);
+        } catch (e) {
+          throw new Error(
+            `O rastreador não pôde iniciar (${e instanceof Error ? e.message : String(e)}).`,
+            { cause: e }
+          );
+        }
+        if (cancelled) return;
+        engineIniciado = true;
         engine.setScreenGeometry(
           settingsRef.current.screenDiagonalIn,
           settingsRef.current.viewingDistanceCm
@@ -1781,30 +1977,67 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           );
         }
 
-        // Ajuste automático da câmera. Roda DEPOIS do engine porque a malha
-        // se fecha sobre o tamanho do rosto, que só existe com o detector de
-        // landmarks rodando. Deliberadamente sem `await`: são ~8 s de
-        // convergência e o app não pode ficar parado esperando — a
-        // pré-calibração já mostra o estado enquanto o ajuste acontece.
-        void autoTuneCamera(stream, engine, () => cancelled);
+        aberturaConcluida(stream);
       } catch (err) {
-        console.error('[IrisFlow] Falha ao inicializar câmera/engine:', err);
-        if (!cancelled) {
-          setCameraError(
-            err instanceof Error && err.message
-              ? err.message
-              : 'Falha ao inicializar a câmera. Recarregue a página.'
-          );
-        }
+        console.error('[IrisFlow] Falha ao abrir a câmera/iniciar o rastreador:', err);
+        if (cancelled) return;
+        falhasDaCamera++;
+        const espera =
+          ESPERAS_DA_CAMERA_MS[Math.min(falhasDaCamera - 1, ESPERAS_DA_CAMERA_MS.length - 1)];
+        const causa = err instanceof Error && err.message ? err.message : 'Falha ao abrir a câmera.';
+        setCameraError(`${causa} O IrisFlow tenta de novo em ${Math.round(espera / 1000)} s.`);
+        if (timerDaCamera !== null) clearTimeout(timerDaCamera);
+        timerDaCamera = setTimeout(() => {
+          timerDaCamera = null;
+          void abrirCamera('reabrir');
+        }, espera);
+      } finally {
+        abrindoCamera = false;
       }
     }
+
+    /** Câmera aberta e entregando quadro: zera as falhas, tira o aviso e ajusta a câmera. */
+    function aberturaConcluida(stream: MediaStream): void {
+      falhasDaCamera = 0;
+      setCameraError(null);
+      // Ajuste automático da câmera. Roda DEPOIS do engine porque a malha
+      // se fecha sobre o tamanho do rosto, que só existe com o detector de
+      // landmarks rodando. Deliberadamente sem `await`: são ~8 s de
+      // convergência e o app não pode ficar parado esperando — a
+      // pré-calibração já mostra o estado enquanto o ajuste acontece. Para
+      // sozinho se a stream for trocada (câmera reaberta).
+      void autoTuneCamera(stream, engine, () => cancelled || streamRef.current !== stream);
+      // A stream nova pode também não entregar quadros: o vigia rearma.
+      if (engine.getState() === 'sem_camera') vigiarSemQuadros();
+    }
+
+    // Câmera conectada (ou trocada) enquanto estamos sem ela: tenta já, sem
+    // esperar a próxima tentativa agendada.
+    const aoMudarDispositivos = () => {
+      if (cancelled) return;
+      const track = streamRef.current?.getVideoTracks?.()[0];
+      const semCamera =
+        !track || track.readyState !== 'live' || engine.getState() === 'sem_camera';
+      if (timerDaCamera === null && !semCamera) return;
+      console.log('[camera] os dispositivos mudaram com a câmera fora — tentando abrir agora.');
+      falhasDaCamera = 0;
+      void abrirCamera('reabrir');
+    };
+    const dispositivos = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
+    dispositivos?.addEventListener?.('devicechange', aoMudarDispositivos);
 
     boot();
 
     return () => {
       cancelled = true;
+      if (timerDaCamera !== null) clearTimeout(timerDaCamera);
+      if (timerSemQuadros !== null) clearTimeout(timerSemQuadros);
+      desligarTrack?.();
+      desligarTrack = null;
+      dispositivos?.removeEventListener?.('devicechange', aoMudarDispositivos);
       unsubState();
       unsubInvalid();
+      unsubSuspensao();
       unsubL2CSStatus();
       unsubGaze();
       unsubDevMode();
@@ -1951,6 +2184,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         engineRef.current?.calibration.getCurrentCameraDistanceCm() ?? null,
       getDistanceRange: () => engineRef.current?.calibration.getDistanceRange() ?? null,
       onInvalidated: (cb) => engineRef.current?.calibration.onInvalidated(cb) ?? (() => {}),
+      getSuspensao: () => engineRef.current?.calibration.getSuspensao() ?? null,
+      onSuspensao: (cb) => engineRef.current?.calibration.onSuspensao(cb) ?? (() => {}),
       getRecentBlinkRatePerMinute: (windowMs) =>
         engineRef.current?.calibration.getRecentBlinkRatePerMinute(windowMs) ?? 0,
       getActiveOpticalCondition: () =>
@@ -2109,6 +2344,23 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, []);
 
+  /**
+   * A câmera está entregando imagem agora? É o `camera_ok` do heartbeat: track
+   * `live` e não muda, engine fora de `sem_camera` e com quadros no último
+   * diagnóstico. Lê refs — identidade estável.
+   */
+  const cameraAtiva = useCallback((): boolean => {
+    const stream = streamRef.current ?? (videoRef.current?.srcObject as MediaStream | null);
+    const track = stream?.getVideoTracks?.()[0];
+    if (!track || track.readyState !== 'live' || track.muted) return false;
+    const eng = engineRef.current;
+    if (!eng) return false;
+    const estado = eng.getState();
+    if (estado === 'sem_camera' || estado === 'idle' || estado === 'loading') return false;
+    const d = eng.getDiagnostics?.();
+    return !d || d.fpsRender > 0;
+  }, []);
+
   const value = useMemo<GazeContextValue>(
     () => ({
       subscribe,
@@ -2120,6 +2372,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         engineRef.current?.setFilterPreset(preset),
       getDiagnostics: () => engineRef.current?.getDiagnostics() ?? null,
       getCameraStream: () => (videoRef.current?.srcObject as MediaStream | null) ?? null,
+      cameraAtiva,
       getCameraAtual: () => cameraAtualRef.current,
       avisoDeCamera,
       limparAvisoDeCamera: () => setAvisoDeCamera(null),
@@ -2147,6 +2400,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       l2csStatus,
       calibration,
       recording,
+      cameraAtiva,
       isComposing,
       setIsComposing,
       isDegraded,
@@ -2169,6 +2423,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         state={state}
         cameraError={cameraError}
         calibrationInvalidated={calibrationInvalidated}
+        avisoDeTela={avisoDeTela}
         distanceAdvice={distanceAdvice}
         gazeLostMessage={gazeLostMessage}
         avisoDeBorda={avisoDeBorda}

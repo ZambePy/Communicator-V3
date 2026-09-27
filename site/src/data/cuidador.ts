@@ -1,6 +1,14 @@
 /* Conteúdo da página do IrisFlow Cuidador (/cuidador). Descreve o app como ele
    é hoje (app/ no monorepo, conferido no código): sem recurso prometido. */
 
+/**
+ * A ressalva dos alertas no celular, a MESMA onde quer que a promessa apareça
+ * (home, /solucao, /cuidador). Sem o push das lojas configurado, o socorro
+ * chega ao celular com o app aberto. Tirar daqui quando o push estiver ativo.
+ */
+export const RESSALVA_DOS_ALERTAS =
+  'Na beta, os alertas chegam com o app aberto; com ele fechado, junto com a publicação nas lojas.'
+
 export const CUIDADOR = {
   titulo: 'O IrisFlow no celular de quem cuida.',
   lead: 'Veja o que o paciente escreve, responda de onde estiver e receba os pedidos de ajuda na hora.',
@@ -35,7 +43,7 @@ export const RECURSOS_DO_CUIDADOR: RecursoDoCuidador[] = [
       src: '/media/cuidador/alertas.webp',
       alt: 'Alerta em tela cheia: "Pedido de socorro. Carlos precisa de você agora", com o motivo (dor muito forte), o prazo para alguém confirmar e o botão "Estou indo!".',
     },
-    nota: 'Na beta, os alertas chegam com o app aberto; com ele fechado, junto com a publicação nas lojas.',
+    nota: RESSALVA_DOS_ALERTAS,
   },
   {
     id: 'relatorios',

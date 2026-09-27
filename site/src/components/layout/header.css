@@ -12,8 +12,8 @@
     color var(--dur) var(--ease-out);
 }
 
-/* Sobre o hero escuro o cabeçalho e transparente e usa a marca em
-   negativo; ao rolar, ele encosta no conteúdo claro e se inverte. */
+/* Sobre a abertura o cabeçalho é transparente e usa a marca em
+   negativo; ao rolar, ganha o vidro escuro para se separar do conteúdo. */
 .header:not(.is-scrolled) {
   color: #f2f6fd;
 }
@@ -153,12 +153,15 @@
   transform: translateY(-7px) rotate(-45deg);
 }
 
-/* --- gaveta mobile --- */
+/* --- gaveta mobile ---
+   Irmã do <header> (não filha): o vidro do cabeçalho viraria o bloco de
+   contenção dela. Fica acima da barra fixa de chamada (110) e do aviso de
+   cookies (120), que cobriam os botões do fim da gaveta. */
 .drawer {
   display: none;
   position: fixed;
   inset: var(--header-h) 0 0 0;
-  z-index: 99;
+  z-index: 125;
   background: var(--bg);
   padding: var(--sp-6) var(--sp-5) var(--sp-8);
   overflow-y: auto;

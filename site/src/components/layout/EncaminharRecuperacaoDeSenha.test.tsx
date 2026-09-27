@@ -13,7 +13,9 @@ import { EncaminharRecuperacaoDeSenha } from './EncaminharRecuperacaoDeSenha'
 
 type Ouvinte = (evento: string) => void
 
-const { supabaseFake, ouvintes, fetchAccount } = vi.hoisted(() => {
+const { supabaseFake, ouvintes, fetchAccount, aba } = vi.hoisted(() => {
+  // Endereço com que a aba abriu: por padrão, a do link do e-mail.
+  const aba = { endereco: '#access_token=x&type=recovery' }
   const ouvintes: Array<(evento: string) => void> = []
   const supabaseFake = {
     auth: {
@@ -25,12 +27,20 @@ const { supabaseFake, ouvintes, fetchAccount } = vi.hoisted(() => {
     },
   }
   const fetchAccount = vi.fn(async () => null)
-  return { supabaseFake, ouvintes, fetchAccount }
+  return { supabaseFake, ouvintes, fetchAccount, aba }
 })
 
 vi.mock('@/lib/supabase', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/supabase')>()
-  return { ...real, isSupabaseConfigured: true, supabase: supabaseFake, client: () => supabaseFake }
+  return {
+    ...real,
+    isSupabaseConfigured: true,
+    supabase: supabaseFake,
+    client: () => supabaseFake,
+    get ENDERECO_INICIAL() {
+      return aba.endereco
+    },
+  }
 })
 
 vi.mock('@/services/api', async (importOriginal) => {
@@ -71,6 +81,7 @@ const rota = () => screen.getByTestId('rota').textContent
 beforeEach(() => {
   vi.clearAllMocks()
   ouvintes.length = 0
+  aba.endereco = '#access_token=x&type=recovery'
 })
 
 describe('EncaminharRecuperacaoDeSenha', () => {
@@ -115,6 +126,17 @@ describe('EncaminharRecuperacaoDeSenha', () => {
     act(() => screen.getByText('ir para a conta').click())
 
     await waitFor(() => expect(rota()).toBe('/conta'))
+  })
+
+  it('as outras abas abertas (o evento é repassado a todas) ficam onde estão', async () => {
+    aba.endereco = ''
+    montar('/planos')
+    await waitFor(() => expect(ouvintes.length).toBeGreaterThan(0))
+
+    await emitir('PASSWORD_RECOVERY')
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(rota()).toBe('/planos')
   })
 
   it('login comum (SIGNED_IN) e renovação de token não mexem na rota', async () => {

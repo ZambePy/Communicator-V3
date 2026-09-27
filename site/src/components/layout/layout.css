@@ -81,3 +81,15 @@
   min-height: 100vh;
   padding-top: calc(var(--header-h) + var(--sp-7));
 }
+
+/* Aviso da fronteira de erro (página que não abriu). */
+.fronteira-de-erro {
+  min-height: 70vh;
+  padding-top: calc(var(--header-h) + var(--sp-8));
+  text-align: center;
+}
+
+.fronteira-de-erro .titulo-capitulo,
+.fronteira-de-erro .texto-capitulo {
+  margin-inline: auto;
+}

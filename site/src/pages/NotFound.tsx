@@ -25,6 +25,17 @@ const SUGESTOES = [
  */
 export default function NotFound() {
   const { pathname } = useLocation()
+  // O caminho vem de quem montou o link: mostra só o começo, decodificado e
+  // curto, para uma frase posta no endereço não virar texto do site.
+  const caminho = (() => {
+    let p = pathname
+    try {
+      p = decodeURIComponent(pathname)
+    } catch {
+      /* caminho malformado: mostra como veio */
+    }
+    return p.length > 48 ? `${p.slice(0, 48)}…` : p
+  })()
 
   return (
     <section className="not-found on-dark">
@@ -43,7 +54,7 @@ export default function NotFound() {
 
         <Reveal anim="up" delay={120}>
           <p className="lead not-found__lead">
-            O endereço <code className="not-found__path">{pathname}</code> não leva a lugar nenhum
+            O endereço <code className="not-found__path">{caminho}</code> não leva a lugar nenhum
             do site — talvez o link esteja incompleto ou a página tenha mudado de nome.
           </p>
         </Reveal>

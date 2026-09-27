@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { AccountProvider, useAccount, type Account } from './AccountContext'
 import type { NovaContaBeta, RespostasPesquisa, ResultadoNovaConta } from '../services/api'
+import { MSG_INDISPONIVEL, SEM_CONEXAO } from '../lib/supabase'
 
 /* ============================================================
    O AccountContext precisa distinguir duas falhas ao reler a conta:
@@ -94,7 +95,8 @@ describe('AccountContext.refresh', () => {
 
     expect(result.current.authenticated).toBe(true)
     expect(result.current.account).toEqual(conta)
-    expect(result.current.sessionError).toBe('Failed to fetch')
+    // o motivo vai para a tela em português, nunca o "Failed to fetch" cru
+    expect(result.current.sessionError).toBe(SEM_CONEXAO)
   })
 
   it('erro de servidor (500) também mantém a sessão', async () => {
@@ -106,7 +108,7 @@ describe('AccountContext.refresh', () => {
 
     expect(result.current.authenticated).toBe(true)
     expect(result.current.account).toEqual(conta)
-    expect(result.current.sessionError).toBe('boom')
+    expect(result.current.sessionError).toBe(MSG_INDISPONIVEL)
   })
 
   it('erro de AUTENTICAÇÃO limpa sessão e conta', async () => {
@@ -301,7 +303,7 @@ describe('AccountContext.signIn / signOut', () => {
     await act(() => result.current.signIn('maria@exemplo.com.br', 'segredo123'))
 
     expect(result.current.authenticated).toBe(true)
-    expect(result.current.sessionError).toBe('Failed to fetch')
+    expect(result.current.sessionError).toBe(SEM_CONEXAO)
   })
 
   it('login recusado propaga o erro e não marca sessão', async () => {

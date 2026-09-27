@@ -17,7 +17,7 @@ function montar() {
 
 beforeEach(() => {
   window.localStorage.clear()
-  unloadAnalytics()
+  unloadAnalytics(() => {})
   vi.stubEnv('VITE_CF_ANALYTICS_TOKEN', 'tok-teste')
 })
 
@@ -32,14 +32,23 @@ describe('<CookieNotice />', () => {
     expect(screen.getByRole('link', { name: /Privacidade/ })).toHaveAttribute('href', '/privacidade')
   })
 
-  it('"Recusar estatísticas" some com o aviso e NÃO carrega o beacon', () => {
-    montar()
-    // antes da escolha, com token, as estatísticas sem cookie rodam
-    expect(beacon()).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Recusar estatísticas' }))
-    expect(screen.queryByRole('region')).not.toBeInTheDocument()
-    expect(window.localStorage.getItem(CONSENT_KEY)).toBe('refused')
-    expect(beacon()).toBeNull()
+  it('"Recusar estatísticas" some com o aviso, tira o beacon e recarrega a página', () => {
+    const original = window.location
+    const reload = vi.fn()
+    Object.defineProperty(window, 'location', { configurable: true, value: { ...original, reload } })
+    try {
+      montar()
+      // antes da escolha, com token, as estatísticas sem cookie rodam
+      expect(beacon()).not.toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Recusar estatísticas' }))
+      expect(screen.queryByRole('region')).not.toBeInTheDocument()
+      expect(window.localStorage.getItem(CONSENT_KEY)).toBe('refused')
+      expect(beacon()).toBeNull()
+      // o beacon que já rodou só para de vez com a página nova
+      expect(reload).toHaveBeenCalledTimes(1)
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: original })
+    }
   })
 
   it('com a recusa guardada, a próxima visita não carrega nada nem mostra o aviso', () => {

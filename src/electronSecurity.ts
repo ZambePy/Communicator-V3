@@ -364,23 +364,42 @@ export function papeisDoMenuEmpacotado(plataforma: string): readonly PapelDoMenu
 /** Janela da política de recarga após queda do renderer. */
 export const RECARGA_JANELA_MS = 10 * 60_000;
 export const RECARGA_MAXIMO = 3;
+/**
+ * Esperas depois do limite da janela: 1, 2 e 5 minutos (o último se repete).
+ * Longas o bastante para a tela não piscar em laço; curtas o bastante para
+ * uma falha que passou (driver de vídeo que voltou, memória liberada) não
+ * deixar o paciente sem comunicação por muito tempo.
+ */
+export const RECARGA_ESPERAS_LONGAS_MS = [60_000, 120_000, 300_000] as const;
 
 /**
  * Depois que o processo da página morre (`render-process-gone`): recarregar?
  *
  *   - `clean-exit` → não (foi fechamento normal);
  *   - qualquer outro motivo (crash, OOM, morto pelo SO, falha de
- *     inicialização) → sim, até `RECARGA_MAXIMO` vezes em
- *     `RECARGA_JANELA_MS`. Passou disso, o problema não é transitório:
- *     recarregar em laço seria uma tela piscando para sempre — o main mostra
- *     um aviso em vez disso.
+ *     inicialização) → sim, SEMPRE. Até `RECARGA_MAXIMO` vezes em
+ *     `RECARGA_JANELA_MS` a espera é de segundos; passou disso, a falha é
+ *     persistente e a espera sobe para minutos (`RECARGA_ESPERAS_LONGAS_MS`),
+ *     com `persistente: true` para o main avisar o cuidador sem bloquear nada.
+ *
+ * Antes, passado o limite, o app parava num diálogo nativo modal sem prazo:
+ * um diálogo não é acionável pelo olhar, e o paciente sozinho ficava sem
+ * comunicação e sem emergência até alguém chegar com o mouse.
  *
  * `historico` são os instantes (ms) das recargas anteriores.
  */
-export function decidirRecarga(motivo: string, historico: readonly number[], agora: number): { recarregar: boolean; esperaMs: number } {
-  if (motivo === 'clean-exit') return { recarregar: false, esperaMs: 0 };
+export function decidirRecarga(
+  motivo: string,
+  historico: readonly number[],
+  agora: number,
+): { recarregar: boolean; esperaMs: number; persistente: boolean } {
+  if (motivo === 'clean-exit') return { recarregar: false, esperaMs: 0, persistente: false };
   const recentes = historico.filter((t) => agora - t < RECARGA_JANELA_MS);
-  if (recentes.length >= RECARGA_MAXIMO) return { recarregar: false, esperaMs: 0 };
-  // Espera cresce um pouco a cada queda: dá tempo de a GPU/driver voltarem.
-  return { recarregar: true, esperaMs: 1000 * (recentes.length + 1) };
+  if (recentes.length < RECARGA_MAXIMO) {
+    // Espera cresce um pouco a cada queda: dá tempo de a GPU/driver voltarem.
+    return { recarregar: true, esperaMs: 1000 * (recentes.length + 1), persistente: false };
+  }
+  const excedentes = recentes.length - RECARGA_MAXIMO;
+  const esperaMs = RECARGA_ESPERAS_LONGAS_MS[Math.min(excedentes, RECARGA_ESPERAS_LONGAS_MS.length - 1)];
+  return { recarregar: true, esperaMs, persistente: true };
 }

@@ -75,4 +75,29 @@ describe('<Contato /> — validação em tempo real', () => {
       '/privacidade',
     )
   })
+
+  it('os limites do banco valem no próprio campo: nome até 120 e mensagem até 5.000, com contador', () => {
+    montar()
+    expect(screen.getByLabelText('Nome completo')).toHaveAttribute('maxlength', '120')
+    const mensagem = screen.getByLabelText('Mensagem')
+    expect(mensagem).toHaveAttribute('maxlength', '5000')
+    fireEvent.change(mensagem, { target: { value: 'x'.repeat(40) } })
+    expect(screen.getByText(/40 de 5\.000 caracteres/)).toBeInTheDocument()
+  })
+
+  it('campo-isca preenchido (robô): diz que enviou e não grava nada', async () => {
+    const { container } = montar()
+    fireEvent.change(screen.getByLabelText('Nome completo'), { target: { value: 'Maria Souza' } })
+    fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'maria@exemplo.com.br' } })
+    fireEvent.change(screen.getByLabelText('Você é'), { target: { value: 'familiar' } })
+    fireEvent.change(screen.getByLabelText('Mensagem'), {
+      target: { value: 'Minha mãe tem ELA e queria saber se ela consegue usar.' },
+    })
+    fireEvent.change(container.querySelector('input[name="site"]')!, { target: { value: 'http://spam' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Enviar mensagem' }))
+    })
+    expect(await screen.findByText('Mensagem recebida')).toBeInTheDocument()
+    expect(enviar).not.toHaveBeenCalled()
+  })
 })

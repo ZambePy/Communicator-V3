@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardIcon } from '@/components/ui/Card'
 import { Icon } from '@/components/ui/Icon'
 import { isEmail } from '@/utils/format'
-import { validar } from '@/utils/validation'
+import { CONTATO, validar } from '@/utils/validation'
 import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
 import { sendContactMessage } from '@/services/api'
 import { BRAND } from '@/data/content'
@@ -15,11 +15,13 @@ import './contato.css'
 
 type Form = { name: string; email: string; role: string; message: string }
 
+/* Os mesmos limites dos CHECKs de contact_messages no banco (CONTATO): antes,
+   um relato longo passava aqui e voltava do banco como erro técnico. */
 const RULES: Rules<Form> = {
-  name: (v) => validar.nome(v, 3),
+  name: (v) => validar.nome(v, CONTATO.nomeMinimo, CONTATO.nomeMaximo),
   email: validar.email,
   role: (v) => validar.escolha(v, 'Escolha a opção que melhor descreve você.'),
-  message: (v) => validar.mensagem(v, 15),
+  message: (v) => validar.mensagem(v, CONTATO.mensagemMinima, CONTATO.mensagemMaxima),
 }
 
 export default function Contato() {
@@ -28,6 +30,9 @@ export default function Contato() {
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [falha, setFalha] = useState<string | null>(null)
+  // Campo-isca: invisível para pessoas (e fora do leitor de tela); robô que
+  // preenche tudo cai aqui e "envia" sem gravar nada.
+  const [isca, setIsca] = useState('')
 
   const set = (key: keyof Form) => (e: { target: { value: string } }) => {
     setForm((f) => ({ ...f, [key]: e.target.value }))
@@ -40,7 +45,7 @@ export default function Contato() {
     setSending(true)
     setFalha(null)
     try {
-      await sendContactMessage(form)
+      if (!isca) await sendContactMessage(form)
       setSent(true)
     } catch (e) {
       setFalha(e instanceof Error ? e.message : 'Não foi possível enviar a mensagem.')
@@ -103,7 +108,8 @@ export default function Contato() {
                       onChange={set('name')}
                       {...v.bind('name')}
                       required
-                      valid={form.name.trim().length >= 3}
+                      valid={form.name.trim().length >= CONTATO.nomeMinimo}
+                      maxLength={CONTATO.nomeMaximo}
                       autoComplete="name"
                       placeholder="Como devemos chamar você"
                     />
@@ -146,9 +152,24 @@ export default function Contato() {
                       onChange={set('message')}
                       {...v.bind('message')}
                       required
-                      valid={form.message.trim().length >= 15}
-                      hint="Ajuda contar: quem vai usar, qual é a condição e há quanto tempo, se a pessoa ainda controla bem os olhos, que computador e webcam vocês têm, e o que já tentaram."
+                      valid={form.message.trim().length >= CONTATO.mensagemMinima}
+                      maxLength={CONTATO.mensagemMaxima}
+                      hint={`Ajuda contar: quem vai usar, qual é a condição e há quanto tempo, se a pessoa ainda controla bem os olhos, que computador e webcam vocês têm, e o que já tentaram. ${form.message.length.toLocaleString('pt-BR')} de ${CONTATO.mensagemMaxima.toLocaleString('pt-BR')} caracteres.`}
                     />
+
+                    <div className="contact__isca" aria-hidden="true">
+                      <label>
+                        Site da empresa (deixe em branco)
+                        <input
+                          type="text"
+                          name="site"
+                          tabIndex={-1}
+                          autoComplete="off"
+                          value={isca}
+                          onChange={(e) => setIsca(e.target.value)}
+                        />
+                      </label>
+                    </div>
 
                     {falha && (
                       <p className="field__error contact__fail" role="alert">

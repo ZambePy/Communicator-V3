@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { usePlans } from '@/hooks/usePlans'
 import { BETA, type PlanId } from '@/data/content'
@@ -13,7 +14,8 @@ const DESTAQUES: Partial<Record<PlanId, string[]>> = {
 export function PlanosResumo() {
   const { plans } = usePlans()
   return (
-    <section className="planos-resumo on-light" aria-labelledby="planos-resumo-titulo">
+    <section className="planos-resumo on-raised com-fundo" aria-labelledby="planos-resumo-titulo">
+      <AmbientBackground variante="particulas" />
       <div className="container">
         <Reveal anim="up">
           <h2 id="planos-resumo-titulo" className="titulo-capitulo">

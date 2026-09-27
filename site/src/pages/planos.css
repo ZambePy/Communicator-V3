@@ -1,21 +1,7 @@
 /* Página de planos (Planos.tsx). A grade vem de sections/pricing.css; aqui só
-   o que muda porque ela está numa faixa clara, logo abaixo da abertura. */
+   o respiro de cima, porque ela fica numa faixa elevada logo abaixo da
+   abertura. */
 
-.on-light .pricing {
+.on-raised .pricing {
   padding-top: clamp(56px, 8vh, 88px);
-}
-
-.on-light .plan--beta {
-  background:
-    radial-gradient(520px 260px at 0% 0%, rgba(0, 121, 106, 0.08), transparent 70%),
-    var(--surface);
-}
-
-.on-light .plan__status--now {
-  background: #00796a;
-  color: #fff;
-}
-
-.on-light .plan__status--now::before {
-  background: #fff;
 }

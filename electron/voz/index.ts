@@ -7,10 +7,15 @@
  *                         consentimento (texto aceito, quando, por qual perfil)
  *   estado.json           { ativa }
  *   cache/<sha256>.wav    frases já sintetizadas (chave = voz + texto)
+ *   tmp/                  referência em preparo e sínteses em curso (*.part.wav)
  *   modelos/              pesos do Hugging Face (HF_HOME)
  *
  * O arquivo original escolhido pelo cuidador NÃO é copiado: só a versão
- * preparada fica no app, e apagar a voz apaga referência, metadados e cache.
+ * preparada fica no app, e apagar a voz apaga referência, metadados (com as
+ * cópias `.bak`), cache e `tmp/`, e encerra o motor — que guarda o
+ * condicionamento da voz na memória do processo. Uma síntese ou importação que
+ * estava em curso na hora da remoção é descartada ao terminar (contador
+ * `geracao`): nada dela é gravado nem tocado.
  *
  * Fluxo de uma fala: renderer pede `sintetizar(texto)` → cache? devolve o WAV
  * → senão manda `falar` ao sidecar, grava no cache e devolve. O renderer toca
@@ -34,6 +39,7 @@ import {
   type ResultadoDaSintese,
 } from '../../src/voz/protocolo';
 import { localizarMotor, Sidecar } from './sidecar';
+import { gravarJsonAtomico, lerJsonProtegido } from '../arquivoSeguro';
 
 interface MetaDaReferencia {
   duracaoS: number;
@@ -50,7 +56,16 @@ interface MetaDaReferencia {
 const CACHE_MAX_MB = 300;
 const TIMEOUTS = { status: 60_000, baixar: 60 * 60_000, preparar: 180_000, falar: 240_000 } as const;
 
-export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: () => BrowserWindow | null }): { encerrar: () => void } {
+export interface ControleDaVoz {
+  /** Pede ao motor que saia (sem esperar). */
+  encerrar: () => void;
+  /** Pede e espera o motor sair (no máximo a cortesia e o kill). */
+  encerrarEAguardar: () => Promise<void>;
+  /** Mata já o que ainda estiver vivo. */
+  matarAgora: () => void;
+}
+
+export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: () => BrowserWindow | null }): ControleDaVoz {
   const pasta = path.join(app.getPath('userData'), 'voz');
   const caminhos = {
     referencia: path.join(pasta, 'referencia.wav'),
@@ -61,6 +76,26 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     temp: path.join(pasta, 'tmp'),
   };
   for (const p of [pasta, caminhos.cache, caminhos.modelos, caminhos.temp]) fs.mkdirSync(p, { recursive: true });
+
+  /** Esvazia `tmp/`: restos de importação e de síntese interrompidas são áudio da voz. */
+  const limparTemporarios = () => {
+    try {
+      fs.rmSync(caminhos.temp, { recursive: true, force: true });
+    } catch (e) {
+      console.warn('[voz] não foi possível limpar voz/tmp:', e);
+    }
+    fs.mkdirSync(caminhos.temp, { recursive: true });
+  };
+  // Um app fechado no meio de uma síntese ou importação deixava ali um
+  // `.part.wav` que ninguém mais apagava.
+  limparTemporarios();
+
+  /**
+   * Versão da voz: muda quando ela é removida ou trocada. Quem espera o motor
+   * (síntese, importação) confere depois do `await` — se mudou, o resultado
+   * pertence a uma voz que já não existe e é jogado fora.
+   */
+  let geracao = 0;
 
   const onde = localizarMotor({ empacotado: app.isPackaged, resourcesPath: process.resourcesPath, raizDoProjeto: opcoes.raizDoProjeto });
 
@@ -84,14 +119,19 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     sintetizando: false,
   };
 
+  // Gravação atômica com cópia `.bak` (ver `arquivoSeguro.ts`): um
+  // `referencia.json` truncado por queda de energia fazia a voz "sumir" e
+  // levava junto o registro do consentimento.
+  const ehObjeto = (v: unknown): v is object => !!v && typeof v === 'object' && !Array.isArray(v);
   const lerJson = <T,>(arquivo: string): T | null => {
-    try {
-      return JSON.parse(fs.readFileSync(arquivo, 'utf-8')) as T;
-    } catch {
-      return null;
-    }
+    const r = lerJsonProtegido(arquivo, ehObjeto, (m) => console.warn(`[voz] ${m}`));
+    return r.ok ? (r.valor as T | null) : null;
   };
-  const gravarJson = (arquivo: string, v: unknown) => fs.writeFileSync(arquivo, JSON.stringify(v, null, 2), 'utf-8');
+  const gravarJson = (arquivo: string, v: unknown) => gravarJsonAtomico(arquivo, v, { indentar: true });
+  /** Apaga um JSON da voz com a cópia e o temporário (o `.bak` também guarda o consentimento). */
+  const apagarJson = (arquivo: string) => {
+    for (const p of [arquivo, `${arquivo}.bak`, `${arquivo}.tmp`]) fs.rmSync(p, { force: true });
+  };
 
   const medirCache = (): { itens: number; mb: number } => {
     try {
@@ -190,6 +230,9 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     const t = normalizarTextoParaFala(texto);
     if (!t) return { ok: false, motivo: 'texto' };
     if (!sidecar) return { ok: false, motivo: 'indisponivel', erro: estado.indisponivelPorque };
+    // A voz desta síntese. Se ela for removida ou trocada enquanto o motor
+    // gera, o resultado não é gravado nem devolvido para tocar.
+    const minhaGeracao = geracao;
     const m = meta();
     if (!m) return { ok: false, motivo: 'sem_voz' };
     if (!estado.ativa) return { ok: false, motivo: 'inativa' };
@@ -209,13 +252,22 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     if (!estado.modelo.baixado) {
       await consultarStatus();
       if (!estado.modelo.baixado) return { ok: false, motivo: 'sem_modelo' };
+      if (minhaGeracao !== geracao) return { ok: false, motivo: 'sem_voz' };
     }
 
     patch({ sintetizando: true });
     const inicio = Date.now();
     const temp = path.join(caminhos.temp, `${chave}.part.wav`);
+    // A voz desta síntese ainda é a voz em vigor? Conferido DEPOIS de cada
+    // espera pelo motor: "Remover voz" no meio não pode terminar com a frase
+    // gravada no cache e tocada com a voz que acabou de ser removida.
+    const vozAindaValida = () => minhaGeracao === geracao && meta()?.vozId === m.vozId;
     try {
       const r = await sidecar.pedir({ cmd: 'falar', texto: t, referencia: caminhos.referencia, saida: temp, idioma: 'pt' }, TIMEOUTS.falar);
+      if (!vozAindaValida()) {
+        console.log('[voz] síntese descartada: a voz foi removida ou trocada durante a geração');
+        return { ok: false, motivo: 'sem_voz' };
+      }
       if (!r.ok) return { ok: false, motivo: 'motor', erro: r.erro };
       fs.renameSync(temp, arquivo);
       podarCache();
@@ -223,6 +275,9 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
       const buf = fs.readFileSync(arquivo);
       return { ok: true, wav: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), deCache: false, ms: Date.now() - inicio };
     } catch (e) {
+      // Remover a voz encerra o motor, e a síntese em curso falha por isso:
+      // não é erro do motor, é a voz que deixou de existir.
+      if (!vozAindaValida()) return { ok: false, motivo: 'sem_voz' };
       const msg = e instanceof Error ? e.message : String(e);
       patch({ motor: sidecar.emErro ? 'erro' : estado.motor, erro: msg });
       return { ok: false, motivo: 'motor', erro: msg };
@@ -251,9 +306,15 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     const origem = escolha.filePaths[0];
 
     const temp = path.join(caminhos.temp, 'referencia.part.wav');
+    // "Remover voz" durante o preparo (até 3 min): sem esta conferência a
+    // importação terminava depois e gravava a voz de volta.
+    let minhaGeracao = geracao;
     try {
       patch({ motor: estado.motor === 'pronto' ? 'pronto' : 'iniciando' });
       const r = await sidecar.pedir({ cmd: 'preparar_referencia', entrada: origem, saida: temp }, TIMEOUTS.preparar);
+      if (minhaGeracao !== geracao) {
+        return { ok: false, erro: 'A voz foi removida enquanto o áudio era preparado; nada foi gravado.' };
+      }
       if (!r.ok) return { ok: false, erro: r.erro ?? 'O preparo do áudio falhou.' };
       const duracaoS = Number(r.duracao_util_s ?? 0);
       const snrDb = typeof r.snr_db === 'number' ? r.snr_db : null;
@@ -262,6 +323,10 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
 
       // Troca atômica: a referência antiga só some quando a nova está pronta.
       fs.renameSync(temp, caminhos.referencia);
+      // Voz trocada: uma síntese da anterior que termine agora é descartada.
+      // A importação continua sendo desta geração (um erro depois daqui não é
+      // "a voz foi removida").
+      minhaGeracao = ++geracao;
       const m: MetaDaReferencia = {
         duracaoS,
         qualidade,
@@ -281,6 +346,9 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
       patch({ motor: 'pronto', erro: undefined });
       return { ok: true, duracaoS, qualidade, avisos };
     } catch (e) {
+      if (minhaGeracao !== geracao) {
+        return { ok: false, erro: 'A voz foi removida enquanto o áudio era preparado; nada foi gravado.' };
+      }
       const msg = e instanceof Error ? e.message : String(e);
       patch({ erro: msg });
       return { ok: false, erro: msg };
@@ -302,13 +370,34 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
       const msg = e instanceof Error ? e.message : String(e);
       patch({ modelo: { ...estado.modelo, baixando: false, progresso: null }, erro: msg });
       return { ok: false, erro: msg };
+    } finally {
+      if (encerrarAposDownload) {
+        encerrarAposDownload = false;
+        sidecar.encerrar();
+      }
     }
   }
 
+  /** Remover a voz durante um download: o motor só é encerrado quando o download acabar. */
+  let encerrarAposDownload = false;
+
   function remover(): void {
-    for (const p of [caminhos.referencia, caminhos.meta, caminhos.estado]) fs.rmSync(p, { force: true });
+    // Primeiro a versão: qualquer síntese/importação em curso passa a ser de
+    // uma voz que não existe mais e é descartada quando o motor responder.
+    geracao++;
+    fs.rmSync(caminhos.referencia, { force: true });
+    apagarJson(caminhos.meta);
+    apagarJson(caminhos.estado);
     fs.rmSync(caminhos.cache, { recursive: true, force: true });
     fs.mkdirSync(caminhos.cache, { recursive: true });
+    limparTemporarios();
+    // O motor guarda o condicionamento da voz na memória do processo. Encerrar
+    // tira a voz da memória e interrompe a síntese em curso. Um download do
+    // modelo (que não tem nada da voz) não é interrompido: o motor sai depois.
+    if (sidecar) {
+      if (estado.modelo.baixando) encerrarAposDownload = true;
+      else sidecar.encerrar();
+    }
     recarregarDoDisco();
     avisar();
   }
@@ -346,5 +435,9 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     avisar();
   }, undefined));
 
-  return { encerrar: () => sidecar?.encerrar() };
+  return {
+    encerrar: () => sidecar?.encerrar(),
+    encerrarEAguardar: () => sidecar?.encerrarEAguardar() ?? Promise.resolve(),
+    matarAgora: () => sidecar?.matarAgora(),
+  };
 }

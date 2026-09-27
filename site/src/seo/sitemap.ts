@@ -40,9 +40,18 @@ export function buildSitemap(origin: string, pages: PageMeta[], lastmod?: string
   )
 }
 
-/** Libera tudo, fecha as telas de conta e aponta o sitemap absoluto. */
+/**
+ * Libera tudo, fecha as telas de conta e aponta o sitemap absoluto.
+ *
+ * O robots.txt casa por PREFIXO (RFC 9309): "Disallow: /conta" fechava também
+ * /contato, e "Disallow: /app", o /apple-touch-icon.png. Por isso cada rota
+ * fechada sai em três regras exatas: a própria rota (`$` marca o fim do
+ * endereço), as subpáginas (`/`) e a rota com parâmetros (`?`).
+ */
 export function buildRobots(origin: string, pages: PageMeta[]): string {
-  const blocked = pages.filter((p) => !p.index).map((p) => `Disallow: ${p.path}`)
+  const blocked = pages
+    .filter((p) => !p.index)
+    .flatMap((p) => [`Disallow: ${p.path}$`, `Disallow: ${p.path}/`, `Disallow: ${p.path}?`])
   return [
     'User-agent: *',
     'Allow: /',

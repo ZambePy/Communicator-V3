@@ -153,4 +153,15 @@ describe('motivoDoLinkNaUrl', () => {
     ).toBe('O link é inválido ou já expirou.')
     expect(motivoDoLinkNaUrl({ hash: '#error=server_error', search: '' })).toBe('O link não é válido.')
   })
+
+  it('texto desconhecido no endereço nunca vira aviso (golpe com o domínio oficial)', () => {
+    const golpe =
+      '#error=access_denied&error_description=Sua+conta+ser%C3%A1+bloqueada+hoje.+Pague+a+taxa+pelo+Pix'
+    const motivo = motivoDoLinkNaUrl({ hash: golpe, search: '' })
+    expect(motivo).toBe('O link não é válido ou já foi usado.')
+    expect(motivo).not.toMatch(/Pix|bloqueada/)
+    expect(motivoDoLinkNaUrl({ hash: '', search: '?error=x&error_description=Ligue+4000-0000' })).toBe(
+      'O link não é válido.',
+    )
+  })
 })

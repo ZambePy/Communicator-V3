@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { CAPITULOS } from '@/data/home'
 import { prefersReducedMotion } from '@/hooks/useReducedMotion'
 import './capitulos.css'
@@ -30,7 +31,8 @@ export function Capitulos() {
   const semMovimento = prefersReducedMotion()
 
   return (
-    <section className="capitulos on-light" id="produto" aria-labelledby="capitulos-titulo">
+    <section className="capitulos on-raised com-fundo" id="produto" aria-labelledby="capitulos-titulo">
+      <AmbientBackground variante="particulas" />
       <div className="container">
         <header className="capitulos__cabeca">
           <span className="eyebrow">IrisFlow Communicator</span>

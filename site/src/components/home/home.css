@@ -127,6 +127,13 @@
   margin-bottom: var(--sp-5);
 }
 
+/* A ressalva dos alertas (beta), logo abaixo da promessa. */
+.cuidador-destaque__ressalva {
+  margin: calc(-1 * var(--sp-3)) 0 var(--sp-5);
+  font-size: 0.92rem;
+  color: var(--text-dim);
+}
+
 /* ---------- resumo dos planos ---------- */
 .planos-resumo {
   padding-block: clamp(72px, 11vh, 128px);

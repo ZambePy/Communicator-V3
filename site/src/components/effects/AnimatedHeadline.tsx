@@ -1,4 +1,4 @@
-import type { ElementType } from 'react'
+import { Fragment, type ElementType } from 'react'
 import { useInView } from '@/hooks/useInView'
 import './typography.css'
 
@@ -39,7 +39,11 @@ export function AnimatedHeadline({
   return (
     <Tag ref={ref} className={`headline ${className}`}>
       {words.map((word, i) => (
-        <span className="headline__mask" key={`${word}-${i}`}>
+        <Fragment key={`${word}-${i}`}>
+          {/* O espaço de verdade, ENTRE as máscaras: copiar, buscar na página,
+              tradutores e leitores de tela recebem o título com espaços. */}
+          {i > 0 && ' '}
+          <span className="headline__mask">
           <span
             className={`headline__word${marks.includes(norm(word)) ? ' gradient-text' : ''}`}
             style={{
@@ -51,7 +55,8 @@ export function AnimatedHeadline({
           >
             {word}
           </span>
-        </span>
+          </span>
+        </Fragment>
       ))}
     </Tag>
   )

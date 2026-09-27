@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { BETA, BETA_CTA } from '@/data/content'
+import { naRota } from '@/routes'
 import './sticky-cta.css'
 
 /** Rotas em que a própria página já é o destino da chamada (ou um fluxo). */
@@ -56,7 +57,7 @@ export function StickyCta() {
   const { pathname } = useLocation()
   const [dismissed, setDismissed] = useState(readDismissed)
   const [blocked, setBlocked] = useState(true)
-  const hiddenRoute = HIDDEN_ON.some((r) => pathname.startsWith(r))
+  const hiddenRoute = naRota(pathname, HIDDEN_ON)
 
   useEffect(() => {
     if (dismissed || hiddenRoute) return

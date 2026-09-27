@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { supabase } from '@/lib/supabase'
+import { mensagemDeErro, supabase } from '@/lib/supabase'
 import * as api from '@/services/api'
 import type { PlanId } from '@/data/content'
 
@@ -176,10 +176,9 @@ export function AccountProvider({ children }: { children: ReactNode }) {
         return null
       }
       // Rede fora, banco fora, 500: o estado anterior continua valendo. A conta
-      // que já estava carregada segue na tela e o aviso explica o que houve.
-      setSessionError(
-        e instanceof Error ? e.message : 'Não foi possível falar com o servidor agora.',
-      )
+      // que já estava carregada segue na tela e o aviso explica o que houve —
+      // sempre em português (um TypeError de rede chega aqui com o texto cru).
+      setSessionError(e instanceof api.ApiError ? e.message : mensagemDeErro(e))
       return null
     }
   }, [])

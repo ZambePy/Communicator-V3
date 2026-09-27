@@ -35,3 +35,28 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 export function idDoCliente(valor: unknown): string | null {
   return typeof valor === 'string' && UUID.test(valor) ? valor.toLowerCase() : null;
 }
+
+/** Que sessões o heartbeat carimba com `last_heartbeat_at`. */
+export type SessoesDoHeartbeat = { tipo: 'todas' } | { tipo: 'nenhuma' } | { tipo: 'uma'; id: string };
+
+/**
+ * Que sessões o heartbeat mantém vivas.
+ *
+ * O carimbo `last_heartbeat_at` é o que impede o job de sessões órfãs de
+ * encerrar uma sessão. Antes o heartbeat carimbava TODAS as sessões abertas
+ * do computador — inclusive uma largada aberta (o app fechou sem
+ * `session.end`, ou abriu outra por cima): ela nunca era encerrada, e o
+ * celular mostrava o paciente "em sessão" desde a véspera, com contadores de
+ * duas sessões misturados.
+ *
+ *  - sem o campo `session_id` (desktops antigos, que não o mandam): todas as
+ *    abertas do computador, como antes;
+ *  - `session_id: null` (o desktop não tem sessão aberta) ou valor que não é
+ *    UUID: nenhuma — o job encerra as largadas em 5 minutos;
+ *  - um UUID: só essa.
+ */
+export function sessoesDoHeartbeat(body: Record<string, unknown>): SessoesDoHeartbeat {
+  if (!('session_id' in body)) return { tipo: 'todas' };
+  const id = idDoCliente(body.session_id);
+  return id ? { tipo: 'uma', id } : { tipo: 'nenhuma' };
+}

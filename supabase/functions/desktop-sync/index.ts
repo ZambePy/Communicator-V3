@@ -28,14 +28,19 @@
 //
 //   heartbeat          { app_version, camera_ok, tracker_ok, calibrated, session_id? }
 //                      → { ok, pending_messages, sessao_aberta? }
-//                      (também carimba sessions.last_heartbeat_at das sessões
-//                       abertas deste computador — migração 20260923022642_sessoes_orfas;
-//                       `sessao_aberta` diz se a `session_id` enviada ainda está
-//                       aberta — o job de sessões órfãs pode tê-la encerrado)
+//                      (também carimba sessions.last_heartbeat_at — migração
+//                       20260923022642_sessoes_orfas: só da `session_id` enviada;
+//                       com `session_id: null`, de nenhuma; sem o campo (desktops
+//                       antigos), de todas as abertas deste computador — ver
+//                       sessoesDoHeartbeat em ./respostas.ts. `sessao_aberta` diz
+//                       se a `session_id` enviada ainda está aberta — o job de
+//                       sessões órfãs pode tê-la encerrado)
 //   session.upsert     { session: { id?, status, dwell_ms, filter_preset, ... } } → { ok, id }
 //   session.end        { session_id, utterances?, chars_typed?, modules_used?, occurred_at?, sent_at? } → { ok }
 //   calibration.result { session_id?, calibration: {...}, report: {...}, occurred_at?, sent_at? } → { ok, id }
-//   message.send       { text, kind, occurred_at?, sent_at? }  → { ok, id }   (sender = paciente)
+//   message.send       { id?, text, kind, occurred_at?, sent_at? }  → { ok, id }   (sender = paciente)
+//                      (`id`: UUID gerado no computador; um reenvio com o mesmo id
+//                       não grava a mensagem duas vezes)
 //   message.spoken     { message_id, occurred_at?, sent_at? }  → { ok }       (msg do cuidador vocalizada)
 //   messages.pending   {}                            → { messages } (do cuidador, ainda não faladas)
 //   help.create        { id?, kind, message, session_id, occurred_at?, sent_at? } → { ok, id }   + push
@@ -56,7 +61,8 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { chegouComAtraso, horaDeBrasilia, horarioDoEvento } from './horario.ts';
-import { idDoCliente, statusDoErroDoBanco } from './respostas.ts';
+import { exigeAcao, mensagensDePush, TITULOS } from './push.ts';
+import { idDoCliente, sessoesDoHeartbeat, statusDoErroDoBanco } from './respostas.ts';
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
@@ -86,15 +92,6 @@ async function sha256(s: string) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-const TITULOS: Record<string, string> = {
-  emergencia: '🚨 Pedido de socorro',
-  ajuda: 'Pedido de ajuda',
-  postura: 'Aviso de postura',
-  fadiga: 'Sinal de fadiga',
-  recalibracao: 'Recalibração recomendada',
-  dispositivo: 'Problema no dispositivo',
-};
-
 const HELP_KINDS = new Set(Object.keys(TITULOS));
 const MSG_KINDS = new Set(['texto', 'frase', 'pictograma', 'simnao', 'sistema']);
 const SESSION_STATUS = new Set(['calibrating', 'active', 'paused', 'ended']);
@@ -123,15 +120,7 @@ async function notifyCaregiver(beneficiaryId: string, kind: string, body: string
   if (!ben) return;
   const { data: tokens } = await supabase.from('push_tokens').select('token').eq('profile_id', ben.profile_id);
   if (!tokens?.length) return;
-  const messages = tokens.map((t) => ({
-    to: t.token,
-    title: TITULOS[kind] ?? 'IrisFlow',
-    body: `${ben.user_name}: ${body}`.slice(0, 180),
-    sound: 'default',
-    priority: 'high',
-    channelId: kind === 'emergencia' || kind === 'ajuda' ? 'emergencia' : 'default',
-    data: { kind, beneficiary_id: beneficiaryId },
-  }));
+  const messages = mensagensDePush(tokens.map((t) => t.token as string), kind, ben.user_name, body, beneficiaryId);
   try {
     await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
@@ -189,28 +178,36 @@ Deno.serve(async (req) => {
         tracker_ok: Boolean(tracker_ok),
         calibrated: Boolean(calibrated),
       }).eq('id', device.id);
-      // Sessões abertas DESTE computador ganham o carimbo de vida. É o que
-      // permite ao job `encerrar_sessoes_orfas` (migração 20260923022642_sessoes_orfas) fechar
-      // sessões cujo desktop sumiu sem mandar `session.end`. O heartbeat não
-      // sabe o id da sessão — e não precisa: o vínculo é pelo device_id.
+      // O carimbo de vida é o que impede o job `encerrar_sessoes_orfas`
+      // (migração 20260923022642_sessoes_orfas) de fechar a sessão. Só a sessão
+      // que o desktop diz ter aberta o recebe — uma largada aberta (o app
+      // fechou sem `session.end`) deixa de ser mantida viva e o job a encerra.
+      // Desktops antigos não mandam `session_id`: para eles continuam todas as
+      // abertas deste computador (ver sessoesDoHeartbeat em ./respostas.ts).
       // O erro é ignorado de propósito: se a coluna ainda não existir
       // (migração não aplicada), o heartbeat continua respondendo e o job
       // usa `updated_at` como reserva.
-      const { data: abertas, error: erroDasSessoes } = await supabase.from('sessions')
-        .update({ last_heartbeat_at: now })
-        .eq('device_id', device.id).neq('status', 'ended')
-        .select('id');
-      const { count } = await supabase
-        .from('messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('beneficiary_id', b).eq('sender', 'cuidador').eq('spoken', false);
+      const alvo = sessoesDoHeartbeat(body);
       // A sessão que o desktop acha que está aberta ainda está? Depois de uns
       // minutos sem rede, o job de sessões órfãs a encerra; sem esta resposta
       // o desktop seguia mandando contadores para uma sessão encerrada e o
       // celular mostrava o paciente como desconectado enquanto ele usava o app.
-      const sessaoAberta = typeof body.session_id === 'string' && !erroDasSessoes
-        ? (abertas ?? []).some((s) => s.id === body.session_id)
-        : undefined;
+      let sessaoAberta: boolean | undefined;
+      if (alvo.tipo === 'nenhuma') {
+        // `session_id` com algo que não é UUID não é sessão nenhuma.
+        if (typeof body.session_id === 'string') sessaoAberta = false;
+      } else {
+        let carimbo = supabase.from('sessions')
+          .update({ last_heartbeat_at: now })
+          .eq('device_id', device.id).neq('status', 'ended');
+        if (alvo.tipo === 'uma') carimbo = carimbo.eq('id', alvo.id);
+        const { data: abertas, error: erroDasSessoes } = await carimbo.select('id');
+        if (alvo.tipo === 'uma' && !erroDasSessoes) sessaoAberta = (abertas ?? []).some((s) => s.id === alvo.id);
+      }
+      const { count } = await supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('beneficiary_id', b).eq('sender', 'cuidador').eq('spoken', false);
       return json({ ok: true, pending_messages: count ?? 0, sessao_aberta: sessaoAberta });
     }
 
@@ -277,10 +274,25 @@ Deno.serve(async (req) => {
       const text = String(body.text ?? '').trim().slice(0, 2000);
       if (!text) return json({ error: 'texto vazio' }, 400);
       const kind = MSG_KINDS.has(String(body.kind)) ? String(body.kind) : 'texto';
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({ beneficiary_id: b, sender: 'paciente', kind, text, spoken: true, created_at: quando })
-        .select('id').single();
+      const linha = { beneficiary_id: b, sender: 'paciente', kind, text, spoken: true, created_at: quando };
+      const idMensagem = idDoCliente(body.id);
+      if (idMensagem) {
+        // Id escolhido no computador (como no help.create): um reenvio da fila
+        // offline depois de uma resposta perdida encontra a mensagem que já
+        // existe, e o cuidador não a recebe duas vezes.
+        const { data: gravada, error } = await supabase
+          .from('messages')
+          .upsert({ id: idMensagem, ...linha }, { onConflict: 'id', ignoreDuplicates: true })
+          .select('id');
+        if (error) return erroDoBanco(error);
+        if (gravada?.length) return json({ ok: true, id: gravada[0].id });
+        const { data: existente, error: erroDaBusca } = await supabase
+          .from('messages').select('beneficiary_id').eq('id', idMensagem).maybeSingle();
+        if (erroDaBusca) return erroDoBanco(erroDaBusca);
+        if (existente?.beneficiary_id === b) return json({ ok: true, id: idMensagem, repetido: true });
+        // Id já usado por OUTRO paciente (cliente adulterado): grava com id do servidor.
+      }
+      const { data, error } = await supabase.from('messages').insert(linha).select('id').single();
       if (error) return erroDoBanco(error);
       return json({ ok: true, id: data.id });
     }
@@ -350,7 +362,7 @@ Deno.serve(async (req) => {
       // Push só nos tipos que exigem ação imediata; avisos de sistema chegam
       // pelo realtime e ficam no histórico de alertas. Um pedido que chega
       // atrasado diz a hora em que foi feito, para não passar por novo.
-      if (kind === 'emergencia' || kind === 'ajuda') {
+      if (exigeAcao(kind)) {
         const corpo = chegouComAtraso(quando, agora)
           ? [message, `pedido às ${horaDeBrasilia(quando)}, chegou com atraso`].filter(Boolean).join(' — ')
           : message;

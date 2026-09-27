@@ -40,12 +40,21 @@ contextBridge.exposeInMainWorld('irisflowSystem', {
    *  o SO não informa ou o valor não é confiável — a UI mantém o passo manual. */
   getMonitorSizes: (): Promise<PhysicalPanelSizeIPC[]> =>
     ipcRenderer.invoke('irisflow:monitor-sizes'),
-  /** Resolução e fator de escala da tela primária, do SO. `window.screen` do
-   *  renderer não expõe a escala do Windows, e ela altera a relação px→cm. */
+  /** Resolução e fator de escala do monitor em que a JANELA do app está (não
+   *  o primário), do SO. `window.screen` do renderer não expõe a escala do
+   *  Windows, e ela altera a relação px→cm. */
   getDisplayInfo: (): Promise<{
-    widthPx: number; heightPx: number; scaleFactor: number;
+    id?: number; widthPx: number; heightPx: number; scaleFactor: number;
     physicalWidthPx: number; physicalHeightPx: number;
   }> => ipcRenderer.invoke('irisflow:display-info'),
+  /** O monitor da janela mudou (ela foi para outro monitor, ou a resolução ou
+   *  a escala dele mudou): quem guardou `getDisplayInfo`/`getMonitorSizes` deve
+   *  consultar de novo. Devolve a função que cancela a escuta. */
+  onTelaMudou: (cb: (info: { id: number; scaleFactor: number }) => void): (() => void) => {
+    const handler = (_e: unknown, info: { id: number; scaleFactor: number }) => cb(info);
+    ipcRenderer.on('irisflow:tela-mudou', handler);
+    return () => ipcRenderer.removeListener('irisflow:tela-mudou', handler);
+  },
 
   /** Abre a pasta de registros do app (log do processo principal, sem imagem
    *  nem texto do paciente) no gerenciador de arquivos — para anexar num
@@ -59,6 +68,8 @@ contextBridge.exposeInMainWorld('irisflowSystem', {
     parar: (): Promise<void> => ipcRenderer.invoke(CANAIS.parar),
     /** Fluxo contínuo (30–60 Hz): `send`, sem resposta, para não enfileirar promessas. */
     olhar: (amostra: AmostraDeOlhar): void => ipcRenderer.send(CANAIS.olhar, amostra),
+    /** Estado do rastreador (`sem_camera` encerra a sessão pelo vigia do main). */
+    rastreamento: (estado: string): void => ipcRenderer.send(CANAIS.rastreamento, estado),
     onParou: (cb: (motivo: MotivoDeSaida) => void): (() => void) => {
       const handler = (_e: unknown, motivo: MotivoDeSaida) => cb(motivo);
       ipcRenderer.on(CANAIS.parou, handler);

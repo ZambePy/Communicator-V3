@@ -9,6 +9,7 @@
 import type { IconName } from '@/components/ui/Icon'
 import type { Recurso, Numero } from '@/components/pagina/Blocos'
 import type { ModuleState } from './content'
+import { RESSALVA_DOS_ALERTAS } from './cuidador'
 
 export type Tela = { src: string; alt: string; largura?: number; altura?: number }
 
@@ -25,6 +26,8 @@ export type ModuloEmTela = {
   tela: Tela
   /** A tela do celular de quem cuida, quando o módulo também vive lá. */
   celular?: Tela
+  /** Ressalva do que ainda depende de algo (ex.: o push das lojas). */
+  nota?: string
 }
 
 const T = '/media/telas'
@@ -94,6 +97,7 @@ export const MODULOS_EM_TELA: ModuloEmTela[] = [
       'Se ninguém confirmar no prazo, o pedido é reforçado',
       'Continua acionável mesmo quando o rastreamento oscila',
     ],
+    nota: RESSALVA_DOS_ALERTAS,
     estado: 'Implementado',
     tela: {
       src: `${T}/emergencia.webp`,

@@ -10,7 +10,7 @@ import { SelosDasLojas } from './SelosDasLojas'
 const { modo, lojas } = vi.hoisted(() => ({
   modo: { oficiais: true },
   lojas: {
-    googlePlay: 'https://play.google.com/store/apps/details?id=br.com.irisflow.cuidador',
+    googlePlay: 'https://play.google.com/store/apps/details?id=br.com.irisflow.cuidador' as string | null,
     appStore: null as string | null,
     apk: null as string | null,
   },
@@ -27,6 +27,7 @@ vi.mock('@/lib/lojas', () => ({
 beforeEach(() => {
   modo.oficiais = true
   lojas.appStore = null
+  lojas.googlePlay = 'https://play.google.com/store/apps/details?id=br.com.irisflow.cuidador'
 })
 
 describe('SelosDasLojas', () => {
@@ -51,6 +52,15 @@ describe('SelosDasLojas', () => {
       'href',
       lojas.googlePlay,
     )
+  })
+
+  it('sem ficha no Google Play, o selo do Google também fica "em breve" e leva à disponibilidade', () => {
+    lojas.googlePlay = null
+    render(<SelosDasLojas />)
+    const google = screen.getByRole('link', { name: 'Google Play, para Android: em breve' })
+    expect(google).toHaveAttribute('href', '/cuidador#disponibilidade')
+    expect(google).not.toHaveAttribute('target')
+    expect(screen.getAllByText('em breve')).toHaveLength(2)
   })
 
   it('com o endereço da App Store, o selo abre a loja numa aba nova', () => {

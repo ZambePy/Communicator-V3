@@ -63,6 +63,12 @@ export default function ConfirmarEmail() {
       .then(() => refresh())
       .then(() => {
         if (!vivo) return
+        // Convite da equipe: a pessoa convidada ainda não tem senha — cria
+        // a primeira em /nova-senha, em vez de ouvir só "obrigado".
+        if (tipo === 'invite') {
+          navigate('/nova-senha?convite=1', { replace: true })
+          return
+        }
         setEstado('ok')
         // tira o token do endereço: um F5 não tenta verificar de novo
         navigate({ search: '' }, { replace: true })

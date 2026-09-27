@@ -96,7 +96,8 @@
   right: -8px;
   padding: 2px 8px;
   border-radius: var(--r-pill);
-  background: var(--teal);
+  /* Branco sobre teal-700: 5,9:1 (sobre o teal da marca dava 3,05:1). */
+  background: var(--teal-700);
   color: #fff;
   font-size: 0.68rem;
   font-weight: 700;

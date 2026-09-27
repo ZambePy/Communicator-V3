@@ -16,9 +16,11 @@ import { detalheDoMotivo } from '@tracker/vigiaDeRecalibracao.aviso';
  * topo de TODAS as telas, inclusive login e onboarding, que o cuidador opera
  * com mouse e teclado e onde não existe controle por olhar nenhum.
  *
- * Os demais continuam: falha de câmera, calibração invalidada, perda de rosto e
- * aviso de distância. Todos são reativos a um evento — só aparecem quando algo
- * de fato acontece — em vez de ficarem presos na tela por uma condição estável.
+ * Os demais continuam: falha de câmera, câmera que parou de enviar imagem,
+ * rastreamento parado (detector de rosto em falha), calibração invalidada ou
+ * suspensa pela janela fora do tamanho, perda de rosto e aviso de distância.
+ * Todos são reativos a um evento — só aparecem quando algo de fato acontece —
+ * em vez de ficarem presos na tela por uma condição estável.
  *
  * O bloqueio que o aviso removido anunciava continua valendo: sem calibração o
  * dwell segue desligado, inclusive para emergência (ver
@@ -29,10 +31,22 @@ import { detalheDoMotivo } from '@tracker/vigiaDeRecalibracao.aviso';
  */
 
 interface Props {
-  /** Estado corrente do engine. */
+  /**
+   * Estado corrente do engine. Dois estados viram aviso por si: `sem_camera`
+   * (a câmera parou de entregar quadros) e `error` (o detector de rosto falhou
+   * e o engine está tentando recriá-lo). Sem eles, os dois ficavam só no
+   * heartbeat — na tela, um cursor parado.
+   */
   state: string;
   cameraError: string | null;
   calibrationInvalidated: string | null;
+  /**
+   * A janela não está do tamanho em que a calibração foi feita (saiu da tela
+   * cheia, monitor rearranjado): a calibração está SUSPENSA — o olhar só aciona
+   * a Emergência e os botões de recuperação — até a janela voltar. `null` no
+   * caminho feliz. O texto vem pronto do `GazeProvider`.
+   */
+  avisoDeTela?: string | null;
   /**
    * gaze perdido além do hold de 2 s. `null` no caminho feliz.
    *
@@ -130,8 +144,10 @@ const CARD: React.CSSProperties = {
 };
 
 export const GazeStatusBanner: React.FC<Props> = ({
+  state,
   cameraError,
   calibrationInvalidated,
+  avisoDeTela = null,
   distanceAdvice = null,
   gazeLostMessage = null,
   avisoDeBorda = null,
@@ -144,10 +160,8 @@ export const GazeStatusBanner: React.FC<Props> = ({
   onRecalibrar = null,
   onDispensarRecalibracao = null,
 }) => {
-  // `state` continua no contrato e e IGNORADO: era a entrada do unico aviso que
-  // saiu ("Ainda nao ha calibracao"). Fica no tipo porque o `GazeProvider`
-  // segue passando, e porque o teste precisa de um jeito de afirmar que
-  // `state="uncalibrated"` nao produz banner nenhum.
+  // `state` só vale para `sem_camera` e `error`. `state="uncalibrated"` não
+  // produz banner nenhum (o aviso "Ainda não há calibração" saiu de vez).
   // Ordem de precedência = ordem de gravidade. Sem câmera, nada mais importa.
   let tom: 'erro' | 'aviso' | null = null;
   let titulo = '';
@@ -161,10 +175,31 @@ export const GazeStatusBanner: React.FC<Props> = ({
     tom = 'erro';
     titulo = 'A câmera não está disponível';
     detalhe = `${cameraError} O controle por olhar está desligado até a câmera voltar.`;
+  } else if (state === 'sem_camera') {
+    // A câmera abriu, mas parou de entregar quadros (cabo solto, hub USB que
+    // reiniciou, driver travado, notebook que dormiu). Antes o engine seguia
+    // em `tracking` sem emitir nada, e a tela não dizia coisa alguma.
+    tom = 'erro';
+    titulo = 'A câmera parou de enviar imagem';
+    detalhe =
+      'O controle por olhar está parado. O IrisFlow está tentando reconectar a câmera sozinho; ' +
+      'confira se o cabo USB está firme e se nenhum outro programa está usando a câmera.';
+  } else if (state === 'error') {
+    tom = 'erro';
+    titulo = 'O rastreamento do olhar parou';
+    detalhe =
+      'O detector de rosto falhou — em geral por causa da placa de vídeo. O IrisFlow está ' +
+      'tentando recuperar sozinho; se não voltar em alguns minutos, feche e abra o IrisFlow.';
   } else if (calibrationInvalidated) {
     tom = 'erro';
     titulo = 'A calibração deixou de valer';
     detalhe = `${calibrationInvalidated} É preciso calibrar de novo antes de usar o olhar.`;
+  } else if (avisoDeTela) {
+    // 'aviso', não 'erro': nada foi perdido — a calibração volta sozinha quando
+    // a janela voltar ao tamanho dela, e a Emergência continua funcionando.
+    tom = 'aviso';
+    titulo = 'O olhar está em modo reduzido';
+    detalhe = avisoDeTela;
   } else if (gazeLostMessage) {
     // acima do aviso de distância e abaixo dos erros de configuração.
     //

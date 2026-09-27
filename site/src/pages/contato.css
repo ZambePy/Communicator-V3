@@ -58,3 +58,12 @@
   font-size: 0.9rem;
   color: var(--text-dim);
 }
+
+/* Campo-isca contra robôs: fora da tela, sem ocupar espaço. */
+.contact__isca {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}

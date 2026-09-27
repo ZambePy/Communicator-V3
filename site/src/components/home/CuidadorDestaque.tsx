@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { SelosDasLojas } from '@/components/ui/SelosDasLojas'
 import { CUIDADOR_DESTAQUE, DEMO_CUIDADOR } from '@/data/home'
@@ -7,7 +8,8 @@ import { CelularDemo } from './Aparelhos'
 /** O app de quem cuida, com a gravação real no celular. */
 export function CuidadorDestaque() {
   return (
-    <section className="cuidador-destaque on-light" aria-labelledby="cuidador-destaque-titulo">
+    <section className="cuidador-destaque on-raised com-fundo" aria-labelledby="cuidador-destaque-titulo">
+      <AmbientBackground variante="particulas" />
       <div className="container cuidador-destaque__grade">
         <Reveal anim="up" className="cuidador-destaque__aparelho">
           <CelularDemo demo={DEMO_CUIDADOR} />
@@ -17,7 +19,7 @@ export function CuidadorDestaque() {
           <Reveal anim="up">
             <img
               className="cuidador-destaque__marca"
-              src="/brand/irisflow-cuidador.svg"
+              src="/brand/irisflow-cuidador-negativo.svg"
               alt="IrisFlow Cuidador"
               width={141}
               height={152}
@@ -35,6 +37,7 @@ export function CuidadorDestaque() {
                 <li key={p}>{p}</li>
               ))}
             </ul>
+            <p className="cuidador-destaque__ressalva">{CUIDADOR_DESTAQUE.ressalva}</p>
           </Reveal>
           <Reveal anim="up" delay={240}>
             <SelosDasLojas />
