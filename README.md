@@ -110,6 +110,19 @@ Três coisas precisam andar junto com esse número sempre que ele for citado:
 
 ---
 
+## Versões: a entregue, a beta e o V2
+
+| versão | onde fica | regra |
+|---|---|---|
+| Entregue no Ensino Médio Técnico | tag `entrega-tecnico-2026` | congelada: é a do pitch, do portfólio e da documentação do curso |
+| Beta pública | `main` deste repositório | só correções pequenas e testadas; release pela tag `v1.0.0-beta.N` (o site e a atualização automática leem os releases daqui) |
+| V2: pipeline novo, acurácia, correções maiores | branch `pipeline-v2`, num repositório privado, aberta na pasta `IrisFlow V2` (um `git worktree` deste repositório) | nada de tag `v*` nela; instalador de teste no próprio PC (`npm run electron:build:win`) ou pelo Release à mão; volta para a `main` só quando ganhar do pipeline atual nas medições ([docs/MEDICOES.md](docs/MEDICOES.md)) |
+
+Para levar uma correção da beta para o V2, na pasta `IrisFlow V2`: `git fetch origin` e
+`git merge origin/main`. O `git push` dessa pasta vai para o repositório privado (remoto
+`v2`); o da pasta principal, para este. O *Supabase keepalive* agendado só roda aqui
+(`if: github.repository == ...`): o repositório do V2 não consulta o banco nem gasta minutos.
+
 ## Pipeline
 
 ```
