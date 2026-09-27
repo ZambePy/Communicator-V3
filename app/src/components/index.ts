@@ -1,5 +1,6 @@
 export * from './Text';
 export * from './IrisLogo';
+export * from './MarcaCuidador';
 export * from './IrisOrbs';
 export * from './PressableScale';
 export * from './Card';

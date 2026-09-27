@@ -258,9 +258,11 @@ export const systemFontStack = Platform.select({
 }) as string;
 
 /**
- * Inter em cinco pesos (carregados em `app/_layout.tsx` com `useFonts`). O peso vem
- * do arquivo da fonte, não de `fontWeight`: no Android, `fontWeight` sobre uma família
- * carregada por nome faz o sistema procurar outra variante e cair na fonte padrão.
+ * Inter em cinco pesos para o texto e Sora em dois para os títulos — a mesma
+ * dupla do site e do app do computador (carregadas em `app/_layout.tsx` com
+ * `useFonts`). O peso vem do arquivo da fonte, não de `fontWeight`: no Android,
+ * `fontWeight` sobre uma família carregada por nome faz o sistema procurar outra
+ * variante e cair na fonte padrão.
  */
 export const fonts = {
   display: 'Inter_800ExtraBold',
@@ -268,9 +270,13 @@ export const fonts = {
   medium: 'Inter_500Medium',
   semibold: 'Inter_600SemiBold',
   bold: 'Inter_700Bold',
+  /** Títulos (display, h1, h2): Sora 700. */
+  heading: 'Sora_700Bold',
+  /** Títulos menores (h3): Sora 600. */
+  headingSemibold: 'Sora_600SemiBold',
 } as const;
 
-export type FontWeight = 'regular' | 'medium' | 'semibold' | 'bold' | 'display';
+export type FontWeight = 'regular' | 'medium' | 'semibold' | 'bold' | 'display' | 'heading' | 'headingSemibold';
 
 /**
  * Escala tipográfica (tamanho / altura de linha / tracking). Corpo mínimo de 15 px e

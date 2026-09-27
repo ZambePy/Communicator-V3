@@ -80,6 +80,49 @@
   font-display: swap;
 }
 
+/* Sora (SIL OFL 1.1, assets/fonts/Sora-OFL.txt): a fonte de títulos e alvos,
+   a mesma do site. Local, porque o app roda offline; só os pesos 600 e 700. */
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./assets/fonts/sora-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./assets/fonts/sora-latin-ext-600-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fonts/sora-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fonts/sora-latin-ext-700-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 html,
 body,
 #root {
@@ -92,6 +135,13 @@ body,
   transition:
     background-color 0.4s ease,
     color 0.4s ease;
+}
+
+/* Títulos em Sora, a fonte da marca; o corpo continua na fonte do sistema. */
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -116,10 +166,11 @@ body,
   --color-navy: #091b33;
 
   /* ── Tipografia ────────────────────────────────────────────────────────── */
-  /* Display: a família do sistema, pesada e com tracking negativo. Boldonse
-     (a marca) continua disponível em `.font-display` para o wordmark. */
-  --font-display: system-ui, -apple-system, 'Segoe UI Variable Display', 'Segoe UI', Roboto,
-    'Helvetica Neue', sans-serif;
+  /* Display: Sora, a fonte do site, nos títulos e nos alvos grandes; o corpo
+     fica com a do sistema. Boldonse (a marca) continua disponível em
+     `.font-display` para o wordmark. */
+  --font-display: 'Sora', system-ui, -apple-system, 'Segoe UI Variable Display', 'Segoe UI',
+    Roboto, 'Helvetica Neue', sans-serif;
   --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --font-mono: 'Cascadia Mono', 'Consolas', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 
@@ -1027,8 +1078,10 @@ select:focus-visible,
   border: 2px solid var(--color-card-border);
   background: var(--color-card-bg);
   color: var(--color-text-base);
-  box-shadow: var(--shadow-1);
-  font-family: inherit;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    var(--shadow-1);
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.25rem;
   letter-spacing: -0.01em;
@@ -1342,6 +1395,8 @@ html:not(.dark) .particulas-de-fundo__ponto {
 .kb-key {
   /* Anula o visual claro do .gaze-button. A tecla é uma superfície discreta
      sobre o fundo, definida por um fio de contorno em vez de borda pesada. */
+  /* A fonte vem da grade do teclado (KB_FONT_KEYS), não do .gaze-button. */
+  font-family: inherit;
   background: var(--kb-key);
   border: 1px solid var(--kb-key-edge);
   box-shadow: none;
@@ -1489,6 +1544,7 @@ html:not(.dark) .particulas-de-fundo__ponto {
 /* Chrome de navegação (início / voltar). Mesma linguagem das teclas, porém
    sempre recuado: são saídas, não conteúdo. */
 .kb-nav {
+  font-family: inherit;
   background: transparent;
   border: 1px solid var(--kb-key-edge);
   box-shadow: none;
@@ -2348,4 +2404,63 @@ textarea.campo {
   font-size: 0.92rem;
   font-weight: 700;
   color: var(--color-text-base);
+}
+
+/* ── Portão do PIN (components/ui/PortaoDoPin.tsx) ────────────────────────
+   Empilhado por padrão. Em tela larga e baixa — notebook de 1366×768 ou
+   1920×1080 com escala de 125 % —, vira duas colunas: o teclado do cuidador
+   à esquerda e a saída pelo olhar (o Cancelar, de 200 px) à direita. Antes,
+   empilhado, o cartão passava da altura da tela e o Cancelar ficava abaixo
+   da dobra. As teclas continuam com 88 px. */
+.portao-pin {
+  max-width: 520px;
+}
+
+.portao-pin__form,
+.portao-pin__principal {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.portao-pin__acoes {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+@media (min-width: 900px) and (max-height: 920px) {
+  .portao-pin {
+    max-width: 900px;
+    padding: 2rem 2.25rem !important;
+  }
+
+  .portao-pin__form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.78fr);
+    gap: 2.25rem;
+    align-items: stretch;
+  }
+
+  .portao-pin__principal {
+    gap: 0.75rem;
+  }
+
+  .portao-pin__icone {
+    display: none !important;
+  }
+
+  .portao-pin__acoes {
+    flex-direction: column;
+    justify-content: center;
+    margin-top: 0;
+  }
+
+  .portao-pin__acoes > * {
+    flex: 0 0 auto !important;
+  }
+
+  .portao-pin__acoes > button[type='submit'] {
+    min-height: 88px;
+  }
 }

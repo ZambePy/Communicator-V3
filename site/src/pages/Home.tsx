@@ -1,35 +1,31 @@
-import { Hero } from '@/components/sections/Hero'
-import { ProblemSection } from '@/components/sections/ProblemSection'
-import { Segments } from '@/components/sections/Segments'
-import { Human } from '@/components/sections/Human'
-import { DwellDemo } from '@/components/sections/DwellDemo'
-import { Modules } from '@/components/sections/Modules'
-import { Differentiators } from '@/components/sections/Differentiators'
-import { Comparison } from '@/components/sections/Comparison'
-import { Pricing } from '@/components/sections/Pricing'
-import { Eligibility } from '@/components/sections/Eligibility'
+import { HeroProduto } from '@/components/home/HeroProduto'
+import { Capitulos } from '@/components/home/Capitulos'
+import { ContrastePreco } from '@/components/home/ContrastePreco'
+import { CuidadorDestaque } from '@/components/home/CuidadorDestaque'
+import { PrivacidadeCurta } from '@/components/home/PrivacidadeCurta'
+import { PlanosResumo } from '@/components/home/PlanosResumo'
 import { Faq } from '@/components/sections/Faq'
 import { CallToAction } from '@/components/sections/CallToAction'
-import { Marquee } from '@/components/effects/Marquee'
-import { MARQUEE_ITEMS } from '@/data/content'
+import { PERGUNTAS_DA_HOME } from '@/data/home'
+import '@/components/home/home.css'
 
-/* Ordem da home: problema → para quem → produto → prova → planos →
-   elegibilidade → perguntas → chamada para a beta (download). */
+/* A home mostra o produto funcionando e fala pouco. A ordem alterna faixa
+   escura e clara: o produto (monitor) → o que ele faz (capítulos) → o preço
+   do aparelho que ele substitui → quem cuida (celular) → privacidade →
+   planos → perguntas → chamada para a beta. O texto longo fica nas páginas
+   de dentro. */
 export default function Home() {
   return (
     <>
-      <Hero />
-      <Marquee items={MARQUEE_ITEMS} />
-      <ProblemSection />
-      <Segments />
-      <Modules limit={6} />
-      <DwellDemo />
-      <Human />
-      <Differentiators />
-      <Comparison />
-      <Pricing />
-      <Eligibility />
-      <Faq />
+      <HeroProduto />
+      <Capitulos />
+      <ContrastePreco />
+      <CuidadorDestaque />
+      <PrivacidadeCurta />
+      <PlanosResumo />
+      <div className="on-light">
+        <Faq perguntas={PERGUNTAS_DA_HOME} verTodas="/planos#perguntas" />
+      </div>
       <CallToAction />
     </>
   )

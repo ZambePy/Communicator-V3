@@ -120,7 +120,7 @@ export default function SessaoDetalhe() {
             <ListRow icon="pulse-outline" title="Suavização" subtitle={presetLabel[s.filter_preset]} />
             <ListRow icon="hand-left-outline" title="Pedidos de ajuda" subtitle={String(s.help_requests)} tone={s.help_requests ? 'warning' : 'accent'} />
             <ListRow icon="apps-outline" title="Módulos usados" subtitle={s.modules_used.join(', ') || '—'} last={!s.app_version} />
-            {s.app_version ? <ListRow icon="code-slash-outline" title="Versão do IrisFlow" subtitle={s.app_version} tone="muted" last /> : null}
+            {s.app_version ? <ListRow icon="code-slash-outline" title="Versão do IrisFlow Communicator" subtitle={s.app_version} tone="muted" last /> : null}
           </Card>
         </>
       )}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
+import { NavPilula } from './NavPilula'
 import { Logo } from './Logo'
 import { Button } from '@/components/ui/Button'
 import { useScrollProgress } from '@/hooks/useScrollProgress'
@@ -12,14 +13,21 @@ import './header.css'
 
 type NavItem = { to: string; label: string; beta?: boolean }
 
+/** O menu principal: o produto, o app de quem cuida, preço e a beta. Empresa,
+ *  contato e acessibilidade ficam no rodapé (e na gaveta do celular). */
 const NAV: NavItem[] = [
-  { to: '/solucao', label: 'A solução' },
+  { to: '/solucao', label: 'Produto' },
   { to: '/como-funciona', label: 'Como funciona' },
-  { to: '/acessibilidade', label: 'Acessibilidade' },
+  { to: '/cuidador', label: 'Cuidador' },
   { to: '/planos', label: 'Planos' },
   // Só aparece com a beta ligada. Até o lançamento leva a etiqueta vermelha
   // com o dia ("10/11"); depois dele, o selo "novo".
   ...(BETA.ativo ? [{ to: BETA_CTA.to, label: 'Beta', beta: true }] : []),
+]
+
+/** Na gaveta do celular, depois do menu principal. */
+const NAV_SECUNDARIA: NavItem[] = [
+  { to: '/baixar', label: 'Baixar' },
   { to: '/sobre', label: 'A empresa' },
   { to: '/contato', label: 'Contato' },
 ]
@@ -85,18 +93,17 @@ export function Header() {
       <div className="container header__inner">
         <Logo size="sm" tone="negativo" />
 
-        <nav className="header__nav" aria-label="Navegação principal">
-          {NAV.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={`header__link underline-grow${item.beta ? ' header__link--beta' : ''}`}
-            >
-              {item.label}
-              {item.beta && seloDaBeta}
-            </NavLink>
-          ))}
-        </nav>
+        <div className="header__nav">
+          <NavPilula
+            rotulo="Navegação principal"
+            itens={NAV.map((item) => ({
+              to: item.to,
+              label: item.label,
+              destaque: item.beta,
+              selo: item.beta ? seloDaBeta : undefined,
+            }))}
+          />
+        </div>
 
         <div className="header__actions">
           {/* Enquanto a sessão carrega não mostramos nem "Entrar" nem "Meu
@@ -112,7 +119,11 @@ export function Header() {
                 Entrar
               </Button>
               {BETA.ativo ? (
-                <Button to={BETA_CTA.to}>{BETA_CTA.label}</Button>
+                lancou ? (
+                  <Button to="/baixar">Baixar grátis</Button>
+                ) : (
+                  <Button to={BETA_CTA.to}>{BETA_CTA.label}</Button>
+                )
               ) : (
                 <Button to="/cadastro">Testar grátis</Button>
               )}
@@ -136,7 +147,7 @@ export function Header() {
 
       <div id="menu-mobile" className={`drawer${open ? ' is-open' : ''}`} hidden={!open}>
         <nav aria-label="Navegação mobile">
-          {NAV.map((item, i) => (
+          {[...NAV, ...NAV_SECUNDARIA].map((item, i) => (
             <NavLink
               key={item.to}
               to={item.to}

@@ -42,7 +42,7 @@ export default function Sucesso() {
 
   return (
     <div className="flow">
-      <AmbientBackground particles={18} light />
+      <AmbientBackground variante="suave" />
 
       <div className="container container--narrow flow__inner">
         <div className="success">

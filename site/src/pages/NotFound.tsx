@@ -1,6 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
-import { IrisMark } from '@/components/layout/Logo'
 import { Reveal } from '@/components/effects/Reveal'
 import { Button } from '@/components/ui/Button'
 import { BETA, BETA_CTA } from '@/data/content'
@@ -8,11 +7,12 @@ import './not-found.css'
 
 /** Atalhos para onde a pessoa provavelmente queria ir. */
 const SUGESTOES = [
-  { to: '/solucao', label: 'O que o IrisFlow faz' },
+  { to: '/solucao', label: 'O produto' },
   { to: '/como-funciona', label: 'Como funciona' },
-  ...(BETA.ativo ? [{ to: BETA_CTA.to, label: 'Beta gratuita e download' }] : []),
+  { to: '/cuidador', label: 'IrisFlow Cuidador' },
+  ...(BETA.ativo ? [{ to: BETA_CTA.to, label: 'Beta gratuita' }] : []),
+  { to: '/baixar', label: 'Baixar' },
   { to: '/planos', label: 'Planos' },
-  { to: '/contato', label: 'Fale com a equipe' },
 ]
 
 /**
@@ -28,31 +28,27 @@ export default function NotFound() {
 
   return (
     <section className="not-found on-dark">
-      <AmbientBackground particles={18} />
+      <AmbientBackground />
 
       <div className="container not-found__inner">
-        <Reveal anim="zoom">
-          <IrisMark size={150} />
-        </Reveal>
-
-        <Reveal anim="up" delay={160}>
+        <Reveal anim="up">
           <p className="not-found__code" aria-hidden="true">
             404
           </p>
         </Reveal>
 
-        <Reveal anim="up" delay={220}>
+        <Reveal anim="up" delay={60}>
           <h1 className="not-found__title">Esta página não existe.</h1>
         </Reveal>
 
-        <Reveal anim="up" delay={280}>
+        <Reveal anim="up" delay={120}>
           <p className="lead not-found__lead">
             O endereço <code className="not-found__path">{pathname}</code> não leva a lugar nenhum
             do site — talvez o link esteja incompleto ou a página tenha mudado de nome.
           </p>
         </Reveal>
 
-        <Reveal anim="up" delay={360}>
+        <Reveal anim="up" delay={180}>
           <div className="not-found__actions">
             <Button to="/" size="lg">
               Voltar ao início
@@ -63,7 +59,7 @@ export default function NotFound() {
           </div>
         </Reveal>
 
-        <Reveal anim="fade" delay={460}>
+        <Reveal anim="fade" delay={240}>
           <nav className="not-found__links" aria-label="Páginas sugeridas">
             <ul>
               {SUGESTOES.map((s) => (

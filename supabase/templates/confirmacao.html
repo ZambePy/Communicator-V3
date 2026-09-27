@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light only">
   <meta name="supported-color-schemes" content="light only">
-  <title>Confirme seu e-mail no IrisFlow</title>
+  <title>Seu código do IrisFlow</title>
 </head>
 <body style="margin:0;padding:0;background:#eef2f8;">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Falta um clique para ativar sua conta na beta do IrisFlow.</div>
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">Seu código de confirmação: {{ slice .Token 0 4 }}. Digite na página do IrisFlow.</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#eef2f8" style="background:#eef2f8;">
     <tr>
       <td align="center" style="padding:32px 16px;">
@@ -20,21 +20,30 @@
           </tr>
           <tr>
             <td bgcolor="#ffffff" style="background:#ffffff;border-radius:0 0 18px 18px;padding:34px 32px 30px;">
-              <h1 style="margin:0 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:25px;line-height:32px;font-weight:bold;color:#0b1b3a;">Confirme seu e-mail</h1>
-              <p style="margin:0 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:25px;color:#334155;">Olá! Você criou uma conta na <strong>beta gratuita do IrisFlow Communicator</strong> com o endereço <strong>{{ .Email }}</strong>.</p><p style="margin:0 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:25px;color:#334155;">Toque no botão para confirmar. Pode ser no celular ou no computador: ao confirmar, você já entra na conta nesse aparelho e segue para a pesquisa rápida.</p>
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 8px;">
+              <h1 style="margin:0 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:25px;line-height:32px;font-weight:bold;color:#0b1b3a;">Seu código de confirmação</h1>
+              <p style="margin:0 0 22px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:25px;color:#334155;">Olá! Você criou uma conta na <strong>beta gratuita do IrisFlow Communicator</strong> com o endereço <strong>{{ .Email }}</strong>. Digite este código na página do IrisFlow para confirmar:</p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;">
                 <tr>
-                  <td align="center" bgcolor="#1b54a8" style="border-radius:12px;">
-                    <a href="{{ .SiteURL }}/confirmar-email?token_hash={{ .TokenHash }}&amp;type=email" target="_blank" style="display:inline-block;padding:15px 30px;font-family:Arial,Helvetica,sans-serif;font-size:17px;font-weight:bold;line-height:20px;color:#ffffff;text-decoration:none;border-radius:12px;">Confirmar meu e-mail</a>
+                  <td align="center" bgcolor="#0b1b3a" style="background:#0b1b3a;border-radius:16px;padding:22px 12px;">
+                    <span style="display:inline-block;font-family:'Courier New',Courier,monospace;font-size:44px;line-height:52px;font-weight:bold;letter-spacing:14px;padding-left:14px;color:#ffffff;">{{ slice .Token 0 4 }}</span>
                   </td>
                 </tr>
               </table>
+              <p style="margin:0 0 14px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:23px;color:#334155;">O código vale por 1 hora. Ao confirmar, você já entra na conta e segue para a pesquisa rápida.</p>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 0;">
                 <tr>
-                  <td style="padding:16px 18px;background:#f5f8fc;border:1px solid #e2e8f0;border-radius:12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:21px;color:#334155;"><strong style="color:#0b1b3a;">Depois de confirmar:</strong> uma pesquisa rápida sobre quem vai usar (cerca de 1 minuto) e o download da beta, que aparece no seu perfil no dia do lançamento.<br><br>O link vale por 1 hora e funciona uma vez. Se não foi você quem criou a conta, é só ignorar este e-mail: nada é ativado sem este clique.</td>
+                  <td style="padding:16px 18px;background:#f5f8fc;border:1px solid #e2e8f0;border-radius:12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:21px;color:#334155;"><strong style="color:#0b1b3a;">Está em outro aparelho?</strong> Confirme pelo botão: funciona no celular ou no computador, e você já entra na conta ali.
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:14px 0 2px;">
+                      <tr>
+                        <td align="center" bgcolor="#1b54a8" style="border-radius:10px;">
+                          <a href="{{ .SiteURL }}/confirmar-email?token_hash={{ .TokenHash }}&amp;type=email" target="_blank" style="display:inline-block;padding:12px 22px;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;line-height:18px;color:#ffffff;text-decoration:none;border-radius:10px;">Confirmar pelo link</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
                 </tr>
               </table>
-              <p style="margin:22px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#64748b;">Se o botão não funcionar, copie e cole este endereço no navegador:<br><a href="{{ .SiteURL }}/confirmar-email?token_hash={{ .TokenHash }}&amp;type=email" target="_blank" style="color:#1b54a8;word-break:break-all;">{{ .SiteURL }}/confirmar-email?token_hash={{ .TokenHash }}&amp;type=email</a></p>
+              <p style="margin:22px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:20px;color:#64748b;">Se não foi você quem criou a conta, é só ignorar este e-mail: nada é ativado sem o código ou o link.</p>
             </td>
           </tr>
           <tr>

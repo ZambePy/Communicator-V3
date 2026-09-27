@@ -65,6 +65,8 @@ const { sessao, acoes, apiFake } = vi.hoisted(() => {
     perfil: null as PerfilBasico | null,
     markBetaDownload: vi.fn(async (_os: string) => {}),
     reenviarConfirmacao: vi.fn(async (_email: string) => {}),
+    conferirCodigo: vi.fn(async (_email: string, _codigo: string) => 'hash-do-cadastro'),
+    verificarLinkDoEmail: vi.fn(async (_hash: string, _tipo: string) => {}),
   }
   return { sessao, acoes, apiFake }
 })
@@ -96,6 +98,8 @@ vi.mock('@/services/api', async (importOriginal) => {
     fetchPerfilBasico: async () => apiFake.perfil,
     markBetaDownload: apiFake.markBetaDownload,
     reenviarConfirmacao: apiFake.reenviarConfirmacao,
+    conferirCodigo: apiFake.conferirCodigo,
+    verificarLinkDoEmail: apiFake.verificarLinkDoEmail,
   }
 })
 
@@ -167,7 +171,7 @@ describe('etapa 1 — criar conta (sem sessão)', () => {
     expect(acoes.criarContaBeta).not.toHaveBeenCalled()
   })
 
-  it('conta criada com "Confirm email": etapa 2 com o e-mail normalizado e o caminho de volta ao computador', async () => {
+  it('conta criada com "Confirm email": etapa 2 pede o código de 4 dígitos do e-mail', async () => {
     montar()
     preencherConta()
     await act(async () => {
@@ -181,29 +185,58 @@ describe('etapa 1 — criar conta (sem sessão)', () => {
       senha: 'segredo123',
       newsletter: true,
     })
-    expect(await screen.findByRole('heading', { name: /Confirme seu e-mail para continuar/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Digite o código do e-mail' })).toBeInTheDocument()
     expect(screen.getByText('maria@exemplo.com.br')).toBeInTheDocument()
     expect(screen.getByText(/Etapa 2 de 4/)).toBeInTheDocument()
-    // quem confirmou no celular continua aqui com a senha, e-mail já preenchido
-    expect(screen.getByRole('link', { name: 'Já confirmei, continuar aqui' })).toHaveAttribute(
+    const campo = screen.getByLabelText('Código de 4 dígitos')
+    expect(campo).toHaveAttribute('autocomplete', 'one-time-code')
+    expect(campo).toHaveAttribute('inputmode', 'numeric')
+    // o próximo código só pode ser pedido depois de 1 minuto (limite do Supabase)
+    expect(screen.getByText(/pedir outro em 1:00/)).toBeInTheDocument()
+    // quem confirmou pelo botão do e-mail no celular continua aqui com a senha
+    expect(screen.getByRole('link', { name: 'Confirmei pelo botão do e-mail' })).toHaveAttribute(
       'href',
       '/entrar?email=maria%40exemplo.com.br',
     )
   })
 
-  it('reenviar o link avisa; corrigir o e-mail volta ao formulário com as senhas limpas', async () => {
+  it('código errado avisa e limpa; o certo abre a sessão com o token do cadastro', async () => {
+    const { CodigoIncorreto } = await import('@/services/api')
+    apiFake.conferirCodigo.mockRejectedValueOnce(new CodigoIncorreto())
     montar()
     preencherConta()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
     })
-    await screen.findByRole('heading', { name: /Confirme seu e-mail/ })
+    const campo = await screen.findByLabelText('Código de 4 dígitos')
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Reenviar o link' }))
+      fireEvent.change(campo, { target: { value: '1111' } })
     })
-    expect(apiFake.reenviarConfirmacao).toHaveBeenCalledWith('maria@exemplo.com.br')
-    expect(await screen.findByText(/Enviamos de novo para maria@exemplo.com.br/)).toBeInTheDocument()
+    expect(apiFake.conferirCodigo).toHaveBeenLastCalledWith('maria@exemplo.com.br', '1111')
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Código incorreto/)
+    expect(apiFake.verificarLinkDoEmail).not.toHaveBeenCalled()
+
+    // só dígitos entram, e colar "4 8 2 9" vale
+    await waitFor(() => expect(screen.getByLabelText('Código de 4 dígitos')).toHaveValue(''))
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Código de 4 dígitos'), { target: { value: '4 8 2 9' } })
+    })
+    expect(apiFake.conferirCodigo).toHaveBeenLastCalledWith('maria@exemplo.com.br', '4829')
+    await waitFor(() => expect(apiFake.verificarLinkDoEmail).toHaveBeenCalledWith('hash-do-cadastro', 'email'), {
+      timeout: 2500,
+    })
+    expect(acoes.refresh).toHaveBeenCalled()
+    expect(screen.getByText(/E-mail confirmado/)).toBeInTheDocument()
+  })
+
+  it('corrigir o e-mail volta ao formulário com as senhas limpas', async () => {
+    montar()
+    preencherConta()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    })
+    await screen.findByRole('heading', { name: 'Digite o código do e-mail' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Corrigir o e-mail' }))
     expect(await screen.findByRole('heading', { name: 'Crie sua conta' })).toBeInTheDocument()

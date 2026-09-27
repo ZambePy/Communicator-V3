@@ -10,7 +10,7 @@ import { isEmail } from '@/utils/format'
 import { validar } from '@/utils/validation'
 import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
 import { sendContactMessage } from '@/services/api'
-import { BRAND, CONDITIONS_SHORT } from '@/data/content'
+import { BRAND } from '@/data/content'
 import './contato.css'
 
 type Form = { name: string; email: string; role: string; message: string }
@@ -55,7 +55,7 @@ export default function Contato() {
         eyebrow="Contato"
         title="Fale com quem construiu a IrisFlow."
         highlight={['construiu']}
-        lead={`Somos três pessoas e respondemos nós mesmos, normalmente em até dois dias úteis. Escreva se você é familiar ou cuidador de alguém com ${CONDITIONS_SHORT} e quer saber se a pessoa conseguiria usar o IrisFlow; se é fisioterapeuta, terapeuta ocupacional, fonoaudiólogo ou neurologista e quer avaliar o produto para indicar; ou se representa uma clínica ou associação interessada no programa de validação.`}
+        lead="Somos três e respondemos nós mesmos, em geral em até dois dias úteis. Família, profissional de saúde ou instituição: conte o caso."
       />
 
       <section className="section">

@@ -1,0 +1,212 @@
+/* Explorador de módulos (ExploradorDeModulos.tsx): lista de abas à esquerda,
+   a tela de verdade à direita. No celular, as abas viram uma fileira que
+   rola de lado, e o texto vem embaixo da tela. */
+
+.explorador {
+  display: grid;
+  gap: var(--sp-6);
+}
+
+/* ---------- abas ---------- */
+.explorador__abas {
+  display: flex;
+  gap: var(--sp-2);
+  margin-inline: calc(-1 * var(--sp-5));
+  padding: 2px var(--sp-5) var(--sp-2);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.explorador__abas::-webkit-scrollbar {
+  display: none;
+}
+
+.explorador__aba {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.98rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease;
+}
+
+.explorador__aba .icon {
+  flex: none;
+  color: var(--text-dim);
+  transition: color var(--dur-fast) ease;
+}
+
+.explorador__aba:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.explorador__aba.is-ativa {
+  color: var(--text);
+  background: var(--surface-3);
+  border-color: var(--accent-line);
+}
+
+.explorador__aba.is-ativa .icon {
+  color: var(--accent);
+}
+
+/* ---------- palco: monitor e, às vezes, o celular na frente ---------- */
+.explorador__palco {
+  position: relative;
+}
+
+.explorador__celulares {
+  position: absolute;
+  right: -1%;
+  bottom: 2%;
+  width: clamp(88px, 21%, 190px);
+  pointer-events: none;
+}
+
+.explorador__celular {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  opacity: 0;
+  transform: translateY(28px) scale(0.96);
+  transition:
+    opacity 480ms var(--ease-out),
+    transform 620ms var(--ease-out);
+}
+
+.explorador__celular.is-ativo {
+  opacity: 1;
+  transform: none;
+}
+
+.explorador__celular .celular {
+  width: 100%;
+}
+
+.explorador__celular .celular__moldura {
+  padding: 6px;
+  border-radius: 26px;
+}
+
+.explorador__celular .celular__tela {
+  border-radius: 21px;
+}
+
+.explorador__celular .celular__camera {
+  top: 11px;
+  height: 12px;
+}
+
+/* ---------- texto do módulo ---------- */
+.explorador__texto {
+  animation: fade-up 460ms var(--ease-out) both;
+}
+
+.explorador__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.explorador__nome {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.4vw, 2rem);
+  letter-spacing: -0.02em;
+}
+
+.explorador__selo {
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.explorador__selo--exp {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.explorador__resumo {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-lead);
+  color: var(--text-soft);
+  max-width: 52ch;
+}
+
+.explorador__pontos {
+  margin: var(--sp-4) 0 0;
+}
+
+/* ---------- computador ---------- */
+@media (min-width: 1000px) {
+  .explorador {
+    grid-template-columns: 250px minmax(0, 1fr);
+    gap: clamp(32px, 4vw, 56px);
+    align-items: start;
+  }
+
+  .explorador__abas {
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    position: sticky;
+    top: calc(var(--header-h) + 24px);
+  }
+
+  .explorador__aba {
+    width: 100%;
+    border-color: transparent;
+    border-radius: 14px;
+    padding: 12px 14px;
+  }
+
+  .explorador__aba.is-ativa {
+    border-color: var(--line);
+  }
+
+  .explorador__texto {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0 var(--sp-6);
+    margin-top: var(--sp-6);
+  }
+
+  .explorador__cabeca,
+  .explorador__resumo {
+    grid-column: 1;
+  }
+
+  .explorador__pontos {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    margin: 4px 0 0;
+  }
+}
+
+@media (max-width: 999px) {
+  .explorador__texto {
+    margin-top: var(--sp-5);
+  }
+}

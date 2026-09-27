@@ -65,9 +65,9 @@ export function client(): SupabaseClient {
    casos que o site realmente encosta; o resto passa direto, porque
    inventar uma mensagem genérica esconderia a causa real.
    ------------------------------------------------------------ */
-/** Exportada para a tela de acesso reconhecer o caso e oferecer o reenvio do link. */
+/** Exportada para a tela de acesso reconhecer o caso e oferecer o código de confirmação. */
 export const EMAIL_NAO_CONFIRMADO =
-  'Este e-mail ainda não foi confirmado. Verifique a caixa de entrada (e o spam) e clique no link de confirmação.'
+  'Este e-mail ainda não foi confirmado. Digite o código de 4 dígitos que enviamos (confira também o spam) ou peça outro.'
 const JA_CADASTRADO = 'Já existe uma conta com este e-mail. Use a tela de acesso para entrar.'
 const LIMITE_DE_EMAIL =
   'Muitos e-mails enviados em pouco tempo. Aguarde alguns minutos e tente de novo.'

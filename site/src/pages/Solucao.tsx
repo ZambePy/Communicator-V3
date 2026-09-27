@@ -1,182 +1,77 @@
 import { PageHead } from '@/components/layout/PageHead'
-import { Modules } from '@/components/sections/Modules'
-import { Differentiators } from '@/components/sections/Differentiators'
+import { ExploradorDeModulos } from '@/components/produto/ExploradorDeModulos'
+import { Capitulo, Detalhe, Recursos } from '@/components/pagina/Blocos'
+import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Comparison } from '@/components/sections/Comparison'
 import { CallToAction } from '@/components/sections/CallToAction'
-import { Reveal } from '@/components/effects/Reveal'
-import { Card, CardIcon } from '@/components/ui/Card'
-import { Icon, type IconName } from '@/components/ui/Icon'
-import { DownloadPanel } from '@/components/ui/DownloadPanel'
-import { BETA, BETA_CTA, BRAND } from '@/data/content'
 import { Button } from '@/components/ui/Button'
-import { useDownloads } from '@/hooks/useDownloads'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
-import { diaPorExtenso } from '@/lib/lancamento'
+import { BETA, BETA_CTA } from '@/data/content'
+import { ADOCAO, DECISOES, LIMITES, MODULOS_EM_TELA } from '@/data/produto'
 import './solucao.css'
 
-const LIMITS = [
-  {
-    title: `O que o ${BRAND.product} entrega`,
-    tone: 'ok' as const,
-    items: [
-      'Controle pleno dentro das próprias telas, desenhadas com alvos grandes e bem espaçados',
-      'Modo Computador no Windows: clicar, arrastar, rolar e digitar em qualquer programa, com uma lupa para os alvos pequenos',
-      'Escrita por fixação, com sugestões de palavras e de frases que aprendem com a pessoa',
-      'Funcionamento offline do rastreamento, do teclado e das frases rápidas',
-    ],
-  },
-  {
-    title: 'O que ele ainda não entrega',
-    tone: 'warn' as const,
-    items: [
-      'Arraste fino e menus muito densos, que continuam trabalhosos com a precisão de uma webcam, mesmo com a lupa',
-      'Uso confortável por quem apresenta movimento involuntário acentuado, espasticidade ou tremor, condições ainda não avaliadas',
-      'Taxa de acionamento acidental medida em uso contínuo real, que só o programa de validação vai responder',
-      'Estudo clínico publicado, atributo em que as soluções internacionais têm décadas de vantagem',
-    ],
-  },
-]
-
-const ADOPTION: { icon: IconName; title: string; text: string }[] = [
-  {
-    icon: 'webcam',
-    title: 'Primeiro uso guiado',
-    text: 'A família é conduzida passo a passo pela posição da câmera, pela iluminação do ambiente e pela calibração inicial, antes de qualquer tentativa de uso real.',
-  },
-  {
-    icon: 'monitor',
-    title: 'Tutorial dentro do produto',
-    text: 'A explicação fica onde a dúvida aparece, na própria tela, e não em um manual que ninguém abre depois da instalação.',
-  },
-  {
-    icon: 'documento',
-    title: 'Guia para quem cuida',
-    text: 'A área do cuidador traz um guia de instalação e explica o resultado do teste de precisão em linguagem simples, escrito para quem vai cuidar, não para quem vai programar.',
-  },
-  {
-    icon: 'email',
-    title: 'Suporte em português, com gente',
-    text: 'O canal de suporte é atendido pela própria equipe. Em um produto usado por horas por dia, sem assistência técnica presente, isso não é acessório.',
-  },
-]
-
+/**
+ * /solucao — o produto. A abertura já é o app: a lista de módulos com a tela
+ * de verdade de cada um. Depois, as decisões que pesam no dia a dia, o apoio
+ * na instalação e o comparativo honesto, com o que ainda falta.
+ */
 export default function Solucao() {
-  // Sistemas com instalador: os mesmos do painel de download desta página.
-  const { platformsText } = useDownloads()
-  // Na beta, esta faixa é vitrine: o download fica depois da inscrição
-  // (conta → pesquisa rápida → download), e só abre no lançamento.
   const program = useBetaProgram()
   const lancou = useJaLancou(program.launchAt)
 
   return (
     <>
       <PageHead
-        eyebrow="O produto"
-        title={`${BRAND.product}: uma plataforma de comunicação, não um rastreador.`}
-        highlight={['comunicação,']}
-        lead={`Aplicação instalável para ${platformsText.long}, que roda integralmente no dispositivo do usuário. O rastreamento ocular é a camada de entrada; sobre ela foram construídos ambientes completos de comunicação, controle, lazer, cuidado e emergência.`}
-      />
+        eyebrow="IrisFlow Communicator"
+        title="Tudo o que a pessoa precisa, pelo olhar."
+        highlight={['olhar.']}
+        lead="Escrever e falar, usar o computador inteiro, conversar com a família e pedir ajuda. Um app no computador, com a webcam que já existe."
+        visual={<ExploradorDeModulos modulos={MODULOS_EM_TELA} />}
+      >
+        {BETA.ativo && !lancou ? (
+          <Button to={BETA_CTA.to}>{BETA_CTA.label}</Button>
+        ) : (
+          <Button to="/baixar">Baixar grátis</Button>
+        )}
+        <Button to="/planos" variant="ghost">
+          Ver os planos
+        </Button>
+      </PageHead>
 
-      <section className="section section--tight">
+      <section className="faixa on-light" aria-labelledby="decisoes-titulo">
         <div className="container">
-          <div className="grid grid--2">
-            {LIMITS.map((block, i) => (
-              <Reveal key={block.title} anim={i === 0 ? 'right' : 'left'} delay={i * 120}>
-                <Card as="div">
-                  <CardIcon tone={block.tone === 'ok' ? 'teal' : 'blue'}>
-                    <Icon name={block.tone === 'ok' ? 'check' : 'alerta'} size={26} />
-                  </CardIcon>
-                  <h3>{block.title}</h3>
-                  <ul className="limits__list">
-                    {block.items.map((it) => (
-                      <li key={it}>{it}</li>
-                    ))}
-                  </ul>
-                </Card>
-              </Reveal>
-            ))}
-          </div>
-
-          <Reveal anim="fade" delay={280}>
-            <p className="aside-note">
-              Preferimos declarar o limite a prometer o que a física do sensor não permite. É a
-              mesma razão pela qual publicamos os indicadores de precisão junto com as condições
-              em que foram medidos.
-            </p>
-          </Reveal>
+          <Capitulo
+            id="decisoes-titulo"
+            titulo="Seis decisões que fazem diferença no dia a dia."
+            texto="Cada uma responde a um problema que aparece em casa: cansaço, postura, luz ruim, internet instável e privacidade."
+          />
+          <Recursos itens={DECISOES} />
         </div>
       </section>
 
-      <Modules />
-
-      {/* A entrega não termina no instalador: a principal causa de abandono
-          de tecnologia assistiva é falta de apoio na adoção, não falha do
-          produto. Isso precisa aparecer antes dos diferenciais técnicos. */}
-      <section className="section">
+      <section className="faixa on-dark" aria-labelledby="adocao-titulo">
+        <AmbientBackground variante="suave" />
         <div className="container">
-          <Reveal anim="fade">
-            <span className="eyebrow">O que vai junto</span>
-          </Reveal>
-          <Reveal anim="up">
-            <h2 className="section-title">A entrega não é o arquivo de instalação.</h2>
-          </Reveal>
-          <Reveal anim="up" delay={120}>
-            <p className="lead section-lead section-lead--tight">
-              A principal causa de abandono de tecnologia assistiva não é falha do produto: é falta
-              de apoio na hora de adotar. Um software que funciona mas que a família não consegue
-              instalar, calibrar ou ajustar termina na gaveta. Por isso o acompanhamento do
-              primeiro uso faz parte do produto, e não de um serviço à parte.
-            </p>
-          </Reveal>
-
-          <div className="grid grid--2">
-            {ADOPTION.map((item, i) => (
-              <Reveal key={item.title} anim="up" delay={i * 90}>
-                <Card as="div">
-                  <CardIcon tone={i % 2 === 0 ? 'teal' : 'blue'}>
-                    <Icon name={item.icon} size={26} />
-                  </CardIcon>
-                  <h3>{item.title}</h3>
-                  <p>{item.text}</p>
-                </Card>
-              </Reveal>
-            ))}
-          </div>
+          <Capitulo
+            id="adocao-titulo"
+            titulo="Ninguém fica sozinho na instalação."
+            texto="Tecnologia assistiva costuma ir para a gaveta por falta de apoio, não por defeito. Por isso o primeiro uso faz parte do produto."
+          />
+          <Recursos itens={ADOCAO} colunas={4} />
         </div>
       </section>
 
-      <Differentiators />
-      <Comparison />
-
-      <section className="section section--tight download-strip" id="download">
-        <div className="container center">
-          <Reveal anim="up">
-            <h2 className="section-title section-title--center">
-              Instalador para {platformsText.short}
-            </h2>
-            <p className="lead section-lead section-lead--center">
-              Uma base de código única gera os instaladores de todos os sistemas.{' '}
-              {!BETA.ativo
-                ? 'Para usar, crie a conta: o login no aplicativo é o mesmo e-mail e senha.'
-                : lancou
-                  ? 'Para baixar, inscreva-se na beta gratuita: crie a conta, responda a pesquisa rápida e o download aparece em seguida.'
-                  : `A beta fica disponível em ${diaPorExtenso(program.launchAt)}, primeiro para ${BETA.sistemaDoLancamento}. Inscreva-se desde já: no dia, o download aparece na sua conta.`}
-            </p>
-          </Reveal>
-          <Reveal anim="up" delay={160}>
-            {BETA.ativo ? (
-              <>
-                <DownloadPanel vitrine liberaEm={program.launchAt} />
-                <p className="download-strip__fine">
-                  <Button to={BETA_CTA.to}>{BETA_CTA.labelLong}</Button>
-                </p>
-              </>
-            ) : (
-              <DownloadPanel />
-            )}
-          </Reveal>
-        </div>
-      </section>
+      <div className="on-light">
+        <Comparison>
+          <Detalhe resumo="O que o IrisFlow ainda não entrega">
+            <ul className="solucao__limites">
+              {LIMITES.map((l) => (
+                <li key={l}>{l}</li>
+              ))}
+            </ul>
+          </Detalhe>
+        </Comparison>
+      </div>
 
       <CallToAction />
     </>

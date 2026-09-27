@@ -16,6 +16,9 @@ const Acessibilidade = lazy(ROUTE_LOADERS['/acessibilidade'])
 const Planos = lazy(ROUTE_LOADERS['/planos'])
 const Sobre = lazy(ROUTE_LOADERS['/sobre'])
 const Contato = lazy(ROUTE_LOADERS['/contato'])
+const Cuidador = lazy(ROUTE_LOADERS['/cuidador'])
+const Baixar = lazy(ROUTE_LOADERS['/baixar'])
+const AbrirApp = lazy(ROUTE_LOADERS['/app'])
 const Beta = lazy(ROUTE_LOADERS['/beta'])
 const Cadastro = lazy(ROUTE_LOADERS['/cadastro'])
 const Pagamento = lazy(ROUTE_LOADERS['/pagamento'])
@@ -45,6 +48,11 @@ export default function App() {
             <Route path="planos" element={<Planos />} />
             <Route path="sobre" element={<Sobre />} />
             <Route path="contato" element={<Contato />} />
+            {/* os dois apps: o do celular de quem cuida e o hub de download;
+                /app é o endereço do código QR (abre a loja certa no celular) */}
+            <Route path="cuidador" element={<Cuidador />} />
+            <Route path="baixar" element={<Baixar />} />
+            <Route path="app" element={<AbrirApp />} />
 
             {/* programa beta (README da raiz, seção "Site (site/)"): criar conta →
                 confirmar e-mail → pesquisa rápida → download */}

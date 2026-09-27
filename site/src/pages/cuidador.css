@@ -1,0 +1,232 @@
+/* Página do IrisFlow Cuidador (Cuidador.tsx). Escrita para o celular primeiro:
+   as regras de base são as do celular, e o computador ganha colunas. */
+
+/* ---------- abertura ---------- */
+.cuidador-hero {
+  position: relative;
+  overflow: hidden;
+  padding-top: calc(var(--header-h) + var(--sp-6));
+  padding-bottom: var(--sp-8);
+  background: var(--navy-deep);
+}
+
+.cuidador-hero__grade {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: var(--sp-7);
+}
+
+.cuidador-hero__texto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.cuidador-hero__marca {
+  width: 76px;
+  height: auto;
+  margin-bottom: var(--sp-5);
+}
+
+.cuidador-hero__titulo {
+  font-size: clamp(2.2rem, 5.4vw, 4rem);
+  line-height: 1.04;
+  letter-spacing: -0.034em;
+  max-width: 13ch;
+  margin-bottom: var(--sp-4);
+}
+
+.cuidador-hero__lead {
+  font-size: var(--fs-lead);
+  max-width: 40ch;
+  margin-bottom: var(--sp-6);
+}
+
+/* O código QR só faz sentido no computador: no celular, os selos bastam. */
+.cuidador-hero__qr {
+  display: none;
+}
+
+.cuidador-hero__aparelho {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.cuidador-hero__legenda {
+  margin: var(--sp-4) 0 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+/* ---------- recursos: carrossel no celular, grade no computador ---------- */
+.cuidador-recursos {
+  padding-block: var(--sp-8);
+}
+
+.cuidador-recursos__lista {
+  list-style: none;
+  margin: var(--sp-6) calc(-1 * var(--sp-5)) 0;
+  padding: 0 var(--sp-5) var(--sp-4);
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: min(78%, 280px);
+  gap: var(--sp-5);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--sp-5);
+  -webkit-overflow-scrolling: touch;
+}
+
+.recurso {
+  margin: 0;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.recurso .celular {
+  width: 100%;
+}
+
+.recurso__titulo {
+  font-size: 1.2rem;
+  margin-bottom: var(--sp-2);
+}
+
+.recurso__texto p {
+  margin: 0;
+  font-size: 0.98rem;
+}
+
+.recurso__texto .recurso__nota {
+  margin-top: var(--sp-2);
+  font-size: 0.86rem;
+  color: var(--text-dim);
+}
+
+.recurso__plano {
+  display: inline-block;
+  margin-top: var(--sp-3);
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+/* ---------- passos ---------- */
+.cuidador-passos {
+  position: relative;
+  padding-block: var(--sp-8);
+  background: var(--navy-deep);
+  overflow: hidden;
+}
+
+.cuidador-passos .container {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- onde baixar ---------- */
+.cuidador-disponivel {
+  padding-block: var(--sp-8);
+}
+
+.cuidador-disponivel__inner {
+  display: grid;
+  gap: var(--sp-6);
+}
+
+.disponibilidade {
+  list-style: none;
+  padding: 0;
+  margin: var(--sp-4) 0 var(--sp-5);
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.disponibilidade li {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: var(--sp-3);
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.disponibilidade a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cuidador-disponivel__privacidade {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+  align-self: end;
+  margin: 0;
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text-soft);
+}
+
+.cuidador-disponivel__privacidade .icon {
+  color: var(--ok);
+  margin-top: 2px;
+}
+
+/* ---------- computador ---------- */
+@media (min-width: 960px) {
+  .cuidador-hero {
+    padding-top: calc(var(--header-h) + var(--sp-8));
+  }
+  .cuidador-hero__grade {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    align-items: center;
+  }
+  .cuidador-hero__qr {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    margin-top: var(--sp-6);
+    padding: var(--sp-3);
+    padding-right: var(--sp-5);
+    border-radius: var(--r-lg);
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.03);
+    max-width: 440px;
+  }
+  .cuidador-hero__qr .qr {
+    width: 104px;
+    height: 104px;
+    flex: none;
+  }
+  .cuidador-hero__qr p {
+    margin: 0;
+    font-size: 0.92rem;
+  }
+  .cuidador-recursos__lista {
+    margin-inline: 0;
+    padding-inline: 0;
+    grid-auto-flow: row;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    overflow: visible;
+  }
+  .cuidador-disponivel__inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: end;
+  }
+}
+
+/* Aparelho de toque grande (tablet deitado): sem QR, que é para outro aparelho. */
+@media (min-width: 960px) and (pointer: coarse) {
+  .cuidador-hero__qr {
+    display: none;
+  }
+}

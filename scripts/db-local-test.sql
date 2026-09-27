@@ -59,7 +59,8 @@ begin
   if not (l->>'allowed')::boolean or l->>'reason' <> 'beta' or l->>'plan_id' <> 'beta' then
     raise exception 'licença beta errada: %', l;
   end if;
-  if not (l->'features'->>'voz')::boolean or not (l->'features'->>'multiplos_dispositivos')::boolean then
+  if not (l->'features'->>'voz')::boolean or not (l->'features'->>'multiplos_dispositivos')::boolean
+     or not coalesce((l->'features'->>'lazer')::boolean, false) then
     raise exception 'features da beta deveriam estar todos true: %', l->'features';
   end if;
   if l->'beneficiary'->>'user_name' <> 'Pedro Souza' then raise exception 'beneficiário errado'; end if;
@@ -397,5 +398,93 @@ begin
     raise exception 'job escalar-pedidos-de-ajuda não foi agendado';
   end if;
 end $$;
+
+-- Lazer e bem-estar por plano (27/09): features.lazer a partir do Completo.
+insert into auth.users (id, email) values
+  ('77777777-7777-7777-7777-777777777771', 'essencial@exemplo.com'),
+  ('77777777-7777-7777-7777-777777777772', 'completo@exemplo.com');
+insert into public.subscriptions (profile_id, plan_id, status, price_brl, trial_ends_at, next_charge_at) values
+  ('77777777-7777-7777-7777-777777777771', 'essencial', 'ativa', 249, now(), now() + interval '30 days'),
+  ('77777777-7777-7777-7777-777777777772', 'completo', 'ativa', 399, now(), now() + interval '30 days');
+
+do $$
+declare e jsonb; c jsonb;
+begin
+  e := public.license_for_profile('77777777-7777-7777-7777-777777777771') -> 'features';
+  c := public.license_for_profile('77777777-7777-7777-7777-777777777772') -> 'features';
+  if (e->>'lazer')::boolean is distinct from false then raise exception 'Essencial não inclui Lazer: %', e; end if;
+  if (c->>'lazer')::boolean is distinct from true then raise exception 'Completo inclui Lazer: %', c; end if;
+  if (c->>'voz')::boolean is distinct from false then raise exception 'Completo não inclui a voz personalizada: %', c; end if;
+  if (e->>'relatorios')::boolean is distinct from false or (c->>'relatorios')::boolean is distinct from true then
+    raise exception 'relatórios fora da régua: % / %', e, c;
+  end if;
+end $$;
+
+select 'Lazer por plano, 27/09: tudo certo' as resultado;
+
+-- Código de 4 dígitos da confirmação (26/09). O GoTrue guarda em
+-- confirmation_token o hash sha224(e-mail || código de 6), em hexadecimal
+-- (com o prefixo "pkce_" no fluxo PKCE); o e-mail mostra os 4 primeiros
+-- dígitos e confirmar_codigo devolve o hash para o verifyOtp.
+insert into auth.users (email, confirmation_token, confirmation_sent_at) values
+  ('codigo@exemplo.com', encode(extensions.digest('codigo@exemplo.com' || '482913', 'sha224'), 'hex'), now()),
+  ('pkce@exemplo.com', 'pkce_' || encode(extensions.digest('pkce@exemplo.com' || '105277', 'sha224'), 'hex'), now());
+insert into auth.users (email, confirmation_token, email_confirmed_at) values
+  ('ja-confirmado@exemplo.com', encode(extensions.digest('ja-confirmado@exemplo.com' || '111111', 'sha224'), 'hex'), now());
+
+do $$
+declare
+  esperado text := encode(extensions.digest('codigo@exemplo.com' || '482913', 'sha224'), 'hex');
+  r text;
+  i int;
+begin
+  if not has_function_privilege('anon', 'public.confirmar_codigo(text, text)', 'execute') then
+    raise exception 'anon precisa poder chamar confirmar_codigo (o site chama sem sessão)';
+  end if;
+  if has_table_privilege('anon', 'public.tentativas_de_codigo', 'select')
+     or has_table_privilege('authenticated', 'public.tentativas_de_codigo', 'select') then
+    raise exception 'tentativas_de_codigo não pode ser legível pelo site';
+  end if;
+
+  -- errado conta uma tentativa; certo devolve o hash e zera a contagem
+  if public.confirmar_codigo('codigo@exemplo.com', '4828') is not null then raise exception 'código errado foi aceito'; end if;
+  if (select erros from public.tentativas_de_codigo where email = 'codigo@exemplo.com') <> 1 then
+    raise exception 'o erro não foi contado';
+  end if;
+  r := public.confirmar_codigo('  Codigo@Exemplo.com ', '4829');
+  if r is distinct from esperado then raise exception 'código certo não devolveu o hash (veio %)', r; end if;
+  if exists (select 1 from public.tentativas_de_codigo where email = 'codigo@exemplo.com') then
+    raise exception 'o acerto deveria apagar as tentativas';
+  end if;
+
+  -- PKCE: devolve o hash com o prefixo, como o Auth guardou
+  r := public.confirmar_codigo('pkce@exemplo.com', '1052');
+  if r is distinct from 'pkce_' || encode(extensions.digest('pkce@exemplo.com' || '105277', 'sha224'), 'hex') then
+    raise exception 'PKCE: hash errado (veio %)', r;
+  end if;
+
+  -- e-mail já confirmado ou sem cadastro: a mesma resposta de código errado
+  if public.confirmar_codigo('ja-confirmado@exemplo.com', '1111') is not null then raise exception 'e-mail já confirmado não pode receber hash'; end if;
+  if public.confirmar_codigo('ninguem@exemplo.com', '1234') is not null then raise exception 'e-mail sem cadastro devolveu hash'; end if;
+
+  -- entrada inválida é recusada antes de contar tentativa
+  begin
+    perform public.confirmar_codigo('codigo@exemplo.com', '12a4');
+    raise exception 'código com letra deveria ser recusado';
+  exception when sqlstate '22023' then null;
+  end;
+
+  -- dez erros em 24 h bloqueiam o código, até o certo
+  for i in 1..10 loop
+    if public.confirmar_codigo('codigo@exemplo.com', '0000') is not null then raise exception 'erro % aceito', i; end if;
+  end loop;
+  begin
+    perform public.confirmar_codigo('codigo@exemplo.com', '4829');
+    raise exception 'depois de 10 erros o código deveria estar bloqueado';
+  exception when sqlstate 'P0429' then null;
+  end;
+end $$;
+
+select 'código de confirmação, 26/09: tudo certo' as resultado;
 
 select 'cenário da beta, 22/09 e 23/09: tudo certo' as resultado;

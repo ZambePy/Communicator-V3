@@ -63,116 +63,111 @@ export const PortaoDoPin: React.FC<{
       }}
     >
       <div
-        className="glass animate-fade-in-up"
+        className="glass animate-fade-in-up portao-pin"
         style={{
           padding: '2.5rem 2.5rem 2rem',
           borderRadius: '2.25rem',
-          maxWidth: 520,
           width: '100%',
           textAlign: 'center',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '1rem',
         }}
       >
-        <div
-          aria-hidden="true"
-          style={{
-            width: '4.5rem',
-            height: '4.5rem',
-            background: 'var(--color-primary-light)',
-            border: '1px solid var(--color-card-border)',
-            borderRadius: '1.35rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto',
-          }}
-        >
-          <UserCog size={36} color="var(--color-primary)" />
-        </div>
-
-        <h1
-          id="portao-pin-titulo"
-          style={{
-            fontSize: '1.75rem',
-            fontWeight: 800,
-            color: 'var(--color-text-base)',
-            margin: 0,
-            lineHeight: 1.2,
-          }}
-        >
-          {titulo}
-        </h1>
-        <p style={{ color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.5 }}>{dica}</p>
-
-        <form
-          onSubmit={enviar}
-          style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}
-        >
-          <label htmlFor="caregiver-pin" className="sr-only">
-            {t('settings.auth.pinLabel')}
-          </label>
-          <input
-            id="caregiver-pin"
-            type="password"
-            value={pin}
-            onChange={(e) => setPin(e.target.value.slice(0, PIN_MAX))}
-            maxLength={PIN_MAX}
-            autoComplete="one-time-code"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="••••"
-            aria-invalid={erro ? true : undefined}
-            aria-describedby={erro ? 'pin-error' : undefined}
-            style={{
-              textAlign: 'center',
-              fontSize: '2.5rem',
-              letterSpacing: '0.75rem',
-              padding: '0.75rem 1rem',
-              borderRadius: '1rem',
-              background: 'var(--field-bg)',
-              color: 'var(--color-text-base)',
-              border: `2px solid ${erro ? 'var(--color-danger)' : 'var(--field-border)'}`,
-              outline: 'none',
-              fontFamily: 'var(--font-family-display)',
-            }}
-          />
-          {erro && (
-            <p
-              id="pin-error"
-              role="alert"
-              style={{ color: 'var(--tint-danger-text)', fontSize: '0.95rem', margin: 0 }}
+        <form onSubmit={enviar} className="portao-pin__form">
+          <div className="portao-pin__principal">
+            <div
+              aria-hidden="true"
+              className="portao-pin__icone"
+              style={{
+                width: '4.5rem',
+                height: '4.5rem',
+                background: 'var(--color-primary-light)',
+                border: '1px solid var(--color-card-border)',
+                borderRadius: '1.35rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto',
+              }}
             >
-              {erro}
-            </p>
-          )}
+              <UserCog size={36} color="var(--color-primary)" />
+            </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '0.75rem',
-              margin: '0.5rem auto',
-              maxWidth: 320,
-              width: '100%',
-            }}
-          >
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((n) => (
-              <Tecla key={n} onClick={() => digitar(n)}>
-                {n}
+            <h1
+              id="portao-pin-titulo"
+              style={{
+                fontSize: '1.75rem',
+                fontWeight: 800,
+                color: 'var(--color-text-base)',
+                margin: 0,
+                lineHeight: 1.2,
+              }}
+            >
+              {titulo}
+            </h1>
+            <p style={{ color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.5 }}>{dica}</p>
+            <label htmlFor="caregiver-pin" className="sr-only">
+              {t('settings.auth.pinLabel')}
+            </label>
+            <input
+              id="caregiver-pin"
+              type="password"
+              value={pin}
+              onChange={(e) => setPin(e.target.value.slice(0, PIN_MAX))}
+              maxLength={PIN_MAX}
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="••••"
+              aria-invalid={erro ? true : undefined}
+              aria-describedby={erro ? 'pin-error' : undefined}
+              style={{
+                textAlign: 'center',
+                fontSize: '2.5rem',
+                letterSpacing: '0.75rem',
+                padding: '0.75rem 1rem',
+                borderRadius: '1rem',
+                background: 'var(--field-bg)',
+                color: 'var(--color-text-base)',
+                border: `2px solid ${erro ? 'var(--color-danger)' : 'var(--field-border)'}`,
+                outline: 'none',
+                fontFamily: 'var(--font-family-display)',
+              }}
+            />
+            {erro && (
+              <p
+                id="pin-error"
+                role="alert"
+                style={{ color: 'var(--tint-danger-text)', fontSize: '0.95rem', margin: 0 }}
+              >
+                {erro}
+              </p>
+            )}
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '0.75rem',
+                margin: '0.5rem auto',
+                maxWidth: 320,
+                width: '100%',
+              }}
+            >
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((n) => (
+                <Tecla key={n} onClick={() => digitar(n)}>
+                  {n}
+                </Tecla>
+              ))}
+              <Tecla tom="perigo" onClick={() => setPin('')}>
+                {t('pin.limpar')}
               </Tecla>
-            ))}
-            <Tecla tom="perigo" onClick={() => setPin('')}>
-              {t('pin.limpar')}
-            </Tecla>
-            <Tecla onClick={() => digitar('0')}>0</Tecla>
-            <Tecla tom="neutro" onClick={() => setPin((p) => p.slice(0, -1))}>
-              {t('pin.apagar')}
-            </Tecla>
+              <Tecla onClick={() => digitar('0')}>0</Tecla>
+              <Tecla tom="neutro" onClick={() => setPin((p) => p.slice(0, -1))}>
+                {t('pin.apagar')}
+              </Tecla>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '1rem', marginTop: '0.25rem' }}>
+          <div className="portao-pin__acoes">
             {/* A SAÍDA por olhar: alta, dwell longo, e legível — o rótulo usa a
                 cor de texto do tema sobre o cartão do tema. */}
             <GazeButton

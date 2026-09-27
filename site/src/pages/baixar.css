@@ -1,0 +1,157 @@
+/* Página de download (Baixar.tsx) e o endereço do código QR (AbrirApp.tsx). */
+
+.baixar-hero {
+  position: relative;
+  overflow: hidden;
+  padding-top: calc(var(--header-h) + clamp(40px, 7vh, 80px));
+  padding-bottom: clamp(48px, 8vh, 88px);
+  background: var(--navy-deep);
+}
+
+.baixar-hero__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.baixar-hero__titulo {
+  font-size: clamp(2.4rem, 5.6vw, 4.2rem);
+  letter-spacing: -0.036em;
+  line-height: 1.02;
+  margin-bottom: var(--sp-4);
+}
+
+.baixar-hero__lead {
+  font-size: var(--fs-lead);
+  max-width: 50ch;
+  margin: 0;
+}
+
+/* ---------- os dois apps ---------- */
+.baixar-apps {
+  padding-block: clamp(48px, 8vh, 96px);
+}
+
+.baixar-apps__lista {
+  display: grid;
+  gap: var(--sp-6);
+}
+
+.baixar-app {
+  padding: clamp(20px, 3vw, 36px);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
+.baixar-app__cabeca {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+
+.baixar-app__cabeca img {
+  width: 48px;
+  height: 48px;
+  flex: none;
+}
+
+.baixar-app__icone {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px -4px rgba(11, 27, 58, 0.35);
+}
+
+.baixar-app__nome {
+  font-size: 1.35rem;
+  margin: 0;
+}
+
+.baixar-app__para {
+  margin: 2px 0 0;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+}
+
+.baixar-app__lojas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-5);
+}
+
+.baixar-app__qr {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.baixar-app__qr .qr {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/* O painel de download foi desenhado para fundo escuro; no cartão claro, a
+   mesma estrutura com as superfícies do tema claro. */
+.baixar-app .dl__card {
+  background: var(--surface-2);
+}
+
+.levar-ao-computador p {
+  margin-bottom: var(--sp-4);
+}
+
+.levar-ao-computador__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+/* ---------- para começar ---------- */
+.baixar-passos {
+  position: relative;
+  overflow: hidden;
+  padding-block: clamp(64px, 10vh, 112px);
+  background: var(--navy-deep);
+}
+
+.baixar-passos__inner {
+  position: relative;
+  z-index: 1;
+}
+
+.baixar-passos .passo a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- /app (código QR) ---------- */
+.abrir-app {
+  padding-top: calc(var(--header-h) + var(--sp-8));
+  min-height: 70vh;
+}
+
+.abrir-app__titulo,
+.abrir-app__texto {
+  margin-inline: auto;
+}
+
+.abrir-app__selos {
+  justify-content: center;
+  margin-top: var(--sp-5);
+}
+
+@media (min-width: 960px) {
+  .baixar-apps__lista {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);
+    align-items: start;
+  }
+}

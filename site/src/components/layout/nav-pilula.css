@@ -1,0 +1,77 @@
+/* Navegação com a pílula de vidro (NavPilula.tsx). As bordas vêm do JS em
+   --pilula-esq e --pilula-dir (px, a partir da esquerda da <nav>). */
+
+.nav-pilula {
+  --pilula-esq: 0px;
+  --pilula-dir: 0px;
+  --pilula-visivel: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: var(--r-pill);
+}
+
+.nav-pilula__links {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-pilula__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--r-pill);
+  font-size: 0.95rem;
+  font-weight: 560;
+  white-space: nowrap;
+  color: rgba(226, 234, 247, 0.72);
+  transition: color var(--dur-fast) ease;
+}
+
+.nav-pilula__link:focus-visible {
+  outline-offset: 0;
+}
+
+/* A camada acesa: mesma fileira, texto branco, recortada pela pílula. */
+.nav-pilula__links--aceso {
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+  clip-path: inset(0 calc(100% - var(--pilula-dir) + 4px) 0 calc(var(--pilula-esq) - 4px) round 999px);
+  opacity: var(--pilula-visivel);
+}
+
+.nav-pilula__links--aceso .nav-pilula__link {
+  color: #fff;
+}
+
+/* O vidro: fundo translúcido que desfoca o que passa por trás, borda fina e um
+   brilho na aresta de cima. */
+.nav-pilula__vidro {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: var(--pilula-esq);
+  width: calc(var(--pilula-dir) - var(--pilula-esq));
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.07));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 6px 18px -6px rgba(2, 7, 16, 0.55);
+  backdrop-filter: blur(10px) saturate(170%);
+  -webkit-backdrop-filter: blur(10px) saturate(170%);
+  opacity: var(--pilula-visivel);
+  transition: opacity 220ms ease;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-pilula__vidro {
+    transition: none;
+  }
+}

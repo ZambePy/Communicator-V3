@@ -1,354 +1,283 @@
-/* ============================================================
-   Página "A empresa".
+/* Página "A empresa" (Sobre.tsx). */
 
-   Abre com a foto dos três e a missão; depois a origem com números,
-   a equipe com retratos redondos, e o resto do plano.
-   ============================================================ */
-
-/* --- foto dos três --- */
-.about-hero {
-  padding-top: var(--sp-6);
-}
-
-.about-hero__figure {
+/* ---------- a foto dos três, na abertura ---------- */
+.sobre-foto {
   position: relative;
-  max-width: 960px;
-  margin: 0 auto;
+  margin: 0;
   border-radius: var(--r-xl);
   overflow: hidden;
+  aspect-ratio: 16 / 7;
   background: var(--navy);
   box-shadow: var(--shadow-lg);
-  aspect-ratio: 21 / 9;
+  animation: entrada 1100ms var(--ease-out) 260ms both;
 }
 
-.about-hero__pic,
-.about-hero__pic img {
+.sobre-foto__imagem,
+.sobre-foto__imagem img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 50% 28%;
+  object-position: 50% 30%;
 }
 
-.about-hero__figure::after {
-  content: '';
+.sobre-foto__legenda {
   position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(180deg, rgba(6, 18, 35, 0) 35%, rgba(6, 18, 35, 0.8) 75%, rgba(6, 18, 35, 0.94)),
-    linear-gradient(90deg, rgba(6, 18, 35, 0.4), transparent 55%);
-  pointer-events: none;
-}
-
-.about-hero__caption {
-  position: absolute;
-  z-index: 1;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: var(--sp-6);
+  left: var(--sp-5);
+  bottom: var(--sp-5);
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  background: rgba(6, 18, 35, 0.62);
   color: #f2f6fd;
+  font-size: 0.9rem;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-.about-hero__mission {
-  font-family: var(--font-display);
-  font-size: clamp(1.3rem, 2.6vw, 2.2rem);
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-  color: #fff;
-  max-width: 28ch;
-  margin: 0 0 var(--sp-2);
-  text-wrap: balance;
-}
-
-.about-hero__who {
-  margin: 0;
-  font-size: 0.95rem;
-  color: #c3d2e8;
-}
-
-/* --- origem --- */
-.origin__inner {
+/* ---------- a família inteira perde a conversa ---------- */
+.sobre-humano {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: var(--sp-8);
+  gap: clamp(32px, 5vw, 72px);
   align-items: start;
-  margin-bottom: var(--sp-8);
 }
 
-.origin__title {
-  max-width: 18ch;
-  margin: 0;
+.sobre-humano .titulo-capitulo {
+  --title-w: 16ch;
 }
 
-.origin__text p {
-  font-size: 1.08rem;
-  line-height: 1.7;
-  max-width: 60ch;
-}
-
-.impact {
+.sobre-humano__linhas {
   list-style: none;
-  margin: 0;
+  margin: var(--sp-6) 0 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--sp-4);
 }
 
-.impact li {
+.sobre-humano__linhas li {
   margin: 0;
-  padding: var(--sp-5);
-  border-left: 2px solid var(--line-strong);
+  padding-left: var(--sp-5);
+  border-left: 2px solid var(--accent-line);
+  font-size: var(--fs-lead);
+  line-height: 1.5;
+  color: var(--text-soft);
 }
 
-.impact__value {
-  display: block;
+.sobre-relato {
+  margin: 0;
+  padding: clamp(24px, 3vw, 40px);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.sobre-relato p {
+  position: relative;
+  margin: 0 0 var(--sp-5);
   font-family: var(--font-display);
-  font-size: clamp(2.2rem, 4.2vw, 3.2rem);
-  line-height: 1;
+  font-size: clamp(1.15rem, 1.8vw, 1.45rem);
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
   color: var(--text);
-  margin-bottom: var(--sp-3);
-  font-variant-numeric: tabular-nums;
 }
 
-.impact__label {
-  margin: 0;
-  font-size: 0.96rem;
-  max-width: 26ch;
+.sobre-relato p::before {
+  content: '“';
+  display: block;
+  height: 0.6em;
+  font-size: 3.2em;
+  line-height: 1;
+  color: var(--accent);
 }
 
-/* --- equipe: retratos redondos (180 px) com anel em gradiente --- */
-.team {
+.sobre-relato footer {
+  font-size: 0.92rem;
+  color: var(--text-dim);
+}
+
+@media (min-width: 1000px) {
+  .sobre-humano {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* ---------- pesquisa ---------- */
+.sobre-nota {
+  margin: var(--sp-7) 0 0;
+  max-width: 76ch;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
+/* ---------- origem e equipe ---------- */
+.sobre-origem {
+  display: grid;
+  gap: var(--sp-5) clamp(32px, 5vw, 80px);
+  align-items: start;
+}
+
+.sobre-origem .titulo-capitulo {
+  --title-w: 17ch;
+}
+
+.sobre-origem__texto p {
+  font-size: 1.06rem;
+  line-height: 1.65;
+  max-width: 60ch;
+}
+
+.sobre-equipe {
   list-style: none;
-  margin: 0;
+  margin: clamp(48px, 8vh, 88px) 0 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-5);
+  gap: var(--sp-6);
 }
 
-.team li {
+.sobre-equipe__pessoa {
   margin: 0;
-}
-
-.member {
-  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: var(--sp-6) var(--sp-5) var(--sp-5);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform var(--dur) var(--ease-spring),
-    box-shadow var(--dur) var(--ease-out),
-    border-color var(--dur) var(--ease-out);
 }
 
-.member:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--line-strong);
+.sobre-equipe__pessoa .portrait {
+  margin-bottom: var(--sp-5);
 }
 
-.member__body {
-  display: grid;
-  gap: 6px;
-  margin-top: var(--sp-4);
+.sobre-equipe__nome {
+  font-size: 1.12rem;
+  margin-bottom: 4px;
 }
 
-.member__name {
-  font-size: 1.15rem;
-  margin: 0;
-}
-
-.member__role {
-  margin: 0;
+.sobre-equipe__papel {
+  margin: 0 0 var(--sp-3);
   font-size: 0.86rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ok);
+  color: var(--accent);
 }
 
-.member__line {
-  margin: 4px 0 0;
-  font-size: 1.02rem;
-  color: var(--text);
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.member__text {
-  margin: var(--sp-2) 0 0;
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--line);
-  font-size: 0.95rem;
-  line-height: 1.6;
-  text-align: left;
-}
-
-/* --- Objetivos de Desenvolvimento Sustentável --- */
-.sdg {
-  margin-top: var(--sp-7);
-  padding-top: var(--sp-5);
-  border-top: 1px solid var(--line);
-}
-
-.sdg__intro {
-  font-size: 0.95rem;
-  color: var(--text-dim);
-  max-width: 72ch;
-  margin-bottom: var(--sp-5);
-}
-
-.sdg__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: var(--sp-5);
-}
-
-.sdg__n {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  line-height: 1;
-  color: var(--ok);
-  margin-bottom: var(--sp-3);
-}
-
-.sdg__title {
-  font-size: 1rem;
-  margin: 0 0 6px;
-}
-
-.sdg__text {
+.sobre-equipe__linha {
   margin: 0;
-  font-size: 0.93rem;
+  max-width: 30ch;
+  color: var(--text-soft);
 }
 
-/* --- roteiro --- */
-.roadmap__title {
-  --title-w: 24ch;
-  margin-bottom: var(--sp-6);
+@media (min-width: 900px) {
+  .sobre-origem {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  }
+  .sobre-equipe {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
-.roadmap {
+/* ---------- valores, compromissos e ODS ---------- */
+.sobre-compromissos {
+  margin-top: clamp(64px, 10vh, 112px);
+}
+
+.sobre-compromissos .link-seta {
+  margin-top: var(--sp-6);
+}
+
+.sobre-ods {
+  list-style: none;
+  margin: clamp(48px, 8vh, 80px) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.sobre-ods li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0;
+  padding: 8px 16px 8px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 0.95rem;
+}
+
+.sobre-ods__numero {
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* ---------- roteiro ---------- */
+.roteiro {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: var(--sp-4);
-}
-
-.roadmap li {
-  margin: 0;
-}
-
-.roadmap__item {
-  display: flex;
   gap: var(--sp-5);
-  padding: var(--sp-5);
-  border: 1px solid var(--line);
+}
+
+.roteiro__item {
+  --cor: var(--text-dim);
+  margin: 0;
+  padding: var(--sp-5) var(--sp-5) var(--sp-5) calc(var(--sp-5) + 4px);
   border-radius: var(--r-lg);
   background: var(--surface);
-  flex-wrap: wrap;
+  box-shadow:
+    inset 4px 0 0 var(--cor),
+    var(--shadow-sm);
 }
 
-.roadmap__item .tag {
-  flex: none;
+.roteiro__item.is-feito {
+  --cor: var(--ok);
 }
 
-.roadmap__body {
-  flex: 1 1 320px;
+.roteiro__item.is-agora,
+.roteiro__item.is-proximo {
+  --cor: var(--accent);
 }
 
-.roadmap__h {
-  font-size: 1.14rem;
-  margin-bottom: 6px;
+.roteiro__situacao {
+  display: inline-block;
+  margin-bottom: var(--sp-3);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cor);
 }
 
-.roadmap__text {
+.roteiro__titulo {
+  font-size: 1.12rem;
+  margin-bottom: var(--sp-2);
+}
+
+.roteiro__texto {
   margin: 0;
-  font-size: 0.97rem;
+  font-size: 0.98rem;
+  color: var(--text-soft);
 }
 
-/* --- fecho --- */
-.about-close {
-  display: grid;
-  place-items: center;
-  gap: var(--sp-4);
-}
-
-.about-close__title {
-  max-width: 20ch;
-}
-
-.about-close__lead {
-  max-width: 58ch;
-}
-
-@media (max-width: 1000px) {
-  .impact {
+@media (min-width: 720px) {
+  .roteiro {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 860px) {
-  .team {
-    grid-template-columns: minmax(0, 1fr);
-    max-width: 520px;
-    margin-inline: auto;
+@media (min-width: 1100px) {
+  .roteiro {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 900px) {
-  .about-hero__figure {
+@media (max-width: 720px) {
+  .sobre-foto {
     aspect-ratio: 4 / 3;
   }
-  .about-hero__caption {
-    padding: var(--sp-5);
-  }
-  .origin__inner {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-5);
-    margin-bottom: var(--sp-7);
-  }
-}
-
-@media (max-width: 640px) {
-  .impact {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  /* No celular a foto não é cortada em retrato: fica 3:2 e a legenda
-     desce para baixo dela, em vez de cobrir os rostos. */
-  .about-hero__figure {
-    aspect-ratio: auto;
-  }
-  .about-hero__pic,
-  .about-hero__pic img {
-    height: auto;
-    aspect-ratio: 3 / 2;
-  }
-  .about-hero__figure::after {
-    display: none;
-  }
-  .about-hero__caption {
-    position: static;
-    padding: var(--sp-4) var(--sp-4) var(--sp-5);
-  }
-}
-
-.about-close .link-ok {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-}
-
-.about-close .underline-grow::after {
-  bottom: 8px;
 }

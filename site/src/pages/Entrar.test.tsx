@@ -8,24 +8,27 @@ import { motivoDoLinkNaUrl } from '@/utils/linkDeEmail'
 /* ============================================================
    /entrar leva cada um à etapa em que está: sem a pesquisa da beta
    respondida → /beta (a pesquisa); com ela → /perfil. `?email=` preenche o
-   e-mail (botão "Já confirmei, continuar aqui"). Links de confirmação
+   e-mail ("Confirmei pelo botão do e-mail", na /beta). Links de confirmação
    antigos ainda caem aqui: com sessão, seguem; vencidos, mostram o motivo.
-   Login de e-mail não confirmado oferece o reenvio do link.
+   Login de e-mail não confirmado pede o código de 4 dígitos ali mesmo.
    ============================================================ */
 
-const { sessao, signIn, reenviar } = vi.hoisted(() => ({
+const { sessao, signIn, refresh, reenviar, conferir, verificar } = vi.hoisted(() => ({
   sessao: { authenticated: false, loading: false, account: null as unknown },
   signIn: vi.fn(),
+  refresh: vi.fn(async () => {}),
   reenviar: vi.fn(async (_email: string) => {}),
+  conferir: vi.fn(async (_email: string, _codigo: string) => 'hash-do-cadastro'),
+  verificar: vi.fn(async (_hash: string, _tipo: string) => {}),
 }))
 
 vi.mock('@/context/AccountContext', () => ({
-  useAccount: () => ({ ...sessao, signIn }),
+  useAccount: () => ({ ...sessao, signIn, refresh }),
 }))
 
 vi.mock('@/services/api', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/services/api')>()
-  return { ...real, reenviarConfirmacao: reenviar }
+  return { ...real, reenviarConfirmacao: reenviar, conferirCodigo: conferir, verificarLinkDoEmail: verificar }
 })
 
 function montar(endereco = '/entrar') {
@@ -88,12 +91,12 @@ describe('<Entrar />', () => {
     expect(await screen.findByText('pesquisa da beta')).toBeInTheDocument()
   })
 
-  it('?email= preenche o e-mail (vindo do "Já confirmei, continuar aqui")', () => {
+  it('?email= preenche o e-mail (vindo do "Confirmei pelo botão do e-mail")', () => {
     montar('/entrar?email=maria%40exemplo.com.br')
     expect(screen.getByLabelText('E-mail')).toHaveValue('maria@exemplo.com.br')
   })
 
-  it('e-mail não confirmado: mostra o motivo e oferece reenviar o link para o e-mail digitado', async () => {
+  it('e-mail não confirmado: pede o código ali mesmo, com o reenvio liberado', async () => {
     signIn.mockRejectedValueOnce(
       new ApiError({ message: 'Email not confirmed', status: 400, code: 'email_not_confirmed' }),
     )
@@ -102,10 +105,14 @@ describe('<Entrar />', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
 
     expect(await screen.findByText(/ainda não foi confirmado/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Reenviar o link de confirmação/ }))
-
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar outro código' }))
     await waitFor(() => expect(reenviar).toHaveBeenCalledWith('maria@exemplo.com.br'))
-    expect(await screen.findByText(/Enviamos um novo link/)).toBeInTheDocument()
+    expect(await screen.findByText(/Enviamos um código novo/)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Código de 4 dígitos'), { target: { value: '4829' } })
+    await waitFor(() => expect(conferir).toHaveBeenCalledWith('maria@exemplo.com.br', '4829'))
+    await waitFor(() => expect(verificar).toHaveBeenCalledWith('hash-do-cadastro', 'email'), { timeout: 2500 })
+    expect(refresh).toHaveBeenCalled()
   })
 
   it('senha errada não oferece reenvio', async () => {
@@ -115,7 +122,7 @@ describe('<Entrar />', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
 
     expect(await screen.findByText('E-mail ou senha incorretos.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Reenviar/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Código de 4 dígitos')).not.toBeInTheDocument()
   })
 
   it('link de confirmação vencido: diz o motivo acima do formulário', () => {

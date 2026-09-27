@@ -29,9 +29,9 @@ import {
 } from './tutorial/passos';
 
 /**
- * Menu principal: nove cartões em grade 3×3, cada um com um selo circular
- * colorido e o ícone escuro por cima. Sem título — o paciente já sabe onde
- * está, e o espaço vale mais como alvo do que como texto.
+ * Menu principal: nove cartões em grade 3×3, cada um com um selo colorido
+ * (quadrado de cantos redondos) e o ícone escuro por cima. Sem título — o
+ * paciente já sabe onde está, e o espaço vale mais como alvo do que como texto.
  *
  * O selo é a única cor do cartão: o fundo é o da tela, e o cartão só ganha
  * o contorno azul quando o olhar entra (comportamento padrão do GazeButton).
@@ -41,7 +41,7 @@ interface AppModule {
   /** Também é a chave em `menu.modulos.*` do i18n. */
   id: string;
   icon: React.ReactNode;
-  /** Cor do selo circular atrás do ícone. */
+  /** Cor do selo atrás do ícone. */
   badge: string;
   route: string;
 }
@@ -206,9 +206,12 @@ export const MainMenu: React.FC = () => {
                     style={{
                       height: '100%',
                       borderRadius: '1.6rem',
-                      background: 'var(--color-card-bg)',
+                      // Um brilho quase imperceptível no topo dá volume ao cartão
+                      // sem virar enfeite — a cor continua sendo só a do selo.
+                      background:
+                        'linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 45%), var(--color-card-bg)',
                       border: '2px solid var(--color-card-border)',
-                      boxShadow: '0 8px 24px var(--color-card-shadow)',
+                      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px var(--color-card-shadow)',
                     }}
                   >
                     <div
@@ -231,14 +234,16 @@ export const MainMenu: React.FC = () => {
                           // encolhe o alvo — o alvo é a caixa do botão inteiro.
                           width: 'clamp(52px, 7vh, 88px)',
                           height: 'clamp(52px, 7vh, 88px)',
-                          borderRadius: '50%',
-                          background: module.badge,
+                          // Quadrado de cantos bem redondos, com um degradê curto
+                          // da própria cor: o selo ganha volume sem mudar de cor.
+                          borderRadius: '30%',
+                          background: `linear-gradient(155deg, color-mix(in srgb, ${module.badge} 72%, #ffffff), ${module.badge})`,
                           color: '#0f172a',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          marginBottom: 'clamp(0.4rem, 1vh, 1rem)',
-                          boxShadow: '0 6px 18px rgba(0, 0, 0, 0.25)',
+                          marginBottom: 'clamp(0.5rem, 1.2vh, 1.1rem)',
+                          boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 8px 20px rgba(0, 0, 0, 0.28)',
                         }}
                       >
                         {module.icon}
@@ -259,10 +264,11 @@ export const MainMenu: React.FC = () => {
                       </div>
                       <div
                         style={{
+                          fontFamily: 'var(--font-display)',
                           fontSize: 'clamp(1.15rem, 2.2vh, 1.7rem)',
-                          fontWeight: 800,
+                          fontWeight: 700,
                           color: 'var(--color-text-base)',
-                          letterSpacing: '-0.01em',
+                          letterSpacing: '-0.02em',
                           lineHeight: 1.15,
                         }}
                       >
@@ -270,11 +276,11 @@ export const MainMenu: React.FC = () => {
                       </div>
                       <div
                         style={{
+                          fontFamily: 'var(--font-body)',
                           fontSize: 'clamp(0.85rem, 1.4vh, 1.05rem)',
-                          opacity: 0.7,
                           marginTop: '0.45rem',
                           fontWeight: 500,
-                          color: 'var(--color-text-base)',
+                          color: 'var(--color-text-muted)',
                         }}
                       >
                         {t(`menu.modulos.${module.id}.description`)}

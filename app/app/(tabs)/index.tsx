@@ -310,7 +310,7 @@ function Hero({ nome, patientName, onOpen }: { nome: string; patientName: string
             Vamos conectar o computador
           </Text>
           <View style={styles.steps}>
-            <Passo n={1} texto={`Instale o IrisFlow no computador de ${nome}.`} />
+            <Passo n={1} texto={`Instale o IrisFlow Communicator no computador de ${nome}.`} />
             <Passo n={2} texto="Entre lá com esta mesma conta. Pronto: o vínculo é automático." />
           </View>
           <Button title="Baixar para o computador" variant="light" icon="download-outline" onPress={() => void Linking.openURL(siteRoute('/beta')).catch(() => undefined)} style={styles.heroCta} />

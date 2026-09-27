@@ -85,7 +85,7 @@ export default function Perfil() {
 
   return (
     <div className="flow">
-      <AmbientBackground particles={10} scan={false} light />
+      <AmbientBackground variante="suave" />
 
       <div className="container flow__inner perfil">
         <header className="perfil__cabeca">

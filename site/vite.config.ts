@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { PAGES } from './src/seo/pages'
 import { buildRobots, buildSitemap } from './src/seo/sitemap'
@@ -81,7 +82,15 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   const siteUrl = resolveSiteUrl(env.VITE_SITE_URL)
 
+  // Os selos da App Store e do Google Play ficam em public/badges/ (o selo da
+  // Apple em SVG vetorial, o do Google em PNG transparente). Se um dos dois
+  // arquivos faltar, o site volta aos botões próprios com o nome das lojas.
+  const selosOficiais =
+    existsSync(path.resolve(__dirname, 'public/badges/app-store.svg')) &&
+    existsSync(path.resolve(__dirname, 'public/badges/google-play.png'))
+
   return {
+    define: { __SELOS_OFICIAIS__: JSON.stringify(selosOficiais) },
     plugins: [react(), seoFiles(siteUrl), somenteASolucao()],
     resolve: {
       alias: {

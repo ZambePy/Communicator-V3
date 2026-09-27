@@ -99,7 +99,8 @@ export interface LicencaResposta {
   access_until: string | null;
   checked_at: string;
   beneficiary: { id: string; user_name: string } | null;
-  features: { relatorios: boolean; multiplos_dispositivos: boolean; assistente: boolean; voz: boolean };
+  /** `lazer` chegou em 27/09/2026: servidores anteriores não o mandam. */
+  features: { relatorios: boolean; multiplos_dispositivos: boolean; assistente: boolean; voz: boolean; lazer?: boolean };
 }
 
 /** Resposta de `pair_device()`. A chave só aparece aqui, uma vez. */

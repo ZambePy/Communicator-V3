@@ -39,6 +39,56 @@ o canto calibrado — §2 e §6), e os números novos desta revisão vêm de
 baseline ao vivo continua sendo o de 2026-09-20 (§14.4) até a próxima rodada
 limpa com o pipeline novo.
 
+**Revisão de 2026-09-26 — o que o número vale para a beta.** Nenhuma medição
+nova e nenhum relatório reinterpretado; três correções de leitura, conferidas
+contra os JSON de `docs/medicoes/historico/`:
+
+1. **O instalador da beta não traz o L2CS.** Desde 24/09 o `release.yml` gera o
+   instalador sem os pesos (a licença do Gaze360 é *research-only*; README,
+   *Pendências e riscos*, item 1), e o app instalado rastreia só pelas duas
+   dimensões absolutas da íris por olho (`irisAbs`). **Todas** as sessões desta
+   página foram medidas **com** o L2CS: o 1,40° descreve o pipeline de pesquisa,
+   não o que a família instala. A acurácia sem o L2CS nunca foi medida — é a
+   M-ablação (§4.6), que passa a ser a primeira da fila.
+2. **Horários.** As linhas de M2, M3 e M4 estavam em UTC (07/09, 00:25–00:36),
+   e o resto do documento, em Brasília. Corrigido para 06/09, 21:25, 21:31 e
+   21:36 (§4.2, §4.3 e §14.1), e a razão do filtro de M2 ficou com um só
+   arredondamento (3,19).
+3. **Resumo em linguagem simples** (§0, novo), para quem precisa do número sem
+   o protocolo: plano de negócios, site e apresentações.
+
+---
+
+## 0. Resumo em linguagem simples
+
+**O que medimos.** A pessoa olha para 13 pontos que aparecem na tela, um de
+cada vez, e o sistema registra para onde *acha* que ela está olhando. A
+**acurácia** é a distância média entre os dois; a **precisão** é o quanto a
+estimativa treme enquanto o olho está parado.
+
+**O melhor resultado até aqui (20/09/2026):** erro médio de **1,40°** — num
+monitor de 24″ a 60 cm, o ponto estimado ficou em média a 56 px (≈ 1,5 cm) do
+alvo, e 76 % das estimativas caíram a menos de 100 px dele. Com o tremor somado,
+o botão que acomoda esse erro tem 215 px de lado (5,6°), e é por isso que as
+telas do paciente usam alvos grandes.
+
+**Como isso se compara.** A literatura de rastreamento por webcam costuma ficar
+entre 2° e 4° (WebGazer 4,17°; FAZE 2,4°; o L2CS-Net sozinho 3,92° no
+MPIIGaze). Rastreadores infravermelhos de laboratório ficam entre 0,5° e 1°.
+O 1,40° está abaixo da faixa típica de webcam e ainda acima do infravermelho.
+
+**O que o número não diz.** É uma pessoa, num posto conhecido, sem réplica
+(N = 1), e foi medido **com** o L2CS, cujos pesos têm licença só para
+pesquisa. O instalador da beta roda sem ele, e a acurácia dessa versão ainda
+não foi medida. A precisão (o tremor) também piorou entre o pipeline antigo e
+o atual (§14.4): acertar o botão ficou mais fácil, segurar o olhar parado nele,
+não.
+
+**O que falta medir, nesta ordem:** o pipeline sem o L2CS (M-ablação, §4.6);
+uma sessão ao vivo com a calibração de 13 pontos e uma réplica (§14.5); e,
+depois, mais participantes, postura reclinada, luz baixa, óculos e distância
+(§4.6).
+
 ---
 
 ## 1. O que é medido
@@ -317,7 +367,7 @@ Confira `pipeline.runtime.filterEffective` no relatório antes de acreditar na
 condição: `__irisflowExp.set` só vale depois do reload, e o painel de preflight
 não confere isso (§5.2).
 
-#### Resultado de M2 *(feita — 2026-09-07)*
+#### Resultado de M2 *(feita — 2026-09-06)*
 
 `accuracy-report-1788740744920.json`, `filterEffective: kalman`.
 
@@ -352,7 +402,7 @@ filtro de produção. A diferença é grande demais para ser ruído de sessão. 
 publicar a comparação, uma repetição de M2 em sessão limpa (9/9 alvos,
 `l2csValid` 1,0, ~30 Hz, mesma distância) tornaria o resultado defensável.
 
-#### Resultado de M3 *(feita — 2026-09-07)*
+#### Resultado de M3 *(feita — 2026-09-06)*
 
 `accuracy-report-1788741070521.json`, `filterEffective: kalmanEma`.
 
@@ -364,7 +414,7 @@ contra os 1,86° de M1. A condição de entrada foi equivalente à da referênci
 |---|---|---|---|
 | `jitterRMS` (bruto) | 21,8 px | 58,3 px | 34,4 px |
 | **`jitterFilteredRMS`** | **21,7 px** | 185,8 px | **203,9 px** |
-| **razão filtrado/bruto** | **0,99** | 3,18 | **5,93** |
+| **razão filtrado/bruto** | **0,99** | 3,19 | **5,93** |
 | mediana/ponto, bruto → filtrado | 18 → 22 px | 36 → 191 px | 29 → **207 px** |
 | pior ponto filtrado | 45 px | 426 px | 423 px |
 | erro | 1,86° | 3,44° | 1,93° |
@@ -436,7 +486,7 @@ Compare contra M1: `meanErrorDeg`, `biasX`/`biasY`, `affine.gainX/gainY` e
 `explainedFraction`. Registre `pipeline.experiment.lateralTranslationCompensation`
 no relatório para provar qual condição rodou.
 
-#### Resultado de M4 *(feita — 2026-09-07)*
+#### Resultado de M4 *(feita — 2026-09-06)*
 
 `accuracy-report-1788741409103.json`, com
 `pipeline.experiment.lateralTranslationCompensation: true` confirmado no
@@ -532,12 +582,13 @@ sessão é de iluminação, não da condição.
 
 A pergunta que dimensiona todo o resto: se o bloco angular vale 0,3°, o
 retreino é urgente; se vale 0,05°, o V2 pode sair sem L2CS enquanto a licença
-não vem.
+não vem. **É também o número da beta**: desde 24/09 o instalador roda a
+condição B.
 
 | | condição A | condição B |
 |---|---|---|
 | URL | `?ep=auto&l2cs=448&filtro=oneEuro&diagonal=…` | `?ep=off&filtro=oneEuro&diagonal=…` |
-| conjunto de features | `irisCore+l2cs:6` | `irisCore:4` |
+| conjunto de features | `irisAbs+l2cs` (4 dims por olho) | `irisAbs` (2 dims por olho — o que o instalador da beta roda) |
 | pessoa, distância, hora | iguais | iguais |
 
 Registrar `meanErrorDeg`, `looErrorPx`, centro/periferia, e o `featureSet` do
@@ -1065,9 +1116,9 @@ trás — **não são reanalisáveis**.
 | 2026-09-06 20:21 | **M1, One Euro** | **74 px** | **1,86°** | 21,8 px | ✅ `accuracy-report-1788736866711.json` |
 | 2026-09-06 19:22 | One Euro | 180 px | 4,58° | 43,2 px | descartada — 3 alvos fora do treino, incluindo o centro |
 | 2026-09-06 19:52 | One Euro | 113 px | 2,85° | 38,2 px | descartada — 2 alvos da linha inferior sem amostra |
-| 2026-09-07 00:25 | **M2, Kalman** | 136 px | 3,44° | 58,3 px | `accuracy-report-1788740744920.json` — filtro amplificou o tremor 3,19×; 1 alvo pulado |
-| 2026-09-07 00:31 | **M3, Kalman+EMA** | 76 px | 1,93° | 34,4 px | `accuracy-report-1788741070521.json` — sessão limpa; filtro amplificou 5,93×; 1 alvo pulado |
-| 2026-09-07 00:36 | **M4, compensação lateral** | 115 px | 2,89° | 36,0 px | `accuracy-report-1788741409103.json` — compensação não melhora em posição fixa; 1 alvo pulado |
+| 2026-09-06 21:25 | **M2, Kalman** | 136 px | 3,44° | 58,3 px | `accuracy-report-1788740744920.json` — filtro amplificou o tremor 3,19×; 1 alvo pulado |
+| 2026-09-06 21:31 | **M3, Kalman+EMA** | 76 px | 1,93° | 34,4 px | `accuracy-report-1788741070521.json` — sessão limpa; filtro amplificou 5,93×; 1 alvo pulado |
+| 2026-09-06 21:36 | **M4, compensação lateral** | 115 px | 2,89° | 36,0 px | `accuracy-report-1788741409103.json` — compensação não melhora em posição fixa; 1 alvo pulado |
 | 2026-09-06 20:36 | deriva T+1 min | 87 px | 2,19° | 53,1 px | linha adiada (§4.5) |
 | 2026-09-06 20:45 | deriva T+10 min | 152 px | 3,87° | 30,7 px | linha adiada (§4.5) |
 | 2026-09-20 11:23 | **baseline, pipeline `irisAbs`** | **56 px** | **1,40°** | 38,1 px | 🏆 `accuracy-report-1789914216975.json` — menor erro medido; detalhe na §14.4 |
@@ -1112,7 +1163,7 @@ mudou (§14.4). Resultado consolidado **daquele** pipeline:
 | medição | condição | erro | métrica-chave | conclusão |
 |---|---|---|---|---|
 | **M1** | One Euro | **1,86°** | razão filtro 0,99 | referência do projeto |
-| **M2** | Kalman | 3,44° | razão filtro **3,18** | amplifica o tremor do cursor |
+| **M2** | Kalman | 3,44° | razão filtro **3,19** | amplifica o tremor do cursor |
 | **M3** | Kalman + EMA | 1,93° | razão filtro **5,93** | amplifica ainda mais; o EMA não corrige |
 | **M4** | compensação lateral | 2,89° | — | não melhora em posição fixa |
 

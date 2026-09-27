@@ -118,7 +118,7 @@ export default function Relatorios() {
           {erro ? (
             <EmptyState icon="cloud-offline-outline" title="Não foi possível carregar" body={erro} action={{ label: 'Tentar de novo', icon: 'refresh', onPress: () => setTentativa((n) => n + 1) }} compact />
           ) : (
-            <EmptyState icon="stats-chart-outline" title="Ainda sem sessões" body={`Quando ${nome} usar o IrisFlow no computador, o resumo de cada dia aparece aqui.`} compact />
+            <EmptyState icon="stats-chart-outline" title="Ainda sem sessões" body={`Quando ${nome} usar o IrisFlow Communicator no computador, o resumo de cada dia aparece aqui.`} compact />
           )}
         </Card>
       ) : (

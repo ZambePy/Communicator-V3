@@ -20,13 +20,21 @@ verify_jwt = false
 
 # Modelos de e-mail do Supabase Auth, em português e com a marca (os mesmos
 # aplicados no projeto em produção, em Authentication → Emails → Templates).
+# A confirmação do cadastro mostra um código de 4 dígitos — os 4 primeiros do
+# código de 6 do Auth, {{ slice .Token 0 4 }} — que a página confere pela
+# função confirmar_codigo (migração 20260927014237_codigo_de_confirmacao.sql);
+# o botão com o link continua no e-mail, para quem abre em outro aparelho.
 # Confirmação e nova senha levam o link direto para o site com o token_hash
 # ({{ .SiteURL }}/confirmar-email?token_hash=… e /nova-senha?token_hash=…):
 # a página verifica o link e abre a sessão no aparelho do clique. Os outros
 # usam o link padrão, {{ .ConfirmationURL }}. Valem para o `supabase start`
 # local; no projeto remoto são aplicados pelo painel (ou pela API de gestão).
+[auth.email]
+# O código de 4 dígitos depende do código de 6 do Auth (o padrão).
+otp_length = 6
+
 [auth.email.template.confirmation]
-subject = "Confirme seu e-mail no IrisFlow"
+subject = "Seu código do IrisFlow: {{ slice .Token 0 4 }}"
 content_path = "./supabase/templates/confirmacao.html"
 
 [auth.email.template.recovery]

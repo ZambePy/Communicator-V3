@@ -1,41 +1,42 @@
 import { Reveal } from '@/components/effects/Reveal'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
-import { IrisMark } from '@/components/layout/Logo'
 import { Button } from '@/components/ui/Button'
+import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
+import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
+import { diaPorExtenso } from '@/lib/lancamento'
 import { BETA, BETA_CTA, TRIAL_DAYS } from '@/data/content'
 import './cta.css'
 
+/** Chamada final das páginas de conteúdo: uma frase, duas ações e, antes do
+ *  lançamento, o dia em que o download abre. */
 export function CallToAction() {
+  const program = useBetaProgram()
+  const lancou = useJaLancou(program.launchAt)
+
   return (
     <section className="cta on-dark">
-      <AmbientBackground particles={16} scan={false} />
+      <AmbientBackground />
 
       <div className="container cta__inner">
-        <Reveal anim="zoom">
-          <IrisMark size={92} />
-        </Reveal>
-
-        <Reveal anim="up" delay={140}>
+        <Reveal anim="up">
           <h2 className="cta__title">
             A pessoa continua lá. <span className="accent-text">Só falta a voz.</span>
           </h2>
         </Reveal>
 
-        <Reveal anim="up" delay={240}>
+        <Reveal anim="up" delay={100}>
           <p className="cta__lead">
-            Instale no computador que já está em casa, calibre em cerca de meio minuto e veja
-            com os próprios olhos se funciona para o seu caso.{' '}
-            {BETA.ativo
-              ? 'Durante a beta o acesso é gratuito e sem cartão, e nenhum texto de site substitui essa verificação.'
-              : 'Não pedimos cartão para começar, e nenhum texto de site substitui essa verificação.'}
+            Instale no computador que já está em casa e veja com os próprios olhos se funciona para
+            o seu caso.{' '}
+            {BETA.ativo ? 'Na beta, sem cartão e sem cobrança.' : 'Sem cartão para começar.'}
           </p>
         </Reveal>
 
-        <Reveal anim="up" delay={340}>
+        <Reveal anim="up" delay={200}>
           <div className="cta__actions">
             {BETA.ativo ? (
-              <Button to={BETA_CTA.to} size="lg" variant="teal">
-                {BETA_CTA.labelLong}
+              <Button to={lancou ? '/baixar' : BETA_CTA.to} size="lg" variant="teal">
+                {lancou ? 'Baixar grátis' : BETA_CTA.labelLong}
               </Button>
             ) : (
               <Button to="/cadastro" size="lg" variant="teal">
@@ -47,6 +48,15 @@ export function CallToAction() {
             </Button>
           </div>
         </Reveal>
+
+        {BETA.ativo && !lancou && (
+          <Reveal anim="fade" delay={300}>
+            <p className="cta__data">
+              <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
+              Download a partir de {diaPorExtenso(program.launchAt)}
+            </p>
+          </Reveal>
+        )}
       </div>
     </section>
   )

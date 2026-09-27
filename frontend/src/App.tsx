@@ -4,6 +4,7 @@ import { GazeProvider } from './context/GazeContext';
 import { AuthProvider } from './context/AuthContext';
 import { LicenseProvider } from './context/LicenseContext';
 import { ProtectedRoute } from './components/ui/ProtectedRoute';
+import { SoComLazer } from './components/ui/SoComLazer';
 import { TransicaoDeRota } from './components/ui/TransicaoDeRota';
 import { FechaPaineisAoNavegar } from './components/FechaPaineisAoNavegar';
 import { PreparoGate } from './pages/setup/PreparoGate';
@@ -399,7 +400,9 @@ function App() {
                               path="/meditation"
                               element={
                                 <ProtectedRoute>
-                                  <MeditationScreen />
+                                  <SoComLazer>
+                                    <MeditationScreen />
+                                  </SoComLazer>
                                 </ProtectedRoute>
                               }
                             />
@@ -425,7 +428,9 @@ function App() {
                               path="/games/bubble"
                               element={
                                 <ProtectedRoute>
-                                  <BubblePopGame />
+                                  <SoComLazer>
+                                    <BubblePopGame />
+                                  </SoComLazer>
                                 </ProtectedRoute>
                               }
                             />
@@ -433,7 +438,9 @@ function App() {
                               path="/games/follow"
                               element={
                                 <ProtectedRoute>
-                                  <FollowTarget />
+                                  <SoComLazer>
+                                    <FollowTarget />
+                                  </SoComLazer>
                                 </ProtectedRoute>
                               }
                             />
@@ -441,7 +448,9 @@ function App() {
                               path="/games/memory"
                               element={
                                 <ProtectedRoute>
-                                  <MemoryGame />
+                                  <SoComLazer>
+                                    <MemoryGame />
+                                  </SoComLazer>
                                 </ProtectedRoute>
                               }
                             />
@@ -449,7 +458,9 @@ function App() {
                               path="/drawing"
                               element={
                                 <ProtectedRoute>
-                                  <DrawingGame />
+                                  <SoComLazer>
+                                    <DrawingGame />
+                                  </SoComLazer>
                                 </ProtectedRoute>
                               }
                             />
@@ -457,7 +468,9 @@ function App() {
                               path="/gallery"
                               element={
                                 <ProtectedRoute>
-                                  <GalleryScreen />
+                                  <SoComLazer>
+                                    <GalleryScreen />
+                                  </SoComLazer>
                                 </ProtectedRoute>
                               }
                             />
@@ -465,7 +478,9 @@ function App() {
                               path="/photo"
                               element={
                                 <ProtectedRoute>
-                                  <PhotoCaptureScreen />
+                                  <SoComLazer>
+                                    <PhotoCaptureScreen />
+                                  </SoComLazer>
                                 </ProtectedRoute>
                               }
                             />
@@ -473,7 +488,9 @@ function App() {
                               path="/news"
                               element={
                                 <ProtectedRoute>
-                                  <NewsScreen />
+                                  <SoComLazer>
+                                    <NewsScreen />
+                                  </SoComLazer>
                                 </ProtectedRoute>
                               }
                             />

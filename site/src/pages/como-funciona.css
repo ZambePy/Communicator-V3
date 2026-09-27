@@ -1,51 +1,136 @@
-.how__split {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: var(--sp-7);
-  align-items: center;
+/* Página "Como funciona" (ComoFunciona.tsx). */
+
+.como__tecnico {
+  margin-top: clamp(40px, 6vh, 64px);
+  max-width: 820px;
 }
 
-.how__steps {
+.como__tecnico .detalhe__corpo p {
+  max-width: 70ch;
+}
+
+/* A demonstração interativa entra numa faixa escura, como o app. */
+.como__demo .demo {
+  background: var(--bg);
+}
+
+/* ---------- para quem é ---------- */
+.condicoes {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: var(--sp-5);
-}
-
-.how__steps li {
-  margin: 0;
-}
-
-.how__step {
-  display: flex;
   gap: var(--sp-4);
 }
 
-.how__n {
-  flex: none;
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  color: var(--ok);
-  padding-top: 4px;
+.condicoes__item {
+  margin: 0;
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 
-.how__step-title {
-  font-size: 1.25rem;
+.condicoes__item--outra {
+  background: transparent;
+  border-style: dashed;
+}
+
+.condicoes__item--outra .link-seta {
+  margin-top: var(--sp-3);
+}
+
+.condicoes__icone {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--sp-4);
+  border-radius: 12px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.condicoes__titulo {
+  font-size: 1.15rem;
   margin-bottom: var(--sp-2);
 }
 
-.how__step-text {
+.condicoes__texto {
   margin: 0;
-  max-width: 58ch;
+  color: var(--text-soft);
 }
 
-@media (max-width: 900px) {
-  .how__split {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-6);
+.condicoes__cuidado {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: var(--sp-4) 0 0;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.condicoes__cuidado .icon {
+  flex: none;
+  margin-top: 3px;
+}
+
+/* ---------- três perguntas ---------- */
+.como__perguntas {
+  margin-top: clamp(56px, 9vh, 96px);
+}
+
+.como__perguntas-titulo {
+  font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+  letter-spacing: -0.02em;
+  margin-bottom: var(--sp-2);
+}
+
+.como__perguntas-texto {
+  margin: 0 0 var(--sp-6);
+  max-width: 52ch;
+  color: var(--text-soft);
+}
+
+.como__perguntas-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+  margin-top: var(--sp-7);
+}
+
+.como__perguntas-acoes .link-seta {
+  margin-top: 0;
+}
+
+/* No celular, as condições deslizam de lado em vez de empilhar seis cartões. */
+@media (max-width: 719px) {
+  .condicoes {
+    margin-inline: calc(-1 * var(--sp-5));
+    padding: 0 var(--sp-5) var(--sp-3);
+    grid-auto-flow: column;
+    grid-auto-columns: min(84%, 320px);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: var(--sp-5);
   }
-  .how__split .irismark {
-    max-width: 220px;
+  .condicoes__item {
+    scroll-snap-align: start;
+  }
+}
+
+@media (min-width: 720px) {
+  .condicoes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1000px) {
+  .condicoes {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

@@ -2,11 +2,13 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
+import { CodigoDeVerificacao } from '@/components/beta/CodigoDeVerificacao'
 import { FormularioPesquisa } from '@/components/beta/FormularioPesquisa'
 import { CompatCheck } from '@/components/sections/CompatCheck'
 import { Button } from '@/components/ui/Button'
 import { Card, CardIcon } from '@/components/ui/Card'
 import { DownloadPanel } from '@/components/ui/DownloadPanel'
+import { SelosDasLojas } from '@/components/ui/SelosDasLojas'
 import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
 import { CheckField, Field } from '@/components/ui/Field'
 import { Icon, type IconName } from '@/components/ui/Icon'
@@ -23,6 +25,7 @@ import {
   fetchPerfilBasico,
   markBetaDownload,
   reenviarConfirmacao,
+  verificarLinkDoEmail,
   type BetaProgram,
 } from '@/services/api'
 import { formatDate, isEmail, osLabel } from '@/utils/format'
@@ -36,10 +39,10 @@ import './beta.css'
    sempre à vista (ETAPAS_DA_BETA, content.ts):
 
    1. Criar conta — nome, e-mail e senha. Nada mais.
-   2. Confirmar e-mail — "Confirm email" ligado no Supabase: o link abre
-      /confirmar-email, que faz o login no aparelho onde foi clicado
-      (celular ou computador) e agradece. Nesta aba, se a confirmação
-      acontecer no mesmo navegador, a página segue sozinha.
+   2. Código do e-mail — "Confirm email" ligado no Supabase: o e-mail traz um
+      código de 4 dígitos, digitado aqui (components/beta/CodigoDeVerificacao),
+      e um botão que abre /confirmar-email e faz o login no aparelho onde foi
+      clicado (celular ou computador).
    3. Pesquisa rápida — quem vai usar, condição, computador, app do
       cuidador (components/beta/FormularioPesquisa.tsx). É ela que abre a
       assinatura 'beta' (complete_beta_registration).
@@ -191,7 +194,7 @@ function CriarConta({ program }: { program: BetaProgram }) {
 
   if (pendente) {
     return (
-      <ConfirmeOEmail
+      <ConfirmeOCodigo
         email={pendente}
         onCorrigir={() => {
           setPendente(null)
@@ -204,7 +207,7 @@ function CriarConta({ program }: { program: BetaProgram }) {
 
   return (
     <div className="flow">
-      <AmbientBackground particles={14} scan={false} light />
+      <AmbientBackground variante="suave" />
 
       <div className="container flow__inner beta">
         <div className="beta__abertura">
@@ -309,7 +312,7 @@ function CriarConta({ program }: { program: BetaProgram }) {
                     autoComplete="email"
                     inputMode="email"
                     placeholder="voce@exemplo.com.br"
-                    hint="Enviamos para ele o link de confirmação."
+                    hint="Enviamos para ele um código de 4 dígitos."
                   />
                 </div>
 
@@ -409,79 +412,55 @@ function CriarConta({ program }: { program: BetaProgram }) {
   )
 }
 
-/* ---------------- etapa 2: confirmar o e-mail ---------------- */
+/* ---------------- etapa 2: o código do e-mail ---------------- */
 
-function ConfirmeOEmail({ email, onCorrigir }: { email: string; onCorrigir: () => void }) {
-  const [enviando, setEnviando] = useState(false)
-  const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null)
-  const tituloRef = useTituloEmFoco()
+function ConfirmeOCodigo({ email, onCorrigir }: { email: string; onCorrigir: () => void }) {
+  const { refresh } = useAccount()
 
-  const reenviar = async () => {
-    setEnviando(true)
-    setAviso(null)
-    try {
-      await reenviarConfirmacao(email)
-      setAviso({ ok: true, texto: `Enviamos de novo para ${email}. Vale o link mais recente.` })
-    } catch (e) {
-      setAviso({ ok: false, texto: e instanceof Error ? e.message : 'Não foi possível reenviar agora.' })
-    } finally {
-      setEnviando(false)
-    }
-  }
+  useEffect(() => {
+    window.scrollTo?.({ top: 0 })
+  }, [])
 
   return (
     <div className="flow">
-      <AmbientBackground particles={12} scan={false} light />
+      <AmbientBackground variante="suave" />
       <div className="container container--narrow flow__inner">
-        <div className="flow__card panel">
+        <div className="flow__card panel beta__codigo">
           <Stepper steps={ETAPAS_DA_BETA} current={1} />
 
-          <span className="beta__icone-grande" aria-hidden="true">
-            <Icon name="email" size={30} />
-          </span>
-          <h1 className="flow__title beta__etapa-titulo" ref={tituloRef} tabIndex={-1}>
-            Confirme seu e-mail para continuar
-          </h1>
-          <p className="lead beta__etapa-texto">
-            Enviamos um link para <strong>{email}</strong>. Pode abrir no celular ou no computador:
-            ao confirmar, você já entra na conta nesse aparelho e segue para a pesquisa rápida.
-          </p>
+          <h1 className="flow__title beta__etapa-titulo beta__codigo-titulo">Digite o código do e-mail</h1>
 
-          <div className="notice" role="status">
+          <CodigoDeVerificacao
+            email={email}
+            aoConfirmar={async (tokenHash) => {
+              // A sessão nasce aqui; com ela, a página segue para a pesquisa.
+              await verificarLinkDoEmail(tokenHash, 'email')
+              await refresh()
+            }}
+            aoReenviar={() => reenviarConfirmacao(email)}
+          />
+
+          <div className="notice beta__codigo-dica" role="note">
             <span className="notice__icon">
               <Icon name="info" size={20} />
             </span>
             <p>
-              Não chegou em alguns minutos? Confira o spam e a aba Promoções. Se este e-mail já tinha
-              conta, nenhum link novo é enviado: é só{' '}
-              <Link to="/entrar" className="link-ok">
+              Não achou? Confira o spam e a aba Promoções. O e-mail também tem um botão que confirma
+              em outro aparelho. Se este endereço já tinha conta, nenhum código é enviado: é só{' '}
+              <Link to={`/entrar?email=${encodeURIComponent(email)}`} className="link-ok">
                 entrar com a senha
               </Link>
               .
             </p>
           </div>
 
-          {aviso && (
-            <div className={`notice${aviso.ok ? '' : ' notice--warn'}`} role={aviso.ok ? 'status' : 'alert'}>
-              <span className="notice__icon">
-                <Icon name={aviso.ok ? 'check' : 'alerta'} size={20} />
-              </span>
-              <p>{aviso.texto}</p>
-            </div>
-          )}
-
-          <div className="beta__confirme-acoes">
-            <Button to={`/entrar?email=${encodeURIComponent(email)}`} full size="lg">
-              Já confirmei, continuar aqui
+          <div className="beta__confirme-secundarias">
+            <Button type="button" variant="ghost" onClick={onCorrigir}>
+              Corrigir o e-mail
             </Button>
-            <div className="beta__confirme-secundarias">
-              <Button type="button" variant="secondary" loading={enviando} onClick={() => void reenviar()}>
-                {enviando ? 'Reenviando…' : 'Reenviar o link'}
-              </Button>
-              <Button type="button" variant="ghost" onClick={onCorrigir}>
-                Corrigir o e-mail
-              </Button>
-            </div>
+            <Button to={`/entrar?email=${encodeURIComponent(email)}`} variant="ghost">
+              Confirmei pelo botão do e-mail
+            </Button>
           </div>
         </div>
       </div>
@@ -515,7 +494,7 @@ function Pesquisa({ program }: { program: BetaProgram }) {
 
   return (
     <div className="flow">
-      <AmbientBackground particles={12} scan={false} light />
+      <AmbientBackground variante="suave" />
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel">
           <Stepper steps={ETAPAS_DA_BETA} current={2} />
@@ -577,7 +556,7 @@ function Download({ account, program }: { account: Account; program: BetaProgram
 
   return (
     <div className="flow">
-      <AmbientBackground particles={18} light />
+      <AmbientBackground variante="suave" />
 
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel beta__trilha-final">
@@ -656,23 +635,28 @@ function Download({ account, program }: { account: Account; program: BetaProgram
         </div>
 
         <div className="beta__cuidador panel">
-          <div>
-            <h2 className="beta__cuidador-title">App do cuidador</h2>
-            <p className="beta__cuidador-text">
-              {!lancou
-                ? `Para o celular de quem acompanha. Também abre em ${diaEMes(program.launchAt)}, com o mesmo e-mail e senha desta conta.`
-                : APP_CUIDADOR_URL
+          <div className="beta__cuidador-cabeca">
+            <img className="beta__cuidador-icone" src="/brand/cuidador-icone.png" alt="" width={48} height={48} />
+            <div>
+              <h2 className="beta__cuidador-title">IrisFlow Cuidador</h2>
+              <p className="beta__cuidador-text">
+                {lancou
                   ? 'Para o celular de quem acompanha. Entre com o mesmo e-mail e senha desta conta.'
-                  : 'O link do app do cuidador chega por e-mail, no endereço desta conta, assim que a versão da beta for publicada.'}
-            </p>
+                  : `Para o celular de quem acompanha. Também abre em ${diaEMes(program.launchAt)}, com o mesmo e-mail e senha desta conta.`}
+              </p>
+            </div>
           </div>
-          {lancou && APP_CUIDADOR_URL ? (
-            <Button href={APP_CUIDADOR_URL} variant="secondary">
-              Baixar app do cuidador
-            </Button>
-          ) : !lancou ? (
-            <EtiquetaLancamento lancamento={program.launchAt} />
-          ) : null}
+          <div className="beta__cuidador-acoes">
+            <SelosDasLojas />
+            {lancou && APP_CUIDADOR_URL && (
+              <a className="link-seta" href={APP_CUIDADOR_URL}>
+                Baixar o APK da beta
+              </a>
+            )}
+            <Link to="/cuidador" className="link-seta">
+              O que o app faz
+            </Link>
+          </div>
         </div>
 
         {lancou && (
@@ -710,7 +694,7 @@ function Download({ account, program }: { account: Account; program: BetaProgram
 function InscricoesFechadas({ program }: { program: BetaProgram }) {
   return (
     <div className="flow">
-      <AmbientBackground particles={12} scan={false} light />
+      <AmbientBackground variante="suave" />
       <div className="container container--narrow flow__inner">
         <span className="eyebrow">Programa beta</span>
         <h1 className="flow__title">As inscrições da beta estão fechadas no momento.</h1>

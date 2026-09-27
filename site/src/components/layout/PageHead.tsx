@@ -1,49 +1,41 @@
 import type { ReactNode } from 'react'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
-import { Reveal } from '@/components/effects/Reveal'
 import { AnimatedHeadline } from '@/components/effects/AnimatedHeadline'
-import { Logo } from './Logo'
 
 type Props = {
-  eyebrow: string
+  /** Rótulo curto acima do título (o nome da página). */
+  eyebrow?: string
   title: string
   highlight?: string[]
   lead?: string
+  /** Botões ou links logo abaixo do texto. */
   children?: ReactNode
+  /** A imagem da página (tela do produto, foto): entra abaixo do texto, larga. */
+  visual?: ReactNode
+  /** Texto centralizado, para as aberturas que têm um visual grande embaixo. */
+  centro?: boolean
 }
 
 /**
- * Cabeçalho das páginas internas. É uma faixa escura, como o hero, para
- * que o cabeçalho fixo tenha sempre o mesmo comportamento no topo de
- * qualquer rota, e para que a marca apareça em negativo ali.
+ * Abertura das páginas de dentro: faixa escura, como o hero da home, para o
+ * cabeçalho fixo se comportar igual no topo de qualquer rota. Pouco texto —
+ * título, uma frase e, quando existe, a imagem do produto logo abaixo.
  */
-export function PageHead({
-  eyebrow,
-  title,
-  highlight = [],
-  lead,
-  children,
-}: Props) {
+export function PageHead({ eyebrow, title, highlight = [], lead, children, visual, centro = false }: Props) {
   // Título da aba e meta description vêm de src/seo/pages.ts (RouteMeta).
   return (
-    <header className="page-head on-dark">
-      <AmbientBackground particles={10} scan={false} />
+    <header
+      className={`page-head on-dark${centro ? ' page-head--centro' : ''}${visual ? ' page-head--com-visual' : ''}`}
+    >
+      <AmbientBackground />
       <div className="container">
         <div className="page-head__inner">
-          <Reveal anim="fade">
-            <Logo variant="symbol" tone="negativo" size="sm" link={false} decorative />
-          </Reveal>
-          <Reveal anim="fade" delay={100}>
-            <span className="eyebrow">{eyebrow}</span>
-          </Reveal>
-          <AnimatedHeadline text={title} as="h1" highlight={highlight} delay={140} />
-          {lead && (
-            <Reveal anim="up" delay={280}>
-              <p className="lead">{lead}</p>
-            </Reveal>
-          )}
-          {children}
+          {eyebrow && <p className="page-head__rotulo anim-entrada">{eyebrow}</p>}
+          <AnimatedHeadline text={title} as="h1" highlight={highlight} delay={60} className="page-head__titulo" />
+          {lead && <p className="page-head__lead anim-entrada anim-entrada--3">{lead}</p>}
+          {children && <div className="page-head__extra anim-entrada anim-entrada--4">{children}</div>}
         </div>
+        {visual && <div className="page-head__visual">{visual}</div>}
       </div>
     </header>
   )

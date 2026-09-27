@@ -76,6 +76,30 @@ export const PAGES: PageMeta[] = [
     priority: 0.8,
   },
   {
+    path: '/cuidador',
+    title: 'IrisFlow Cuidador: o app de celular de quem cuida',
+    description:
+      'Veja o que o paciente escreve, responda de onde estiver e receba os pedidos de ajuda na hora. App para iPhone e Android, com a mesma conta do computador.',
+    index: true,
+    changefreq: 'monthly',
+    priority: 0.8,
+  },
+  {
+    path: '/baixar',
+    title: 'Baixar o IrisFlow para o computador e o celular',
+    description:
+      'O IrisFlow Communicator para o computador do paciente e o IrisFlow Cuidador para o celular de quem cuida. Os dois entram com a mesma conta.',
+    index: true,
+    changefreq: 'weekly',
+    priority: 0.9,
+  },
+  {
+    path: '/app',
+    title: 'Baixar o IrisFlow Cuidador',
+    description: 'Abre a loja de aplicativos do celular na página do IrisFlow Cuidador.',
+    index: false,
+  },
+  {
     path: '/sobre',
     title: 'Sobre a IrisFlow: quem faz o comunicador por olhar',
     description:

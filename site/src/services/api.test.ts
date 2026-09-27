@@ -357,6 +357,31 @@ describe('verificarLinkDoEmail (etapa 2: o link abre a sessão no aparelho)', ()
   })
 })
 
+describe('conferirCodigo (etapa 2: os 4 dígitos do e-mail)', () => {
+  it('manda o e-mail normalizado e os 4 dígitos, e devolve o token_hash do cadastro', async () => {
+    fake.rpc.mockResolvedValueOnce({ data: 'hash-do-cadastro', error: null })
+    await expect(api.conferirCodigo('  Maria@Exemplo.com ', '4829')).resolves.toBe('hash-do-cadastro')
+    expect(fake.rpc).toHaveBeenCalledWith('confirmar_codigo', { p_email: 'maria@exemplo.com', p_codigo: '4829' })
+    // conferir não abre a sessão: isso é do verificarLinkDoEmail, depois da animação
+    expect(auth.verifyOtp).not.toHaveBeenCalled()
+  })
+
+  it('sem hash (código errado ou sem cadastro pendente): CodigoIncorreto', async () => {
+    fake.rpc.mockResolvedValueOnce({ data: null, error: null })
+    await expect(api.conferirCodigo('maria@exemplo.com', '1111')).rejects.toBeInstanceOf(api.CodigoIncorreto)
+  })
+
+  it('bloqueio por tentativas (P0429) vira a orientação de usar o link do e-mail', async () => {
+    fake.rpc.mockResolvedValueOnce({ data: null, error: { message: 'confirmar_codigo: muitas tentativas', code: 'P0429' } })
+    await expect(api.conferirCodigo('maria@exemplo.com', '1111')).rejects.toThrow(api.CODIGO_BLOQUEADO)
+  })
+
+  it('o hash devolvido abre a sessão pelo mesmo caminho do link', async () => {
+    await api.verificarLinkDoEmail('hash-do-codigo', 'email')
+    expect(auth.verifyOtp).toHaveBeenCalledWith({ token_hash: 'hash-do-codigo', type: 'email' })
+  })
+})
+
 describe('responderPesquisa (etapa 3: abre a assinatura beta)', () => {
   beforeEach(() => {
     auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } } } as never)

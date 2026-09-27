@@ -23,8 +23,17 @@ initSentry();
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 function RootLayout() {
-  // Inter em cinco pesos; a 800 é a fonte de destaque (display).
-  const [fontsLoaded, fontError] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold });
+  // Inter em cinco pesos para o texto; Sora (a fonte do site e do app do
+  // computador) nos títulos. Os arquivos da Sora estão em assets/fonts (OFL).
+  const [fontsLoaded, fontError] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
+    Sora_600SemiBold: require('../assets/fonts/Sora-SemiBold.ttf'),
+    Sora_700Bold: require('../assets/fonts/Sora-Bold.ttf'),
+  });
   // Se a fonte falhar, seguimos com a do sistema: a tela nunca fica presa no splash.
   const fontsReady = fontsLoaded || Boolean(fontError);
 

@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { SessionLoading } from '@/components/ui/Skeleton'
 import { useAccount } from '@/context/AccountContext'
 import { EMAIL_NAO_CONFIRMADO } from '@/lib/supabase'
-import { ApiError, reenviarConfirmacao } from '@/services/api'
+import { ApiError, reenviarConfirmacao, verificarLinkDoEmail } from '@/services/api'
+import { CodigoDeVerificacao } from '@/components/beta/CodigoDeVerificacao'
 import { isEmail } from '@/utils/format'
 import { motivoDoLinkNaUrl } from '@/utils/linkDeEmail'
 import { SENHA_MINIMA, validar } from '@/utils/validation'
@@ -33,9 +34,9 @@ function ehEmailNaoConfirmado(e: unknown): boolean {
    está: quem ainda não respondeu a pesquisa da beta vai para /beta (a
    pesquisa); quem já respondeu, para /perfil.
 
-   `?email=` preenche o e-mail — é o caminho do botão "Já confirmei,
-   continuar aqui" da /beta, para quem confirmou no celular e voltou ao
-   computador. Links de confirmação antigos (de antes da /confirmar-email)
+   `?email=` preenche o e-mail — é o caminho do "Confirmei pelo botão do
+   e-mail" da /beta, para quem confirmou no celular e voltou ao computador.
+   E-mail ainda não confirmado: o código de 4 dígitos aparece aqui mesmo. Links de confirmação antigos (de antes da /confirmar-email)
    ainda caem aqui com a sessão no endereço, ou com o motivo quando o link
    venceu, dito acima do formulário.
    ============================================================ */
@@ -50,9 +51,7 @@ export default function Entrar() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [naoConfirmado, setNaoConfirmado] = useState(false)
-  const [reenviando, setReenviando] = useState(false)
-  const [reenvio, setReenvio] = useState<{ ok: boolean; texto: string } | null>(null)
-  const { signIn, authenticated, account, loading: carregandoSessao } = useAccount()
+  const { signIn, authenticated, account, loading: carregandoSessao, refresh } = useAccount()
   const navigate = useNavigate()
   const motivo = useMemo(() => motivoDoLinkNaUrl(), [])
 
@@ -68,7 +67,6 @@ export default function Entrar() {
     e.preventDefault()
     setError(null)
     setNaoConfirmado(false)
-    setReenvio(null)
     v.touch('email', 'password')
     if (!v.isValid()) return
 
@@ -84,25 +82,12 @@ export default function Entrar() {
     }
   }
 
-  const reenviar = async () => {
-    setReenviando(true)
-    setReenvio(null)
-    try {
-      await reenviarConfirmacao(email)
-      setReenvio({ ok: true, texto: `Enviamos um novo link para ${email.trim()}. Vale o mais recente.` })
-    } catch (e) {
-      setReenvio({ ok: false, texto: e instanceof Error ? e.message : 'Não foi possível reenviar agora.' })
-    } finally {
-      setReenviando(false)
-    }
-  }
-
   // Espera a sessão ser lida: quem chega pelo link do e-mail já está entrando.
   if (carregandoSessao) return <SessionLoading />
 
   return (
     <div className="flow">
-      <AmbientBackground particles={12} scan={false} light />
+      <AmbientBackground variante="suave" />
 
       <div className="container flow__inner flow__inner--narrow">
         <Reveal anim="fade">
@@ -122,7 +107,7 @@ export default function Entrar() {
                 </span>
                 <p>
                   {motivo} Entre com o e-mail e a senha da inscrição: se o endereço ainda não
-                  estiver confirmado, você pode pedir um link novo aqui mesmo.
+                  estiver confirmado, você pode pedir um código novo aqui mesmo.
                 </p>
               </div>
             )}
@@ -163,24 +148,24 @@ export default function Entrar() {
               )}
 
               {naoConfirmado && (
-                <div className="entrar__reenvio">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    full
-                    loading={reenviando}
-                    onClick={() => void reenviar()}
-                  >
-                    {reenviando ? 'Reenviando…' : 'Reenviar o link de confirmação'}
-                  </Button>
-                  {reenvio && (
-                    <p
-                      className={reenvio.ok ? 'form-hint' : 'field__error'}
-                      role={reenvio.ok ? 'status' : 'alert'}
-                    >
-                      {reenvio.texto}
-                    </p>
-                  )}
+                <div className="entrar__codigo">
+                  <CodigoDeVerificacao
+                    email={email.trim().toLowerCase()}
+                    esperaInicial={0}
+                    instrucao={
+                      <>
+                        Digite o código de 4 dígitos do último e-mail que enviamos para{' '}
+                        <strong>{email.trim()}</strong>, ou peça outro.
+                      </>
+                    }
+                    aoConfirmar={async (tokenHash) => {
+                      // Com o e-mail confirmado, a sessão já nasce aqui; o efeito
+                      // acima leva a pessoa para a etapa em que ela está.
+                      await verificarLinkDoEmail(tokenHash, 'email')
+                      await refresh()
+                    }}
+                    aoReenviar={() => reenviarConfirmacao(email)}
+                  />
                 </div>
               )}
 

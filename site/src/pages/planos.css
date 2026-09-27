@@ -1,20 +1,21 @@
-.plan-stat {
-  padding: var(--sp-5);
-  border-left: 2px solid var(--line-strong);
+/* Página de planos (Planos.tsx). A grade vem de sections/pricing.css; aqui só
+   o que muda porque ela está numa faixa clara, logo abaixo da abertura. */
+
+.on-light .pricing {
+  padding-top: clamp(56px, 8vh, 88px);
 }
 
-.plan-stat__value {
-  display: block;
-  font-family: var(--font-display);
-  font-size: clamp(2.2rem, 4.6vw, 3.2rem);
-  line-height: 1;
-  margin-bottom: var(--sp-3);
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
+.on-light .plan--beta {
+  background:
+    radial-gradient(520px 260px at 0% 0%, rgba(0, 121, 106, 0.08), transparent 70%),
+    var(--surface);
 }
 
-.plan-stat__label {
-  margin: 0;
-  font-size: 0.98rem;
-  max-width: 32ch;
+.on-light .plan__status--now {
+  background: #00796a;
+  color: #fff;
+}
+
+.on-light .plan__status--now::before {
+  background: #fff;
 }

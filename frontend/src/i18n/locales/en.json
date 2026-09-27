@@ -71,7 +71,7 @@
       "foto": {
         "title": "Take a Photo",
         "subtitle": "Fun camera and memories",
-        "badge": "New ✨"
+        "badge": "New"
       },
       "galeria": {
         "title": "Photo Gallery",
@@ -105,6 +105,12 @@
         "title": "Rest",
         "subtitle": "A calm screen to rest your eyes"
       }
+    },
+    "bloqueado": {
+      "titulo": "Leisure and well-being is not part of this account’s plan",
+      "texto": "Eye-controlled games, photos, readings and meditation are included in the IrisFlow Completo and IrisFlow Voz plans. The caregiver can change the plan in Account and subscription. Rest mode is still on the main menu.",
+      "voltar": "Back to the menu",
+      "missao": "This plan does not include Leisure: go back to the tutorial and continue to the next step."
     }
   },
   "settings": {

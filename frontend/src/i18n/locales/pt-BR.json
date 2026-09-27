@@ -71,7 +71,7 @@
       "foto": {
         "title": "Tirar Foto",
         "subtitle": "Câmera divertida e memórias",
-        "badge": "Novo ✨"
+        "badge": "Novo"
       },
       "galeria": {
         "title": "Galeria de Fotos",
@@ -105,6 +105,12 @@
         "title": "Descanso",
         "subtitle": "Tela calma para descansar o olhar"
       }
+    },
+    "bloqueado": {
+      "titulo": "Lazer e bem-estar não faz parte do plano desta conta",
+      "texto": "Os jogos pelo olhar, as fotos, as leituras e a meditação estão nos planos IrisFlow Completo e IrisFlow Voz. O cuidador pode mudar de plano em Conta e assinatura. O Descanso continua no menu principal.",
+      "voltar": "Voltar ao menu",
+      "missao": "Este plano não inclui o Lazer: volte ao tutorial e siga para o próximo passo."
     }
   },
   "settings": {

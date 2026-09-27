@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { AnimatedHeadline } from '@/components/effects/AnimatedHeadline'
 import { Reveal } from '@/components/effects/Reveal'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import './dwell-demo.css'
@@ -205,29 +204,16 @@ export function DwellDemo() {
   })
 
   return (
-    <section className="section demo" id="demo">
+    <section className="faixa demo" id="demo" aria-labelledby="demo-titulo">
       <div className="container">
-        <Reveal anim="fade">
-          <span className="eyebrow">Experimente</span>
-        </Reveal>
-
-        <AnimatedHeadline
-          text="Uma fixação do olhar, uma frase inteira."
-          as="h2"
-          highlight={['frase', 'inteira.']}
-          className="demo__title"
-        />
-
-        <Reveal anim="up" delay={140}>
-          <p className="lead demo__lead">
-            Escrever letra a letra custa caro para quem se move só com os olhos. Por isso a prancha
-            de pictogramas existe: um alvo, uma frase pronta, dita em voz alta. Na IrisFlow o
-            gatilho é o olhar estimado pela webcam; aqui, para você experimentar sem instalar nada,
-            é o cursor ou a tecla Tab. O resto é idêntico: contorno de destaque ao entrar no alvo,
-            mudança de cor durante a seleção, preenchimento até a confirmação e uma pausa curta
-            depois de cada seleção, para impedir o disparo duplo.
-            {reduced &&
-              ' Como o seu sistema pede menos movimento, aqui a seleção acontece no clique ou no Enter, sem o anel de espera.'}
+        <Reveal anim="up" className="capitulo">
+          <h2 id="demo-titulo" className="titulo-capitulo">
+            Experimente: uma fixação, uma frase inteira.
+          </h2>
+          <p className="texto-capitulo">
+            Pare o cursor sobre um pictograma, ou chegue nele pela tecla Tab. No app, quem faz esse
+            gesto é o olhar.
+            {reduced && ' Com o movimento reduzido do seu sistema, aqui a seleção é no clique ou no Enter.'}
           </p>
         </Reveal>
 
@@ -336,10 +322,8 @@ export function DwellDemo() {
 
         <Reveal anim="fade" delay={320}>
           <p className="demo__note">
-            A prancha não substitui o teclado: ela resolve o que se repete todo dia, e o teclado
-            continua ali para o que não cabe em um pictograma, com sugestões que aprendem as
-            palavras e as frases de quem usa. No produto, a fixação já vocaliza a frase sozinha —
-            aqui o botão existe porque ninguém gosta de um site que começa a falar sem avisar.
+            No app, a frase já sai falada na fixação. Aqui o botão Falar existe porque ninguém gosta
+            de um site que começa a falar sem avisar.
           </p>
         </Reveal>
       </div>
