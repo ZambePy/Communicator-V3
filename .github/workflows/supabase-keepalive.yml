@@ -41,6 +41,9 @@ permissions:
 jobs:
   ping:
     name: Consulta leve no Supabase
+    # Só no repositório público da beta: o repositório privado do V2 herda
+    # este arquivo e não deve consultar o banco nem gastar minutos.
+    if: github.repository == 'ZambePy/Communicator-V3'
     # Ubuntu fixo em 24.04 (o que `ubuntu-latest` é hoje): o GitHub passa o
     # `ubuntu-latest` para o Ubuntu 26 a partir de 19/10/2026, e uma troca de
     # sistema no meio de um release não pode vir sem ninguém pedir.
