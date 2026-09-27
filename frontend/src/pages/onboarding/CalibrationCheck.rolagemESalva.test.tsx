@@ -85,6 +85,7 @@ const principal = () => document.querySelector('main') as HTMLElement;
 beforeEach(() => {
   calibrado = false;
   carimboDaCalibracao = null;
+  localStorage.removeItem('irisflow.calibracao.dono');
   vi.clearAllMocks();
   Object.defineProperty(navigator, 'mediaDevices', {
     configurable: true,
@@ -164,6 +165,27 @@ describe('reaproveitar a calibração salva', () => {
 
     // Se tivesse iniciado, o estágio mudaria e a tela deixaria de rolar.
     expect(screen.queryByTestId('start-calibration-full')).toBeNull();
+  });
+
+  // FE-11: depois de trocar de paciente, "Usar a calibração salva" oferecia a
+  // do paciente anterior — o cursor do novo seguiria o mapeamento de outra pessoa.
+  it('NÃO oferece a calibração de outro paciente (quem está é o p1; a salva é do p2)', () => {
+    calibrado = true;
+    carimboDaCalibracao = Date.now();
+    localStorage.setItem('irisflow.calibracao.dono', 'p2');
+    montar();
+    expect(screen.queryByTestId('usar-calibracao-salva')).toBeNull();
+    expect(screen.getByTestId('start-calibration-full')).toBeInTheDocument();
+  });
+
+  it('oferece a do próprio paciente, e reaproveitar marca o dono (calibração antiga, sem dono)', () => {
+    calibrado = true;
+    carimboDaCalibracao = Date.now();
+    montar();
+    act(() => {
+      screen.getByTestId('usar-calibracao-salva').click();
+    });
+    expect(localStorage.getItem('irisflow.calibracao.dono')).toBe('p1');
   });
 
   it('leva ao destino, sem passar pela coleta', () => {

@@ -10,6 +10,8 @@ import {
   getActivityByHour,
   definirPerfilAtivo,
   chaveDoPerfil,
+  MAX_FRASES_NO_HISTORICO,
+  MAX_CALIBRACOES_NO_HISTORICO,
 } from './clinicalLogger';
 
 describe('clinicalLogger — Telemetria Clínica Local', () => {
@@ -99,5 +101,23 @@ describe('clinicalLogger — Telemetria Clínica Local', () => {
     setConsent(false);
     expect(hasConsent()).toBe(false);
     expect(getClinicalData().sentences.length).toBe(0); // Logs excluídos efetivamente!
+  });
+
+  // FE-21: o histórico crescia para sempre e era regravado inteiro a cada frase.
+  it('guarda só as frases e calibrações mais recentes (teto do histórico)', () => {
+    setConsent(true);
+    const antigas = Array.from({ length: MAX_FRASES_NO_HISTORICO }, (_, i) => ({ id: `s${i}`, text: `frase ${i}`, timestamp: new Date(2026, 0, 1).toISOString() }));
+    const calibs = Array.from({ length: MAX_CALIBRACOES_NO_HISTORICO }, (_, i) => ({ id: `c${i}`, errorDeg: 1, timestamp: new Date(2026, 0, 1).toISOString() }));
+    localStorage.setItem(chaveDoPerfil('paciente-de-teste'), JSON.stringify({ sentences: antigas, calibrations: calibs }));
+
+    logSentence('a mais nova');
+    logCalibrationAccuracy(0.5);
+
+    const data = getClinicalData();
+    expect(data.sentences).toHaveLength(MAX_FRASES_NO_HISTORICO);
+    expect(data.sentences[0].text).toBe('frase 1');
+    expect(data.sentences.at(-1)?.text).toBe('a mais nova');
+    expect(data.calibrations).toHaveLength(MAX_CALIBRACOES_NO_HISTORICO);
+    expect(data.calibrations.at(-1)?.errorDeg).toBe(0.5);
   });
 });

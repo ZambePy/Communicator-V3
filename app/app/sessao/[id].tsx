@@ -3,6 +3,8 @@ import { StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Card, EmptyState, ListRow, MetricTile, Notice, ProgressRing, Screen, ScreenHeader, SectionTitle, Shimmer, StatusPill, Text } from '@/components';
 import { useData } from '@/data/DataContext';
+import { BloqueioDoPlano } from '@/features/BloqueioDoPlano';
+import { useApp } from '@/store/AppProvider';
 import { hasFatigueData, hasPostureData, Session } from '@/data/types';
 import { sizes, spacing } from '@/theme';
 import { dateLong, decimal, driftLabel, durationMin, fatigueLabel, formatDuration, hm, presetLabel } from '@/utils/format';
@@ -11,13 +13,17 @@ export default function SessaoDetalhe() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const data = useData();
+  // O relatório da sessão é recurso do plano, como a aba Relatórios: antes o
+  // Início o abria em qualquer plano (a aba ficava trancada, o atalho não).
+  const { can } = useApp();
+  const permitido = can('relatorios');
   const [s, setS] = useState<Session | null | undefined>(undefined);
   /** Falha ao buscar (rede, servidor) — diferente de "não existe", e com nova tentativa. */
   const [falhou, setFalhou] = useState(false);
   const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !permitido) return;
     setFalhou(false);
     data
       .getSession(id)
@@ -28,7 +34,7 @@ export default function SessaoDetalhe() {
         setS(undefined);
         setFalhou(true);
       });
-  }, [data, id, tentativa]);
+  }, [data, id, tentativa, permitido]);
 
   const titulo = s ? capitalizar(dateLong(s.started_at)) : 'Relatório de sessão';
   const periodo = s ? `${hm(s.started_at)}${s.ended_at ? ` – ${hm(s.ended_at)}` : ' · em andamento'} · ${formatDuration(durationMin(s))}` : undefined;
@@ -37,7 +43,9 @@ export default function SessaoDetalhe() {
     <Screen>
       <ScreenHeader onBack={() => router.back()} eyebrow="Relatório de sessão" title={titulo} subtitle={periodo} />
 
-      {falhou ? (
+      {!permitido ? (
+        <BloqueioDoPlano recurso="Os relatórios de sessão" />
+      ) : falhou ? (
         <Card>
           <EmptyState
             icon="cloud-offline-outline"

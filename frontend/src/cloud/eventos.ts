@@ -10,6 +10,7 @@
  * emita-o na tela e trate-o em `CloudContext.tsx`.
  */
 import type { MessageKind, HelpKind } from './types';
+import type { RespostaSync } from './desktopSync';
 import type { AccuracyResult, RunMeta } from '@tracker/accuracy';
 import { modoApresentacaoAtivo } from '../services/apresentacao';
 
@@ -38,8 +39,12 @@ export function emitir(e: EventoDoPaciente): void {
   // saída, não o aplicativo.
   if (modoApresentacaoAtivo()) {
     console.info(`[cloud] modo apresentação: evento "${e.tipo}" não foi enviado`);
+    if (e.tipo === 'ajuda' && e.id) informarEntrega(e.id, 'ensaio');
     return;
   }
+  // Ninguém ouvindo (a integração com a nuvem não está montada): o pedido
+  // de ajuda não sai deste computador, e a tela precisa saber.
+  if (e.tipo === 'ajuda' && e.id && ouvintes.size === 0) informarEntrega(e.id, 'sem_nuvem');
   for (const o of ouvintes) {
     try {
       o(e);
@@ -66,7 +71,60 @@ export const emitirResultadoDeCalibracao = (
 export const emitirUso = (uso: { caracteres?: number; frases?: number; modulo?: string }) =>
   emitir({ tipo: 'uso', ...uso });
 
+// ---------- entrega dos pedidos de ajuda ----------
+//
+// A tela de emergência dizia "ALERTA ENVIADO!" sem saber se algo tinha saído
+// (sem conta vinculada, sem internet, modo apresentação). O `CloudProvider`
+// informa aqui o que aconteceu com o pedido de id conhecido; a tela mostra.
+
+/**
+ * - `enviando`: saiu para o servidor, sem resposta ainda;
+ * - `enviado`: o servidor gravou (o celular do cuidador recebe);
+ * - `na_fila`: sem internet — sai sozinho quando a conexão voltar;
+ * - `sem_nuvem`: este computador não está ligado a um celular de cuidador;
+ * - `falhou`: o servidor recusou (o alarme continua só aqui);
+ * - `ensaio`: modo apresentação — nada foi enviado de propósito.
+ */
+export type EntregaDoPedido = 'enviando' | 'enviado' | 'na_fila' | 'sem_nuvem' | 'falhou' | 'ensaio';
+
+const entregas = new Map<string, EntregaDoPedido>();
+const ouvintesDeEntrega = new Set<(id: string, entrega: EntregaDoPedido) => void>();
+
+export function informarEntrega(id: string, entrega: EntregaDoPedido): void {
+  // Um "enviado" não volta para "na fila" (uma resposta atrasada de outra
+  // tentativa não pode desdizer a entrega).
+  if (entregas.get(id) === 'enviado' && entrega !== 'enviado') return;
+  entregas.set(id, entrega);
+  if (entregas.size > 50) entregas.delete(entregas.keys().next().value as string);
+  for (const o of ouvintesDeEntrega) {
+    try {
+      o(id, entrega);
+    } catch (err) {
+      console.warn('[cloud] ouvinte de entrega falhou', err);
+    }
+  }
+}
+
+/** O que a resposta do envio (`DesktopSync.enviar`) diz sobre a entrega de um pedido. */
+export function entregaDaResposta(r: RespostaSync): EntregaDoPedido {
+  if (r.ok) return 'enviado';
+  if (r.error === 'sem_vinculo') return 'sem_nuvem';
+  if (r.enfileirado) return 'na_fila';
+  return 'falhou';
+}
+
+export function entregaDoPedido(id: string): EntregaDoPedido | null {
+  return entregas.get(id) ?? null;
+}
+
+export function ouvirEntrega(o: (id: string, entrega: EntregaDoPedido) => void): () => void {
+  ouvintesDeEntrega.add(o);
+  return () => { ouvintesDeEntrega.delete(o); };
+}
+
 /** Só para testes: zera os ouvintes. */
 export function _limparOuvintes(): void {
   ouvintes.clear();
+  ouvintesDeEntrega.clear();
+  entregas.clear();
 }

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { LinearTransition } from 'react-native-reanimated';
 import { AlertListSkeleton, Button, Card, EmptyState, Notice, Screen, ScreenHeader, SegmentedControl, StatusPill, Text } from '@/components';
 import { HelpRequest } from '@/data/types';
-import { pushIndisponivel } from '@/hooks/usePushNotifications';
+import { abrirAjustesDoCanal, pushIndisponivel, useCanalDeEmergencia } from '@/hooks/usePushNotifications';
 import { useApp } from '@/store/AppProvider';
 import { radius, sizes, spacing, useEntrada, useTheme } from '@/theme';
 import { mensagemDeErro } from '@/utils/errors';
@@ -14,10 +14,12 @@ type Filter = 'abertos' | 'todos';
 
 export default function Alertas() {
   const { colors } = useTheme();
-  const { helpRequests, acknowledgeAlert, resolveAlert, settings, patient, patientLoaded, pushError, refresh, error } = useApp();
+  const { helpRequests, acknowledgeAlert, resolveAlert, settings, patient, patientLoaded, patientVerified, pushError, refresh } = useApp();
   const [filter, setFilter] = useState<Filter>('abertos');
   const [refreshing, setRefreshing] = useState(false);
   const semPush = pushIndisponivel();
+  // Android: o canal do socorro fura o "Não perturbe"? Só o cuidador liga isso.
+  const { furaNaoPerturbe } = useCanalDeEmergencia();
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -66,13 +68,31 @@ export default function Alertas() {
         />
       ) : pushError === 'registro' || semPush === 'sem-projeto' ? (
         <Notice tone="info" icon="notifications-outline" text="Por enquanto, os alertas chegam com o app aberto. Deixe-o aberto quando precisar." style={styles.notice} />
+      ) : furaNaoPerturbe === false ? (
+        // O app pede ao Android que o socorro toque no "Não perturbe", mas o
+        // sistema só atende se o cuidador ligar isso no canal (APP-5).
+        <Notice
+          tone="warning"
+          icon="moon-outline"
+          title="No “Não perturbe”, o socorro chega sem som"
+          text="Para ele tocar mesmo assim, ligue “Substituir Não perturbe” no canal “Emergência e pedidos de ajuda”."
+          action={{ label: 'Abrir ajustes do alerta', onPress: () => void abrirAjustesDoCanal() }}
+          style={styles.notice}
+          testID="aviso-nao-perturbe"
+        />
+      ) : null}
+
+      {/* Há alertas na tela, mas a última atualização falhou: podem faltar os mais novos. */}
+      {patientLoaded && !patientVerified && list.length > 0 ? (
+        <Notice tone="warning" icon="cloud-offline-outline" text="Não deu para atualizar agora: podem faltar alertas mais novos. Tentamos de novo sozinhos." style={styles.notice} testID="alertas-desatualizados" />
       ) : null}
 
       <View style={styles.list}>
         {!patientLoaded && helpRequests.length === 0 ? (
           <AlertListSkeleton />
-        ) : list.length === 0 && error ? (
-          // A carga falhou: "tudo tranquilo" seria uma afirmação sem base.
+        ) : list.length === 0 && !patientVerified ? (
+          // A carga falhou (ou nem a conta carregou): "tudo tranquilo" seria uma
+          // afirmação sem base — e fechar o aviso de erro não muda isso.
           <EmptyState icon="cloud-offline-outline" title="Não deu para verificar os alertas" body="Confira a internet e tente de novo." action={{ label: 'Tentar de novo', icon: 'refresh', onPress: () => void onRefresh() }} />
         ) : list.length === 0 ? (
           filter === 'abertos' ? (

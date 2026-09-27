@@ -68,3 +68,24 @@ export function limitarDwellMs(ms: number): number {
 export function presetMaisProximo(ms: number): PresetDeDwell | null {
   return PRESETS_DE_DWELL.find((p) => Math.abs(p.ms - ms) <= TOLERANCIA_DE_PRESET_MS) ?? null;
 }
+
+/**
+ * O dwell de um alvo que não usa o do paciente.
+ *
+ *  - `data-dwell-ms`: tempo próprio, absoluto (jogos, cancelar a emergência).
+ *  - `data-dwell-mult`: o alvo custa caro (Emergência, "Falar", "Início" no
+ *    teclado) e precisa de PELO MENOS esse múltiplo do dwell do paciente.
+ *
+ * Antes só havia o absoluto: para quem alongou o dwell para 2,5–4 s por causa
+ * de fixações acidentais, a Emergência (2 s) e o "Falar" (2 s) disparavam
+ * ANTES de uma letra comum — mais alarmes falsos e falas involuntárias
+ * justamente para os pacientes mais lentos (FE-13). Com os dois, vale o maior.
+ * `null` = o alvo usa o dwell do paciente.
+ */
+export function dwellDoAlvo(absolutoMs: number | null, multiplo: number | null, dwellDoPacienteMs: number): number | null {
+  const absoluto = absolutoMs != null && Number.isFinite(absolutoMs) && absolutoMs > 0 ? absolutoMs : null;
+  const mult = multiplo != null && Number.isFinite(multiplo) && multiplo > 0 ? multiplo : null;
+  if (absoluto == null && mult == null) return null;
+  const relativo = mult == null ? 0 : Math.round(mult * limitarDwellMs(dwellDoPacienteMs));
+  return Math.max(absoluto ?? 0, relativo);
+}

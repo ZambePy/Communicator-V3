@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { env } from '../config/env';
 import { definirPerfilAtivo } from '../utils/clinicalLogger';
+import { apagarModeloDoPerfil, definirPerfilDoAssistente } from '../services/assistente/armazenamento';
 import {
   listarPerfis,
   criarPerfil,
@@ -28,6 +29,12 @@ interface AuthContextData {
   createProfile: (dados: NovoPerfil) => Profile;
   removeProfile: (id: string) => void;
   loginCaregiver: (pin: string) => boolean;
+  /**
+   * Fecha SÓ a área do cuidador; o paciente continua escolhido. É o "Encerrar
+   * Acesso" e o que a trava automática chama (ver `TravaDoCuidador`).
+   */
+  encerrarAcessoDoCuidador: () => void;
+  /** Sai de tudo: área do cuidador E paciente escolhido. */
   logout: () => void;
 }
 
@@ -89,9 +96,13 @@ const paraProfile = (p: PerfilLocal): Profile => ({
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentProfile, setCurrentProfile] = useState<Profile | null>(
-    () => loadProfile().currentProfile
-  );
+  const [currentProfile, setCurrentProfile] = useState<Profile | null>(() => {
+    const salvo = loadProfile().currentProfile;
+    // Já na primeira renderização: as telas filhas podem pedir sugestões
+    // antes do efeito abaixo rodar, e leriam o vocabulário sem dono.
+    definirPerfilDoAssistente(salvo?.id ?? null);
+    return salvo;
+  });
   const [caregiver, setCaregiver] = useState<CaregiverSession>(loadCaregiverSession);
   const [profiles, setProfiles] = useState<Profile[]>(() => listarPerfis().map(paraProfile));
   const { isCaregiver, authToken } = caregiver;
@@ -101,6 +112,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // nada — que é o lado certo de falhar, mas silencioso demais para deixar.
   useEffect(() => {
     definirPerfilAtivo(currentProfile?.id ?? null);
+    // O vocabulário do assistente também é por paciente (FE-11).
+    definirPerfilDoAssistente(currentProfile?.id ?? null);
   }, [currentProfile]);
 
   useEffect(() => {
@@ -133,6 +146,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const removeProfile = useCallback((id: string) => {
     removerPerfil(id);
+    // O que o assistente aprendeu com esse paciente sai junto: frases faladas
+    // são dado de saúde e não podem ficar sem dono no computador.
+    apagarModeloDoPerfil(id);
     setProfiles((antes) => antes.filter((p) => p.id !== id));
     // Um perfil removido não pode continuar selecionado: a calibração
     // carregada ficaria sem dono e o app apontaria para algo que não existe.
@@ -148,6 +164,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     return false;
   };
+
+  const encerrarAcessoDoCuidador = useCallback(() => {
+    setCaregiver((atual) => (atual.isCaregiver ? { isCaregiver: false, authToken: null } : atual));
+  }, []);
 
   const logout = () => {
     setCurrentProfile(null);
@@ -165,6 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createProfile,
         removeProfile,
         loginCaregiver,
+        encerrarAcessoDoCuidador,
         logout,
       }}
     >

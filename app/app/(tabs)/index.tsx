@@ -8,7 +8,8 @@ import { hasFatigueData, hasPostureData, isBetaPlan, MessageKind } from '@/data/
 import { siteRoute } from '@/lib/config';
 import { useApp } from '@/store/AppProvider';
 import { motion, radius, shadows, sizes, spacing, useTheme } from '@/theme';
-import { driftLabel, durationMin, fatigueLabel, firstName, formatDate, formatDuration, greeting, helpKindLabel, timeAgo } from '@/utils/format';
+import { driftLabel, durationMin, fatigueLabel, firstName, formatDuration, greeting, helpKindLabel, timeAgo } from '@/utils/format';
+import { rotuloDoPlano } from '@/utils/plano';
 
 /** Respostas de um toque. Sim/Não vão como `simnao` (a tela do paciente destaca). */
 const RAPIDAS: { texto: string; kind: MessageKind; icon?: keyof typeof Ionicons.glyphMap }[] = [
@@ -23,7 +24,10 @@ type EnvioRapido = { texto: string; estado: 'enviando' | 'ok' | 'falha' } | null
 export default function Home() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { profile, patient, devices, session, helpRequests, messages, unreadCount, refresh, plan, subscription, sendMessage, patientLoaded, error } = useApp();
+  const { profile, patient, devices, session, helpRequests, messages, unreadCount, refresh, plan, subscription, license, sendMessage, patientLoaded, patientVerified } = useApp();
+  // "Sem mensagens", "tudo tranquilo": só com a última carga verificada. A
+  // string de erro não serve — o cuidador a apaga ao fechar o aviso.
+  const semVerificar = !patientVerified;
   const [refreshing, setRefreshing] = useState(false);
   const [envio, setEnvio] = useState<EnvioRapido>(null);
 
@@ -112,13 +116,13 @@ export default function Home() {
           </PressableScale>
         ) : (
           <View style={styles.emptyMsg}>
-            <Ionicons name={error ? 'cloud-offline-outline' : 'chatbubble-ellipses-outline'} size={sizes.icon.lg} color={error ? colors.warningText : colors.primary} />
+            <Ionicons name={semVerificar ? 'cloud-offline-outline' : 'chatbubble-ellipses-outline'} size={sizes.icon.lg} color={semVerificar ? colors.warningText : colors.primary} />
             <View style={styles.flex}>
               <Text variant="body" weight="semibold">
-                {error ? 'Não deu para carregar a conversa' : 'Ainda sem mensagens'}
+                {semVerificar ? 'Não deu para carregar a conversa' : 'Ainda sem mensagens'}
               </Text>
               <Text variant="bodySmall" tone="muted">
-                {error ? 'Assim que a conexão voltar, as mensagens aparecem aqui.' : `Quando ${nome} escrever com os olhos, aparece aqui.`}
+                {semVerificar ? 'Assim que a conexão voltar, as mensagens aparecem aqui.' : `Quando ${nome} escrever com os olhos, aparece aqui.`}
               </Text>
             </View>
           </View>
@@ -173,7 +177,7 @@ export default function Home() {
       <Card padding={0}>
         {/* Sem carga, "tudo tranquilo" seria uma afirmação sem base: numa
             falha, dizer que não deu para verificar e oferecer tentar de novo. */}
-        {openAlerts.length === 0 && error ? (
+        {openAlerts.length === 0 && semVerificar ? (
           <ListRow icon="cloud-offline-outline" title="Não deu para verificar os alertas" subtitle="Toque para tentar de novo." tone="warning" onPress={() => void refresh()} last />
         ) : openAlerts.length === 0 ? (
           <ListRow icon="shield-checkmark" title="Tudo tranquilo" subtitle="Nenhum alerta pendente." tone="accent" last />
@@ -217,8 +221,8 @@ export default function Home() {
       {plan ? (
         <PressableScale onPress={() => router.push('/assinatura')} accessibilityRole="button" style={styles.plan}>
           <Ionicons name={isBetaPlan(plan, subscription) ? 'sparkles-outline' : 'card-outline'} size={sizes.icon.sm} color={colors.textMuted} />
-          <Text variant="caption" tone="muted" center style={styles.flexShrink}>
-            {isBetaPlan(plan, subscription) && subscription ? `Beta · acesso completo até ${formatDate(subscription.next_charge_at)}` : `Plano ${plan.name}`}
+          <Text variant="caption" tone="muted" center style={styles.flexShrink} testID="selo-do-plano">
+            {rotuloDoPlano(plan, subscription, license)}
           </Text>
         </PressableScale>
       ) : null}
@@ -233,11 +237,12 @@ export default function Home() {
  */
 function Hero({ nome, patientName, onOpen }: { nome: string; patientName: string | null; onOpen: () => void }) {
   const { colors } = useTheme();
-  const { devices, session, error, refresh } = useApp();
+  const { devices, session, patientVerified, refresh } = useApp();
   const device = devices.find((d) => !d.revoked_at);
   const online = device?.online ?? false;
 
-  const estado = !device ? (error ? 'indisponivel' : 'semComputador') : session ? 'emSessao' : online ? 'ligado' : 'desligado';
+  // Sem a carga verificada não dá para afirmar "nenhum computador conectado".
+  const estado = !device ? (!patientVerified ? 'indisponivel' : 'semComputador') : session ? 'emSessao' : online ? 'ligado' : 'desligado';
   const pill = estado === 'emSessao' ? { label: 'Ao vivo', live: true, tone: 'accent' as const } : estado === 'ligado' ? { label: 'Ligado', live: false, tone: 'accent' as const } : estado === 'desligado' ? { label: 'Desligado', live: false, tone: 'muted' as const } : null;
   const posturaMedida = session ? hasPostureData(session) : false;
   const fadigaMedida = session ? hasFatigueData(session) : false;
@@ -268,7 +273,8 @@ function Hero({ nome, patientName, onOpen }: { nome: string; patientName: string
     <LinearGradient colors={colors.gradientHero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
       <View style={styles.heroTop}>
         <Avatar name={patientName} onDark />
-        <Text variant="h3" tone="onDark" style={styles.flex} numberOfLines={1}>
+        {/* Duas linhas: em 320 dp o nome era cortado já com a fonte padrão. */}
+        <Text variant="h3" tone="onDark" style={styles.flex} numberOfLines={2}>
           {patientName ?? 'Paciente'}
         </Text>
         {pill ? <StatusPill label={pill.label} live={pill.live} tone={pill.tone} onDark /> : null}

@@ -156,6 +156,17 @@ describe('TutorialWizard — navegar pelo olhar', () => {
     expect(navigate).toHaveBeenCalledWith('/welcome', { replace: true });
   });
 
+  // FE-17: o "Continuar" do passo 1 ficava abaixo da dobra nas resoluções
+  // comuns. A navegação fica presa à borda de baixo da caixa que rola.
+  it('Voltar e Continuar ficam num rodapé preso à borda de baixo (sticky), dentro da caixa que rola', () => {
+    montar();
+    const nav = screen.getByTestId('navegacao-do-tutorial');
+    expect(nav).toHaveStyle({ position: 'sticky', bottom: '0px' });
+    expect(within(nav).getByRole('button', { name: /tutorial\.next/ })).toBeInTheDocument();
+    expect(within(nav).getByRole('button', { name: /tutorial\.back/ })).toBeInTheDocument();
+    expect(screen.getByRole('main')).toHaveStyle({ overflowY: 'auto' });
+  });
+
   it('Voltar está desabilitado só no primeiro passo, e volta de verdade', () => {
     montar();
     const voltar = () => screen.getByRole('button', { name: /tutorial\.back/ });

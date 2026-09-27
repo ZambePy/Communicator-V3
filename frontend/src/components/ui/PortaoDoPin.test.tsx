@@ -89,3 +89,15 @@ describe('comportamento', () => {
     expect(aoCancelar).toHaveBeenCalled();
   });
 });
+
+describe('o PIN não se digita pelo olhar (FE-1)', () => {
+  it('teclado e "Entrar" são só de mouse/teclado; o Cancelar continua ao alcance do olhar', () => {
+    montar();
+    for (const n of ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']) {
+      expect(screen.getByRole('button', { name: n }).getAttribute('data-no-dwell')).toBe('true');
+    }
+    const entrar = document.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(entrar.getAttribute('data-no-dwell')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Cancelar' }).getAttribute('data-no-dwell')).toBeNull();
+  });
+});

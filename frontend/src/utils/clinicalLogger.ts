@@ -123,6 +123,16 @@ export const clearClinicalData = (): void => {
   localStorage.removeItem(chaveDoPerfil(perfilAtivo));
 };
 
+/**
+ * Teto do histórico: as frases e calibrações MAIS RECENTES. Antes o log crescia
+ * para sempre (≈ 8 MB/ano a 100 frases/dia) e era regravado inteiro a cada
+ * frase — engasgo crescente no "Falar" e, com a cota por origem cheia, a
+ * calibração e os ajustes deixavam de ser salvos em silêncio (FE-21). As
+ * estatísticas (frases mais usadas, horários) passam a olhar para essa janela.
+ */
+export const MAX_FRASES_NO_HISTORICO = 2000;
+export const MAX_CALIBRACOES_NO_HISTORICO = 300;
+
 export const logSentence = (text: string): void => {
   if (!hasConsent() || !text.trim()) return;
 
@@ -132,6 +142,7 @@ export const logSentence = (text: string): void => {
     text: text.trim(),
     timestamp: new Date().toISOString(),
   });
+  if (data.sentences.length > MAX_FRASES_NO_HISTORICO) data.sentences = data.sentences.slice(-MAX_FRASES_NO_HISTORICO);
   saveClinicalData(data);
 };
 
@@ -144,6 +155,7 @@ export const logCalibrationAccuracy = (errorDeg: number): void => {
     errorDeg,
     timestamp: new Date().toISOString(),
   });
+  if (data.calibrations.length > MAX_CALIBRACOES_NO_HISTORICO) data.calibrations = data.calibrations.slice(-MAX_CALIBRACOES_NO_HISTORICO);
   saveClinicalData(data);
 };
 

@@ -99,6 +99,76 @@ describe('CaregiverDashboard PIN & Keypad Access', () => {
 
     expect(screen.queryByText('Acesso Restrito ao Cuidador')).toBeNull();
     expect(screen.getByText('Painel do Cuidador')).toBeInTheDocument();
-    expect(screen.getByText('Tomar medicação da manhã')).toBeInTheDocument();
+    expect(screen.getByText('Rotina Diária')).toBeInTheDocument();
+  });
+});
+
+// FE-20: toda instalação nascia com "Tomar medicação da manhã" e "Beber 500ml
+// de água" na rotina — informação clínica que ninguém cadastrou.
+describe('CaregiverDashboard — rotina sem tarefas de fábrica (FE-20)', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockIsCaregiver = true;
+    localStorage.clear();
+    await i18n.changeLanguage('pt-BR');
+  });
+
+  it('instalação nova: rotina vazia, com convite para acrescentar', () => {
+    render(
+      <MemoryRouter>
+        <CaregiverDashboard />
+      </MemoryRouter>
+    );
+    expect(screen.queryByText(/medicação/i)).toBeNull();
+    expect(screen.queryByText(/500ml/i)).toBeNull();
+    expect(screen.getByTestId('rotina-vazia')).toBeInTheDocument();
+  });
+
+  it('o cuidador acrescenta e remove as próprias tarefas, e elas ficam gravadas', () => {
+    render(
+      <MemoryRouter>
+        <CaregiverDashboard />
+      </MemoryRouter>
+    );
+    fireEvent.change(screen.getByLabelText('Nova tarefa da rotina'), { target: { value: 'Fisioterapia às 14h' } });
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar/ }));
+    expect(screen.getByText('Fisioterapia às 14h')).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('irisflow_caregiver_patient123') ?? '{}').tasks).toEqual([{ id: 1, label: 'Fisioterapia às 14h', done: false }]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remover tarefa: Fisioterapia às 14h' }));
+    expect(screen.queryByText('Fisioterapia às 14h')).toBeNull();
+    expect(screen.getByTestId('rotina-vazia')).toBeInTheDocument();
+  });
+});
+
+describe('CaregiverDashboard — dado gravado fora do formato não derruba a tela (FE-8)', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockIsCaregiver = true;
+    localStorage.clear();
+    await i18n.changeLanguage('pt-BR');
+  });
+
+  it('tasks que não é lista (edição à mão, versão antiga): rotina vazia, sem cair', () => {
+    localStorage.setItem('irisflow_caregiver_patient123', JSON.stringify({ tasks: { 0: 'x' }, entries: 'y' }));
+    render(
+      <MemoryRouter>
+        <CaregiverDashboard />
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId('rotina-vazia')).toBeInTheDocument();
+  });
+
+  it('armazenamento cheio ao gravar: a tela segue de pé', () => {
+    const gravar = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('cheio', 'QuotaExceededError'); });
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <MemoryRouter>
+        <CaregiverDashboard />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Rotina Diária')).toBeInTheDocument();
+    expect(aviso).toHaveBeenCalled();
+    gravar.mockRestore();
   });
 });

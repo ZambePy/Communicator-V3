@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { definirEmergenciaAtiva } from '../../services/estadoDeEmergencia';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertOctagon, HeartPulse, ShieldAlert, Thermometer, Wind } from 'lucide-react';
-import { emitirPedidoDeAjuda } from '../../cloud/eventos';
+import { emitirPedidoDeAjuda, entregaDoPedido, ouvirEntrega, type EntregaDoPedido } from '../../cloud/eventos';
 import { novoIdDePedido } from '../../cloud/desktopSync';
 import { useCloud } from '../../cloud/CloudContext';
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeButton } from '../../components/ui/GazeButton';
 import { GazeGrid } from '../../components/ui/GazeGrid';
 import { playTone, getSharedAudioContext } from '../../utils/emergencyAudio';
+import { falaPrioritariaEmCurso } from '../../services/voz/sistema';
 
 /** Prazo local quando não há ajuste remoto (`patient_settings.emergency_timeout_s`). */
 const PRAZO_PADRAO_S = 15;
@@ -25,9 +26,9 @@ const EMERGENCIES = [
 
 export const EmergencyEscalation: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation();
-  const { ajustesRemotos, reconhecimento } = useCloud();
+  const { ajustesRemotos, reconhecimento, mensagens } = useCloud();
   const [triggered, setTriggered] = useState<string | null>(null);
   const [triggeredAt, setTriggeredAt] = useState<number | null>(null);
   const [escalated, setEscalated] = useState(false);
@@ -35,6 +36,31 @@ export const EmergencyEscalation: React.FC = () => {
   const [vistoEm, setVistoEm] = useState<string | null>(null);
   /** Id do pedido enviado por esta tela — é por ele que a confirmação é reconhecida. */
   const [pedidoId, setPedidoId] = useState<string | null>(null);
+  /**
+   * O que aconteceu com o pedido: enviado ao celular, na fila (sem internet),
+   * sem celular vinculado, recusado ou ensaio. Antes a tela dizia "ALERTA
+   * ENVIADO!" em todos esses casos.
+   */
+  const [entrega, setEntrega] = useState<EntregaDoPedido | null>(null);
+
+  useEffect(() => {
+    if (!pedidoId) return;
+    // O barramento pode ter respondido antes deste efeito (modo apresentação,
+    // sem integração): lê o que já foi informado e passa a ouvir o resto.
+    setEntrega(entregaDoPedido(pedidoId));
+    return ouvirEntrega((id, e) => {
+      if (id === pedidoId) setEntrega(e);
+    });
+  }, [pedidoId]);
+
+  // A resposta do cuidador durante o socorro fica NA tela de emergência (o
+  // cartão global de mensagens não aparece aqui): a mais recente desde pouco
+  // antes do pedido — 5 min de tolerância para relógios desalinhados.
+  const mensagemDoCuidador = triggeredAt
+    ? [...(mensagens ?? [])]
+        .reverse()
+        .find((m) => m.sender === 'cuidador' && m.kind !== 'sistema' && Date.parse(m.created_at) >= triggeredAt - 5 * 60_000) ?? null
+    : null;
 
   // Prazo de escalonamento: o mesmo que o cuidador configurou no app (e que
   // o cron do servidor usa), com 15 s de reserva quando não há ajuste.
@@ -56,6 +82,7 @@ export const EmergencyEscalation: React.FC = () => {
     setTriggeredAt(Date.now());
     setEscalated(false);
     setVistoEm(null);
+    setEntrega(null);
     setPedidoId(id);
 
     // Som de bip forte inicial.
@@ -96,14 +123,33 @@ export const EmergencyEscalation: React.FC = () => {
     emitirPedidoDeAjuda('emergencia', label, id);
   };
 
-  // Efeito de escuta de parâmetro para auto-disparo
+  // Auto-disparo (botão flutuante, Modo Computador): UMA vez por montagem, e o
+  // parâmetro sai da URL logo em seguida.
+  //
+  // Antes o efeito dependia de `triggered` e o parâmetro nunca saía: "Cancelar"
+  // zerava `triggered` numa atualização urgente, que renderiza ANTES da
+  // navegação (o router navega dentro de `startTransition`) — com
+  // `autoTrigger` ainda na URL, o efeito mandava um SEGUNDO pedido de socorro
+  // (novo push, novo pedido no banco, alarme de novo) no instante em que o
+  // paciente cancelava. No StrictMode do desenvolvimento disparava duas vezes.
+  const autoDisparoFeitoRef = useRef(false);
   useEffect(() => {
     const autoTrigger = searchParams.get('autoTrigger');
-    if (autoTrigger && !triggered) {
-      const item = EMERGENCIES.find((e) => e.id === autoTrigger) || EMERGENCIES[3];
-      triggerAlert(item.id, t(item.labelKey));
-    }
-  }, [searchParams, t, triggered]);
+    if (!autoTrigger || autoDisparoFeitoRef.current) return;
+    autoDisparoFeitoRef.current = true;
+    const item = EMERGENCIES.find((e) => e.id === autoTrigger) || EMERGENCIES[3];
+    triggerAlert(item.id, t(item.labelKey));
+    setSearchParams(
+      (atual) => {
+        const sem = new URLSearchParams(atual);
+        sem.delete('autoTrigger');
+        return sem;
+      },
+      { replace: true }
+    );
+    // Só o parâmetro importa: `t` e `triggerAlert` mudam a cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Confirmação do cuidador chegou (UPDATE em help_requests com
   // acknowledged_at, via CloudContext). Vale a do pedido que ESTA tela enviou,
@@ -123,7 +169,8 @@ export const EmergencyEscalation: React.FC = () => {
     if (vistoEm === reconhecimento.acknowledged_at) return;
     setVistoEm(reconhecimento.acknowledged_at);
     if ('speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
-      window.speechSynthesis.cancel();
+      // A mensagem do cuidador (fala prioritária) termina antes; esta entra na fila.
+      if (!falaPrioritariaEmCurso()) window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(`Seu cuidador viu o pedido às ${horaCurta(reconhecimento.acknowledged_at)}.`);
       u.lang = 'pt-BR';
       u.rate = 0.95;
@@ -170,9 +217,12 @@ export const EmergencyEscalation: React.FC = () => {
       playTone(760, 0.3, 0.25, 0.35);
     }, 2000);
 
-    // Fala contínua a cada 5s
+    // Fala contínua a cada 5s — mas nunca por cima da mensagem do cuidador:
+    // antes o `cancel()` cortava a resposta dele no meio (e ela ainda saía
+    // como "falada" para o celular).
     const speechInterval = setInterval(() => {
       if ('speechSynthesis' in window) {
+        if (falaPrioritariaEmCurso()) return;
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance("ALERTA CRÍTICO: O paciente precisa de socorro imediato!");
         u.lang = 'pt-BR';
@@ -219,7 +269,7 @@ export const EmergencyEscalation: React.FC = () => {
             <AlertOctagon size={44} /> {t('emergency.title')}
           </h1>
           <p style={{ fontSize: '1.25rem', color: 'var(--color-text-base)', opacity: 0.7, margin: 0, fontWeight: 500 }}>
-            {triggered ? 'Seu alerta foi enviado. Aguarde atendimento.' : 'Selecione o tipo de ajuda necessário'}
+            {triggered ? 'Alerta disparado. Aguarde atendimento.' : 'Selecione o tipo de ajuda necessário'}
           </p>
         </div>
 
@@ -242,25 +292,45 @@ export const EmergencyEscalation: React.FC = () => {
           >
             <AlertOctagon size={100} color={vistoEm ? '#16a34a' : '#dc2626'} aria-hidden="true" style={{ animation: escalated && !vistoEm ? 'shake 0.3s infinite' : 'none' }} />
             <h2 style={{ fontSize: '3rem', color: '#dc2626', textAlign: 'center', marginTop: '1.5rem', fontWeight: 800 }}>
-              {vistoEm ? 'SEU CUIDADOR VIU' : escalated ? 'ALERTA ESCALADO' : t('emergency.alertSent')}
+              {vistoEm ? 'SEU CUIDADOR VIU' : escalated ? 'ALERTA ESCALADO' : t(`emergency.entrega.${entrega ?? 'enviando'}.titulo`)}
             </h2>
             <p style={{ fontSize: '1.75rem', color: '#991b1b', textAlign: 'center', marginTop: '0.5rem', fontWeight: 600 }}>
               {vistoEm
                 ? `Seu cuidador viu o pedido às ${horaCurta(vistoEm)}. Ajuda a caminho.`
                 : escalated
                   ? 'Ninguém confirmou ainda. O alarme continua tocando neste computador.'
-                  : t('emergency.waiting', { label: triggered })}
+                  : t(`emergency.entrega.${entrega ?? 'enviando'}.detalhe`, { label: triggered })}
             </p>
 
+            {mensagemDoCuidador && (
+              <div
+                role="status"
+                aria-live="polite"
+                data-testid="mensagem-do-cuidador-na-emergencia"
+                style={{
+                  marginTop: '1.5rem',
+                  width: 'min(760px, 100%)',
+                  padding: '1rem 1.5rem',
+                  borderRadius: '1.25rem',
+                  background: '#1B54A8',
+                  color: '#ffffff',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Mensagem do cuidador
+                </div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, lineHeight: 1.3, wordBreak: 'break-word' }}>
+                  {mensagemDoCuidador.text}
+                </div>
+              </div>
+            )}
+
             <GazeButton
-              onClick={() => {
-                setTriggered(null);
-                setTriggeredAt(null);
-                setEscalated(false);
-                setVistoEm(null);
-                setPedidoId(null);
-                navigate('/menu');
-              }}
+              // Só navega: zerar o estado aqui renderizava a tela "sem alerta"
+              // antes de sair (ver o auto-disparo acima). O desmonte já para o
+              // alarme e a fala.
+              onClick={() => navigate('/menu', { replace: true })}
               style={{
                 marginTop: '2.5rem',
                 width: '340px',

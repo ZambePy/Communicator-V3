@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import React from 'react';
-import { EmergencyProvider, useEmergency } from './EmergencyContext';
+import { EmergencyProvider, PRAZO_DO_ENSAIO_MS, useEmergency } from './EmergencyContext';
 import { EmergencyEscalation } from '../pages/output/EmergencyEscalation';
 
 // -----------------------------------------------------------------------------
@@ -22,7 +22,8 @@ import { EmergencyEscalation } from '../pages/output/EmergencyEscalation';
 // -----------------------------------------------------------------------------
 
 const emitirPedidoDeAjuda = vi.fn();
-vi.mock('../cloud/eventos', () => ({
+vi.mock('../cloud/eventos', async (original) => ({
+  ...(await original<typeof import('../cloud/eventos')>()),
   emitirPedidoDeAjuda: (...a: unknown[]) => emitirPedidoDeAjuda(...a),
 }));
 
@@ -50,7 +51,7 @@ vi.mock('./AuthContext', () => ({
 }));
 
 const enviou = () => emitirPedidoDeAjuda.mock.calls.length;
-const naTelaDeEmergencia = () => screen.queryByText(/Seu alerta foi enviado/i) !== null;
+const naTelaDeEmergencia = () => screen.queryByText(/Alerta disparado/i) !== null;
 
 let rota = '';
 
@@ -152,5 +153,63 @@ describe('o modo não sobrevive à saída do tutorial', () => {
     });
     expect(naTelaDeEmergencia()).toBe(true);
     expect(enviou()).toBe(1);
+  });
+});
+
+// FE-14: o ensaio era um estado do passo do tutorial — valia enquanto o passo
+// estivesse aberto, sem limite de tempo nem de vezes. Um paciente parado ali
+// ficava com o socorro inoperante.
+describe('o ensaio vale UMA vez e tem prazo', () => {
+  it('depois do primeiro acionamento, o próximo é de verdade', () => {
+    montar(true);
+    act(() => {
+      screen.getByTestId('disparar').click();
+    });
+    expect(enviou()).toBe(0);
+    expect(screen.getByTestId('ensaiou').textContent).toBe('true');
+
+    act(() => {
+      screen.getByTestId('disparar').click();
+    });
+    expect(naTelaDeEmergencia()).toBe(true);
+    expect(enviou()).toBe(1);
+  });
+
+  it('passado o prazo, o botão volta a valer sozinho (mesmo sem sair do passo)', () => {
+    vi.useFakeTimers();
+    try {
+      montar(true);
+      act(() => {
+        vi.advanceTimersByTime(PRAZO_DO_ENSAIO_MS);
+      });
+      act(() => {
+        screen.getByTestId('disparar').click();
+      });
+      expect(enviou()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('confirmação aberta como ensaio termina como ensaio, mesmo se o prazo vencer no meio da contagem', () => {
+    vi.useFakeTimers();
+    try {
+      montar(true);
+      act(() => {
+        vi.advanceTimersByTime(PRAZO_DO_ENSAIO_MS - 2_000);
+      });
+      act(() => {
+        screen.getByLabelText('Disparar Emergência Médica').click();
+      });
+      expect(screen.getByText('ENSAIO — NADA SERÁ ENVIADO')).toBeInTheDocument();
+      // O prazo vence durante a contagem de 5 s; o título que o paciente viu vale.
+      act(() => {
+        vi.advanceTimersByTime(6_000);
+      });
+      expect(enviou()).toBe(0);
+      expect(screen.getByTestId('ensaiou').textContent).toBe('true');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

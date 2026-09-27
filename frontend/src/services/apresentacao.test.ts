@@ -20,9 +20,30 @@ describe('modo apresentação', () => {
   it('começa desligado e persiste ao ligar', () => {
     expect(modoApresentacaoAtivo()).toBe(false);
     definirModoApresentacao(true);
-    expect(localStorage.getItem(CHAVE_DO_MODO_APRESENTACAO)).toBe('1');
+    expect(localStorage.getItem(CHAVE_DO_MODO_APRESENTACAO)).toMatch(/^desde:\d+$/);
     _reiniciarParaTeste();
     expect(modoApresentacaoAtivo()).toBe(true);
+  });
+
+  it('desliga sozinho depois de 2 h — esquecido ligado, ele descartava todo socorro (FE-9)', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-27T10:00:00Z'));
+      definirModoApresentacao(true);
+      vi.setSystemTime(new Date('2026-09-27T11:59:00Z'));
+      expect(modoApresentacaoAtivo()).toBe(true);
+      vi.setSystemTime(new Date('2026-09-27T12:00:01Z'));
+      expect(modoApresentacaoAtivo()).toBe(false);
+      expect(localStorage.getItem(CHAVE_DO_MODO_APRESENTACAO)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('o formato antigo, sem data, conta como desligado', () => {
+    localStorage.setItem(CHAVE_DO_MODO_APRESENTACAO, '1');
+    _reiniciarParaTeste();
+    expect(modoApresentacaoAtivo()).toBe(false);
   });
 
   it('avisa quem estiver ouvindo, e só quando muda', () => {

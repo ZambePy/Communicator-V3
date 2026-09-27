@@ -4,27 +4,62 @@
  * o contrato do app com ele: quais chamadas saem, com que carga, e o que sobe
  * quando alguma delas falha.
  */
+import { AuthRetryableFetchError } from '@supabase/supabase-js';
 import { SITE_URL } from '@/lib/config';
 import { mapDevice, mapSession, SupabaseProvider } from './supabaseProvider';
+import { ehConflitoDeAjustes } from './types';
 
 // Definidos antes de qualquer `new SupabaseProvider()` (que chama `getSupabase()`
 // no construtor). A fábrica do `jest.mock` só devolve fechamentos, então os
 // nomes abaixo já existem quando são lidos. Prefixo `mock` exigido pelo Jest.
 const mockFrom = jest.fn();
+const mockRpc = jest.fn();
 const mockResetPasswordForEmail = jest.fn();
-type SessaoFalsa = { data: { session: { user: { id: string; email: string } } | null } };
-const mockGetSession = jest.fn<Promise<SessaoFalsa>, []>(async () => ({ data: { session: null } }));
-const mockSignOut = jest.fn(async () => ({ error: null }));
+type UsuarioFalso = { id: string; email: string };
+type SessaoFalsa = { data: { session: { user: UsuarioFalso; refresh_token?: string } | null }; error?: unknown };
+const mockGetSession = jest.fn<Promise<SessaoFalsa>, []>(async () => ({ data: { session: null }, error: null }));
+const mockSignOut = jest.fn<Promise<{ error: unknown }>, []>(async () => ({ error: null }));
+const mockOnAuthStateChange = jest.fn();
+const mockLerSessaoGuardada = jest.fn<Promise<{ refresh_token?: string; user?: { id?: string; email?: string } } | null>, []>(async () => null);
+const mockApagarSessaoGuardada = jest.fn(async () => undefined);
+// Cliente descartável das saídas pendentes (`criarClienteIsolado`).
+const mockIsolado = {
+  rpc: jest.fn(),
+  from: jest.fn(),
+  auth: { refreshSession: jest.fn(), signOut: jest.fn(async () => ({ error: null })) },
+};
 jest.mock('@/lib/supabase', () => ({
   getSupabase: () => ({
     from: (...args: unknown[]) => mockFrom(...args),
+    rpc: (...args: unknown[]) => mockRpc(...args),
     auth: {
       resetPasswordForEmail: (...args: unknown[]) => mockResetPasswordForEmail(...args),
       getSession: () => mockGetSession(),
       signOut: () => mockSignOut(),
+      onAuthStateChange: (cb: unknown) => mockOnAuthStateChange(cb),
     },
   }),
+  lerSessaoGuardada: () => mockLerSessaoGuardada(),
+  apagarSessaoGuardada: () => mockApagarSessaoGuardada(),
+  criarClienteIsolado: () => mockIsolado,
 }));
+// Keychain/Keystore em memória: o token registrado e as saídas pendentes.
+const mockArmazem = new Map<string, string>();
+jest.mock('@/lib/secureStorage', () => ({
+  secureStorage: {
+    getItem: async (k: string) => mockArmazem.get(k) ?? null,
+    setItem: async (k: string, v: string) => {
+      mockArmazem.set(k, v);
+    },
+    removeItem: async (k: string) => {
+      mockArmazem.delete(k);
+    },
+  },
+}));
+
+const TOKEN_REGISTRADO = 'irisflow.push.token-registrado';
+const SAIDA_PENDENTE = 'irisflow.push.saida-pendente';
+const logado = (id = 'user-1'): SessaoFalsa => ({ data: { session: { user: { id, email: 'a@b.c' }, refresh_token: 'rt-1' } }, error: null });
 
 type Resultado = { data?: unknown; error?: { message: string } | null };
 
@@ -47,10 +82,21 @@ function consulta(resultado: Resultado) {
 
 beforeEach(() => {
   mockFrom.mockReset();
+  mockRpc.mockReset();
   mockResetPasswordForEmail.mockReset();
   mockGetSession.mockReset();
-  mockGetSession.mockResolvedValue({ data: { session: null } });
-  mockSignOut.mockClear();
+  mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+  mockSignOut.mockReset();
+  mockSignOut.mockResolvedValue({ error: null });
+  mockOnAuthStateChange.mockReset();
+  mockLerSessaoGuardada.mockReset();
+  mockLerSessaoGuardada.mockResolvedValue(null);
+  mockApagarSessaoGuardada.mockClear();
+  mockIsolado.rpc.mockReset();
+  mockIsolado.from.mockReset();
+  mockIsolado.auth.refreshSession.mockReset();
+  mockIsolado.auth.signOut.mockClear();
+  mockArmazem.clear();
 });
 
 // ---------- mapeadores ----------
@@ -136,8 +182,10 @@ describe('mapSession', () => {
 
 // ---------- resolveHelpRequest ----------
 describe('resolveHelpRequest', () => {
+  const gravou = () => consulta({ data: [{ id: 'hr-1' }], error: null });
+
   it('propaga o erro do segundo UPDATE (reconhecimento) — antes ele era engolido', async () => {
-    const primeiro = consulta({ error: null });
+    const primeiro = gravou();
     const segundo = consulta({ error: { message: 'permission denied for table help_requests' } });
     mockFrom.mockReturnValueOnce(primeiro).mockReturnValueOnce(segundo);
 
@@ -162,8 +210,14 @@ describe('resolveHelpRequest', () => {
   });
 
   it('resolve quando as duas escritas passam', async () => {
-    mockFrom.mockReturnValueOnce(consulta({ error: null })).mockReturnValueOnce(consulta({ error: null }));
+    mockFrom.mockReturnValueOnce(gravou()).mockReturnValueOnce(gravou());
     await expect(new SupabaseProvider().resolveHelpRequest('hr-1')).resolves.toBeUndefined();
+  });
+
+  it('UPDATE sem linha e sem erro (a RLS negou em silêncio) rejeita — a tela não diz "resolvido"', async () => {
+    mockFrom.mockReturnValueOnce(consulta({ data: [], error: null }));
+    await expect(new SupabaseProvider().resolveHelpRequest('hr-1')).rejects.toThrow(/não está acessível/);
+    expect(mockFrom).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -184,30 +238,53 @@ describe('getSettings / updateSettings', () => {
     await expect(new SupabaseProvider().getSettings('b1')).resolves.toEqual(linha);
   });
 
-  it('updateSettings faz upsert PARCIAL: só o campo alterado + chave, sem ler antes', async () => {
+  it('sem linha lida: INSERT só com o campo alterado + chave (o desktop não recebe padrões)', async () => {
     const escrita = consulta({ data: { ...linha, emergency_timeout_s: 90 }, error: null });
     mockFrom.mockReturnValueOnce(escrita);
 
-    const r = await new SupabaseProvider().updateSettings('b1', { emergency_timeout_s: 90 });
+    const r = await new SupabaseProvider().updateSettings('b1', { emergency_timeout_s: 90 }, null);
 
-    // Uma única chamada (a escrita): o SELECT prévio que montava a linha inteira sumiu.
     expect(mockFrom).toHaveBeenCalledTimes(1);
     expect(mockFrom).toHaveBeenCalledWith('patient_settings');
-    const [payload, opts] = escrita.upsert.mock.calls[0];
-    expect(payload).toEqual({ beneficiary_id: 'b1', emergency_timeout_s: 90, updated_at: expect.any(String) });
-    // Nada de dwell_ms/filter_preset no payload: o desktop não pode receber 1500/balanceado sem o cuidador ter pedido.
+    const [payload] = escrita.insert.mock.calls[0];
+    expect(payload).toEqual({ beneficiary_id: 'b1', emergency_timeout_s: 90 });
+    // Nada de dwell_ms/filter_preset: o desktop não pode receber 1500/balanceado sem o cuidador ter pedido.
     expect(payload).not.toHaveProperty('dwell_ms');
     expect(payload).not.toHaveProperty('filter_preset');
-    expect(opts).toEqual({ onConflict: 'beneficiary_id' });
+    expect(escrita.upsert).not.toHaveBeenCalled();
     expect(r.emergency_timeout_s).toBe(90);
   });
 
-  it('updateSettings ignora beneficiary_id/updated_at vindos no patch e propaga erro', async () => {
+  it('sem linha lida, mas outro celular criou a linha antes (23505): conflito, nada gravado', async () => {
+    mockFrom.mockReturnValueOnce(consulta({ data: null, error: { message: 'duplicate key', code: '23505' } as { message: string } }));
+    const erro = await new SupabaseProvider().updateSettings('b1', { emergency_timeout_s: 90 }, null).catch((e: unknown) => e);
+    expect(ehConflitoDeAjustes(erro)).toBe(true);
+  });
+
+  it('com linha lida: UPDATE só se `updated_at` ainda é o lido (concorrência otimista)', async () => {
+    const escrita = consulta({ data: { ...linha, emergency_timeout_s: 90, updated_at: '2026-09-02T00:00:00Z' }, error: null });
+    mockFrom.mockReturnValueOnce(escrita);
+
+    const r = await new SupabaseProvider().updateSettings('b1', { emergency_timeout_s: 90 }, linha.updated_at);
+
+    expect(escrita.update).toHaveBeenCalledWith({ emergency_timeout_s: 90 });
+    expect(escrita.eq).toHaveBeenCalledWith('beneficiary_id', 'b1');
+    expect(escrita.eq).toHaveBeenCalledWith('updated_at', linha.updated_at);
+    expect(r.updated_at).toBe('2026-09-02T00:00:00Z');
+  });
+
+  it('com linha lida e ninguém afetado (outro celular gravou depois da leitura): conflito', async () => {
+    mockFrom.mockReturnValueOnce(consulta({ data: null, error: null }));
+    const erro = await new SupabaseProvider().updateSettings('b1', { emergency_contacts: [] }, linha.updated_at).catch((e: unknown) => e);
+    expect(ehConflitoDeAjustes(erro)).toBe(true);
+  });
+
+  it('ignora beneficiary_id/updated_at vindos no patch e propaga erro', async () => {
     const escrita = consulta({ data: null, error: { message: 'permission denied' } });
     mockFrom.mockReturnValueOnce(escrita);
-    await expect(new SupabaseProvider().updateSettings('b1', { dwell_ms: 800, beneficiary_id: 'outro', updated_at: 'x' })).rejects.toMatchObject({ message: 'permission denied' });
-    expect(escrita.upsert.mock.calls[0][0]).toMatchObject({ beneficiary_id: 'b1', dwell_ms: 800 });
-    expect(escrita.upsert.mock.calls[0][0].updated_at).not.toBe('x');
+    await expect(new SupabaseProvider().updateSettings('b1', { dwell_ms: 800, beneficiary_id: 'outro', updated_at: 'x' }, linha.updated_at)).rejects.toMatchObject({ message: 'permission denied' });
+    expect(escrita.update).toHaveBeenCalledWith({ dwell_ms: 800 });
+    expect(escrita.eq).toHaveBeenCalledWith('beneficiary_id', 'b1');
   });
 });
 
@@ -233,8 +310,8 @@ describe('listMessages', () => {
 // ---------- reconhecimento ----------
 describe('acknowledgeHelpRequest', () => {
   it('grava acknowledged_by com o usuário logado', async () => {
-    mockGetSession.mockResolvedValueOnce({ data: { session: { user: { id: 'user-1', email: 'a@b.c' } } } });
-    const escrita = consulta({ error: null });
+    mockGetSession.mockResolvedValueOnce(logado());
+    const escrita = consulta({ data: [{ id: 'hr-1' }], error: null });
     mockFrom.mockReturnValueOnce(escrita);
 
     await new SupabaseProvider().acknowledgeHelpRequest('hr-1');
@@ -243,44 +320,236 @@ describe('acknowledgeHelpRequest', () => {
     expect(escrita.eq).toHaveBeenCalledWith('id', 'hr-1');
     expect(escrita.is).toHaveBeenCalledWith('acknowledged_at', null);
   });
+
+  it('nenhuma linha porque outro celular já confirmou: tudo certo', async () => {
+    mockFrom.mockReturnValueOnce(consulta({ data: [], error: null })).mockReturnValueOnce(consulta({ data: { acknowledged_at: '2026-09-10T12:00:00Z' }, error: null }));
+    await expect(new SupabaseProvider().acknowledgeHelpRequest('hr-1')).resolves.toBeUndefined();
+  });
+
+  it('nenhuma linha e o pedido continua sem confirmação (a RLS negou): rejeita', async () => {
+    mockFrom.mockReturnValueOnce(consulta({ data: [], error: null })).mockReturnValueOnce(consulta({ data: null, error: null }));
+    await expect(new SupabaseProvider().acknowledgeHelpRequest('hr-1')).rejects.toThrow(/não está acessível/);
+  });
+});
+
+describe('markMessagesRead', () => {
+  it('devolve só as linhas que o banco marcou', async () => {
+    const escrita = consulta({ data: [{ id: 'm1', read_at: '2026-09-10T12:00:00Z' }], error: null });
+    mockFrom.mockReturnValueOnce(escrita);
+    await expect(new SupabaseProvider().markMessagesRead('b1')).resolves.toEqual([{ id: 'm1', read_at: '2026-09-10T12:00:00Z' }]);
+    expect(escrita.eq).toHaveBeenCalledWith('sender', 'paciente');
+    expect(escrita.is).toHaveBeenCalledWith('read_at', null);
+  });
+
+  it('propaga a falha (antes era ignorada e o selo sumia sem nada gravado)', async () => {
+    mockFrom.mockReturnValueOnce(consulta({ data: null, error: { message: 'network' } }));
+    await expect(new SupabaseProvider().markMessagesRead('b1')).rejects.toMatchObject({ message: 'network' });
+  });
+});
+
+// ---------- sessão ----------
+describe('getUser / garantirSessao / onAuthChange (sem rede não é sair da conta)', () => {
+  const semRede = () => new AuthRetryableFetchError('Failed to fetch', 0);
+
+  it('com sessão: o usuário dela', async () => {
+    mockGetSession.mockResolvedValueOnce(logado());
+    await expect(new SupabaseProvider().getUser()).resolves.toEqual({ id: 'user-1', email: 'a@b.c' });
+  });
+
+  it('token vencido e sem rede para renovar: continua logado com a sessão guardada', async () => {
+    mockGetSession.mockResolvedValueOnce({ data: { session: null }, error: semRede() });
+    mockLerSessaoGuardada.mockResolvedValueOnce({ refresh_token: 'rt', user: { id: 'user-1', email: 'a@b.c' } });
+    await expect(new SupabaseProvider().getUser()).resolves.toEqual({ id: 'user-1', email: 'a@b.c' });
+  });
+
+  it('sem sessão nenhuma: null', async () => {
+    await expect(new SupabaseProvider().getUser()).resolves.toBeNull();
+  });
+
+  it('garantirSessao: sem rede falha como conexão; sem sessão, como sessão expirada', async () => {
+    mockGetSession.mockResolvedValueOnce({ data: { session: null }, error: semRede() });
+    await expect(new SupabaseProvider().garantirSessao()).rejects.toThrow(/Sem conexão/);
+    mockGetSession.mockResolvedValueOnce({ data: { session: null }, error: null });
+    await expect(new SupabaseProvider().garantirSessao()).rejects.toThrow(/sessão expirou/);
+    mockGetSession.mockResolvedValueOnce(logado());
+    await expect(new SupabaseProvider().garantirSessao()).resolves.toBeUndefined();
+  });
+
+  it('onAuthChange: só SIGNED_OUT tira da conta; a sessão inicial sem sessão (falta de rede) não', () => {
+    const unsubscribe = jest.fn();
+    mockOnAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe } } });
+    const cb = jest.fn();
+    const off = new SupabaseProvider().onAuthChange(cb);
+    const ouvinte = mockOnAuthStateChange.mock.calls[0][0] as (e: string, s: unknown) => void;
+
+    ouvinte('INITIAL_SESSION', null);
+    expect(cb).not.toHaveBeenCalled();
+    ouvinte('TOKEN_REFRESHED', { user: { id: 'user-1', email: 'a@b.c' } });
+    expect(cb).toHaveBeenLastCalledWith({ id: 'user-1', email: 'a@b.c' });
+    ouvinte('SIGNED_OUT', null);
+    expect(cb).toHaveBeenLastCalledWith(null);
+    off();
+    expect(unsubscribe).toHaveBeenCalled();
+  });
+});
+
+describe('getLicense', () => {
+  it('pede ao servidor a licença (desktop_license) — a mesma regra do desktop', async () => {
+    const licenca = { allowed: false, reason: 'beta_encerrada', plan_id: 'beta', features: { relatorios: true, multiplos_dispositivos: true, assistente: true, voz: true, lazer: true } };
+    mockRpc.mockResolvedValueOnce({ data: licenca, error: null });
+    await expect(new SupabaseProvider().getLicense()).resolves.toEqual(licenca);
+    expect(mockRpc).toHaveBeenCalledWith('desktop_license');
+  });
+
+  it('propaga a falha', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'network' } });
+    await expect(new SupabaseProvider().getLicense()).rejects.toMatchObject({ message: 'network' });
+  });
 });
 
 // ---------- push ----------
-describe('registerPushToken / signOut', () => {
+describe('registerPushToken', () => {
+  it('registra pela RPC `registrar_push_token` (o aparelho passa a ser da conta logada) e guarda o token', async () => {
+    mockGetSession.mockResolvedValueOnce(logado());
+    mockRpc.mockResolvedValueOnce({ data: null, error: null, status: 204 });
+
+    await new SupabaseProvider().registerPushToken('ExponentPushToken[x]');
+
+    expect(mockRpc).toHaveBeenCalledWith('registrar_push_token', { p_token: 'ExponentPushToken[x]', p_platform: 'expo' });
+    // O upsert direto (recusado pela RLS quando o token era de outra conta) não é usado.
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockArmazem.get(TOKEN_REGISTRADO)).toBe('ExponentPushToken[x]');
+  });
+
+  it('banco sem a função (migração ainda não aplicada): cai no upsert de antes', async () => {
+    mockGetSession.mockResolvedValueOnce(logado());
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' }, status: 404 });
+    const upsert = consulta({ error: null });
+    mockFrom.mockReturnValueOnce(upsert);
+
+    await new SupabaseProvider().registerPushToken('ExponentPushToken[x]');
+
+    expect(upsert.upsert).toHaveBeenCalledWith({ profile_id: 'user-1', token: 'ExponentPushToken[x]', platform: 'expo' }, { onConflict: 'token' });
+  });
+
   it('rejeita quando o banco recusa o token (antes o erro era engolido)', async () => {
-    mockGetSession.mockResolvedValueOnce({ data: { session: { user: { id: 'user-1', email: 'a@b.c' } } } });
-    mockFrom.mockReturnValueOnce(consulta({ error: { message: 'new row violates row-level security policy' } }));
+    mockGetSession.mockResolvedValueOnce(logado());
+    mockRpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'new row violates row-level security policy' }, status: 403 });
     await expect(new SupabaseProvider().registerPushToken('ExponentPushToken[x]')).rejects.toThrow(/recusou o registro/);
+    expect(mockArmazem.has(TOKEN_REGISTRADO)).toBe(false);
   });
 
   it('rejeita sem sessão, sem tentar escrever', async () => {
-    mockGetSession.mockResolvedValueOnce({ data: { session: null } });
     await expect(new SupabaseProvider().registerPushToken('t')).rejects.toThrow(/Sem sessão/);
+    expect(mockRpc).not.toHaveBeenCalled();
     expect(mockFrom).not.toHaveBeenCalled();
   });
+});
 
-  it('signOut apaga o token registrado nesta execução ANTES de derrubar a sessão', async () => {
-    mockGetSession.mockResolvedValueOnce({ data: { session: { user: { id: 'user-1', email: 'a@b.c' } } } });
-    const registro = consulta({ error: null });
-    const remocao = consulta({ error: null });
-    mockFrom.mockReturnValueOnce(registro).mockReturnValueOnce(remocao);
+describe('signOut: o celular deixa de receber os alertas da conta', () => {
+  it('tira o token obtido agora E o registrado numa abertura anterior, ANTES de derrubar a sessão', async () => {
+    mockArmazem.set(TOKEN_REGISTRADO, 'ExponentPushToken[antigo]');
+    mockRpc.mockResolvedValue({ data: null, error: null });
 
-    const p = new SupabaseProvider();
-    await p.registerPushToken('ExponentPushToken[x]');
-    expect(registro.upsert).toHaveBeenCalledWith({ profile_id: 'user-1', token: 'ExponentPushToken[x]', platform: 'expo' }, { onConflict: 'token' });
+    await new SupabaseProvider().signOut('ExponentPushToken[agora]');
 
-    await p.signOut();
-    expect(mockFrom).toHaveBeenNthCalledWith(2, 'push_tokens');
-    expect(remocao.delete).toHaveBeenCalled();
-    expect(remocao.eq).toHaveBeenCalledWith('token', 'ExponentPushToken[x]');
-    // ordem: o DELETE (que depende de auth.uid()) vem antes do signOut do Auth
-    expect(remocao.delete.mock.invocationCallOrder[0]).toBeLessThan(mockSignOut.mock.invocationCallOrder[0]);
+    expect(mockRpc).toHaveBeenCalledWith('remover_push_token', { p_token: 'ExponentPushToken[agora]' });
+    expect(mockRpc).toHaveBeenCalledWith('remover_push_token', { p_token: 'ExponentPushToken[antigo]' });
+    // ordem: a remoção (que depende de auth.uid()) vem antes do signOut do Auth
+    expect(mockRpc.mock.invocationCallOrder[1]).toBeLessThan(mockSignOut.mock.invocationCallOrder[0]);
+    expect(mockArmazem.has(TOKEN_REGISTRADO)).toBe(false);
+    expect(mockArmazem.has(SAIDA_PENDENTE)).toBe(false);
   });
 
-  it('signOut sem token registrado só derruba a sessão', async () => {
-    await new SupabaseProvider().signOut();
+  it('sem rede: a remoção fica pendente com a credencial da sessão, e a sessão guardada é apagada', async () => {
+    mockArmazem.set(TOKEN_REGISTRADO, 'ExponentPushToken[x]');
+    mockLerSessaoGuardada.mockResolvedValue({ refresh_token: 'rt-9', user: { id: 'user-1' } });
+    mockRpc.mockRejectedValue(new TypeError('Network request failed'));
+    // O supabase-js devolve erro SEM apagar a sessão quando não alcança o servidor.
+    mockSignOut.mockResolvedValueOnce({ error: new AuthRetryableFetchError('Failed to fetch', 0) });
+
+    await new SupabaseProvider().signOut(null);
+
+    expect(JSON.parse(mockArmazem.get(SAIDA_PENDENTE) ?? '[]')).toEqual([{ tokens: ['ExponentPushToken[x]'], refresh_token: 'rt-9' }]);
+    expect(mockArmazem.has(TOKEN_REGISTRADO)).toBe(false);
+    expect(mockApagarSessaoGuardada).toHaveBeenCalled();
+  });
+
+  it('sem token nenhum: só derruba a sessão', async () => {
+    await new SupabaseProvider().signOut(null);
+    expect(mockRpc).not.toHaveBeenCalled();
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockSignOut).toHaveBeenCalled();
+    expect(mockApagarSessaoGuardada).not.toHaveBeenCalled();
+  });
+
+  it('servidor que não responde não prende a saída: segue depois do prazo, com a remoção pendente', async () => {
+    jest.useFakeTimers();
+    try {
+      mockArmazem.set(TOKEN_REGISTRADO, 'ExponentPushToken[x]');
+      mockLerSessaoGuardada.mockResolvedValue({ refresh_token: 'rt-9' });
+      mockRpc.mockReturnValue(new Promise(() => undefined));
+      mockSignOut.mockReturnValue(new Promise(() => undefined));
+
+      const saida = new SupabaseProvider().signOut(null);
+      await jest.advanceTimersByTimeAsync(5_000);
+      await jest.advanceTimersByTimeAsync(5_000);
+      await saida;
+
+      expect(JSON.parse(mockArmazem.get(SAIDA_PENDENTE) ?? '[]')).toEqual([{ tokens: ['ExponentPushToken[x]'], refresh_token: 'rt-9' }]);
+      expect(mockApagarSessaoGuardada).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('concluirSaidaPendente', () => {
+  const pendente = (tokens: string[], refresh_token = 'rt-9') => mockArmazem.set(SAIDA_PENDENTE, JSON.stringify([{ tokens, refresh_token }]));
+
+  it('nada pendente: true, sem rede', async () => {
+    await expect(new SupabaseProvider().concluirSaidaPendente()).resolves.toBe(true);
+    expect(mockIsolado.auth.refreshSession).not.toHaveBeenCalled();
+  });
+
+  it('com rede: renova a credencial da conta que saiu, remove os tokens e encerra aquela sessão', async () => {
+    pendente(['ExponentPushToken[x]']);
+    mockIsolado.auth.refreshSession.mockResolvedValueOnce({ data: { session: { refresh_token: 'rt-10' } }, error: null });
+    mockIsolado.rpc.mockResolvedValueOnce({ data: null, error: null });
+
+    await expect(new SupabaseProvider().concluirSaidaPendente()).resolves.toBe(true);
+
+    expect(mockIsolado.auth.refreshSession).toHaveBeenCalledWith({ refresh_token: 'rt-9' });
+    expect(mockIsolado.rpc).toHaveBeenCalledWith('remover_push_token', { p_token: 'ExponentPushToken[x]' });
+    expect(mockIsolado.auth.signOut).toHaveBeenCalled();
+    expect(mockArmazem.has(SAIDA_PENDENTE)).toBe(false);
+    // Nada disso passa pela sessão do app (quem está logado agora).
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('ainda sem rede: continua pendente', async () => {
+    pendente(['ExponentPushToken[x]']);
+    mockIsolado.auth.refreshSession.mockResolvedValueOnce({ data: { session: null }, error: new AuthRetryableFetchError('Failed to fetch', 0) });
+
+    await expect(new SupabaseProvider().concluirSaidaPendente()).resolves.toBe(false);
+    expect(JSON.parse(mockArmazem.get(SAIDA_PENDENTE) ?? '[]')).toEqual([{ tokens: ['ExponentPushToken[x]'], refresh_token: 'rt-9' }]);
+  });
+
+  it('credencial recusada (sessão revogada): desiste, sem ficar tentando para sempre', async () => {
+    pendente(['ExponentPushToken[x]']);
+    mockIsolado.auth.refreshSession.mockResolvedValueOnce({ data: { session: null }, error: { message: 'Invalid Refresh Token', status: 400 } });
+
+    await expect(new SupabaseProvider().concluirSaidaPendente()).resolves.toBe(true);
+    expect(mockArmazem.has(SAIDA_PENDENTE)).toBe(false);
+  });
+
+  it('token registrado de novo neste celular (outra conta entrou): não é removido — agora é dela', async () => {
+    pendente(['ExponentPushToken[x]']);
+    mockArmazem.set(TOKEN_REGISTRADO, 'ExponentPushToken[x]');
+
+    await expect(new SupabaseProvider().concluirSaidaPendente()).resolves.toBe(true);
+    expect(mockIsolado.auth.refreshSession).not.toHaveBeenCalled();
+    expect(mockIsolado.rpc).not.toHaveBeenCalled();
   });
 });
 

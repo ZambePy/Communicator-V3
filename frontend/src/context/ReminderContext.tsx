@@ -28,11 +28,12 @@ export const useReminders = () => useContext(ReminderContext);
 const REMINDERS_KEY = 'irisflow_reminders';
 const TRIGGERED_KEY = 'irisflow_triggered_reminders';
 
-const DEFAULT_REMINDERS: Reminder[] = [
-  { id: '1', title: 'Tomar água', time: '10:00' },
-  { id: '2', title: 'Mudar de posição', time: '14:00' },
-  { id: '3', title: 'Medicação da tarde', time: '16:00' },
-];
+/**
+ * Nenhum lembrete até o cuidador cadastrar (Configurações → Lembretes). Antes
+ * toda instalação nova abria às 16:00, sobre a tela do paciente, o modal
+ * "Medicação da tarde" — um lembrete clínico que ninguém configurou (FE-20).
+ */
+const DEFAULT_REMINDERS: Reminder[] = [];
 
 /** Lê JSON do localStorage sem nunca lançar; valor inválido cai no fallback. */
 function lerJson<T>(key: string, fallback: T, valido: (v: unknown) => v is T): T {

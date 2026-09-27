@@ -9,17 +9,20 @@
  *
  * Toda leitura passa por RLS: o cuidador só enxerga os beneficiários do próprio profile.
  */
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import { isAuthRetryableFetchError, type PostgrestError, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
 import { siteRoute } from '@/lib/config';
-import { getSupabase } from '@/lib/supabase';
+import { secureStorage } from '@/lib/secureStorage';
+import { apagarSessaoGuardada, criarClienteIsolado, getSupabase, lerSessaoGuardada } from '@/lib/supabase';
 import {
   AccuracySummary,
   AuthUser,
   Beneficiary,
   BetaRegistration,
+  ConflitoDeAjustes,
   DataProvider,
   Device,
   HelpRequest,
+  License,
   Message,
   MessageKind,
   PatientSettings,
@@ -31,44 +34,170 @@ import {
   Subscription,
 } from './types';
 
+/** Último token de push que ESTE aparelho registrou — sobrevive ao fechamento do app. */
+const CHAVE_TOKEN_REGISTRADO = 'irisflow.push.token-registrado';
+/** Remoções de token que ficaram para depois (saída sem rede), com a credencial da conta que saiu. */
+const CHAVE_SAIDA_PENDENTE = 'irisflow.push.saida-pendente';
+
+interface SaidaPendente {
+  tokens: string[];
+  refresh_token: string;
+}
+
+/** O pedido não é visível para a conta logada (a RLS nega o UPDATE com 0 linhas, sem erro). */
+const PEDIDO_INACESSIVEL = 'Este pedido não está acessível para a conta deste celular.';
+
+/** Função RPC ausente no banco (migração ainda não aplicada): PGRST202, HTTP 404. */
+function funcaoAusente(error: Pick<PostgrestError, 'code' | 'message'>, status?: number): boolean {
+  return error.code === 'PGRST202' || status === 404 || /could not find the function/i.test(error.message ?? '');
+}
+
+/** Tópico único por assinatura: o realtime-js reaproveita um canal de mesmo nome ainda saindo, e o `subscribe()` dele não faz nada. */
+let assinaturas = 0;
+
+/** Quanto a saída espera o servidor (remoção do token, encerramento da sessão) antes de seguir sem ele. */
+export const PRAZO_DA_SAIDA_MS = 5_000;
+
+/** Um só cliente descartável para as saídas pendentes (sem sessão guardada, sem renovação automática). */
+let isoladoCache: SupabaseClient | null = null;
+function clienteIsolado(): SupabaseClient {
+  isoladoCache ??= criarClienteIsolado();
+  return isoladoCache;
+}
+
 export class SupabaseProvider implements DataProvider {
   private sb = getSupabase();
-  /** Token Expo Push registrado nesta execução — apagado do perfil no `signOut`. */
+  /** Token Expo Push registrado nesta execução (o último de qualquer execução fica em `CHAVE_TOKEN_REGISTRADO`). */
   private pushToken: string | null = null;
 
   // ---------- auth ----------
   async getUser(): Promise<AuthUser | null> {
-    const { data } = await this.sb.auth.getSession();
+    const { data, error } = await this.sb.auth.getSession();
     const u = data.session?.user;
-    return u ? { id: u.id, email: u.email ?? '' } : null;
+    if (u) return { id: u.id, email: u.email ?? '' };
+    // Sem rede para renovar um token vencido o supabase-js responde "sem
+    // sessão" com um erro de rede — mas a sessão continua guardada, e ele a
+    // renova sozinho quando a rede voltar. Isso não é sair da conta: o cuidador
+    // continua logado (as cargas avisam "sem internet") em vez de cair nas
+    // boas-vindas achando que foi deslogado.
+    if (error && isAuthRetryableFetchError(error)) {
+      const guardada = await lerSessaoGuardada();
+      if (guardada?.user?.id) return { id: guardada.user.id, email: guardada.user.email ?? '' };
+    }
+    return null;
+  }
+  async garantirSessao() {
+    const { data, error } = await this.sb.auth.getSession();
+    if (data.session) return;
+    // Sem sessão o PostgREST responderia como ANÔNIMO — listas vazias, sem
+    // erro. Melhor falhar como falha de conexão (a carga tenta de novo).
+    if (error && isAuthRetryableFetchError(error)) throw new Error('Sem conexão para renovar o acesso à conta.');
+    throw new Error('Sua sessão expirou. Entre de novo para continuar.');
   }
   async signIn(email: string, password: string) {
     const { data, error } = await this.sb.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     if (error || !data.user) throw new Error(traduzErro(error?.message));
     return { id: data.user.id, email: data.user.email ?? '' };
   }
-  async signOut() {
-    // Antes de derrubar a sessão (a RLS de `push_tokens` exige auth.uid()):
-    // sem isto o celular continuava recebendo socorro de uma conta da qual
-    // o cuidador já tinha saído.
-    const token = this.pushToken;
-    if (token) {
-      const { error } = await this.sb.from('push_tokens').delete().eq('token', token);
-      if (error) console.warn('[IrisFlow Cuidador] token de push não removido ao sair:', error.message);
-      else this.pushToken = null;
+  async signOut(pushToken?: string | null) {
+    // Antes de derrubar a sessão (a remoção exige auth.uid()): este celular
+    // deixa de receber os alertas desta conta. Vale o token obtido agora e o
+    // último registrado AQUI em qualquer execução — o registro desta execução
+    // pode ter falhado e o de uma abertura anterior ter dado certo.
+    const guardado = await secureStorage.getItem(CHAVE_TOKEN_REGISTRADO).catch(() => null);
+    const tokens = [...new Set([pushToken, this.pushToken, guardado].filter((t): t is string => Boolean(t)))];
+    // A credencial para concluir depois vem do armazenamento, sem rede: pedir
+    // a sessão ao supabase-js com o token vencido e sem internet espera ~30 s.
+    const credencial = (await lerSessaoGuardada())?.refresh_token ?? null;
+    // Sem rede, cada chamada pode esperar a renovação do token: a saída não
+    // fica presa — o que não coube no prazo vira remoção pendente.
+    const pendentes = tokens.length ? await comPrazo(removerTodos(this.sb, tokens), PRAZO_DA_SAIDA_MS, tokens) : [];
+    if (pendentes.length && credencial) {
+      // `concluirSaidaPendente` termina a remoção quando a rede voltar — o
+      // celular não pode seguir recebendo os socorros de uma conta da qual saiu.
+      await this.gravarSaidasPendentes([...(await this.lerSaidasPendentes()), { tokens: pendentes, refresh_token: credencial }]);
     }
+    this.pushToken = null;
+    await secureStorage.removeItem(CHAVE_TOKEN_REGISTRADO).catch(() => undefined);
     // `local`: sai só DESTE celular. O padrão do supabase-js é `global`, que
     // revoga a sessão da conta em todo lugar — e a conta é da família: sair
     // num celular derrubava o app dos outros cuidadores (e o alarme de
     // socorro com ele) e a escuta do computador do paciente.
-    await this.sb.auth.signOut({ scope: 'local' });
+    const { error } = await comPrazo(
+      this.sb.auth.signOut({ scope: 'local' }).catch((e: unknown) => ({ error: e })),
+      PRAZO_DA_SAIDA_MS,
+      { error: new Error('Sem resposta do servidor ao sair.') },
+    );
+    // Sem rede e com o token vencido o supabase-js devolve o erro SEM apagar a
+    // sessão guardada: a tela mostrava as boas-vindas e, na abertura seguinte,
+    // o cuidador estava logado de novo.
+    if (error) await apagarSessaoGuardada();
   }
   onAuthChange(cb: (u: AuthUser | null) => void) {
-    const { data } = this.sb.auth.onAuthStateChange((_e, session) => {
+    const { data } = this.sb.auth.onAuthStateChange((evento, session) => {
       const u = session?.user;
-      cb(u ? { id: u.id, email: u.email ?? '' } : null);
+      if (u) cb({ id: u.id, email: u.email ?? '' });
+      // Só a saída explícita tira o cuidador da conta. O INITIAL_SESSION também
+      // chega sem sessão quando a renovação falhou por falta de rede — a sessão
+      // continua guardada e `getUser` já decidiu o estado inicial.
+      else if (evento === 'SIGNED_OUT') cb(null);
     });
     return () => data.subscription.unsubscribe();
+  }
+  async concluirSaidaPendente(): Promise<boolean> {
+    const pendentes = await this.lerSaidasPendentes();
+    if (pendentes.length === 0) return true;
+    const restantes: SaidaPendente[] = [];
+    for (const p of pendentes) {
+      const r = await this.concluirSaida(p);
+      if (r) restantes.push(r);
+    }
+    await this.gravarSaidasPendentes(restantes);
+    return restantes.length === 0;
+  }
+  /** Conclui uma saída pendente; devolve o que ainda falta (com a credencial renovada) ou `null`. */
+  private async concluirSaida(p: SaidaPendente): Promise<SaidaPendente | null> {
+    // Um token registrado de novo NESTE aparelho (outra conta entrou e o
+    // registro o transferiu) não é removido: agora ele é da conta logada.
+    const registrado = await secureStorage.getItem(CHAVE_TOKEN_REGISTRADO).catch(() => null);
+    const tokens = p.tokens.filter((t) => t !== registrado && t !== this.pushToken);
+    if (tokens.length === 0) return null;
+    const isolado = clienteIsolado();
+    const { data, error } = await isolado.auth.refreshSession({ refresh_token: p.refresh_token });
+    if (error || !data.session) {
+      // Rede: tenta de novo depois. Credencial recusada (sessão revogada,
+      // senha trocada): daqui não há mais como remover — o próximo registro
+      // neste aparelho transfere o token para a conta que entrar.
+      if (error && isAuthRetryableFetchError(error)) return { tokens, refresh_token: p.refresh_token };
+      console.warn('[IrisFlow Cuidador] saída pendente abandonada: credencial recusada.', error?.message);
+      return null;
+    }
+    // O refresh token gira a cada renovação: o próximo passo usa o novo.
+    const atual: SaidaPendente = { tokens, refresh_token: data.session.refresh_token };
+    for (const token of tokens) {
+      try {
+        await removerToken(isolado, token);
+        atual.tokens = atual.tokens.filter((t) => t !== token);
+      } catch {
+        return atual;
+      }
+    }
+    // Com rede de novo, encerra no servidor a sessão da conta que saiu.
+    await isolado.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    return null;
+  }
+  private async lerSaidasPendentes(): Promise<SaidaPendente[]> {
+    try {
+      const bruto = await secureStorage.getItem(CHAVE_SAIDA_PENDENTE);
+      const lista = bruto ? (JSON.parse(bruto) as SaidaPendente[]) : [];
+      return Array.isArray(lista) ? lista.filter((p) => p && Array.isArray(p.tokens) && typeof p.refresh_token === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+  private async gravarSaidasPendentes(lista: SaidaPendente[]) {
+    if (lista.length === 0) await secureStorage.removeItem(CHAVE_SAIDA_PENDENTE).catch(() => undefined);
+    else await secureStorage.setItem(CHAVE_SAIDA_PENDENTE, JSON.stringify(lista)).catch(() => undefined);
   }
   async requestPasswordReset(email: string) {
     // O link do e-mail leva à página do site onde se define a senha nova — a
@@ -115,6 +244,13 @@ export class SupabaseProvider implements DataProvider {
     if (!data) return null;
     const { plans, ...subscription } = data as unknown as Subscription & { plans: Plan };
     return { subscription, plan: plans };
+  }
+  async getLicense(): Promise<License> {
+    // A mesma função que o desktop chama no login e o site na Conta: a regra
+    // de acesso mora no banco (`license_for_profile`), não aqui.
+    const { data, error } = await this.sb.rpc('desktop_license');
+    if (error) throw error;
+    return data as License;
   }
   async getBetaRegistration(): Promise<BetaRegistration | null> {
     // RLS: `beta_registrations_select_own` — só a linha do próprio profile.
@@ -184,17 +320,27 @@ export class SupabaseProvider implements DataProvider {
     // `acknowledged_by` = quem confirmou (auth.uid()): com mais de um celular
     // na conta, o histórico diz qual cuidador viu o pedido.
     const user = await this.getUser();
-    const { error } = await this.sb
+    const { data, error } = await this.sb
       .from('help_requests')
       .update({ acknowledged_at: new Date().toISOString(), acknowledged_by: user?.id ?? null })
       .eq('id', id)
-      .is('acknowledged_at', null);
+      .is('acknowledged_at', null)
+      .select('id');
     if (error) throw error;
+    if (data?.length) return;
+    // Nenhuma linha: ou outro celular já confirmou (tudo certo), ou a RLS negou
+    // em silêncio (UPDATE 0, sem erro) — e a tela diria "confirmado" sem nada
+    // gravado. Só a releitura diz qual dos dois.
+    const { data: linha, error: erroDaLeitura } = await this.sb.from('help_requests').select('acknowledged_at').eq('id', id).maybeSingle();
+    if (erroDaLeitura) throw erroDaLeitura;
+    if (!(linha as { acknowledged_at?: string | null } | null)?.acknowledged_at) throw new Error(PEDIDO_INACESSIVEL);
   }
   async resolveHelpRequest(id: string) {
     const now = new Date().toISOString();
-    const { error } = await this.sb.from('help_requests').update({ resolved_at: now }).eq('id', id);
+    const { data, error } = await this.sb.from('help_requests').update({ resolved_at: now }).eq('id', id).select('id');
     if (error) throw error;
+    // UPDATE 0 sem erro = a RLS negou: nada foi resolvido.
+    if (!data?.length) throw new Error(PEDIDO_INACESSIVEL);
     // Segundo UPDATE (reconhecimento implícito): o erro sobe igual ao do primeiro.
     // Engolir aqui fazia a tela dizer "resolvido" mesmo sem nada ter gravado.
     await this.acknowledgeHelpRequest(id);
@@ -224,12 +370,17 @@ export class SupabaseProvider implements DataProvider {
     return data as Message;
   }
   async markMessagesRead(beneficiaryId: string) {
-    await this.sb
+    // Devolve as linhas que o banco marcou: a tela só muda o que de fato foi
+    // gravado (antes o erro era ignorado e o selo sumia sem nada no banco).
+    const { data, error } = await this.sb
       .from('messages')
       .update({ read_at: new Date().toISOString() })
       .eq('beneficiary_id', beneficiaryId)
       .eq('sender', 'paciente')
-      .is('read_at', null);
+      .is('read_at', null)
+      .select('id, read_at');
+    if (error) throw error;
+    return (data ?? []) as Pick<Message, 'id' | 'read_at'>[];
   }
 
   // ---------- frases rápidas ----------
@@ -264,27 +415,46 @@ export class SupabaseProvider implements DataProvider {
     return data ? (data as PatientSettings) : null;
   }
   /**
-   * Upsert PARCIAL: só as colunas alteradas vão no payload. O PostgREST faz
-   * `ON CONFLICT DO UPDATE SET` apenas dessas colunas; na primeira gravação a
-   * linha nasce com o campo alterado e o resto fica com o padrão do banco.
+   * Gravação PARCIAL: só as colunas alteradas vão no payload — o desktop, que
+   * assina `patient_settings`, não recebe padrões que ninguém pediu (antes a
+   * primeira gravação mandava a linha inteira e sobrescrevia o dwell local).
    *
-   * Antes a primeira gravação (ou o `ensureSettings`) mandava a linha inteira
-   * com os padrões do app, e o desktop — que assina `patient_settings` —
-   * sobrescrevia o dwell configurado localmente com 1500 ms sem ninguém pedir.
+   * Com concorrência otimista: dois celulares (ou o computador, que grava o
+   * rótulo da voz) não se sobrescrevem mais. Antes o app gravava a lista de
+   * contatos inteira calculada do estado local, e um contato adicionado no
+   * outro celular sumia sem aviso.
+   *   - sem linha lida (`lidoEm` null): INSERT puro — se alguém criou a linha
+   *     depois da leitura, a chave primária recusa (23505);
+   *   - com linha: UPDATE só se `updated_at` (carimbado pelo gatilho a cada
+   *     gravação) ainda é o lido — nenhuma linha afetada = alguém gravou antes.
+   * Nos dois casos sobe `ConflitoDeAjustes` sem gravar nada.
    */
-  async updateSettings(beneficiaryId: string, patch: Partial<PatientSettings>): Promise<PatientSettings> {
+  async updateSettings(beneficiaryId: string, patch: Partial<PatientSettings>, lidoEm: string | null): Promise<PatientSettings> {
     const { beneficiary_id: _b, updated_at: _u, ...campos } = patch;
-    const row = { ...campos, beneficiary_id: beneficiaryId, updated_at: new Date().toISOString() };
-    const { data, error } = await this.sb.from('patient_settings').upsert(row, { onConflict: 'beneficiary_id' }).select('*').single();
+    if (lidoEm === null) {
+      const { data, error } = await this.sb.from('patient_settings').insert({ ...campos, beneficiary_id: beneficiaryId }).select('*').single();
+      if (error?.code === '23505') throw new ConflitoDeAjustes();
+      if (error) throw error;
+      return data as PatientSettings;
+    }
+    const { data, error } = await this.sb
+      .from('patient_settings')
+      .update(campos)
+      .eq('beneficiary_id', beneficiaryId)
+      .eq('updated_at', lidoEm)
+      .select('*')
+      .maybeSingle();
     if (error) throw error;
+    if (!data) throw new ConflitoDeAjustes();
     return data as PatientSettings;
   }
 
   // ---------- tempo real ----------
   subscribe(beneficiaryId: string, handlers: RealtimeHandlers) {
     const filter = `beneficiary_id=eq.${beneficiaryId}`;
+    assinaturas += 1;
     const channel: RealtimeChannel = this.sb
-      .channel(`caregiver:${beneficiaryId}`)
+      .channel(`caregiver:${beneficiaryId}:${Date.now()}-${assinaturas}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter }, (p) => {
         if (p.new && 'id' in p.new) handlers.onMessage?.(p.new as Message);
       })
@@ -301,6 +471,12 @@ export class SupabaseProvider implements DataProvider {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices', filter }, (p) => {
         if (p.new && 'id' in p.new) handlers.onDevice?.(mapDevice(p.new));
       })
+      // Ajustes gravados em outro celular (contatos de emergência, prazo) ou
+      // pelo computador (rótulo da voz): sem isto cada celular mostrava a sua
+      // lista até recarregar. Também está na publicação desde a migração do app.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'patient_settings', filter }, (p) => {
+        if (p.new && 'beneficiary_id' in p.new) handlers.onSettings?.(p.new as PatientSettings);
+      })
       // A cada inscrição confirmada — a primeira e as que o cliente refaz
       // sozinho depois de a conexão cair (celular bloqueado, troca de rede) —
       // quem chama recarrega: o tempo real não reenvia o que chegou enquanto
@@ -316,16 +492,56 @@ export class SupabaseProvider implements DataProvider {
   async registerPushToken(token: string) {
     const user = await this.getUser();
     if (!user) throw new Error('Sem sessão: o token de push não foi registrado.');
-    // O erro SOBE: antes era ignorado e o app dizia que avisaria o celular
-    // sem que o token existisse no banco (RLS negada, rede fora, tabela
-    // ausente). Quem chama decide o que mostrar; aqui só o registro.
-    const { error } = await this.sb.from('push_tokens').upsert({ profile_id: user.id, token, platform: 'expo' }, { onConflict: 'token' });
-    if (error) {
-      console.warn('[IrisFlow Cuidador] falha ao registrar o token de push:', error.message);
-      throw new Error(traduzErroPush(error.message));
+    // RPC `registrar_push_token` (security definer): o aparelho passa a
+    // pertencer à conta logada nele. O upsert direto era recusado pela RLS
+    // quando o token ainda era de outra conta (quem saiu sem rede, ou a conta
+    // anterior do mesmo celular) — e o celular seguia recebendo os socorros
+    // da conta antiga, não os da nova. Banco sem a função: o upsert de antes.
+    // O erro SOBE: quem chama decide o que mostrar; aqui só o registro.
+    const { error, status } = await this.sb.rpc('registrar_push_token', { p_token: token, p_platform: 'expo' });
+    let falha: { message: string } | null = error;
+    if (error && funcaoAusente(error, status)) {
+      const r = await this.sb.from('push_tokens').upsert({ profile_id: user.id, token, platform: 'expo' }, { onConflict: 'token' });
+      falha = r.error;
+    }
+    if (falha) {
+      console.warn('[IrisFlow Cuidador] falha ao registrar o token de push:', falha.message);
+      throw new Error(traduzErroPush(falha.message));
     }
     this.pushToken = token;
+    await secureStorage.setItem(CHAVE_TOKEN_REGISTRADO, token).catch(() => undefined);
   }
+}
+
+/** Cada token que não saiu (a primeira falha interrompe: sem rede, as outras também falhariam). */
+async function removerTodos(sb: SupabaseClient, tokens: string[]): Promise<string[]> {
+  for (let i = 0; i < tokens.length; i++) {
+    try {
+      await removerToken(sb, tokens[i]);
+    } catch (e) {
+      console.warn('[IrisFlow Cuidador] token de push não removido ao sair:', (e as Error)?.message);
+      return tokens.slice(i);
+    }
+  }
+  return [];
+}
+
+/** `promessa`, ou `seEsgotar` se ela não resolver em `ms`. Nunca rejeita por causa do prazo. */
+function comPrazo<T>(promessa: Promise<T>, ms: number, seEsgotar: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const prazo = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(seEsgotar), ms);
+  });
+  return Promise.race([promessa, prazo]).finally(() => clearTimeout(timer));
+}
+
+/** Tira o token da tabela: RPC `remover_push_token`; num banco sem a função, o DELETE de antes (sob RLS). */
+async function removerToken(sb: SupabaseClient, token: string): Promise<void> {
+  const { error, status } = await sb.rpc('remover_push_token', { p_token: token });
+  if (!error) return;
+  if (!funcaoAusente(error, status)) throw error;
+  const r = await sb.from('push_tokens').delete().eq('token', token);
+  if (r.error) throw r.error;
 }
 
 // ---------- mapeadores ----------

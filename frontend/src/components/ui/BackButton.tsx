@@ -6,6 +6,12 @@ import { GazeButton } from './GazeButton';
 
 interface BackButtonProps {
   to?: string;
+  /**
+   * Saída de uma tela aonde o paciente chega sozinho num caminho de
+   * recuperação (ex.: a calibração): aceita com o rastreamento degradado e
+   * nas telas sem cursor (ver `data-recovery` no GazeContext).
+   */
+  recovery?: boolean;
 }
 
 /**
@@ -20,7 +26,7 @@ interface BackButtonProps {
 export const BACK_BUTTON_SIZE_PX = 96;
 export const BACK_BUTTON_RADIUS_PX = 16;
 
-export const BackButton: React.FC<BackButtonProps> = ({ to }) => {
+export const BackButton: React.FC<BackButtonProps> = ({ to, recovery = false }) => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   return (
@@ -29,6 +35,7 @@ export const BackButton: React.FC<BackButtonProps> = ({ to }) => {
       width={BACK_BUTTON_SIZE_PX}
       height={BACK_BUTTON_SIZE_PX}
       isolado
+      recovery={recovery}
       style={{
         borderRadius: BACK_BUTTON_RADIUS_PX,
         padding: '0.75rem',

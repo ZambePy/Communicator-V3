@@ -6,6 +6,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTimi
 import { Card, EmptyState, ListRow, MetricTile, ProgressRing, Screen, ScreenHeader, SectionTitle, Shimmer, Text } from '@/components';
 import { useData } from '@/data/DataContext';
 import { hasFatigueData, Session } from '@/data/types';
+import { BloqueioDoPlano } from '@/features/BloqueioDoPlano';
 import { useApp } from '@/store/AppProvider';
 import { motion, opacity, radius, sizes, spacing, useTheme } from '@/theme';
 import { mensagemDeErro } from '@/utils/errors';
@@ -17,7 +18,7 @@ export default function Relatorios() {
   const { colors } = useTheme();
   const router = useRouter();
   const data = useData();
-  const { patient, can, plan, session } = useApp();
+  const { patient, can, session } = useApp();
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [tentativa, setTentativa] = useState(0);
@@ -99,15 +100,7 @@ export default function Relatorios() {
       <ScreenHeader eyebrow={patient?.user_name} title="Relatórios" />
 
       {!allowed ? (
-        <Card>
-          <EmptyState
-            icon="lock-closed-outline"
-            title="Relatórios fazem parte do plano Completo"
-            body={`Seu plano atual é o ${plan?.name ?? 'Essencial'}. O Completo inclui o histórico de uso e os relatórios de sessão para a família.`}
-            action={{ label: 'Ver planos', icon: 'sparkles-outline', onPress: () => router.push('/assinatura') }}
-            compact
-          />
-        </Card>
+        <BloqueioDoPlano />
       ) : sessions === null ? (
         <Card>
           <Shimmer height={spacing.xl} width="40%" />

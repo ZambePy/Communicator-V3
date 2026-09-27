@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createSupabaseLicenseService, sistemaDoComputador } from './supabaseLicenseService';
+import { createSupabaseLicenseService, sistemaDoComputador, EVENTO_ANTES_DE_SAIR, type DetalheAntesDeSair } from './supabaseLicenseService';
 
 // O contrato do Bloco 1 (`LicenseService`) cumprido pelo Supabase do site.
 // Sem rede: o cliente supabase-js e o fetch da Edge Function são dublês.
@@ -175,6 +175,34 @@ describe('supabaseLicenseService.verify', () => {
     expect(await svcCom(vi.fn(async () => respostaHttp(503, {})) as unknown as typeof fetch).verify('k', 'd')).toEqual({ ok: false, reason: 'unreachable' });
     expect(await svcCom(vi.fn(async () => respostaHttp(401, { code: 401, message: 'Missing authorization header' })) as unknown as typeof fetch).verify('k', 'd')).toEqual({ ok: false, reason: 'unreachable' });
   });
+
+  it('cabeçalhos chegam e o CORPO trava: o prazo de 8 s vale para ele também → unreachable', async () => {
+    // Antes o timer era desligado junto com os cabeçalhos e o `json()` ficava
+    // sem prazo: a licença parava em `checking` ("Carregando…" em todas as
+    // rotas protegidas) enquanto a conexão não caísse.
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => ({
+        ok: true,
+        status: 200,
+        json: () =>
+          new Promise((_resolve, reject) => {
+            // Como o fetch de verdade: abortar o sinal interrompe a leitura.
+            init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          }),
+      }) as unknown as Response);
+      let resultado: unknown = 'pendente';
+      void svcCom(fetchImpl as unknown as typeof fetch)
+        .verify('CHAVE-9', 'd')
+        .then((r) => { resultado = r; });
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(resultado).toBe('pendente');
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(resultado).toEqual({ ok: false, reason: 'unreachable' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('supabaseLicenseService.logout', () => {
@@ -188,6 +216,25 @@ describe('supabaseLicenseService.logout', () => {
     expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(localStorage.getItem('irisflow.vinculo')).toBeNull();
     expect(localStorage.getItem('irisflow.fila')).toBeNull();
+  });
+
+  it('espera quem pediu (a fila offline saindo) ANTES de revogar a chave — com teto (FE-22)', async () => {
+    localStorage.setItem('irisflow.vinculo', JSON.stringify({ device_id: 'dev-9', device_key: 'CHAVE-9', beneficiary_id: 'ben-1', beneficiary_name: 'C', email: 'a@b.c', pareado_em: '' }));
+    const { cliente, rpc } = fabricarCliente();
+    const ordem: string[] = [];
+    rpc.mockImplementation(async () => { ordem.push('revogou'); return { data: null, error: null }; });
+    const ouvinte = (ev: Event) => {
+      (ev as CustomEvent<DetalheAntesDeSair>).detail?.esperar?.(
+        new Promise((r) => setTimeout(() => { ordem.push('fila saiu'); r(1); }, 600)),
+      );
+    };
+    window.addEventListener(EVENTO_ANTES_DE_SAIR, ouvinte);
+    try {
+      await createSupabaseLicenseService({ cliente: () => cliente }).logout('CHAVE-9');
+    } finally {
+      window.removeEventListener(EVENTO_ANTES_DE_SAIR, ouvinte);
+    }
+    expect(ordem).toEqual(['fila saiu', 'revogou']);
   });
 });
 

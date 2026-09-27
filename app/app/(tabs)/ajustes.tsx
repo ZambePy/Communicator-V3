@@ -11,7 +11,9 @@ import { haptics } from '@/lib/haptics';
 import { useApp } from '@/store/AppProvider';
 import { layout, opacity, radius, sizes, spacing, ThemePreference, useTheme } from '@/theme';
 import { mensagemDeErro } from '@/utils/errors';
-import { brl, firstName, formatDate, timeAgo } from '@/utils/format';
+import { semOContato } from '@/utils/contatos';
+import { brl, firstName, timeAgo } from '@/utils/format';
+import { detalheDaBeta } from '@/utils/plano';
 
 /** Abre um link externo sem derrubar a tela se não houver navegador/e-mail. */
 function abrirLink(url: string, alternativa?: string) {
@@ -24,9 +26,10 @@ function abrirLink(url: string, alternativa?: string) {
 export default function Ajustes() {
   const { colors, preference, setPreference } = useTheme();
   const router = useRouter();
-  const { settings, updateSettings, profile, patient, plan, subscription, signOut, devices, patientLoaded } = useApp();
-  const beta = isBetaPlan(plan, subscription);
+  const { settings, updateSettings, profile, patient, plan, subscription, license, signOut, devices, patientLoaded } = useApp();
+  const beta = isBetaPlan(plan, subscription) || license?.plan_id === 'beta';
   const [saving, setSaving] = useState(false);
+  const [saindo, setSaindo] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [falha, setFalha] = useState<string | null>(null);
   const [novoContato, setNovoContato] = useState(false);
@@ -52,7 +55,12 @@ export default function Ajustes() {
   const device = devices.find((d) => !d.revoked_at);
   const online = device?.online ?? false;
 
-  /** Tira um contato da lista, depois de confirmar. */
+  /**
+   * Tira um contato da lista, depois de confirmar. A remoção é calculada sobre
+   * a lista que o SERVIDOR tem na hora de gravar (e recalculada se outro
+   * celular gravou antes) — não sobre a desta tela, que podia estar velha: um
+   * contato que outro familiar acabara de cadastrar sumia junto, sem aviso.
+   */
   const removerContato = (indice: number) => {
     const contatos = settings?.emergency_contacts ?? [];
     const c = contatos[indice];
@@ -62,7 +70,7 @@ export default function Ajustes() {
       {
         text: 'Remover',
         style: 'destructive',
-        onPress: () => void apply({ emergency_contacts: contatos.filter((_, i) => i !== indice) }),
+        onPress: () => void apply((atual) => ({ emergency_contacts: semOContato(atual?.emergency_contacts ?? [], c) })),
       },
     ]);
   };
@@ -98,7 +106,16 @@ export default function Ajustes() {
   const sair = () =>
     Alert.alert('Sair da conta?', 'Este celular deixa de receber os alertas desta conta.', [
       { text: 'Cancelar', style: 'cancel' },
-      { text: 'Sair', style: 'destructive', onPress: () => void signOut() },
+      {
+        text: 'Sair',
+        style: 'destructive',
+        onPress: () => {
+          // Sair tira o token deste celular do servidor (até alguns segundos
+          // sem rede): o botão mostra que está saindo.
+          setSaindo(true);
+          void signOut().finally(() => setSaindo(false));
+        },
+      },
     ]);
 
   const excluir = () =>
@@ -131,7 +148,7 @@ export default function Ajustes() {
           <Notice tone="info" icon="cloud-outline" title="Ainda não sincronizado" text={`O computador de ${nome} usa os próprios ajustes. O que você mudar aqui passa a valer lá — só o que mudar.`} style={styles.notice} />
         ) : null}
 
-        <SectionTitle title={`Computador de ${nome}`} first />
+        <SectionTitle title={patient ? `Computador de ${nome}` : 'Computador do paciente'} first />
         <View style={styles.stack}>
           <Card>
             <Setting icon="timer-outline" title="Tempo de fixação" hint="Quanto tempo o olhar fica no alvo para selecionar." />
@@ -230,7 +247,9 @@ export default function Ajustes() {
                 </Text>
               </View>
             </View>
-            <Stepper value={settings?.emergency_timeout_s ?? 45} step={15} min={15} max={300} onChange={(v) => void apply({ emergency_timeout_s: v })} />
+            {/* Uma gravação de cada vez: com toques rápidos e latências
+                diferentes, o banco terminava com um valor intermediário. */}
+            <Stepper value={settings?.emergency_timeout_s ?? 45} step={15} min={15} max={300} ocupado={saving} onChange={(v) => void apply({ emergency_timeout_s: v })} />
           </View>
           {(settings?.emergency_contacts ?? []).map((c, i) => (
             // Índice na chave: o mesmo telefone pode estar cadastrado duas vezes.
@@ -283,7 +302,7 @@ export default function Ajustes() {
           <ListRow
             icon={beta ? 'sparkles-outline' : 'card-outline'}
             title={beta ? 'Programa beta' : plan ? `Plano ${plan.name}` : 'Sem assinatura'}
-            subtitle={beta && subscription ? `Acesso completo até ${formatDate(subscription.next_charge_at)}` : subscription ? `${brl(subscription.price_brl)}/mês · ${subscription.status === 'avaliacao' ? 'período de avaliação' : subscription.status}` : undefined}
+            subtitle={beta ? detalheDaBeta(license, subscription) : subscription ? `${brl(subscription.price_brl)}/mês · ${subscription.status === 'avaliacao' ? 'período de avaliação' : subscription.status}` : undefined}
             onPress={() => router.push('/assinatura')}
           />
           <ListRow icon="mail-outline" title={profile?.buyer_name ?? '—'} subtitle={profile?.email} tone="muted" last />
@@ -311,7 +330,7 @@ export default function Ajustes() {
           <ListRow icon="trash-outline" title="Excluir conta e dados" subtitle="Pedido por e-mail, em até 15 dias" tone="danger" last onPress={excluir} />
         </Card>
 
-        <Button title="Sair da conta" variant="dangerOutline" icon="log-out-outline" onPress={sair} style={styles.logout} />
+        <Button title={saindo ? 'Saindo…' : 'Sair da conta'} variant="dangerOutline" icon="log-out-outline" loading={saindo} onPress={sair} style={styles.logout} />
 
         <View style={styles.about}>
           <Ionicons name="lock-closed-outline" size={sizes.icon.xs} color={colors.textMuted} />
@@ -330,7 +349,9 @@ export default function Ajustes() {
         falha={falha}
         onFechar={() => setNovoContato(false)}
         onSalvar={async (c) => {
-          const ok = await apply({ emergency_contacts: [...(settings?.emergency_contacts ?? []), c] });
+          // Acrescentado à lista do servidor na hora de gravar — não à desta
+          // tela: o contato que outro celular acabou de cadastrar continua lá.
+          const ok = await apply((atual) => ({ emergency_contacts: [...(atual?.emergency_contacts ?? []), c] }));
           // Na falha o modal fica aberto com o que foi digitado e o erro dentro
           // dele — fechar aqui apagaria o trabalho do cuidador.
           if (ok) setNovoContato(false);
@@ -359,17 +380,18 @@ function Setting({ icon, title, hint, emBreve = false }: { icon: keyof typeof Io
   );
 }
 
-function Stepper({ value, step, min, max, onChange }: { value: number; step: number; min: number; max: number; onChange: (v: number) => void }) {
+function Stepper({ value, step, min, max, ocupado = false, onChange }: { value: number; step: number; min: number; max: number; ocupado?: boolean; onChange: (v: number) => void }) {
   const { colors } = useTheme();
   // No limite o toque não grava nada: cada toque em "−" no mínimo faria um
-  // upsert idêntico no banco e piscaria "Salvando…".
+  // upsert idêntico no banco e piscaria "Salvando…". Enquanto uma gravação
+  // não volta, os botões esperam: o próximo passo parte do valor confirmado.
   return (
     <View style={[styles.stepper, { backgroundColor: colors.surfaceAlt }]}>
-      <IconButton icon="remove" variant="plain" accessibilityLabel={`Diminuir prazo, agora ${value} segundos`} disabled={value <= min} onPress={() => value > min && onChange(Math.max(min, value - step))} />
+      <IconButton icon="remove" variant="plain" accessibilityLabel={`Diminuir prazo, agora ${value} segundos`} disabled={ocupado || value <= min} onPress={() => !ocupado && value > min && onChange(Math.max(min, value - step))} />
       <Text variant="h3" center style={styles.stepperValue} accessibilityLiveRegion="polite">
         {value} s
       </Text>
-      <IconButton icon="add" variant="plain" accessibilityLabel={`Aumentar prazo, agora ${value} segundos`} disabled={value >= max} onPress={() => value < max && onChange(Math.min(max, value + step))} />
+      <IconButton icon="add" variant="plain" accessibilityLabel={`Aumentar prazo, agora ${value} segundos`} disabled={ocupado || value >= max} onPress={() => !ocupado && value < max && onChange(Math.min(max, value + step))} />
     </View>
   );
 }

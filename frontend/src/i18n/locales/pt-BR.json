@@ -162,7 +162,7 @@
     "title": "URGÊNCIA MÉDICA",
     "alertSent": "ALERTA ENVIADO!",
     "waiting": "Sinal de {{label}} disparado. Aguarde.",
-    "cancelAndReturn": "Cancelar Alerta e Voltar",
+    "cancelAndReturn": "Parar o alarme e voltar",
     "chooseType": "Selecione o tipo de urgência",
     "items": {
       "pain": "DOR MUITO FORTE",
@@ -170,7 +170,33 @@
       "cold": "MUITO FRIO / FEBRE",
       "other": "OUTRA URGÊNCIA"
     },
-    "triggerAria": "Disparar alerta de urgência: {{label}}"
+    "triggerAria": "Disparar alerta de urgência: {{label}}",
+    "entrega": {
+      "enviando": {
+        "titulo": "ENVIANDO O ALERTA…",
+        "detalhe": "Sinal de {{label}} disparado. Avisando o celular do cuidador."
+      },
+      "enviado": {
+        "titulo": "ALERTA ENVIADO!",
+        "detalhe": "Sinal de {{label}} disparado. O celular do cuidador foi avisado."
+      },
+      "na_fila": {
+        "titulo": "SEM INTERNET",
+        "detalhe": "O alarme está tocando aqui. O aviso ao celular do cuidador sai assim que a internet voltar."
+      },
+      "sem_nuvem": {
+        "titulo": "ALARME LOCAL",
+        "detalhe": "Este computador não está ligado ao celular de um cuidador: o alarme toca só aqui."
+      },
+      "falhou": {
+        "titulo": "ALARME LOCAL",
+        "detalhe": "Não foi possível avisar o celular do cuidador. O alarme está tocando aqui."
+      },
+      "ensaio": {
+        "titulo": "MODO APRESENTAÇÃO",
+        "detalhe": "Nada foi enviado ao celular do cuidador: o modo apresentação está ligado."
+      }
+    }
   },
   "onboarding": {
     "splash": {
@@ -260,6 +286,9 @@
     "new": "Novo paciente",
     "start": "Iniciar sessão",
     "remove": "Remover",
+    "removeConfirmTitle": "Remover o perfil de {{name}}?",
+    "removeConfirmBody": "O perfil e as frases que o assistente aprendeu com essa pessoa saem deste computador, e não há como desfazer. Para usar o IrisFlow Communicator de novo com essa pessoa, será preciso criar outro perfil e calibrar outra vez.",
+    "removeConfirm": "Remover perfil",
     "form": {
       "title": "Novo paciente",
       "name": "Nome",
@@ -591,7 +620,9 @@
       "sair": "Sair desta máquina",
       "sairAviso": "O paciente perde o acesso até alguém entrar de novo. A calibração e os perfis ficam salvos.",
       "sairConfirmar": "Sim, sair",
-      "sairCancelar": "Cancelar"
+      "sairCancelar": "Cancelar",
+      "sairFila_one": "Há 1 envio esperando internet (pode ser um pedido de socorro). O app tenta mandá-lo antes de sair; sem internet, ele se perde.",
+      "sairFila_other": "Há {{count}} envios esperando internet (podem incluir pedidos de socorro). O app tenta mandá-los antes de sair; sem internet, eles se perdem."
     },
     "perfil": {
       "title": "Paciente",
@@ -644,6 +675,23 @@
   "pin": {
     "limpar": "Limpar",
     "apagar": "Apagar"
+  },
+  "bloqueio": {
+    "titulo": "O acesso deste computador está bloqueado",
+    "motivo": {
+      "grace-expired": "Faz mais de {{dias}} dias que o IrisFlow não consegue confirmar a assinatura pela internet.",
+      "expired": "A assinatura venceu ou o pagamento está em aberto.",
+      "revoked": "Este computador foi desvinculado da conta, ou a assinatura foi encerrada.",
+      "device-unbound": "A assinatura está ativa em outro computador.",
+      "invalid-token": "A chave deste computador não vale mais.",
+      "desconhecido": "Não foi possível confirmar a assinatura."
+    },
+    "oQueFazer": {
+      "grace-expired": "Conecte este computador à internet: o acesso volta sozinho assim que a assinatura for confirmada. Também dá para entrar de novo com o e-mail e a senha.",
+      "expired": "Regularize a assinatura no site e entre de novo com o e-mail e a senha.",
+      "padrao": "Entre de novo com o e-mail e a senha da assinatura."
+    },
+    "emergencia": "O botão de Emergência continua funcionando neste computador: ele toca o alarme aqui. Enquanto o acesso estiver bloqueado, o pedido não chega ao celular do cuidador."
   },
   "checksCamera": {
     "rosto": "Rosto encontrado",

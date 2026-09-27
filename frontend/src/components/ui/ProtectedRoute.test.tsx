@@ -71,6 +71,7 @@ const montar = (requireCaregiver = false) =>
             <Route path="/consent" element={<div>tela de consentimento</div>} />
             <Route path="/profiles" element={<div>tela de perfis</div>} />
             <Route path="/menu" element={<div>tela de menu</div>} />
+            <Route path="/settings" element={<div>portão do PIN</div>} />
           </Routes>
         </MemoryRouter>
       </AuthProvider>
@@ -149,7 +150,7 @@ describe('Modo Desenvolvedor', () => {
 });
 
 describe('área do cuidador', () => {
-  it('manda para o menu quando o PIN não foi informado', async () => {
+  it('com a área fechada, manda para o portão do PIN (Configurações), nunca abre direto', async () => {
     await semearLicencaAtiva();
     aceitarConsentimento(CONTAS_DE_TESTE.ativa);
     const perfil = criarPerfil({ name: 'Joana' });
@@ -157,6 +158,7 @@ describe('área do cuidador', () => {
 
     montar(true);
 
-    await waitFor(() => expect(viu('tela de menu')).toBeInTheDocument());
+    await waitFor(() => expect(viu('portão do PIN')).toBeInTheDocument());
+    expect(screen.queryByText('conteudo protegido')).toBeNull();
   });
 });

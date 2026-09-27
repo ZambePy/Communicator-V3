@@ -19,10 +19,13 @@ interface CaregiverPageLayoutProps {
  */
 export const CaregiverPageLayout: React.FC<CaregiverPageLayoutProps> = ({ children, title }) => {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { encerrarAcessoDoCuidador } = useAuth();
 
+  // Fecha só a área do cuidador: o paciente continua escolhido e o app volta
+  // ao menu dele. Antes era `logout()`, que também desmarcava o paciente e
+  // levava a /profiles — onde o olhar escolhia um perfil sem cursor (FE-12).
   const handleLogout = () => {
-    logout();
+    encerrarAcessoDoCuidador();
     navigate('/menu');
   };
 
@@ -37,9 +40,14 @@ export const CaregiverPageLayout: React.FC<CaregiverPageLayoutProps> = ({ childr
         flexDirection: 'column',
       }}
     >
-      {/* Cabeçalho do Cuidador */}
+      {/* Cabeçalho do Cuidador. `reserva-emergencia`: o botão de Emergência
+          aparece também nas telas do cuidador (o paciente pode estar diante
+          de uma área esquecida aberta), e "Encerrar Acesso" ficava debaixo
+          dele. O cabeçalho vai de borda a borda: margem 0. */}
       <header
+        className="reserva-emergencia"
         style={{
+          '--reserva-margem': '0px',
           position: 'sticky',
           top: 0,
           display: 'flex',

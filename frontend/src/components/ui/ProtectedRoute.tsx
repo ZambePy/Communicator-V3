@@ -64,7 +64,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // 5. Sem paciente escolhido não há calibração nem vocabulário para carregar.
   if (!currentProfile) return <Navigate to="/profiles" replace />;
 
-  if (requireCaregiver && !isCaregiver) return <Navigate to="/menu" replace />;
+  // Rotas da área do cuidador com a área fechada: vão para Configurações, que
+  // mostra o portão do PIN (o paciente sai dele pelo "Cancelar", ao alcance do
+  // olhar). Antes nenhuma rota usava esta guarda, e /conta, /historico,
+  // /relatorio, /settings/voice e /caregiver/guide abriam sem PIN.
+  if (requireCaregiver && !isCaregiver) return <Navigate to="/settings" replace />;
 
   return <>{children}</>;
 };

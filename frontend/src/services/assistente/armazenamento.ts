@@ -27,6 +27,18 @@ import {
 
 export const CHAVE_DO_MODELO = 'irisflow.assistente.v1';
 
+/**
+ * O modelo é POR PACIENTE: `irisflow.assistente.v1.<perfil>`. Antes havia uma
+ * chave só, e o paciente B recebia como sugestão as frases que o paciente A
+ * tinha falado (dado de saúde vazando entre quem divide o computador — a tela
+ * de perfis promete "cada paciente tem o próprio vocabulário") (FE-11).
+ * Sem perfil escolhido, vale a chave antiga.
+ */
+export const chaveDoModeloDoPerfil = (perfilId: string): string => `${CHAVE_DO_MODELO}.${perfilId}`;
+
+let perfil: string | null = null;
+const chaveAtual = (): string => (perfil ? chaveDoModeloDoPerfil(perfil) : CHAVE_DO_MODELO);
+
 /** Chaves do preditor antigo, lidas uma única vez para não perder o aprendido. */
 const CHAVES_ANTIGAS = {
   palavras: 'irisflow_user_words',
@@ -76,17 +88,69 @@ function migrarDoPreditorAntigo(modelo: ModeloDoAssistente): boolean {
   return migrou;
 }
 
+/**
+ * Troca o paciente do assistente. O que o anterior ensinou e ainda não foi
+ * gravado vai para a chave DELE antes da troca; o próximo `carregarModelo` lê
+ * a do novo.
+ */
+export function definirPerfilDoAssistente(perfilId: string | null): void {
+  if (perfilId === perfil) return;
+  if (gravacaoAgendada) {
+    clearTimeout(gravacaoAgendada);
+    gravacaoAgendada = null;
+    if (memoria) gravarAgora(memoria);
+  }
+  perfil = perfilId;
+  memoria = null;
+  aprendizadosDesdeAPoda = 0;
+}
+
+/** Apaga o que o assistente aprendeu com um paciente (perfil removido). */
+export function apagarModeloDoPerfil(perfilId: string): void {
+  if (perfilId === perfil) {
+    memoria = modeloVazio();
+    if (gravacaoAgendada) {
+      clearTimeout(gravacaoAgendada);
+      gravacaoAgendada = null;
+    }
+  }
+  try {
+    localStorage.removeItem(chaveDoModeloDoPerfil(perfilId));
+  } catch {
+    /* nada a fazer */
+  }
+}
+
 /** O modelo em memória, carregando do disco na primeira chamada. */
 export function carregarModelo(): ModeloDoAssistente {
   if (memoria) return memoria;
   let modelo: ModeloDoAssistente;
   try {
-    const bruto = localStorage.getItem(CHAVE_DO_MODELO);
+    const chave = chaveAtual();
+    let bruto = localStorage.getItem(chave);
+    if (!bruto && perfil) {
+      // Migração única: o modelo de antes (uma chave só, sem dono) passa para
+      // o primeiro paciente que abrir o teclado depois da atualização — e sai
+      // da chave global, para não virar o vocabulário de todos os outros.
+      const global = localStorage.getItem(CHAVE_DO_MODELO);
+      if (global) {
+        bruto = global;
+        localStorage.setItem(chave, global);
+        localStorage.removeItem(CHAVE_DO_MODELO);
+      }
+    }
     modelo = bruto ? sanearModelo(JSON.parse(bruto)) : modeloVazio();
     if (!bruto && migrarDoPreditorAntigo(modelo)) {
       // Grava já: a migração é única e perdê-la significaria voltar ao vocabulário
-      // de fábrica para um paciente que já ensinou o aparelho.
+      // de fábrica para um paciente que já ensinou o aparelho. E apaga o antigo:
+      // o próximo paciente sem modelo não pode herdar as palavras deste.
       gravarAgora(modelo);
+      try {
+        localStorage.removeItem(CHAVES_ANTIGAS.palavras);
+        localStorage.removeItem(CHAVES_ANTIGAS.bigramas);
+      } catch {
+        /* nada a fazer */
+      }
     }
   } catch {
     modelo = modeloVazio();
@@ -96,14 +160,15 @@ export function carregarModelo(): ModeloDoAssistente {
 }
 
 function gravarAgora(modelo: ModeloDoAssistente): void {
+  const chave = chaveAtual();
   try {
-    localStorage.setItem(CHAVE_DO_MODELO, JSON.stringify(modelo));
+    localStorage.setItem(chave, JSON.stringify(modelo));
   } catch {
     // Cota estourada: poda agressiva e uma segunda tentativa. Se ainda falhar,
     // o assistente segue funcionando em memória durante a sessão.
     try {
       podar(modelo);
-      localStorage.setItem(CHAVE_DO_MODELO, JSON.stringify(modelo));
+      localStorage.setItem(chave, JSON.stringify(modelo));
     } catch {
       console.warn('[assistente] não foi possível gravar o modelo (cota do armazenamento)');
     }
@@ -164,6 +229,7 @@ export function apagarModelo(): void {
     gravacaoAgendada = null;
   }
   try {
+    localStorage.removeItem(chaveAtual());
     localStorage.removeItem(CHAVE_DO_MODELO);
     localStorage.removeItem(CHAVES_ANTIGAS.palavras);
     localStorage.removeItem(CHAVES_ANTIGAS.bigramas);
@@ -178,9 +244,10 @@ export function resumoDoModelo(): { palavras: number; frases: number; perguntas:
   return { palavras: t.palavras, frases: t.frases, perguntas: t.perguntas, kb: Math.round(t.bytes / 1024) };
 }
 
-/** Só para os testes: esquece o que está em memória e relê o disco. */
+/** Só para os testes: esquece o que está em memória (e o paciente) e relê o disco. */
 export function reiniciarParaTeste(): void {
   memoria = null;
+  perfil = null;
   aprendizadosDesdeAPoda = 0;
   if (gravacaoAgendada) {
     clearTimeout(gravacaoAgendada);

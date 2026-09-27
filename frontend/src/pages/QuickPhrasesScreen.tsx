@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { emitirFalaDoPaciente } from '../cloud/eventos';
 import { falar } from '../services/voz';
-import { MessageSquare, AlertCircle, Tv, Wind, Activity, ChevronRight, ChevronLeft } from 'lucide-react';
+import { MessageSquare, AlertCircle, Tv, Wind, Activity, ChevronRight, ChevronLeft, LayoutGrid } from 'lucide-react';
 import { GazePageLayout } from '../components/ui/GazePageLayout';
 import { GazeGrid } from '../components/ui/GazeGrid';
 import { GazeButton } from '../components/ui/GazeButton';
@@ -76,6 +77,7 @@ export const TEXTOS_DAS_FRASES_RAPIDAS = PHRASES.map((p) => p.text);
 
 export const QuickPhrasesScreen: React.FC = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(0);
   useAvisoDePrimeiroSucesso();
 
@@ -209,12 +211,32 @@ export const QuickPhrasesScreen: React.FC = () => {
               </GazeButton>
             )}
 
-            {/* Células vazias na última página: ocupam a grade 3×2 sem oferecer
-                alvo nem desenhar quase nada — um cartão "desabilitado" com
-                traço no meio parecia botão quebrado. */}
+            {/* Na última página: o caminho para os pictogramas (o cartão
+                "Comunicação" do menu promete "frases rápidas e pictogramas", e a
+                tela existia sem nenhum caminho pela interface — FE-23) e uma
+                célula vazia, que ocupa a grade 3×2 sem oferecer alvo. */}
             {currentPage === 1 && (
               <>
-                <div aria-hidden="true" style={{ borderRadius: 'var(--radius-xl)', border: '2px dashed var(--color-card-border)', opacity: 0.5 }} />
+                <GazeButton
+                  onClick={() => navigate('/pictograms')}
+                  style={{
+                    height: '100%',
+                    borderRadius: 'var(--radius-xl)',
+                    border: '2px solid var(--state-hover-border)',
+                    background: 'var(--state-active-bg)',
+                    color: 'var(--color-primary)',
+                  }}
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', width: '100%' }}>
+                    <LayoutGrid size={56} aria-hidden="true" style={{ marginBottom: '0.5rem' }} />
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.015em' }}>
+                      Pictogramas
+                    </span>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 600, opacity: 0.8, marginTop: '0.25rem' }}>
+                      imagens que falam
+                    </span>
+                  </div>
+                </GazeButton>
                 <div aria-hidden="true" style={{ borderRadius: 'var(--radius-xl)', border: '2px dashed var(--color-card-border)', opacity: 0.5 }} />
               </>
             )}

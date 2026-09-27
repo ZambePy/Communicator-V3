@@ -25,6 +25,7 @@ import { PreparoDaCalibracao } from '../calibration/PreparoDaCalibracao';
 import { ordemDaGrade } from '../calibration/ordemDaGrade';
 import { tutorialConcluido } from '../../services/local/tutorialProfile';
 import { useAuth } from '../../context/AuthContext';
+import { calibracaoEhDoPerfil, registrarDonoDaCalibracao } from '../../services/local/donoDaCalibracao';
 
 interface CalibrationPointUI {
   x: number;
@@ -354,6 +355,8 @@ export const CalibrationCheck: React.FC = () => {
 
   const finishAndTransition = () => {
     setStage('transitioning');
+    // A calibração nova é deste paciente: só ele pode reaproveitá-la depois.
+    registrarDonoDaCalibracao(perfilAtual?.id ?? null);
     // O resultado da calibração vem ANTES de seguir. O diagnóstico de ajuste
     // já era calculado e só aparecia embutido nesta tela; agora ele tem uma
     // leitura própria, em linguagem de cuidador.
@@ -676,7 +679,9 @@ export const CalibrationCheck: React.FC = () => {
    * ativado ou a calibração é invalidada em tempo de execução, e um valor
    * memoizado ofereceria reaproveitar um modelo que já não existe.
    */
-  const temCalibracaoSalva = calibration.isCalibrated();
+  // Só a do próprio paciente: depois de trocar de perfil, a calibração salva
+  // é a do paciente anterior e não serve para este (FE-11).
+  const temCalibracaoSalva = calibration.isCalibrated() && calibracaoEhDoPerfil(perfilAtual?.id ?? null);
 
   /**
    * "de hoje", "há 3 dias" — o que decide se vale reaproveitar.
@@ -695,6 +700,7 @@ export const CalibrationCheck: React.FC = () => {
    * algo foi medido agora.
    */
   const seguirComCalibracaoSalva = () => {
+    registrarDonoDaCalibracao(perfilAtual?.id ?? null);
     const destino = perfilAtual && !tutorialConcluido(perfilAtual.id) ? '/tutorial' : '/menu';
     navigate(destino, { replace: true });
   };
@@ -868,7 +874,11 @@ export const CalibrationCheck: React.FC = () => {
         {/* Botão Voltar */}
         {stage === 'tutorial' && (
           <div style={{ position: 'absolute', top: '2rem', left: '2rem', zIndex: 60 }}>
-            <BackButton />
+            {/* Caminho de recuperação: o paciente chega aqui sozinho ("Recalibre
+                aqui", "Calibrar de novo"), com o rastreamento degradado e sem
+                cursor. Os controles desta tela aceitam o olhar nessas
+                condições (`data-recovery`), com dwell longo (FE-3, FE-4). */}
+            <BackButton recovery />
           </div>
         )}
 
@@ -1121,6 +1131,7 @@ export const CalibrationCheck: React.FC = () => {
                 disabled={!podeComecar}
                 data-dwell-ms="2500"
                 data-testid="start-calibration-full"
+                  data-recovery="true"
                 aria-disabled={!podeComecar}
                 aria-describedby="l2cs-status-message"
                 style={{
@@ -1186,6 +1197,7 @@ export const CalibrationCheck: React.FC = () => {
                   onClick={seguirComCalibracaoSalva}
                   data-dwell-ms="2000"
                   data-testid="usar-calibracao-salva"
+                  data-recovery="true"
                   style={{
                     background: 'transparent',
                     color: TEXT_PRIMARY,
@@ -1213,6 +1225,7 @@ export const CalibrationCheck: React.FC = () => {
                      com o olhar. */
                   data-dwell-ms="2500"
                   data-testid="start-calibration-quick"
+                  data-recovery="true"
                   style={{
                     background: 'transparent',
                     color: TEXT_PRIMARY,
@@ -1461,6 +1474,7 @@ export const CalibrationCheck: React.FC = () => {
               >
                 <button
                   type="button"
+                  data-recovery="true"
                   onClick={() => {
                     setFalhaDoTeste(null);
                     runAccuracyTestThenExit();
@@ -1480,6 +1494,7 @@ export const CalibrationCheck: React.FC = () => {
                 </button>
                 <button
                   type="button"
+                  data-recovery="true"
                   onClick={() => navigate('/menu')}
                   style={{
                     background: 'transparent',
@@ -1656,6 +1671,7 @@ export const CalibrationCheck: React.FC = () => {
                   type="button"
                   data-dwell-ms="2500"
                   data-testid="drift-recalibrar"
+                  data-recovery="true"
                   onClick={() => {
                     setDriftVerdict(null);
                     setAlvosPulados(0);
@@ -1680,6 +1696,7 @@ export const CalibrationCheck: React.FC = () => {
                   type="button"
                   data-dwell-ms="2500"
                   data-testid="drift-continuar"
+                  data-recovery="true"
                   onClick={() => {
                     setStage('testing');
                     // Mesma proteção do caminho automático: sem ela uma exceção

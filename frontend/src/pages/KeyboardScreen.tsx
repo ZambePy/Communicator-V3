@@ -86,6 +86,14 @@ const DWELL_BACK_MS = 2000;
  *  uma letra errada — e fica à ESQUERDA, longe do fim da linha de composição,
  *  onde o olho pousa ao conferir o texto. */
 const DWELL_SPEAK_MS = 2000;
+/**
+ * Pisos relativos ao dwell do paciente (`data-dwell-mult`): com dwell de 2,5 s
+ * ou mais, os absolutos acima ficavam MAIS curtos que uma letra — "Falar"
+ * disparava com 2,3 s para quem usa 4 s (FE-13). Vale o maior dos dois.
+ */
+const MULT_HOME = 1.7;
+const MULT_BACK = 1.3;
+const MULT_SPEAK = 1.3;
 /** Duração do brilho de "falou" (ver `.kb-compose--falou` em index.css). */
 const FALOU_MS = 700;
 
@@ -139,6 +147,26 @@ const EspacoGlifo: React.FC<{ width: number }> = ({ width }) => {
   );
 };
 
+/** Chave do rascunho do teclado (sessão da janela: fechar o app o descarta). */
+const CHAVE_DO_RASCUNHO_DO_TECLADO = 'irisflow.rascunhoDoTeclado';
+
+function lerRascunhoDoTeclado(): string {
+  try {
+    return sessionStorage.getItem(CHAVE_DO_RASCUNHO_DO_TECLADO) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function gravarRascunhoDoTeclado(texto: string): void {
+  try {
+    if (texto) sessionStorage.setItem(CHAVE_DO_RASCUNHO_DO_TECLADO, texto.slice(0, 2000));
+    else sessionStorage.removeItem(CHAVE_DO_RASCUNHO_DO_TECLADO);
+  } catch {
+    // Sem armazenamento: o rascunho vale só enquanto a tela está aberta.
+  }
+}
+
 export const KeyboardScreen: React.FC = () => {
   const { t } = useTranslation();
   const { setIsComposing } = useGaze();
@@ -146,7 +174,12 @@ export const KeyboardScreen: React.FC = () => {
   // esta tela (507 linhas) re-renderizar a cada mudança de estado do engine.
   const isDwelling = useIsDwelling();
   const navigate = useNavigate();
-  const [text, setText] = useState('');
+  // Rascunho guardado na sessão: sair do teclado (Emergência, "Calibrar de
+  // novo", um aviso) e voltar não apaga minutos de digitação pelo olhar (FE-6).
+  const [text, setText] = useState(lerRascunhoDoTeclado);
+  useEffect(() => {
+    gravarRascunhoDoTeclado(text);
+  }, [text]);
   const [lastPressed, setLastPressed] = useState<string | null>(null);
   /** A linha de composição acabou de ser falada: brilho curto, uma vez. */
   const [falou, setFalou] = useState(false);
@@ -513,6 +546,10 @@ export const KeyboardScreen: React.FC = () => {
                     : handleSelectSuggestion(item)
                   : handleItemClick(item)
               }
+              // Apagar repete com o olhar parado nele (apagar várias letras);
+              // as outras teclas só voltam a valer depois que o olhar sai
+              // (rearme por saída, ver GazeContext).
+              data-repetir={activeGroup !== 5 && item === 'Apagar' ? 'true' : undefined}
               noWarn
               style={cell}
             >
@@ -606,6 +643,7 @@ export const KeyboardScreen: React.FC = () => {
             onClick={handleHomeClick}
             aria-label="Início"
             data-dwell-ms={DWELL_HOME_MS}
+            data-dwell-mult={MULT_HOME}
             width={NAV_W}
             height={NAV_H}
             style={{ flex: '0 0 auto' }}
@@ -621,6 +659,7 @@ export const KeyboardScreen: React.FC = () => {
               onClick={handleBackClick}
               aria-label="Voltar"
               data-dwell-ms={DWELL_BACK_MS}
+              data-dwell-mult={MULT_BACK}
               width={NAV_W}
               height={NAV_H}
               style={{ flex: '0 0 auto' }}
@@ -637,6 +676,7 @@ export const KeyboardScreen: React.FC = () => {
               onClick={speak}
               aria-label="Falar o texto"
               data-dwell-ms={DWELL_SPEAK_MS}
+              data-dwell-mult={MULT_SPEAK}
               width={NAV_W}
               height={NAV_H}
               style={{ flex: '0 0 auto', color: KB.ember, borderColor: KB.emberEdge }}

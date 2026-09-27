@@ -44,7 +44,9 @@ const BLINK_WINDOW_MS = 60_000;
 // 3 × 10s = 30s de sinal consistente. Menos que isso é ruído.
 export const MIN_CONSECUTIVE_ABOVE = 3;
 
-const HIDE_ON_PATHS = new Set(['/calibration-check', '/emergency']);
+// No teclado o aviso ficava sobre a última fileira de teclas (Apagar) e o
+// "Modo Descanso" navegava para fora — a frase em composição se perdia (FE-6).
+const HIDE_ON_PATHS = new Set(['/calibration-check', '/emergency', '/keyboard']);
 
 function isPatientScreen(pathname: string): boolean {
   if (pathname === '/' || pathname === '/login') return false;

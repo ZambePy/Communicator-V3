@@ -39,9 +39,14 @@ function TabIcon({ name, active, color, badge, badgeTone = 'primary' }: { name: 
   );
 }
 
+/**
+ * Rótulo da aba. Cinco rótulos numa barra de 320 dp (ou com a fonte do
+ * sistema grande) eram cortados — "Conve…", "Relató…": o texto encolhe até
+ * caber (até 70%). O nome acessível da aba continua completo.
+ */
 function TabLabel({ children, focused, color }: { children: string; focused: boolean; color: ColorValue }) {
   return (
-    <Text variant="tab" weight={focused ? 'bold' : 'semibold'} style={{ color: color as string }} numberOfLines={1}>
+    <Text variant="tab" weight={focused ? 'bold' : 'semibold'} style={{ color: color as string }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
       {children}
     </Text>
   );

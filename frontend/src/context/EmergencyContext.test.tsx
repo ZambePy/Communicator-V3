@@ -11,9 +11,11 @@ vi.mock('./GazeContext', () => ({
   }),
 }));
 
+let testIsCaregiver = false;
 vi.mock('./AuthContext', () => ({
   useAuth: () => ({
     currentProfile: { id: 'patient123' },
+    isCaregiver: testIsCaregiver,
   }),
 }));
 
@@ -21,29 +23,71 @@ describe('EmergencyContext — Sistema de Emergência Canônica', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     testIsDegraded = false;
+    testIsCaregiver = false;
   });
 
-  it('deve exibir o botão de emergência na tela do paciente e ocultar nas do cuidador', () => {
-    // Paciente
-    const { unmount } = render(
-      <MemoryRouter initialEntries={['/menu']}>
-        <EmergencyProvider>
-          <div>Tela do Paciente</div>
-        </EmergencyProvider>
-      </MemoryRouter>
-    );
-    expect(screen.getByRole('button', { name: /Emergência/i })).toBeInTheDocument();
-    unmount();
+  it.each(['/menu', '/settings', '/caregiver', '/conta', '/login', '/', '/profiles'])(
+    'o botão de emergência existe em %s — inclusive no portão do PIN e no login',
+    (rota) => {
+      // A regra antiga era por rota: `/settings*`, `/caregiver*`, `/` e `/login`
+      // ficavam sem botão. O menu do paciente leva a `/settings`, e licença
+      // bloqueada joga tudo no `/login`: o paciente ficava sem socorro.
+      render(
+        <MemoryRouter initialEntries={[rota]}>
+          <EmergencyProvider>
+            <div>Tela</div>
+          </EmergencyProvider>
+        </MemoryRouter>
+      );
+      expect(screen.getByRole('button', { name: /Emergência/i })).toBeInTheDocument();
+    }
+  );
 
-    // Cuidador
-    render(
+  it('continua lá com o cuidador conectado; só some na própria tela de emergência', () => {
+    testIsCaregiver = true;
+    const { unmount } = render(
       <MemoryRouter initialEntries={['/settings']}>
         <EmergencyProvider>
           <div>Tela do Cuidador</div>
         </EmergencyProvider>
       </MemoryRouter>
     );
+    expect(screen.getByRole('button', { name: /Emergência/i })).toBeInTheDocument();
+    unmount();
+
+    render(
+      <MemoryRouter initialEntries={['/emergency']}>
+        <EmergencyProvider>
+          <div>Tela de emergência</div>
+        </EmergencyProvider>
+      </MemoryRouter>
+    );
     expect(screen.queryByRole('button', { name: /Emergência/i })).toBeNull();
+  });
+
+  it('o aviso "Recalibre aqui" não aparece com o cuidador conectado (ele usa o mouse)', () => {
+    testIsDegraded = true;
+    testIsCaregiver = true;
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <EmergencyProvider>
+          <div>Conteúdo</div>
+        </EmergencyProvider>
+      </MemoryRouter>
+    );
+    expect(screen.queryByText(/Rastreamento impreciso/i)).toBeNull();
+  });
+
+  it('no portão do PIN (cuidador desconectado) o aviso "Recalibre aqui" aparece: é caminho do paciente', () => {
+    testIsDegraded = true;
+    render(
+      <MemoryRouter initialEntries={['/settings']}>
+        <EmergencyProvider>
+          <div>Conteúdo</div>
+        </EmergencyProvider>
+      </MemoryRouter>
+    );
+    expect(screen.getByText(/Rastreamento impreciso/i)).toBeInTheDocument();
   });
 
   it('deve entrar em estado de confirmação e iniciar contagem regressiva ao clicar no botão', () => {

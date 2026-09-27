@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle2, Circle, Activity, Frown, Smile, HeartPulse, Save } from 'lucide-react';
+import { CheckCircle2, Circle, Activity, Frown, Smile, HeartPulse, Save, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { CaregiverPageLayout } from '../../components/ui/CaregiverPageLayout';
@@ -24,11 +24,16 @@ interface CaregiverState {
   entries: DiaryEntry[];
 }
 
-const DEFAULT_TASKS: Task[] = [
-  { id: 1, label: 'Tomar medicação da manhã', done: false },
-  { id: 2, label: 'Fisioterapia (14h)', done: false },
-  { id: 3, label: 'Beber 500ml de água', done: false },
-];
+/**
+ * Sem tarefas "de fábrica": antes toda instalação nascia com "Tomar medicação
+ * da manhã" e "Beber 500ml de água" — informação clínica que ninguém
+ * cadastrou (e beber água é inadequado para quem tem disfagia, comum na ELA).
+ * A rotina é do cuidador, que acrescenta o que fizer sentido (FE-20).
+ */
+const DEFAULT_TASKS: Task[] = [];
+
+/** Tamanho máximo do texto de uma tarefa. */
+const MAX_TAREFA = 80;
 
 const storageKey = (userId: string) => `irisflow_caregiver_${userId}`;
 
@@ -36,10 +41,16 @@ const loadState = (userId: string): CaregiverState => {
   try {
     const raw = localStorage.getItem(storageKey(userId));
     if (!raw) return { tasks: DEFAULT_TASKS, entries: [] };
-    const parsed = JSON.parse(raw) as Partial<CaregiverState>;
+    const parsed = JSON.parse(raw) as Partial<CaregiverState> | null;
+    // Só listas: um valor gravado fora do formato (edição à mão, versão
+    // antiga) derrubava o painel inteiro em `tasks.map` (FE-8).
+    const tarefas = Array.isArray(parsed?.tasks)
+      ? parsed.tasks.filter((t): t is Task => !!t && typeof t === 'object' && typeof (t as Task).label === 'string')
+      : null;
+    const diario = Array.isArray(parsed?.entries) ? parsed.entries.filter((e) => !!e && typeof e === 'object') : [];
     return {
-      tasks: parsed.tasks ?? DEFAULT_TASKS,
-      entries: parsed.entries ?? [],
+      tasks: tarefas ?? DEFAULT_TASKS,
+      entries: diario,
     };
   } catch {
     return { tasks: DEFAULT_TASKS, entries: [] };
@@ -55,16 +66,34 @@ export const CaregiverDashboard: React.FC = () => {
 
   const [tasks, setTasks] = useState<Task[]>(initial.tasks);
   const [entries, setEntries] = useState<DiaryEntry[]>(initial.entries);
+  const [novaTarefa, setNovaTarefa] = useState('');
   const [painLevel, setPainLevel] = useState(0);
   const [mood, setMood] = useState<'good' | 'bad' | null>(null);
 
 
   useEffect(() => {
-    localStorage.setItem(storageKey(userId), JSON.stringify({ tasks, entries }));
+    try {
+      localStorage.setItem(storageKey(userId), JSON.stringify({ tasks, entries }));
+    } catch (e) {
+      // Armazenamento cheio ou indisponível: o painel segue funcionando; só
+      // não guarda (antes a exceção num efeito derrubava a tela).
+      console.warn('[cuidador] não foi possível gravar o painel:', e);
+    }
   }, [tasks, entries, userId]);
 
   const toggleTask = (id: number) => {
     setTasks((t) => t.map((task) => (task.id === id ? { ...task, done: !task.done } : task)));
+  };
+
+  const adicionarTarefa = () => {
+    const label = novaTarefa.trim().slice(0, MAX_TAREFA);
+    if (!label) return;
+    setTasks((t) => [...t, { id: t.reduce((max, x) => Math.max(max, x.id), 0) + 1, label, done: false }]);
+    setNovaTarefa('');
+  };
+
+  const removerTarefa = (id: number) => {
+    setTasks((t) => t.filter((task) => task.id !== id));
   };
 
   const saveEntry = () => {
@@ -170,8 +199,13 @@ export const CaregiverDashboard: React.FC = () => {
               marginTop: '1.5rem',
             }}
           >
+            {tasks.length === 0 ? (
+              <li style={{ color: 'var(--color-text-muted)', fontSize: '1rem', lineHeight: 1.5 }} data-testid="rotina-vazia">
+                Nenhuma tarefa ainda. Acrescente abaixo o que faz parte do dia de quem você cuida.
+              </li>
+            ) : null}
             {tasks.map((task) => (
-              <li key={task.id}>
+              <li key={task.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch' }}>
                 <button
                   type="button"
                   role="checkbox"
@@ -209,9 +243,80 @@ export const CaregiverDashboard: React.FC = () => {
                     {task.label}
                   </span>
                 </button>
+                <button
+                  type="button"
+                  data-no-dwell
+                  onClick={() => removerTarefa(task.id)}
+                  aria-label={`Remover tarefa: ${task.label}`}
+                  title="Remover tarefa"
+                  style={{
+                    flex: '0 0 auto',
+                    width: '3.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '1rem',
+                    border: '1px solid var(--color-card-border)',
+                    background: 'transparent',
+                    color: 'var(--color-text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <Trash2 size={20} aria-hidden="true" />
+                </button>
               </li>
             ))}
           </ul>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              adicionarTarefa();
+            }}
+            style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', flexWrap: 'wrap' }}
+          >
+            <label htmlFor="nova-tarefa" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+              Nova tarefa da rotina
+            </label>
+            <input
+              id="nova-tarefa"
+              data-no-dwell
+              value={novaTarefa}
+              onChange={(e) => setNovaTarefa(e.target.value)}
+              maxLength={MAX_TAREFA}
+              placeholder="Ex.: Fisioterapia às 14h"
+              style={{
+                flex: '1 1 14rem',
+                minHeight: '3rem',
+                padding: '0 1rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--color-card-border)',
+                background: 'var(--color-bg-sunken)',
+                color: 'var(--color-text-base)',
+                fontSize: '1rem',
+              }}
+            />
+            <button
+              type="submit"
+              data-no-dwell
+              disabled={!novaTarefa.trim()}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                minHeight: '3rem',
+                padding: '0 1.25rem',
+                borderRadius: 'var(--radius-md)',
+                border: '1.5px solid var(--state-hover-border)',
+                background: 'var(--state-active-bg)',
+                color: 'var(--color-text-base)',
+                fontWeight: 700,
+                cursor: novaTarefa.trim() ? 'pointer' : 'not-allowed',
+                opacity: novaTarefa.trim() ? 1 : 0.6,
+              }}
+            >
+              <Plus size={18} aria-hidden="true" /> Adicionar
+            </button>
+          </form>
         </section>
 
         <section

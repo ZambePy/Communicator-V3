@@ -279,7 +279,7 @@ export const SettingsScreen: React.FC = () => {
   const { reminders, addReminder, deleteReminder } = useReminders();
 
   const [consentActive, setConsentActive] = useState(hasConsent());
-  const [clinicalData, setClinicalData] = useState(getClinicalData());
+  const [clinicalData, setClinicalData] = useState(() => getClinicalData());
 
   const handleToggleConsent = (consented: boolean) => {
     setConsent(consented);
@@ -1172,12 +1172,15 @@ export const SettingsScreen: React.FC = () => {
           >
             No modo apresentação, nada sai deste computador: o pedido de socorro, as mensagens e os
             indicadores deixam de chegar ao celular do cuidador, e uma faixa fica visível na tela para que
-            ninguém confunda a demonstração com uso real. As telas continuam mostrando o estado verdadeiro
-            do rastreamento — o modo não inventa números.
+            ninguém confunda a demonstração com uso real. O modo se desliga sozinho depois de 2 horas. As
+            telas continuam mostrando o estado verdadeiro do rastreamento — o modo não inventa números.
           </p>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* Só com o mouse: o modo apresentação descarta os pedidos de
+                socorro — o olhar do paciente não pode ligá-lo. */}
             <button
               type="button"
+              data-no-dwell="true"
               onClick={() => {
                 const novo = !apresentacao;
                 setApresentacao(novo);
@@ -1223,6 +1226,7 @@ export const SettingsScreen: React.FC = () => {
             </button>
             <button
               type="button"
+              data-no-dwell="true"
               onClick={refazerApresentacao}
               aria-label="Refazer a apresentação inicial"
               style={{

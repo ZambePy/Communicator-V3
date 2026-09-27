@@ -264,9 +264,9 @@ describe('reajuste rápido: a Emergência continua por cima', () => {
     expect(aviso.mock.calls.some((c) => String(c[0]).includes('emergência em curso'))).toBe(true);
   });
 
-  it('também nas telas do cuidador, onde o botão normalmente não aparece', async () => {
+  it('também nas telas do cuidador — onde agora o botão aparece sempre (FE-1/FE-10)', async () => {
     montar('/settings');
-    expect(screen.queryByRole('button', { name: NOME_DA_EMERGENCIA })).toBeNull();
+    expect(screen.getByRole('button', { name: NOME_DA_EMERGENCIA })).toBeInTheDocument();
     await iniciarReajuste();
     expect(screen.getByRole('button', { name: NOME_DA_EMERGENCIA })).toBeInTheDocument();
   });

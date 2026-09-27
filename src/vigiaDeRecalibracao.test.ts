@@ -8,6 +8,7 @@ import {
   FATOR_VIES,
   VIES_MINIMO_PX,
   AMOSTRAS_MINIMAS_DA_FIXACAO,
+  MEMORIA_DAS_FIXACOES_MS,
 } from './vigiaDeRecalibracao';
 
 function storageCom(obj: unknown): Pick<Storage, 'getItem'> {
@@ -116,5 +117,56 @@ describe('fração do teto da correção — independente da referência', () =>
   it('abaixo da fração, sem referência, continua "não sei"', () => {
     expect(avaliarNecessidadeDeRecalibracao({ bceaPx2: 1e6, viesPx: 500, fracaoDoTeto: 0.5 }, null))
       .toEqual({ precisa: false, motivo: null });
+  });
+});
+
+// CORE-8: o portão por raio (60 px) punha um teto no que se media — o limiar
+// (3× a referência) ficava acima do máximo mensurável — e quando o modelo
+// piorava as janelas deixavam de contar: a mediana congelava no valor bom.
+describe('VigiaDeRecalibracao — a dispersão que cresce é medida (CORE-8)', () => {
+  const gerador = (seed0: number) => {
+    let seed = seed0;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    return () => (rnd() + rnd() + rnd() + rnd() - 2) * Math.sqrt(3);
+  };
+  /** Fixações em pontos que mudam a cada 1,5 s (sacadas entre elas), a 30 Hz. */
+  function olhar(v: VigiaDeRecalibracao, sigma: number, deMs: number, ateMs: number, seed = 11) {
+    const g = gerador(seed);
+    for (let t = deMs; t <= ateMs; t += 33) {
+      const alvo = Math.floor(t / 1500) % 4;
+      const cx = 400 + (alvo % 2) * 600;
+      const cy = 300 + Math.floor(alvo / 2) * 400;
+      v.registrarPredicao(cx + sigma * g(), cy + sigma * g(), t);
+    }
+  }
+
+  it('com a precisão medida na pessoa (≈27 px por eixo), dispersão 3× maior em BCEA acusa', () => {
+    // Referência do teste de precisão com σ ≈ 27 px: 2·k·π·σ² ≈ 5 250 px².
+    const referencia = { bceaPx2: 5250, viesPx: 10, timestamp: 1 };
+    const v = new VigiaDeRecalibracao();
+    olhar(v, 27, 0, 60_000);
+    expect(avaliarNecessidadeDeRecalibracao({ bceaPx2: v.bceaRecentePx2(), viesPx: null }, referencia).precisa).toBe(false);
+
+    const piorou = new VigiaDeRecalibracao();
+    olhar(piorou, 27 * 2.2, 0, 60_000); // BCEA ≈ 4,8× a referência
+    expect(piorou.fixacoesMedidas).toBeGreaterThan(0);
+    expect(avaliarNecessidadeDeRecalibracao({ bceaPx2: piorou.bceaRecentePx2(), viesPx: null }, referencia))
+      .toEqual({ precisa: true, motivo: 'bcea' });
+  });
+
+  it('depois de um período bom, um período ruim move a mediana (as fixações antigas expiram)', () => {
+    const v = new VigiaDeRecalibracao();
+    olhar(v, 12, 0, 90_000);
+    const boa = v.bceaRecentePx2()!;
+    olhar(v, 60, 90_033, 90_000 + MEMORIA_DAS_FIXACOES_MS + 30_000, 23);
+    const agora = v.bceaRecentePx2()!;
+    expect(agora).toBeGreaterThan(boa * 10);
+  });
+
+  it('as janelas com sacada no meio continuam fora', () => {
+    const v = new VigiaDeRecalibracao();
+    // Olhar que salta 300 px a cada 250 ms: nenhuma janela de 500 ms é estável.
+    for (let t = 0; t <= 5000; t += 33) v.registrarPredicao(Math.floor(t / 250) % 2 ? 800 : 500, 400, t);
+    expect(v.fixacoesMedidas).toBe(0);
   });
 });

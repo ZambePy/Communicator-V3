@@ -24,14 +24,14 @@ import { saudeDoRastreamento } from './saudeDoRastreamento';
 import { useSettings } from '../context/SettingsContext';
 import { useLicense } from '../context/LicenseContext';
 import { limitarDwellMs } from '../dwellMs';
-import { EVENTO_ANTES_DE_SAIR } from '../services/license/supabaseLicenseService';
+import { EVENTO_ANTES_DE_SAIR, type DetalheAntesDeSair } from '../services/license/supabaseLicenseService';
 import { cloudConfig, nuvemConfigurada } from './config';
 import { cofre, CHAVES, infoDoApp } from './armazenamento';
 import { supabase } from './supabaseClient';
-import { DesktopSync } from './desktopSync';
-import { ouvir, emitirFalaDoPaciente, emitirPedidoDeAjuda, type EventoDoPaciente } from './eventos';
+import { DesktopSync, novoIdDePedido } from './desktopSync';
+import { ouvir, emitirFalaDoPaciente, emitirPedidoDeAjuda, entregaDaResposta, informarEntrega, type EventoDoPaciente } from './eventos';
 import { camposDeCalibracao, resumoDoRelatorio } from './sessao';
-import { falarComVozDoSistema } from '../services/voz/sistema';
+import { falarComVozDoSistema, vozDoSistemaDisponivel } from '../services/voz/sistema';
 import { assinarEstadoDaVoz, estadoDaVoz, vozClonadaPronta } from '../services/voz';
 import { montarRelatorio } from '../services/diagnostico/relatorioDeSuporte';
 import { instalarRelatosAutomaticos, registrarEnviador } from '../services/diagnostico/relatosAutomaticos';
@@ -124,7 +124,9 @@ const POLL_MS = 20_000;
 
 // Mensagem do CUIDADOR lida em voz alta: voz do sistema, de propósito — a voz
 // clonada é a do paciente e não deve dizer o que outra pessoa escreveu.
-const falar = (texto: string): Promise<void> => falarComVozDoSistema(texto, { rate: 0.95 });
+// Mensagem do cuidador: fala prioritária — o alarme da emergência espera por
+// ela em vez de cortá-la (FE-5). `true` só se foi falada inteira.
+const falar = (texto: string): Promise<boolean> => falarComVozDoSistema(texto, { rate: 0.95, prioritaria: true });
 
 export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const gaze = useGaze();
@@ -148,6 +150,8 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const presetAplicadoRef = useRef<string | null>(null);
   /** Mensagens do cuidador sendo faladas agora — evita falar duas vezes (realtime × polling). */
   const falandoRef = useRef(new Set<string>());
+  /** Mensagens mostradas sem voz (o sistema não tem voz): não voltam a cada heartbeat. */
+  const semVozRef = useRef(new Set<string>());
   const realtimeRef = useRef<CloudState['realtime']>('indisponivel');
   const canalRef = useRef<RealtimeChannel | null>(null);
   const syncRef = useRef<DesktopSync | null>(null);
@@ -156,6 +160,11 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const sync = useMemo(
     () => new DesktopSync({
       chave: () => vinculoRef.current?.device_key ?? null,
+      // Socorro que esperava na fila saiu: a tela de emergência troca "sem
+      // internet" por "enviado".
+      aoEntregarDaFila: (acao) => {
+        if (acao.action === 'help.create' && acao.id) informarEntrega(acao.id, 'enviado');
+      },
       aoPerderCredencial: () => {
         // Computador desvinculado pelo cuidador (site ou app): esquece a chave,
         // fecha o realtime, descarta a fila (não pode vazar para outra conta) e
@@ -238,11 +247,18 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const mensagens = existe ? s.mensagens.map((x) => (x.id === m.id ? m : x)) : [...s.mensagens, m].slice(-200);
       return { mensagens, naoFaladas: mensagens.filter((x) => x.sender === 'cuidador' && !x.spoken).length };
     });
-    if (m.spoken || falandoRef.current.has(m.id)) return;
+    if (m.spoken || falandoRef.current.has(m.id) || semVozRef.current.has(m.id)) return;
     falandoRef.current.add(m.id);
     try {
       mostrarNaTela(m);
-      await falar(m.text);
+      const falou = await falar(m.text);
+      if (!falou) {
+        // Não foi ouvida inteira: o celular do cuidador NÃO recebe "falada".
+        // Interrompida, ela volta no próximo heartbeat (fica pendente no
+        // servidor). Sem voz no sistema, fica só na tela, sem repetir o cartão.
+        if (!vozDoSistemaDisponivel()) semVozRef.current.add(m.id);
+        return;
+      }
       await sync.enviar({ action: 'message.spoken', message_id: m.id });
       patch((s) => {
         const mensagens = s.mensagens.map((x) => (x.id === m.id ? { ...x, spoken: true } : x));
@@ -495,12 +511,20 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }).catch(() => undefined);
       sessaoIdRef.current = null;
     };
+    // Sair da conta revoga a chave em seguida: fecha a sessão enquanto ela vale
+    // e tenta esvaziar a fila offline (socorros e mensagens que esperavam
+    // internet), que a saída descarta.
+    const aoSairDaConta = (ev: Event) => {
+      aoFechar();
+      const s = syncRef.current;
+      if (!s) return;
+      (ev as CustomEvent<DetalheAntesDeSair>).detail?.esperar?.(s.drenar().catch(() => 0));
+    };
     window.addEventListener('pagehide', aoFechar);
-    // Sair da conta revoga a chave em seguida: fecha a sessão enquanto ela vale.
-    window.addEventListener(EVENTO_ANTES_DE_SAIR, aoFechar);
+    window.addEventListener(EVENTO_ANTES_DE_SAIR, aoSairDaConta);
     return () => {
       window.removeEventListener('pagehide', aoFechar);
-      window.removeEventListener(EVENTO_ANTES_DE_SAIR, aoFechar);
+      window.removeEventListener(EVENTO_ANTES_DE_SAIR, aoSairDaConta);
     };
   }, []);
 
@@ -517,19 +541,30 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             c.frases++;
             c.caracteres += e.texto.length;
           }
+          // O id nasce aqui e vai junto para o servidor (e para a fila): o
+          // reenvio de uma mensagem cuja resposta se perdeu não a duplica, e a
+          // cópia local já tem o id que o realtime vai trazer.
           const local: Message = {
-            id: `local-${Date.now()}`, beneficiary_id: vinculoRef.current?.beneficiary_id ?? '',
+            id: novoIdDePedido(), beneficiary_id: vinculoRef.current?.beneficiary_id ?? '',
             sender: 'paciente', kind: e.kind, text: e.texto, created_at: new Date().toISOString(), read_at: null, spoken: true,
           };
           patch((s) => ({ mensagens: [...s.mensagens, local].slice(-200) }));
-          void sync.enviar({ action: 'message.send', text: e.texto, kind: e.kind }).then((r) => {
-            if (r.id) patch((s) => ({ mensagens: s.mensagens.map((m) => (m.id === local.id ? { ...m, id: r.id! } : m)) }));
+          void sync.enviar({ action: 'message.send', id: local.id, text: e.texto, kind: e.kind }).then((r) => {
+            if (r.id && r.id !== local.id) patch((s) => ({ mensagens: s.mensagens.map((m) => (m.id === local.id ? { ...m, id: r.id! } : m)) }));
+            if (r.enfileirado) patch({ filaPendente: sync.tamanhoDaFila });
           });
           break;
         }
-        case 'ajuda':
-          void sync.enviar({ action: 'help.create', ...(e.id ? { id: e.id } : {}), kind: e.kind, message: e.mensagem, session_id: sessaoIdRef.current });
+        case 'ajuda': {
+          const id = e.id;
+          if (id) informarEntrega(id, 'enviando');
+          void sync.enviar({ action: 'help.create', ...(id ? { id } : {}), kind: e.kind, message: e.mensagem, session_id: sessaoIdRef.current })
+            .then((r) => {
+              if (id) informarEntrega(id, entregaDaResposta(r));
+              patch({ filaPendente: sync.tamanhoDaFila });
+            });
           break;
+        }
         case 'calibracao': {
           const r = e.resultado;
           void sync.enviar({

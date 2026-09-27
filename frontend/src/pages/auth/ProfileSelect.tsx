@@ -6,6 +6,7 @@ import { UserCircle, UserPlus, ArrowRight, Trash2, AlertCircle, Camera, X } from
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { ProgressoDoOnboarding } from '../../components/ui/ProgressoDoOnboarding';
 import { EstadoVazio } from '../../components/ui/EstadoDaTela';
+import { useConfirmacao } from '../../components/ui/DialogoDeConfirmacao';
 
 /**
  * Escolha e cadastro do paciente.
@@ -55,6 +56,19 @@ async function reduzirImagem(file: File): Promise<string> {
 export const ProfileSelect: React.FC = () => {
   const { t } = useTranslation();
   const { profiles, selectProfile, createProfile, removeProfile } = useAuth();
+  const { confirmar, dialogo } = useConfirmacao();
+
+  // Remover era UM clique, sem confirmação, num botão de 32 px dentro do
+  // cartão de "Iniciar sessão": um clique errado apagava o perfil (FE-15).
+  const pedirRemocao = async (p: { id: string; name: string }) => {
+    const ok = await confirmar({
+      titulo: t('profiles.removeConfirmTitle', { name: p.name }),
+      descricao: t('profiles.removeConfirmBody'),
+      confirmar: t('profiles.removeConfirm'),
+      destrutivo: true,
+    });
+    if (ok) removeProfile(p.id);
+  };
   const navigate = useNavigate();
 
   const [criando, setCriando] = useState(false);
@@ -115,6 +129,7 @@ export const ProfileSelect: React.FC = () => {
         padding: '2.5rem 2rem',
       }}
     >
+      {dialogo}
       <ProgressoDoOnboarding atual="perfil" />
       {/* `coluna-livre-da-emergencia`: a 1280×720 o título de 860 px chegava
           por baixo da Emergência quando a página rolava. */}
@@ -348,8 +363,10 @@ export const ProfileSelect: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() => removeProfile(p.id)}
+                    data-no-dwell
+                    onClick={() => void pedirRemocao(p)}
                     aria-label={`${t('profiles.remove')} ${p.name}`}
+                    title={`${t('profiles.remove')} ${p.name}`}
                     style={{
                       position: 'absolute',
                       top: 10,
@@ -357,8 +374,8 @@ export const ProfileSelect: React.FC = () => {
                       background: 'var(--color-card-bg)',
                       border: '1px solid var(--color-card-border)',
                       borderRadius: '50%',
-                      width: 32,
-                      height: 32,
+                      width: 40,
+                      height: 40,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
