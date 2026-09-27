@@ -112,7 +112,7 @@ export default function Pagamento() {
 
   return (
     <div className="flow">
-      <AmbientBackground particles={14} scan={false} light />
+      <AmbientBackground variante="suave" />
 
       <div className="container container--narrow flow__inner">
         <Reveal anim="fade">

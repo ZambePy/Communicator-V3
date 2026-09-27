@@ -21,7 +21,7 @@ export default function Paciente() {
   };
 
   const confirmarDesvinculo = (id: string, name: string) => {
-    const texto = `${name} deixa de enviar sessões e mensagens. Para voltar, é só entrar de novo no IrisFlow do computador com esta conta.`;
+    const texto = `${name} deixa de enviar sessões e mensagens. Para voltar, é só entrar de novo no IrisFlow Communicator, no computador, com esta conta.`;
     if (Platform.OS === 'web') return desvincular(id);
     Alert.alert('Desvincular este computador?', texto, [
       { text: 'Manter', style: 'cancel' },
@@ -81,7 +81,7 @@ export default function Paciente() {
       {falha ? <Notice tone="danger" title="Não foi possível desvincular" text={falha} style={styles.notice} /> : null}
       {devices.length === 0 ? (
         <Card>
-          <EmptyState icon="desktop-outline" title="Nenhum computador ainda" body={`No computador de ${nome}, abra o IrisFlow e entre com esta mesma conta. O vínculo é automático.`} compact />
+          <EmptyState icon="desktop-outline" title="Nenhum computador ainda" body={`No computador de ${nome}, abra o IrisFlow Communicator e entre com esta mesma conta. O vínculo é automático.`} compact />
         </Card>
       ) : (
         <Card padding={0}>

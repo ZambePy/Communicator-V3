@@ -63,33 +63,3 @@ export function Logo({
     </Link>
   )
 }
-
-/**
- * O símbolo da íris como elemento gráfico: recebe um halo que pulsa e
- * anéis concêntricos que se expandem, sem nada desenhado por cima da
- * marca. Serve de âncora visual onde antes havia uma ilustração.
- */
-export function IrisMark({
-  size = 200,
-  tone = 'negativo',
-  spin = true,
-}: {
-  size?: number
-  tone?: 'positivo' | 'negativo'
-  spin?: boolean
-}) {
-  return (
-    <span className="irismark" style={{ width: `min(100%, ${size}px)` }} aria-hidden="true">
-      <span className="irismark__halo" />
-      <span className="irismark__ring" />
-      <span className="irismark__ring irismark__ring--2" />
-      <img
-        src={FILES.symbol[tone]}
-        alt=""
-        className={`irismark__img${spin ? ' is-spinning' : ''}`}
-        width={512}
-        height={512}
-      />
-    </span>
-  )
-}

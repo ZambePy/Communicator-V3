@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { Button, IrisLogo, IrisOrbs, Text } from '@/components';
+import { Button, IrisOrbs, MarcaCuidador, Text } from '@/components';
 import { siteRoute } from '@/lib/config';
 import { layout, motion, radius, sizes, spacing, useEntrada, useTheme } from '@/theme';
 
@@ -35,15 +35,7 @@ export default function Onboarding() {
     <LinearGradient colors={colors.gradientBrand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.root, { paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xl }]}>
       <IrisOrbs />
       <Animated.View entering={entrada.suave()} style={styles.brand}>
-        <IrisLogo size={sizes.logo.lg} onDark halo />
-        <Text variant="h2" tone="onDark" accessibilityRole="header">
-          IrisFlow
-        </Text>
-        <View style={[styles.tag, { backgroundColor: colors.onDarkFill }]}>
-          <Text variant="caption" tone="onDark" weight="semibold">
-            Para quem cuida
-          </Text>
-        </View>
+        <MarcaCuidador size={sizes.logo.lg} onDark halo />
       </Animated.View>
 
       <ScrollView ref={ref} horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={onScroll} style={styles.pager}>
@@ -95,8 +87,7 @@ function Dot({ active }: { active: boolean }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'space-between' },
-  brand: { alignItems: 'center', gap: spacing.sm },
-  tag: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
+  brand: { alignItems: 'center' },
   pager: { flexGrow: 0 },
   slide: { paddingHorizontal: layout.gutter + spacing.sm, justifyContent: 'center', alignItems: 'center' },
   icon: { width: sizes.tile.xl + spacing.md, height: sizes.tile.xl + spacing.md, borderRadius: radius.xl, alignItems: 'center', justifyContent: 'center', borderWidth: sizes.border },

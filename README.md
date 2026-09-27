@@ -46,7 +46,7 @@ O repositório é um monorepo com as quatro peças do produto:
 |---|---|
 | `src/`, `frontend/`, `electron/`, `voice-engine/` | o app desktop (núcleo do rastreamento, interface, processo principal, motor de voz) |
 | `site/` | o site: inscrição na beta, conta e download dos instaladores ([Site](#site-site)) |
-| `app/` | o app do cuidador para celular, em Expo ([App do cuidador](#app-do-cuidador-app)) |
+| `app/` | o **IrisFlow Cuidador**, o app de celular de quem cuida, em Expo ([IrisFlow Cuidador](#irisflow-cuidador-app)) |
 | `supabase/` | banco, regras de acesso e Edge Functions, compartilhados pelos três ([Supabase](#supabase-supabase)) |
 
 A privacidade do produto se organiza em **três camadas**, e vale enunciá-las
@@ -73,6 +73,40 @@ verificação de atualizações (GitHub Releases), o download, uma vez, dos peso
 do modelo de voz (processo Python) e o envio de relatórios de falha — este
 só num instalador compilado com `IRISFLOW_CRASH_URL`, um segredo opcional do
 release que, sem cadastro, deixa o envio desligado.
+
+---
+
+## Estado e resultados
+
+**Fase:** beta gratuita. O site já recebe inscrições; o download abre em
+**10/11/2026**, primeiro para Windows 10 e 11 (macOS e Linux em preparação —
+[Pendências e riscos](#pendências-e-riscos), item 7).
+
+**Acurácia medida.** Protocolo, métricas e todas as ressalvas em
+[`docs/MEDICOES.md`](docs/MEDICOES.md); o resumo sem jargão está na §0 de lá.
+
+| rodada | erro médio | acerto num raio de 100 px | observação |
+|---|---|---|---|
+| baseline de 20/09/2026, **com** o L2CS | **1,40°** (56 px) | 76 % | menor erro medido; uma pessoa, sem réplica |
+| M1, 06/09/2026 (pipeline anterior) | 1,86° (74 px) | 64 % | reproduzido em 1,93° numa segunda calibração |
+| instalador da beta, **sem** o L2CS | não medido | — | é a próxima medição (M-ablação, `docs/MEDICOES.md` §4.6) |
+| literatura, webcam | 2–4° | — | WebGazer 4,17° · FAZE 2,4° · L2CS-Net sozinho 3,92° (MPIIGaze) |
+| literatura, infravermelho de laboratório | 0,5–1° | — | Tobii Pro Nano 0,54–0,69° · EyeLink 0,75–0,86° |
+
+Três coisas precisam andar junto com esse número sempre que ele for citado:
+
+- **É N = 1.** Uma pessoa, num posto de uso conhecido, calibrada para ela
+  mesma. A faixa da literatura vem de muitos participantes.
+- **Foi medido com o L2CS**, e os pesos dele têm licença só para pesquisa. O
+  instalador da beta sai sem eles ([Modelos](#modelos)) e rastreia só pela
+  íris; a acurácia dessa versão ainda não foi medida. O caminho para
+  recuperar o bloco angular com licença comercial é o retreino do V2 (ramo
+  ocular com UnityEyes 2, MIT; ramo facial dependente de licença).
+- **A precisão piorou** enquanto a acurácia melhorava (tremor de 21,8 → 38,1 px
+  entre M1 e o baseline), e o efeito do filtro sobre o dwell não tem medida
+  própria (`docs/MEDICOES.md` §14.3 e §14.4).
+
+**Código:** o estado dos testes está em [Verificação](#verificação).
 
 ---
 
@@ -630,7 +664,9 @@ projetos, e um `torchvision` de outra versão faz o modelo falhar ao carregar
 | Face Landmarker | `frontend/public/mediapipe/models/face_landmarker.task` | MediaPipe Tasks Vision, 478 landmarks com íris |
 | ONNX Runtime Web | `frontend/public/ort/` | binários WASM/WebGPU carregados pelo worker |
 
-Sem o arquivo `.onnx` o app roda com as 4 features de íris (`?ep=off`).
+Sem o arquivo `.onnx` (ou com `?ep=off`) o vetor fica só com as duas dimensões
+absolutas da íris por olho (`irisAbs`) — é assim que o instalador da beta roda
+desde 24/09 ([Pendências e riscos](#pendências-e-riscos), item 1).
 
 Cada modelo tem uma **ficha de proveniência** no seu `*.meta.json` (bloco
 `proveniencia`: bases de treino, licença, `usoComercial`, contrato) e um
@@ -794,16 +830,28 @@ Regras da interface do paciente: alvos de no mínimo 160×120 px, nada se move
 sob o olhar (sem `transform` em hover), uma ação principal por tela, zona de
 descanso sem alvos, textos curtos e sem jargão.
 
-### Lazer e jogos
+### Lazer e bem-estar
 
-O cartão **Lazer** do menu reúne o que não é comunicação: **Estoura Bolhas**,
-**Siga o Alvo**, **Jogo da Memória**, **Desenho**, **Notícias** e
-**Meditação**. Os quatro primeiros foram reescritos para funcionar **por
-fixação ocular** — antes eram esboços controlados por mouse, isto é,
-inutilizáveis exatamente pela pessoa para quem o app existe. O Desenho pinta na
+O cartão **Lazer** do menu abre **Lazer e bem-estar**
+([`GamesMenu.tsx`](frontend/src/pages/GamesMenu.tsx)), em três grupos: **Fotos e
+memórias** (Tirar Foto e Galeria de Fotos), **Jogos com o olhar** (Estoura Bolhas,
+Jogo da Memória, Siga o Alvo e Desenho com Olhar) e **Bem-estar** (Leituras, os
+textos que o cuidador guarda em Configurações para o paciente ouvir em voz alta;
+Meditação; e Descanso, uma tela calma para descansar o olhar). Os jogos foram
+reescritos para funcionar **por fixação ocular** — antes eram esboços controlados
+por mouse, isto é, inutilizáveis exatamente pela pessoa para quem o app existe — e
+não cobram tempo: existem para treinar o olhar e descansar. O Desenho pinta na
 posição do olhar, assinando `useGaze().subscribe` diretamente em vez de esperar
-por eventos de ponteiro. Notícias e Meditação já existiam como rotas, mas eram
-órfãs: nenhum caminho da interface levava até elas, e agora estão no menu.
+por eventos de ponteiro.
+
+**Plano.** O módulo é dos planos Completo e Voz (e da beta, que libera tudo): a licença
+traz `features.lazer` (`license_for_profile()`, migração `20260927014332_lazer_no_plano`). Sem o
+recurso, o cartão Lazer abre uma tela que explica o motivo e leva de volta ao menu, e
+as telas de jogos, fotos, leituras e meditação voltam para ela
+([`SoComLazer.tsx`](frontend/src/components/ui/SoComLazer.tsx),
+[`services/lazer`](frontend/src/services/lazer/index.ts)). O Descanso tem cartão
+próprio no menu principal e fica fora da trava. Licença sem a chave (servidor anterior,
+cache antigo) conta como liberada, a mesma regra da voz e do assistente.
 
 Um bug do **Siga o Alvo** merece registro porque falseava o único retorno que o
 jogo dá: o placar subia sozinho, sem o paciente acertar nada. Corrigido — a
@@ -1238,7 +1286,7 @@ resposta. `payment-webhook` é
 `gateway_events` → `register_charge()`. Na beta não há gateway: todo plano tem
 `purchasable = false`.
 
-**Estado em produção (24/09/2026).** As 17 migrações do repositório
+**Estado em produção (27/09/2026).** As 19 migrações do repositório
 aplicadas, com as versões do histórico remoto exatamente iguais às do nome dos
 arquivos. As quatro últimas entraram em 24/09 e os arquivos foram renomeados
 para a versão que o projeto registrou: `20260924020011_help_requests_received_at`
@@ -1248,7 +1296,11 @@ substitui o vínculo dele em vez de acumular chaves válidas),
 `20260924022108_conta_de_teste_protegida` (ninguém troca a senha nem o e-mail
 da [conta de teste](#conta-de-teste)) e `20260924230017_beta_lancamento` (a data
 em que o download da beta abre no site). A `desktop-sync` foi publicada
-depois das três primeiras.
+depois das três primeiras. As duas últimas entraram em 27/09 pelo conector do
+Supabase, com os arquivos renomeados para a versão registrada:
+`20260927014237_codigo_de_confirmacao` (o código de 4 dígitos da confirmação, com o
+modelo e o assunto do e-mail trocados no painel no mesmo dia) e
+`20260927014332_lazer_no_plano` (`features.lazer` na licença).
 
 **Migração nova:** `supabase migration new <nome>` e `supabase db push` — a
 versão do nome do arquivo vira a do histórico. Aplicada por fora do CLI (MCP,
@@ -1274,7 +1326,11 @@ roda à parte, no SQL Editor. No Auth do painel: Site URL = a origem do site
 (`https://irisflow-communicator.pages.dev`) e Redirect URLs `<site>/entrar` e
 `<site>/nova-senha` — o "Esqueci a senha" do site e o do app mandam
 `redirectTo` para `/nova-senha`, e o site leva o evento de recuperação para lá
-de qualquer página. A proteção contra senha vazada só existe no plano Pro.
+de qualquer página. Os modelos de e-mail (*Authentication → Emails → Templates*)
+são os de [`supabase/templates/`](supabase/templates/), com os assuntos do
+[`config.toml`](supabase/config.toml); o de confirmação usa `{{ slice .Token 0 4 }}`,
+então "Email OTP Length" precisa ficar em 6. A proteção contra senha vazada só
+existe no plano Pro.
 
 **Teste local.** [`scripts/db-local-test.sh`](scripts/db-local-test.sh) cria o
 banco `irisflow_beta_test` num PostgreSQL limpo com um *shim* do Supabase
@@ -1294,9 +1350,10 @@ CPF, `desktop_license()` (`beta`, `beta_encerrada`), dois computadores e novo
 login no mesmo computador, inscrições fechadas, RLS de `beta_registrations` e
 `support_reports`, sessões órfãs, `patient_settings` sem padrões de
 rastreamento, telefone opcional, o escalonamento (prazo contado da chegada,
-push só com celular cadastrado) e, depois do seed, a conta de teste e a
-proteção dela. Passou em 24/09/2026 (PostgreSQL 16) com as 17 migrações, já
-com os nomes novos. Fora
+push só com celular cadastrado), o código de confirmação (o hash como o GoTrue
+grava, o prefixo do PKCE, e-mail já confirmado ou sem cadastro, entrada inválida e o
+bloqueio depois de 10 erros) e, depois do seed, a conta de teste e a proteção dela.
+Passou em 26/09/2026 (PostgreSQL 16) com as 18 migrações. Fora
 dele: as Edge Functions (o horário dos eventos tem teste Deno próprio).
 
 ---
@@ -1310,8 +1367,11 @@ fechada: os planos aparecem como indisponíveis e o fluxo pago leva a `/beta`.
 | rota | o que faz | banco |
 |---|---|---|
 | `/`, `/solucao`, `/como-funciona`, `/acessibilidade`, `/planos`, `/sobre` | institucional; preço de `plans`, com reserva em `content.ts` | `plans` |
-| `/beta` | a inscrição em 4 etapas com a trilha à vista: criar conta → confirmar e-mail → pesquisa rápida → download (travado até o lançamento) | Auth, `complete_beta_registration()`, `beta_program`, `mark_beta_download()` |
-| `/confirmar-email` | destino do link de confirmação: verifica o `token_hash`, abre a sessão **no aparelho do clique** e agradece, com o próximo passo | Auth (`verifyOtp`) |
+| `/cuidador` | a página do **IrisFlow Cuidador**: o vídeo de demonstração num celular, as telas do app e onde baixar (selos das lojas; no computador, um código QR para `/app`) | — |
+| `/baixar` | os dois aplicativos: o instalador do computador, com o sistema do visitante na frente (travado com o dia até o lançamento), e o app do celular pelos selos; no celular, oferece copiar ou mandar por e-mail o link para abrir no computador | `beta_program` |
+| `/app` | o endereço do código QR: no Android abre o Google Play; no iPhone, a App Store (ou a seção de disponibilidade, enquanto não houver endereço); no computador, mostra os selos | — |
+| `/beta` | a inscrição em 4 etapas com a trilha à vista: criar conta → confirmar e-mail (código de 4 dígitos) → pesquisa rápida → download (travado até o lançamento) | Auth, `confirmar_codigo()`, `complete_beta_registration()`, `beta_program`, `mark_beta_download()` |
+| `/confirmar-email` | destino do botão do e-mail, a alternativa ao código: verifica o `token_hash`, abre a sessão **no aparelho do clique** e agradece, com o próximo passo | Auth (`verifyOtp`) |
 | `/perfil` | "Meu perfil": situação da inscrição e dia do lançamento, dados da conta e respostas da pesquisa (editáveis), download e, depois do lançamento, *Aplicativo e computadores* | `profiles`, `my_account`, `beta_registrations`, `desktop_license()`, `devices` |
 | `/entrar`, `/recuperar-senha`, `/nova-senha` | login (leva à pesquisa ou ao perfil) e nova senha (aceita o link com `token_hash`) | Auth |
 | `/conta` | durante a beta, vai para `/perfil` (o desktop e e-mails antigos apontam para cá); fora dela, o painel da assinatura | `my_account`, `desktop_license()`, `devices`, `revoke_device()` |
@@ -1322,18 +1382,41 @@ fechada: os planos aparecem como indisponíveis e o fluxo pago leva a `/beta`.
 sessão, não de um estado da página — F5, outro dia ou outro aparelho caem no
 lugar certo: sem sessão, **criar conta** (nome, e-mail, senha e o aceite dos
 termos; o `signUp` leva só nome, newsletter e a data do aceite, que viajam no
-JWT); logo depois, com *Confirm email* ligado, **confirmar e-mail**; com sessão e
-sem conta, a **pesquisa rápida**
+JWT); logo depois, com *Confirm email* ligado, **confirmar e-mail**, pelo código
+de 4 dígitos que chega no e-mail ([`CodigoDeVerificacao.tsx`](site/src/components/beta/CodigoDeVerificacao.tsx):
+um campo só com `autocomplete="one-time-code"`, desenhado como quatro caixas; colar e
+o preenchimento automático do celular funcionam; o quarto dígito confere sozinho, e o
+acerto fecha com a animação das caixas em órbita, parada com movimento reduzido;
+"Reenviar código" depois de 60 s, o intervalo do Supabase); com sessão e sem conta, a
+**pesquisa rápida**
 ([`FormularioPesquisa.tsx`](site/src/components/beta/FormularioPesquisa.tsx):
 quem vai usar, como a pessoa gosta de ser chamada, condição, computador, app do
 cuidador; telefone e "como conheceu" opcionais), que chama
 `complete_beta_registration` e abre a assinatura `beta`; com conta, o
 **download**. Os botões de enviar ficam sempre habilitados: o clique mostra o
-que falta e leva o foco ao primeiro campo. O link do e-mail abre
-`/confirmar-email`, que faz o login **no aparelho onde foi clicado** — conta
-criada no computador, e-mail aberto no celular: o celular entra logado e agradece;
-no computador, "Já confirmei, continuar aqui" leva a `/entrar?email=…`. Quem
-tem sessão vê "Meu perfil" no cabeçalho mesmo antes da pesquisa.
+que falta e leva o foco ao primeiro campo. O botão do e-mail continua lá, para
+quem abre a mensagem em outro aparelho: ele leva a `/confirmar-email`, que faz o
+login **no aparelho onde foi clicado** — conta criada no computador, e-mail aberto
+no celular: o celular entra logado e agradece; no computador, "Já confirmei,
+continuar aqui" leva a `/entrar?email=…`. Quem tem sessão vê "Meu perfil" no
+cabeçalho mesmo antes da pesquisa.
+
+**Código de 4 dígitos.** O Auth só aceita códigos de 6 a 10 dígitos; o e-mail
+mostra os 4 primeiros do código de 6 (`{{ slice .Token 0 4 }}`, em
+[`confirmacao.html`](supabase/templates/confirmacao.html) e no assunto) e a
+função `confirmar_codigo(e-mail, código)` (migração
+`20260927014237_codigo_de_confirmacao.sql`) testa as 100 terminações contra o hash
+guardado pelo Auth e devolve o `token_hash`, que o site troca por uma sessão com
+`verifyOtp`, como no link — prazo e uso único continuam com o Auth. Dez códigos
+errados por e-mail em 24 h bloqueiam o código até o dia seguinte (o link segue
+valendo), e a resposta é a mesma para código errado e para e-mail sem cadastro
+pendente. Exige "Email OTP Length" = 6 no painel (*Sign In / Providers → Email*).
+Em produção desde 27/09/2026: a migração, o modelo e o assunto do e-mail e o tamanho
+do código, que estava em 8 e passou a 6. O advisor de segurança do Supabase aponta
+`confirmar_codigo` como função *security definer* executável por `anon`: é de propósito
+(a confirmação acontece antes de existir sessão), e o limite de erros e a resposta
+única cobrem o risco. Se o projeto for recriado, a ordem é migração, depois modelo,
+assunto e tamanho do código, e só então o site.
 
 **Lançamento.** O download abre em `beta_program.launch_at` (10/11/2026 00:00 de
 Brasília, migração `20260924230017_beta_lancamento.sql`); até lá a inscrição
@@ -1366,7 +1449,9 @@ que o `.env.local`. Para desenvolver (`npm run dev`), copie
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | contas, planos, beta | site abre; ação de conta diz "serviço indisponível" |
 | `VITE_SITE_URL` | canonical, og:*, sitemap, destino dos e-mails | `https://irisflow-communicator.pages.dev` |
 | `VITE_RELEASES_REPO` / `VITE_RELEASES_AVAILABLE` | de onde vêm os instaladores / quais sistemas o site oferece | `ZambePy/Communicator-V3` / `windows` |
-| `VITE_APP_CUIDADOR_URL` | link do app em `/beta` | "o link chega por e-mail" |
+| `VITE_APP_CUIDADOR_URL` | APK do app do cuidador (anexado a cada release), em `/beta` | "o link chega por e-mail" |
+| `VITE_GOOGLE_PLAY_URL` | troca o endereço do Google Play | `…/store/apps/details?id=br.com.irisflow.cuidador`, que passa a funcionar sozinho quando o app for publicado com esse pacote |
+| `VITE_APP_STORE_URL` | endereço do app na App Store (com o número que o App Store Connect dá) | o selo da Apple aparece "em breve" e leva a `/cuidador#disponibilidade` |
 | `VITE_CF_ANALYTICS_TOKEN` | Cloudflare Web Analytics | nenhuma estatística |
 | `VITE_PAYMENT_PUBLIC_KEY`, `VITE_API_URL` | reservadas (gateway, API própria) | sem uso hoje |
 
@@ -1381,21 +1466,59 @@ canonical e og:* a cada rota e o `vite.config.ts` gera `sitemap.xml` e
 (`seo.test.ts` confere). O site não grava cookie; o Cloudflare Web Analytics
 (sem cookie) carrega a menos que o visitante recuse no aviso.
 
-**Hero.** Título "Seu olhar tem voz" (com "voz" em gradiente) e, ao lado, só a
-marca: o símbolo da íris (`IrisMark`, de
-[`Logo.tsx`](site/src/components/layout/Logo.tsx)) girando devagar, com o halo,
-os anéis que se expandem e uma aura azul e teal própria do hero
-([`hero.css`](site/src/components/sections/hero.css)). No celular ela vem depois
-das chamadas, menor. Com movimento reduzido fica parada.
+**Home.** Pouco texto: a abertura ([`HeroProduto.tsx`](site/src/components/home/HeroProduto.tsx))
+traz a frase "Seu olhar tem voz", uma linha de apoio, as duas chamadas e o produto
+funcionando num monitor, com a gravação real da tela do IrisFlow Communicator
+(`public/media/demo-communicator.mp4`, de 18/09/2026, com o cursor do olhar). Logo
+abaixo, o app do cuidador num celular com a gravação dele
+(`public/media/demo-cuidador.mp4`/`.webm`, dados simulados, sem os trechos com avisos
+técnicos de desenvolvimento). Os vídeos e as descrições para leitor de tela estão em
+[`data/home.ts`](site/src/data/home.ts). Cada vídeo toca sem som só enquanto está na
+tela, tem botão de pausa e, com movimento reduzido, começa parado no quadro de
+abertura ([`useDemo.ts`](site/src/hooks/useDemo.ts)).
+
+**Selos das lojas** ([`SelosDasLojas.tsx`](site/src/components/ui/SelosDasLojas.tsx),
+[`lojas.ts`](site/src/lib/lojas.ts)). Os selos pretos da Apple ("Download on the App
+Store") e do Google Play estão em `site/public/badges/`: `app-store.svg`, vetorial, e
+`google-play.png`, com fundo transparente, os dois na proporção 3,05 : 1, exibidos com
+44 px de altura. Foram extraídos do arquivo vetorial que a equipe forneceu (27/09/2026);
+quando houver os selos atuais baixados das páginas de marketing da Apple e do Google
+(inclusive em português), basta trocar os dois arquivos mantendo os nomes. Sobre fundo
+escuro, o selo ganha o contorno cinza (`#A6A6A6`) do selo oficial da Apple; o "em breve"
+da App Store fica acima do selo, sem cobrir o texto. Com os dois arquivos presentes o
+build usa as imagens (`__SELOS_OFICIAIS__`, em `vite.config.ts`); se um faltar, o site
+volta aos botões próprios, com os mesmos rótulos para leitor de tela.
 
 ---
 
-## App do cuidador (app/)
+## IrisFlow Cuidador (app/)
 
-Expo SDK 57 + expo-router, sempre no Supabase real: não há modo demonstração, e
-um build sem `EXPO_PUBLIC_SUPABASE_*` mostra "Não conseguimos conectar agora".
-Não há cadastro no app; em `__DEV__` o login já vem com a conta de teste
-(`CONTA_DE_TESTE`, [`config.ts`](app/src/lib/config.ts)).
+O app de celular de quem cuida chama-se **IrisFlow Cuidador** — o par do
+**IrisFlow Communicator**, o app do computador. Expo SDK 57 + expo-router,
+sempre no Supabase real: não há modo demonstração, e um build sem
+`EXPO_PUBLIC_SUPABASE_*` mostra "Não conseguimos conectar agora". Não há
+cadastro no app (a conta nasce no site); em `__DEV__` o login já vem com a
+conta de teste (`CONTA_DE_TESTE`, [`config.ts`](app/src/lib/config.ts)).
+
+**Marca.** O símbolo da IrisFlow com "cuidador" embaixo, na Boldonse do
+logotipo, convertida em contorno: [`irisflow-cuidador.svg`](site/public/brand/irisflow-cuidador.svg)
+(fundo claro) e [`irisflow-cuidador-negativo.svg`](site/public/brand/irisflow-cuidador-negativo.svg)
+(fundo escuro), gerados por [`gerar-marca-cuidador.py`](app/scripts/gerar-marca-cuidador.py)
+a partir de [`irisflow-simbolo.svg`](site/public/brand/irisflow-simbolo.svg) —
+o símbolo vetorial exportado do `REDUZIDO.ai`. É a **capa** do app (a abertura,
+`splash-icon.png`, sobre o marinho `#091B33`, com 200 dp de largura), a tela de
+boas-vindas e a carga inicial ([`MarcaCuidador.tsx`](app/src/components/MarcaCuidador.tsx)),
+e a imagem de destaque do Google Play (`app/assets/store/imagem-de-destaque.png`,
+1024×500). Os ícones seguem só com o símbolo: texto num ícone de 48 px não se
+lê. Nos ícones e na capa as lâminas usam o azul mais claro dos ícones
+(`#3D74C8`), que aparece melhor sobre o marinho; nos arquivos da marca, o azul
+oficial (`#1B54A8`). Para regenerar tudo:
+
+```bash
+pip install fonttools uharfbuzz playwright pillow
+python app/scripts/gerar-marca-cuidador.py   # SVGs da marca + app/src/components/marcaCuidador.ts
+python app/scripts/gerar-icones.py           # ícones, capa e imagem da loja (confere tamanhos e zona segura)
+```
 
 | tela | o que faz |
 |---|---|
@@ -1414,10 +1537,11 @@ desktop só envia pedidos de socorro (`emergencia`). O "Esqueci a senha" do app
 manda o cuidador para `<site>/nova-senha` (`EXPO_PUBLIC_SITE_URL`).
 
 **Push.** O token Expo vai para `push_tokens` e recebe o socorro e o
-escalonamento. **Não funciona no Expo Go** nem em emulador, e em build exige
-`extra.eas.projectId` no `app.json`, hoje vazio: até lá o alerta só chega com o
-app aberto, pelo realtime. No Android, o FCM pede o `google-services.json`
-(`app.config.js`).
+escalonamento. **Não funciona no Expo Go** nem em emulador. Em build, o token usa o
+`extra.eas.projectId` do `app.json` (projeto EAS criado em 24/09/2026); no Android,
+o FCM pede o `google-services.json` (`GOOGLE_SERVICES_JSON` no EAS, lido pelo
+`app.config.js`) e, no iOS, a chave APNs da conta Apple paga. Enquanto isso não
+estiver configurado, o alerta só chega com o app aberto, pelo realtime.
 
 **Variáveis** ([`app/.env.example`](app/.env.example) → `app/.env`, públicas):
 `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` (obrigatórias),
@@ -1900,13 +2024,14 @@ o replay de gravação real (`docs/MEDICOES.md` §15), que precisa de uma
 gravação. Os instaladores dos três sistemas saem de
 `.github/workflows/release.yml` ([Instalador](#instalador-e-atualização-automática)).
 
-**Estado medido nesta versão (24/09/2026):** núcleo com **1968 testes (mais 2 pulados) em 178 arquivos**,
-interface com **1205 em 136 arquivos**, site com **213 em 22 arquivos** e app do
-cuidador com **103 em 12 suítes** — 3489 testes ao todo; checagem de tipos sem
+**Estado medido nesta versão (27/09/2026):** núcleo com **1968 testes (mais 2 pulados) em 178 arquivos**,
+interface com **1212 em 138 arquivos**, site com **238 em 27 arquivos** e app do
+cuidador com **103 em 12 suítes** — 3521 testes ao todo; checagem de tipos sem
 erro nos cinco projetos (núcleo, Electron, interface, site e app), configuração
 pública sem segredo, os builds de produção da interface e do site passando;
-banco local com as 17 migrações, o cenário e o seed passando; teste Deno da
-`desktop-sync` (15) passando.
+banco local com as 19 migrações (aplicadas duas vezes), o cenário — agora com o
+código de confirmação e o Lazer por plano — e o seed passando. O teste Deno da `desktop-sync` (15)
+passou na versão de 24/09 e a função não mudou desde então.
 
 Os testes do núcleo cobrem os módulos puros, onde os limiares e as leis de
 controle vivem: calibração (inclusive a correção local dos cantos, com um olho
@@ -1955,7 +2080,7 @@ porque o cursor parou, mas porque o quadro ainda não aconteceu.
 | Linux (Electron) | não testado numa máquina real; o CI empacota e confere a pasta do app, e o release gera AppImage, `.deb` e `.rpm`. Modo Computador em X11 via `xdotool`; motor de voz roda (Python) |
 | macOS (Electron) | não testado; o release gera `.dmg` e `.zip` (x64 e arm64), sem assinatura Apple. Modo Computador ainda sem adaptador (Acessibilidade) |
 | Site | conferido no Chromium, em tela de computador e de celular; Firefox e Safari não foram testados à parte |
-| App do cuidador | Android e iOS via Expo; push só em build (não no Expo Go) |
+| IrisFlow Cuidador | Android e iOS via Expo; push só em build (não no Expo Go) |
 
 Os controles de câmera (`zoom`, `brightness`, `contrast`, `exposureMode`)
 dependem do driver. O app sonda o que existe e, quando não consegue ajustar,
@@ -1965,7 +2090,7 @@ diz qual ajuste físico é necessário.
 
 ## Pendências e riscos
 
-Estado em 24/09/2026.
+Estado em 26/09/2026.
 
 1. **Pesos do L2CS — decisão jurídica.** A licença do Gaze360 é *research-only* e proíbe
    uso comercial, inclusive de modelos treinados na base; a decisão de 15/09/2026 é não
@@ -2018,6 +2143,19 @@ Estado em 24/09/2026.
    pagamento real (`attach_payment_method` sem gateway + cancelar + reativar) e o limite
    de computadores de Completo/Voz anunciado no site não é aplicado pelo banco;
    avisos de postura/fadiga previstos no banco que o desktop não envia.
+10. **Primeiro cadastro real com o código.** A função foi testada num Postgres
+    local, com o hash calculado como o Auth calcula, e o modelo usa `slice`, função do
+    próprio Go template que o Supabase usa nos e-mails; mas nenhum e-mail com o código
+    saiu ainda de verdade. Faça um cadastro de teste na `/beta` e confira o código no
+    assunto e no corpo. Se o e-mail não chegar, volte o assunto para "Confirme seu e-mail
+    no IrisFlow" (*Authentication → Emails → Confirm sign up*): o botão do corpo continua
+    confirmando pelo link.
+11. **Lojas.** O selo do Google Play usa o desenho antigo ("Android app on Google
+    play"), o que veio no arquivo da equipe; troque pelo atual quando baixá-lo do Google
+    ([Site](#site-site)). O link do Google Play passa a funcionar quando o app for
+    publicado com o pacote `br.com.irisflow.cuidador`; o da App Store precisa de
+    `VITE_APP_STORE_URL` em `site/.env.production` depois do cadastro no App Store
+    Connect — até lá o selo da Apple fica "em breve".
 
 ---
 

@@ -81,7 +81,7 @@ export default function ConfirmarEmail() {
   if (estado === 'verificando' || (loading && estado === 'parado')) {
     return (
       <div className="flow">
-        <AmbientBackground particles={10} scan={false} light />
+        <AmbientBackground variante="suave" />
         <div className="container container--narrow flow__inner">
           <div className="flow__card panel confirmar__carregando" role="status">
             <Spinner size={28} />
@@ -139,7 +139,7 @@ function Obrigado({
 
   return (
     <div className="flow">
-      <AmbientBackground particles={16} light />
+      <AmbientBackground variante="suave" />
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel">
           <Stepper steps={ETAPAS_DA_BETA} current={inscricaoCompleta ? 3 : 2} />
@@ -200,7 +200,7 @@ function LinkInvalido({ motivo }: { motivo: string }) {
   const reenviar = async (e: FormEvent) => {
     e.preventDefault()
     if (!isEmail(email)) {
-      setAviso({ ok: false, texto: 'Informe o e-mail da conta para receber um link novo.' })
+      setAviso({ ok: false, texto: 'Informe o e-mail da conta para receber um código novo.' })
       return
     }
     setEnviando(true)
@@ -209,7 +209,7 @@ function LinkInvalido({ motivo }: { motivo: string }) {
       await reenviarConfirmacao(email)
       setAviso({
         ok: true,
-        texto: `Se ${email.trim()} tiver uma conta a confirmar, um link novo chega em instantes. Vale o mais recente.`,
+        texto: `Se ${email.trim()} tiver uma conta a confirmar, um e-mail novo, com o código e o botão, chega em instantes. Digite o código na tela de acesso.`,
       })
     } catch (err) {
       setAviso({ ok: false, texto: err instanceof Error ? err.message : 'Não foi possível reenviar agora.' })
@@ -220,7 +220,7 @@ function LinkInvalido({ motivo }: { motivo: string }) {
 
   return (
     <div className="flow">
-      <AmbientBackground particles={10} scan={false} light />
+      <AmbientBackground variante="suave" />
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel">
           <span className="beta__icone-grande" aria-hidden="true">
@@ -238,7 +238,7 @@ function LinkInvalido({ motivo }: { motivo: string }) {
           </div>
 
           <form onSubmit={reenviar} noValidate className="confirmar__reenvio">
-            <p className="flow__optional-title">Ainda não confirmou? Peça um link novo</p>
+            <p className="flow__optional-title">Ainda não confirmou? Peça um código novo</p>
             <Field
               label="E-mail da conta"
               type="email"
@@ -257,7 +257,7 @@ function LinkInvalido({ motivo }: { motivo: string }) {
               </div>
             )}
             <Button type="submit" variant="secondary" loading={enviando} disabled={enviando}>
-              {enviando ? 'Enviando…' : 'Enviar um link novo'}
+              {enviando ? 'Enviando…' : 'Enviar um código novo'}
             </Button>
           </form>
         </div>
@@ -271,16 +271,16 @@ function LinkInvalido({ motivo }: { motivo: string }) {
 function SemLink() {
   return (
     <div className="flow">
-      <AmbientBackground particles={10} scan={false} light />
+      <AmbientBackground variante="suave" />
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel">
           <span className="beta__icone-grande" aria-hidden="true">
             <Icon name="email" size={30} />
           </span>
-          <h1 className="flow__title beta__etapa-titulo">Abra o link que enviamos por e-mail</h1>
+          <h1 className="flow__title beta__etapa-titulo">Confirme pelo e-mail que enviamos</h1>
           <p className="lead beta__etapa-texto">
-            Esta página confirma o e-mail da conta a partir do link da mensagem “Confirme seu e-mail
-            no IrisFlow”. Se você já confirmou, entre com o e-mail e a senha.
+            Esta página confirma a conta pelo botão da mensagem “Seu código do IrisFlow”. Tem o código
+            de 4 dígitos? Digite na tela de acesso, depois do e-mail e da senha.
           </p>
           <div className="beta__confirme-acoes">
             <Button to="/entrar" full size="lg">

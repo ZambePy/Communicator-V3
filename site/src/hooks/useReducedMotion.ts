@@ -27,27 +27,3 @@ export function useReducedMotion(): boolean {
 
   return reduced
 }
-
-/**
- * Máquina modesta: poucos núcleos, tela estreita ou preferência por menos
- * movimento. Usado para desligar o fundo ambiente pesado (blur, partículas).
- */
-export function useLowPower(): boolean {
-  const [low, setLow] = useState(() => detectLowPower())
-
-  useEffect(() => {
-    const onResize = () => setLow(detectLowPower())
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
-  return low
-}
-
-function detectLowPower(): boolean {
-  if (typeof window === 'undefined') return false
-  if (prefersReducedMotion()) return true
-  const cores = navigator.hardwareConcurrency
-  if (typeof cores === 'number' && cores > 0 && cores <= 4) return true
-  return window.innerWidth < 720
-}

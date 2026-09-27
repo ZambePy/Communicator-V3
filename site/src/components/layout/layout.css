@@ -5,32 +5,75 @@
   background: var(--bg);
 }
 
-/* Faixa escura de abertura das páginas internas. Ocupa a área sob o
-   cabeçalho fixo, por isso o padding-top inclui a altura dele. */
+/* Abertura escura das páginas de dentro. Ocupa a área sob o cabeçalho fixo,
+   por isso o padding-top inclui a altura dele. */
 .page-head {
   position: relative;
   overflow: hidden;
-  padding-block: calc(var(--header-h) + var(--sp-7)) var(--sp-8);
+  padding-block: calc(var(--header-h) + clamp(40px, 8vh, 88px)) clamp(56px, 9vh, 104px);
 }
 
 .page-head__inner {
   position: relative;
   z-index: 1;
-  max-width: 800px;
+  max-width: 820px;
 }
 
-.page-head .logo {
+.page-head--centro .page-head__inner {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.page-head__rotulo {
+  margin: 0 0 var(--sp-4);
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.page-head__titulo {
+  font-size: clamp(2.3rem, 5vw, 4rem);
+  line-height: 1.04;
+  letter-spacing: -0.034em;
   margin-bottom: var(--sp-5);
 }
 
-.page-head h1 {
-  font-size: var(--fs-h1);
-  margin-bottom: var(--sp-4);
+.page-head--centro .page-head__titulo {
+  margin-inline: auto;
+  max-width: 18ch;
 }
 
-.page-head .lead {
-  margin-bottom: 0;
-  max-width: 68ch;
+.page-head__lead {
+  margin: 0;
+  font-size: var(--fs-lead);
+  line-height: 1.55;
+  max-width: 54ch;
+}
+
+.page-head--centro .page-head__lead {
+  margin-inline: auto;
+}
+
+.page-head__extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-6);
+}
+
+.page-head--centro .page-head__extra {
+  justify-content: center;
+}
+
+.page-head__visual {
+  position: relative;
+  z-index: 1;
+  margin-top: clamp(40px, 7vh, 80px);
+}
+
+.page-head--com-visual {
+  padding-bottom: clamp(48px, 8vh, 96px);
 }
 
 /* O esqueleto de rota fica abaixo do cabeçalho fixo e ocupa a dobra. */

@@ -1,8 +1,3 @@
-.comparison__title {
-  max-width: 22ch;
-  margin-bottom: var(--sp-6);
-}
-
 .cmp__wrap {
   position: relative;
   overflow-x: auto;
@@ -120,10 +115,9 @@
 }
 
 .comparison__honesty {
-  max-width: 88ch;
-  margin: var(--sp-5) 0 0;
-  font-size: 0.96rem;
-  color: var(--text-dim);
-  padding-left: var(--sp-5);
-  border-left: 2px solid var(--warn-line);
+  max-width: 72ch;
+  margin: var(--sp-6) 0 var(--sp-6);
+  font-size: 1.02rem;
+  line-height: 1.6;
+  color: var(--text-soft);
 }

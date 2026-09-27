@@ -1,81 +1,18 @@
-import { useMemo } from 'react'
-import { useLowPower } from '@/hooks/useReducedMotion'
 import './ambient.css'
 
 type Props = {
-  /** Densidade de partículas. */
-  particles?: number
-  /** Mostra a linha de varredura vertical, alusão à leitura da webcam. */
-  scan?: boolean
-  /** Em fundo claro o efeito entra bem mais discreto, para não competir
-   *  com o texto. O contraste do corpo é requisito, não preferência. */
-  light?: boolean
+  /** `suave` nas páginas de fluxo (beta, conta, acesso): a luz quase some,
+   *  para não competir com formulário nenhum. */
+  variante?: 'destaque' | 'suave'
 }
 
 /**
- * Movimento ambiente de fundo: um gradiente em morphing, partículas à
- * deriva e uma linha de varredura sutil. É puramente decorativo, e por
- * isso sai marcado como aria-hidden.
- *
- * Custo: cada blob com blur de 72 px é uma camada cara para compor. Em
- * máquinas modestas (≤ 4 núcleos), telas estreitas ou com movimento
- * reduzido, o componente entra em modo leve: só o gradiente estático e
- * um blob, sem partículas nem varredura.
+ * Luz de fundo das faixas escuras: um único foco azul, parado, vindo de
+ * cima — como a luz de uma tela num quarto escuro. Sem partículas, grade,
+ * varredura ou manchas em movimento: decoração que se mexe compete com o
+ * produto, e é o produto que precisa aparecer. Decorativo (aria-hidden) e
+ * sem custo de composição: é um gradiente estático.
  */
-export function AmbientBackground({ particles = 18, scan = true, light = false }: Props) {
-  const lite = useLowPower()
-  const count = lite ? 0 : particles
-
-  const dots = useMemo(
-    () =>
-      Array.from({ length: count }, (_, i) => ({
-        id: i,
-        left: Math.random() * 100,
-        top: Math.random() * 100,
-        size: 1.5 + Math.random() * 3.5,
-        dx: `${(Math.random() - 0.5) * 120}px`,
-        dy: `${-80 - Math.random() * 220}px`,
-        duration: 14 + Math.random() * 20,
-        delay: -Math.random() * 30,
-        opacity: 0.18 + Math.random() * 0.42,
-        teal: Math.random() > 0.65,
-      })),
-    [count],
-  )
-
-  return (
-    <div
-      className={`ambient${light ? ' ambient--light' : ''}${lite ? ' ambient--lite' : ''}`}
-      aria-hidden="true"
-    >
-      <div className="ambient__mesh" />
-      <span className="ambient__blob ambient__blob--a anim-blob" />
-      {!lite && <span className="ambient__blob ambient__blob--b anim-blob" />}
-      <div className="ambient__grid" />
-      {scan && !light && !lite && <span className="ambient__scan" />}
-      {dots.length > 0 && (
-        <div className="ambient__particles">
-          {dots.map((d) => (
-            <span
-              key={d.id}
-              className={`ambient__dot${d.teal ? ' ambient__dot--teal' : ''}`}
-              style={
-                {
-                  left: `${d.left}%`,
-                  top: `${d.top}%`,
-                  width: d.size,
-                  height: d.size,
-                  '--p-dx': d.dx,
-                  '--p-dy': d.dy,
-                  '--p-opacity': d.opacity,
-                  animationDuration: `${d.duration}s`,
-                  animationDelay: `${d.delay}s`,
-                } as React.CSSProperties
-              }
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
+export function AmbientBackground({ variante = 'destaque' }: Props) {
+  return <div className={`ambient ambient--${variante}`} aria-hidden="true" />
 }

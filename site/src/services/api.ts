@@ -278,8 +278,9 @@ export async function signUp(profile: Profile, password: string, planId: PlanId)
    A inscrição tem quatro etapas, e cada uma é uma chamada daqui:
    1. criarContaBeta — só a conta (nome, e-mail e senha). Com "Confirm
       email" ligado, volta sem sessão e o Supabase manda o link;
-   2. verificarLinkDoEmail — a página /confirmar-email troca o token_hash
-      do link por uma sessão no aparelho onde ele foi aberto;
+   2. conferirCodigo + verificarLinkDoEmail — os 4 dígitos do e-mail viram o
+      token_hash do cadastro, e o hash vira a sessão; o botão do e-mail faz o
+      mesmo pela página /confirmar-email, no aparelho onde foi aberto;
    3. responderPesquisa — a pesquisa rápida sobre quem vai usar, que roda
       complete_beta_registration (plano 'beta', sem cobrança) e grava
       beta_registrations. A condição de saúde entra só aqui, já com sessão,
@@ -353,6 +354,48 @@ export function verificarLinkDoEmail(tokenHash: string, tipo: TipoDeLink): Promi
     verificacoes.set(chave, pedido)
   }
   return pedido
+}
+
+/* ---------------- código de 4 dígitos ----------------
+   O e-mail de confirmação mostra os 4 primeiros dígitos do código do
+   Supabase Auth (supabase/templates/confirmacao.html). A função
+   confirmar_codigo (migração 20260927014237_codigo_de_confirmacao.sql)
+   confere os 4 dígitos e devolve o token_hash do cadastro — o mesmo do link
+   do e-mail —, e verificarLinkDoEmail troca o hash pela sessão. São dois
+   passos de propósito: a tela anima o "confirmado" entre um e outro, antes
+   de a sessão chegar e a página seguir para a pesquisa.
+   ------------------------------------------------------------ */
+
+/** Quantos dígitos o e-mail mostra. */
+export const DIGITOS_DO_CODIGO = 4
+
+/** Os 4 dígitos não conferem (ou não há cadastro esperando confirmação com o e-mail). */
+export class CodigoIncorreto extends Error {
+  constructor() {
+    super('Código incorreto. Confira os 4 dígitos no e-mail e tente de novo.')
+    this.name = 'CodigoIncorreto'
+  }
+}
+
+export const CODIGO_BLOQUEADO =
+  'Muitas tentativas com o código errado. Use o botão "Confirmar pelo link" do e-mail ou tente de novo amanhã.'
+
+/**
+ * Confere o código do e-mail e devolve o token_hash do cadastro. Não abre a
+ * sessão: quem chama decide quando (ver verificarLinkDoEmail).
+ */
+export async function conferirCodigo(email: string, codigo: string): Promise<string> {
+  const { data, error } = await client().rpc('confirmar_codigo', {
+    p_email: email.trim().toLowerCase(),
+    p_codigo: codigo,
+  })
+  if (error) {
+    // P0429: 10 códigos errados em 24 h (limite da função, contra chute).
+    if ((error as { code?: string }).code === 'P0429') throw new ApiError(CODIGO_BLOQUEADO)
+    erro(error)
+  }
+  if (typeof data !== 'string' || data === '') throw new CodigoIncorreto()
+  return data
 }
 
 /** Respostas da pesquisa rápida (etapa 3), com os valores dos enums do banco. */

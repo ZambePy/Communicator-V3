@@ -1,0 +1,369 @@
+/* Código de 4 dígitos (CodigoDeVerificacao.tsx). Escuro e sem cor: o foco é
+   uma luz branca. Cor só no veredito — teal da marca no acerto, vermelho no
+   erro. */
+
+.codigo {
+  text-align: center;
+}
+
+.codigo__instrucao {
+  margin: 0 auto var(--sp-5);
+  max-width: 46ch;
+  color: var(--text-soft);
+}
+
+.codigo__instrucao strong {
+  overflow-wrap: anywhere;
+}
+
+/* ---------- o palco: caixas, órbita e selo no mesmo lugar ---------- */
+.codigo__palco {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 156px;
+  margin: 0 auto var(--sp-2);
+}
+
+.codigo__caixas {
+  position: relative;
+  display: flex;
+  gap: clamp(8px, 2.6vw, 14px);
+  cursor: text;
+}
+
+.codigo__caixa {
+  display: grid;
+  place-items: center;
+  width: clamp(54px, 15vw, 64px);
+  height: clamp(64px, 18vw, 76px);
+  border-radius: 16px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 200ms ease;
+}
+
+.codigo__caixa.is-cheia {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.codigo__caixa.is-ativa {
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.07),
+    0 0 28px rgba(255, 255, 255, 0.14);
+}
+
+/* O cursor piscando na caixa da vez, quando ela ainda está vazia. */
+.codigo__caixa.is-ativa:empty::after {
+  content: '';
+  width: 2px;
+  height: 30px;
+  border-radius: 2px;
+  background: currentColor;
+  animation: codigo-cursor 1s steps(1) infinite;
+}
+
+/* O campo de verdade cobre as quatro caixas, invisível: recebe o teclado,
+   o colar e o preenchimento automático. */
+.codigo__campo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font-size: 16px; /* evita o zoom automático do iOS */
+  cursor: text;
+}
+
+.codigo__campo:disabled {
+  cursor: default;
+}
+
+/* ---------- conferindo ---------- */
+.codigo--conferindo .codigo__caixa {
+  animation: codigo-pulso 900ms ease-in-out infinite;
+  animation-delay: calc(var(--i) * 110ms);
+}
+
+/* ---------- erro ---------- */
+.codigo--erro .codigo__caixas {
+  animation: codigo-tremer 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.codigo--erro .codigo__caixa {
+  border-color: var(--danger);
+}
+
+/* ---------- confirmado: órbita, fusão e o selo ---------- */
+.codigo__orbita {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 128px;
+  height: 128px;
+  margin: -64px 0 0 -64px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.codigo--confirmado .codigo__orbita,
+.codigo--entrando .codigo__orbita {
+  animation: codigo-orbita 1700ms cubic-bezier(0.4, 0, 0.3, 1) forwards;
+}
+
+.codigo__selo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin: -38px 0 0 -38px;
+  border-radius: 22px;
+  background: linear-gradient(160deg, #19c2ab, #00a693 55%, #018476);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 18px 44px -12px rgba(0, 166, 147, 0.75);
+  opacity: 0;
+  transform: scale(0.2);
+  pointer-events: none;
+}
+
+.codigo__selo svg {
+  width: 36px;
+  height: 36px;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+}
+
+/* Dois anéis que se abrem do selo, uma vez só. */
+.codigo__selo::before,
+.codigo__selo::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 24px;
+  border: 1px solid rgba(63, 214, 194, 0.55);
+  opacity: 0;
+}
+
+.codigo--confirmado .codigo__selo,
+.codigo--entrando .codigo__selo {
+  animation: codigo-selo 560ms cubic-bezier(0.34, 1.56, 0.64, 1) 1380ms forwards;
+}
+
+.codigo--confirmado .codigo__selo svg,
+.codigo--entrando .codigo__selo svg {
+  animation: codigo-check 420ms ease-out 1640ms forwards;
+}
+
+.codigo--confirmado .codigo__selo::before,
+.codigo--entrando .codigo__selo::before {
+  animation: codigo-anel 1100ms ease-out 1600ms forwards;
+}
+
+.codigo--confirmado .codigo__selo::after,
+.codigo--entrando .codigo__selo::after {
+  animation: codigo-anel 1100ms ease-out 1850ms forwards;
+}
+
+/* ---------- textos ---------- */
+.codigo__situacao {
+  min-height: 1.6em;
+  margin: 0 0 var(--sp-2);
+  font-weight: 650;
+  color: var(--text-soft);
+}
+
+.codigo--confirmado .codigo__situacao,
+.codigo--entrando .codigo__situacao {
+  color: var(--ok);
+  animation: fade-up 480ms var(--ease-out) 1500ms both;
+}
+
+.codigo__mensagem {
+  margin: 0 auto var(--sp-3);
+  max-width: 44ch;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.codigo__aviso {
+  margin: 0 auto var(--sp-3);
+  max-width: 44ch;
+  color: var(--ok);
+}
+
+.codigo__reenvio {
+  margin: var(--sp-3) 0 0;
+  font-size: 0.95rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.codigo__reenviar {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.codigo__reenviar:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.codigo__reenviar:disabled {
+  color: var(--text-dim);
+  cursor: default;
+}
+
+/* ---------- movimentos ---------- */
+@keyframes codigo-cursor {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes codigo-pulso {
+  0%,
+  100% {
+    border-color: var(--line-strong);
+  }
+  50% {
+    border-color: rgba(255, 255, 255, 0.55);
+  }
+}
+
+@keyframes codigo-tremer {
+  10%,
+  90% {
+    transform: translateX(-2px);
+  }
+  20%,
+  80% {
+    transform: translateX(4px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-7px);
+  }
+  40%,
+  60% {
+    transform: translateX(7px);
+  }
+}
+
+@keyframes codigo-orbita {
+  0% {
+    opacity: 0;
+    transform: scale(0.55) rotate(0deg);
+  }
+  22% {
+    opacity: 1;
+    transform: scale(1) rotate(30deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1) rotate(160deg);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.35) rotate(260deg);
+  }
+}
+
+@keyframes codigo-selo {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes codigo-check {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes codigo-anel {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+/* Movimento reduzido: nada gira; o check aparece direto. */
+@media (prefers-reduced-motion: reduce) {
+  .codigo--confirmado .codigo__caixas,
+  .codigo--entrando .codigo__caixas {
+    opacity: 0;
+  }
+  .codigo--confirmado .codigo__orbita,
+  .codigo--entrando .codigo__orbita {
+    animation: none;
+  }
+  .codigo--confirmado .codigo__selo,
+  .codigo--entrando .codigo__selo {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .codigo--confirmado .codigo__selo svg,
+  .codigo--entrando .codigo__selo svg {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .codigo--confirmado .codigo__selo::before,
+  .codigo--confirmado .codigo__selo::after,
+  .codigo--entrando .codigo__selo::before,
+  .codigo--entrando .codigo__selo::after {
+    animation: none;
+  }
+  .codigo--confirmado .codigo__situacao,
+  .codigo--entrando .codigo__situacao {
+    animation: none;
+  }
+}

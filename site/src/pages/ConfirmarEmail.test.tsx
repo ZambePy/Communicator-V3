@@ -105,7 +105,7 @@ describe('<ConfirmarEmail />', () => {
     expect(screen.queryByRole('link', { name: 'Responder a pesquisa rápida' })).not.toBeInTheDocument()
   })
 
-  it('link vencido: explica, oferece entrar e pedir um link novo', async () => {
+  it('link vencido: explica, oferece entrar e pedir um código novo', async () => {
     apiFake.verificar.mockRejectedValueOnce(
       new ApiError({ message: 'Email link is invalid or has expired', status: 403, code: 'otp_expired' }),
     )
@@ -117,10 +117,10 @@ describe('<ConfirmarEmail />', () => {
 
     fireEvent.change(screen.getByLabelText('E-mail da conta'), { target: { value: 'maria@exemplo.com.br' } })
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Enviar um link novo' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Enviar um código novo' }))
     })
     expect(apiFake.reenviar).toHaveBeenCalledWith('maria@exemplo.com.br')
-    expect(await screen.findByText(/um link novo chega em instantes/)).toBeInTheDocument()
+    expect(await screen.findByText(/com o código e o botão, chega em instantes/)).toBeInTheDocument()
   })
 
   it('link do modelo padrão do Supabase (sessão já lida do endereço): agradece', async () => {
@@ -146,7 +146,7 @@ describe('<ConfirmarEmail />', () => {
 
   it('aberta sem link e sem sessão: diz para abrir o link do e-mail', () => {
     montar('/confirmar-email')
-    expect(screen.getByRole('heading', { name: 'Abra o link que enviamos por e-mail' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Confirme pelo e-mail que enviamos' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Entrar na conta' })).toHaveAttribute('href', '/entrar')
   })
 })

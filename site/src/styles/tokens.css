@@ -122,9 +122,9 @@
     Arial, sans-serif;
 
   /* escala fluida — nenhum texto essencial em corpo reduzido */
-  --fs-display: clamp(2.05rem, 5.6vw, 4.4rem);
+  --fs-display: clamp(2.5rem, 6.4vw, 5.25rem);
   --fs-h1: clamp(2rem, 4.4vw, 3.2rem);
-  --fs-h2: clamp(1.6rem, 3.1vw, 2.4rem);
+  --fs-h2: clamp(1.75rem, 3.5vw, 2.85rem);
   --fs-h3: clamp(1.2rem, 1.9vw, 1.5rem);
   --fs-lead: clamp(1.05rem, 1.45vw, 1.28rem);
   --fs-body: 1.0625rem;
@@ -199,6 +199,51 @@
   --shadow-md: 0 14px 40px rgba(2, 7, 16, 0.5);
   --shadow-lg: 0 30px 78px rgba(2, 7, 16, 0.6);
   --glow: 0 14px 40px rgba(27, 84, 168, 0.5);
+
+  color: var(--text);
+  background: var(--bg);
+}
+
+/* ============================================================
+   Faixa clara: as seções de produto da home, o app do cuidador e o
+   download. O mesmo truque do .on-dark — só os tokens mudam —, então
+   cartões, textos, botões e ícones se acertam sozinhos. Alternar faixa
+   escura e clara é o que separa um capítulo do outro sem linha nem
+   efeito: é o ritmo das páginas de produto de verdade.
+   ============================================================ */
+.on-light {
+  color-scheme: light;
+
+  --bg: #f5f7fb;
+  --bg-soft: #eef2f8;
+  --surface: #ffffff;
+  --surface-2: #f3f6fb;
+  --surface-3: #e8edf5;
+  --line: rgba(11, 27, 58, 0.1);
+  --line-strong: rgba(11, 27, 58, 0.2);
+
+  --text: #0b1b3a;
+  --text-soft: #34445f;
+  --text-dim: #5a6a83;
+
+  --accent: var(--blue);
+  --accent-soft: rgba(27, 84, 168, 0.08);
+  --accent-line: rgba(27, 84, 168, 0.24);
+  --ok: #00796a;
+  --ok-soft: rgba(0, 121, 106, 0.08);
+  --ok-line: rgba(0, 121, 106, 0.26);
+
+  --warn: #8a5a00;
+  --warn-soft: rgba(176, 116, 0, 0.1);
+  --warn-line: rgba(176, 116, 0, 0.28);
+  --danger: #b3261e;
+  --danger-soft: rgba(179, 38, 30, 0.08);
+  --danger-line: rgba(179, 38, 30, 0.26);
+
+  --shadow-sm: 0 1px 2px rgba(11, 27, 58, 0.06), 0 2px 8px rgba(11, 27, 58, 0.05);
+  --shadow-md: 0 10px 30px rgba(11, 27, 58, 0.1);
+  --shadow-lg: 0 30px 70px rgba(11, 27, 58, 0.16);
+  --glow: 0 10px 30px rgba(27, 84, 168, 0.22);
 
   color: var(--text);
   background: var(--bg);

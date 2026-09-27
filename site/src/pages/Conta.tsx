@@ -98,7 +98,7 @@ export default function Conta() {
 
   return (
     <div className="flow">
-      <AmbientBackground particles={10} scan={false} light />
+      <AmbientBackground variante="suave" />
 
       <div className="container flow__inner">
         <Reveal anim="fade">

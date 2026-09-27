@@ -9,6 +9,7 @@ import { useLicense } from '../../context/LicenseContext';
 import { MANAGE_URL } from '../../services/license';
 import type { LoginFailure } from '../../services/license';
 import { cloudConfig } from '../../cloud/config';
+import simbolo from '../../assets/brand/irisflow-simbolo.png';
 
 /**
  * Login / ativação.
@@ -127,11 +128,13 @@ export const LoginScreen: React.FC = () => {
             gap: '0.6rem',
           }}
         >
+          {/* O símbolo da marca: o LOGO.png (letras escuras) sumia no cartão escuro. */}
           <img
-            src="/LOGO.png"
+            src={simbolo}
             alt=""
             aria-hidden="true"
-            style={{ width: 130, height: 'auto' }}
+            draggable={false}
+            style={{ width: 56, height: 56 }}
             onError={(e) => (e.currentTarget.style.display = 'none')}
           />
           <h1 id="login-title" className="t-h1" style={{ margin: 0, color: 'var(--color-text-base)' }}>

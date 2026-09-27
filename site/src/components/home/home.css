@@ -1,0 +1,286 @@
+/* Seções da home que não têm arquivo próprio: contraste de preço, destaque do
+   app do cuidador, resumo dos planos e privacidade. Mais os passos numerados,
+   que a página do cuidador e a de download também usam. (A lista com check e o
+   link com seta ficam em styles/global.css.) */
+
+/* Passos numerados (páginas do cuidador e de download). */
+.passos {
+  list-style: none;
+  counter-reset: passo;
+  padding: 0;
+  margin: var(--sp-6) 0 0;
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.passo {
+  margin: 0;
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.passo__numero {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-bottom: var(--sp-4);
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.passo__titulo {
+  font-size: 1.15rem;
+  margin-bottom: var(--sp-2);
+}
+
+.passo p {
+  margin: 0;
+}
+
+@media (min-width: 960px) {
+  .passos {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ---------- contraste de preço ---------- */
+.contraste {
+  position: relative;
+  padding-block: clamp(80px, 12vh, 140px);
+  background: var(--navy-deep);
+}
+
+.contraste__titulo {
+  --title-w: 20ch;
+  margin-bottom: clamp(32px, 6vh, 64px);
+}
+
+.contraste__lados {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-5);
+}
+
+.contraste__lado {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: clamp(24px, 3vw, 40px);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.contraste__lado--irisflow {
+  border-color: rgba(63, 214, 194, 0.35);
+  background: linear-gradient(160deg, rgba(0, 166, 147, 0.12), rgba(27, 84, 168, 0.08));
+}
+
+.contraste__rotulo {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+
+.contraste__valor {
+  font-family: var(--font-display);
+  font-size: clamp(1.9rem, 4vw, 3.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.contraste__lado--dedicado .contraste__valor {
+  color: var(--text-soft);
+}
+
+.contraste__nota {
+  color: var(--text-soft);
+  font-size: 1rem;
+}
+
+/* ---------- destaque do app do cuidador ---------- */
+.cuidador-destaque {
+  padding-block: clamp(80px, 12vh, 140px);
+  overflow: hidden;
+}
+
+.cuidador-destaque__grade {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: clamp(40px, 6vw, 96px);
+  align-items: center;
+}
+
+.cuidador-destaque__marca {
+  width: 88px;
+  height: auto;
+  margin-bottom: var(--sp-5);
+}
+
+/* ---------- resumo dos planos ---------- */
+.planos-resumo {
+  padding-block: clamp(72px, 11vh, 128px);
+  border-top: 1px solid var(--line);
+}
+
+.planos-resumo__grade {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin-top: clamp(28px, 5vh, 48px);
+}
+
+.plano-mini {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-5) var(--sp-5) var(--sp-5);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
+.plano-mini--destaque {
+  border-color: var(--accent-line);
+  box-shadow:
+    0 0 0 1px var(--accent-line),
+    var(--shadow-md);
+}
+
+.plano-mini__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.plano-mini__nome {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.plano-mini__selo {
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.plano-mini__preco {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: var(--sp-4) 0 var(--sp-4);
+  color: var(--text);
+}
+
+.plano-mini__preco strong {
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.plano-mini__moeda,
+.plano-mini__periodo {
+  font-size: 0.95rem;
+  color: var(--text-dim);
+}
+
+.plano-mini__lista {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--sp-4);
+  display: grid;
+  gap: var(--sp-2);
+  flex: 1;
+}
+
+.plano-mini__lista li {
+  margin: 0;
+  padding-left: 18px;
+  position: relative;
+  color: var(--text-soft);
+}
+
+.plano-mini__lista li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.plano-mini__aparelhos {
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+
+.planos-resumo__link {
+  margin-top: var(--sp-6);
+}
+
+/* ---------- privacidade ---------- */
+.privacidade-curta {
+  position: relative;
+  padding-block: clamp(72px, 11vh, 120px);
+  background: var(--navy-deep);
+}
+
+.privacidade-curta__inner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: clamp(24px, 4vw, 56px);
+  align-items: start;
+}
+
+.privacidade-curta__icone {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  color: var(--teal-300);
+  background: rgba(63, 214, 194, 0.08);
+  border: 1px solid rgba(63, 214, 194, 0.3);
+}
+
+/* ---------- celular e tablet ---------- */
+@media (max-width: 960px) {
+  .cuidador-destaque__grade {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cuidador-destaque__aparelho {
+    order: 2;
+  }
+  .planos-resumo__grade {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 480px;
+  }
+}
+
+@media (max-width: 720px) {
+  .contraste__lados {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .privacidade-curta__inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

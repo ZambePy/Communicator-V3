@@ -146,6 +146,52 @@ hr {
   border-block: 1px solid var(--line);
 }
 
+/* Título grande de capítulo: poucas palavras, muito espaço. */
+.titulo-capitulo {
+  font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.028em;
+  max-width: var(--title-w, 18ch);
+  margin-bottom: var(--sp-4);
+}
+
+.texto-capitulo {
+  font-size: var(--fs-lead);
+  line-height: 1.55;
+  color: var(--text-soft);
+  max-width: var(--lead-w, 46ch);
+}
+
+/* ---------- seção padrão das páginas de dentro ---------- */
+.faixa {
+  position: relative;
+  overflow: hidden;
+  padding-block: clamp(72px, 11vh, 128px);
+}
+
+.faixa > .container {
+  position: relative;
+  z-index: 1;
+}
+
+.capitulo {
+  margin-bottom: clamp(32px, 6vh, 56px);
+}
+
+.capitulo .texto-capitulo {
+  margin-bottom: 0;
+}
+
+.capitulo--centro {
+  text-align: center;
+}
+
+.capitulo--centro .titulo-capitulo,
+.capitulo--centro .texto-capitulo {
+  margin-inline: auto;
+}
+
+
 .grid {
   display: grid;
   gap: var(--sp-5);
@@ -171,25 +217,69 @@ hr {
   line-height: 1.62;
 }
 
+/* Rótulo curto acima de um título: só o texto, na cor de acento. */
 .eyebrow {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
-  font-size: 0.8rem;
-  letter-spacing: 0.16em;
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   font-weight: 700;
   color: var(--accent);
   margin-bottom: var(--sp-3);
 }
 
-.eyebrow::before {
+
+/* ---------- lista com check e link com seta ---------- */
+.lista-check {
+  list-style: none;
+  padding: 0;
+  margin: var(--sp-5) 0 var(--sp-6);
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.lista-check li {
+  position: relative;
+  margin: 0;
+  padding-left: 32px;
+  color: var(--text);
+  font-size: 1.02rem;
+  line-height: 1.5;
+}
+
+.lista-check li::before {
   content: '';
-  width: 26px;
-  height: 2px;
-  background: currentColor;
-  border-radius: 2px;
-  opacity: 0.55;
+  position: absolute;
+  left: 0;
+  top: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E")
+      center / 13px no-repeat,
+    var(--ok);
+}
+
+.link-seta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--sp-5);
+  font-weight: 650;
+  color: var(--accent);
+}
+
+.link-seta::after {
+  content: '→';
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.link-seta:hover::after,
+.link-seta:focus-visible::after {
+  transform: translateX(4px);
 }
 
 /* ---------- padrões de seção repetidos em várias páginas ----------
@@ -245,15 +335,11 @@ hr {
   margin-top: var(--sp-5);
 }
 
-/* Palavra destacada dentro de um título. `.gradient-text` era usada em
-   títulos de seção (Planos, Comparativo) sem regra fora do AnimatedHeadline
-   — o trecho saía sem destaque nenhum. Agora as duas classes são iguais. */
+/* Palavra destacada dentro de um título: só a cor de acento, sem
+   degradê — o destaque é a palavra, não o efeito. */
 .gradient-text,
 .accent-text {
-  background-image: linear-gradient(96deg, var(--blue-300), var(--teal-300));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
 }
 
 /* Dica sob o botão de enviar enquanto ele está desabilitado: diz o que

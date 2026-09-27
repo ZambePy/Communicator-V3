@@ -378,13 +378,11 @@
   max-width: 520px;
 }
 
-/* reenvio do link de confirmação, na tela de acesso ("Confirm email" ligado) */
-.entrar__reenvio {
-  display: grid;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-4);
-}
-
-.entrar__reenvio p {
-  margin: 0;
+/* código de confirmação na tela de acesso ("Confirm email" ligado) */
+.entrar__codigo {
+  margin: var(--sp-2) 0 var(--sp-5);
+  padding: var(--sp-5) var(--sp-4) var(--sp-4);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
 }

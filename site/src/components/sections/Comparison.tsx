@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Reveal } from '@/components/effects/Reveal'
 import { COMPARISON } from '@/data/content'
 import './comparison.css'
@@ -72,22 +72,22 @@ function Cell({ value }: { value: string }) {
   return <span className={`cmp__text ${cellClass(value)}`}>{value}</span>
 }
 
-export function Comparison() {
+/**
+ * A tabela comparativa, com a ressalva curta embaixo. `children` entra depois
+ * da ressalva (a página do produto põe ali o que ele ainda não entrega).
+ */
+export function Comparison({ children }: { children?: ReactNode }) {
   const shadows = useScrollShadows()
   return (
-    <section className="section comparison" id="comparativo">
+    <section className="faixa comparison" id="comparativo" aria-labelledby="comparativo-titulo">
       <div className="container">
-        <Reveal anim="fade">
-          <span className="eyebrow">Comparativo honesto</span>
-        </Reveal>
-
-        <Reveal anim="up">
-          <h2 className="comparison__title">
-            Onde a IrisFlow ganha <span className="gradient-text">e onde ela perde</span>.
+        <Reveal anim="up" className="capitulo">
+          <h2 id="comparativo-titulo" className="titulo-capitulo">
+            Onde a IrisFlow ganha e onde ela perde.
           </h2>
         </Reveal>
 
-        <Reveal anim="zoom" delay={160}>
+        <Reveal anim="up" delay={120}>
           <div
             className={`cmp__wrap${shadows.left ? ' can-left' : ''}${shadows.right ? ' can-right' : ''}`}
             ref={shadows.ref}
@@ -126,9 +126,10 @@ export function Comparison() {
           </div>
         </Reveal>
 
-        <Reveal anim="fade" delay={280}>
+        <Reveal anim="fade" delay={200}>
           <p className="comparison__honesty">{COMPARISON.honesty}</p>
         </Reveal>
+        {children}
       </div>
     </section>
   )

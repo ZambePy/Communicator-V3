@@ -1,126 +1,131 @@
+import { Link } from 'react-router-dom'
 import { PageHead } from '@/components/layout/PageHead'
-import { Pipeline } from '@/components/sections/Pipeline'
+import { PassosComTela, Estagios } from '@/components/produto/Passos'
+import { Capitulo, Detalhe, Recursos } from '@/components/pagina/Blocos'
+import { AmbientBackground } from '@/components/effects/AmbientBackground'
+import { Reveal } from '@/components/effects/Reveal'
 import { DwellDemo } from '@/components/sections/DwellDemo'
 import { CallToAction } from '@/components/sections/CallToAction'
-import { Reveal } from '@/components/effects/Reveal'
-import { Card, CardIcon } from '@/components/ui/Card'
-import { Icon, type IconName } from '@/components/ui/Icon'
-import { IrisMark } from '@/components/layout/Logo'
-import { Parallax } from '@/components/effects/Parallax'
-import { PLATFORMS } from '@/data/content'
+import { Button } from '@/components/ui/Button'
+import { Icon } from '@/components/ui/Icon'
+import { BETA, BETA_CTA, BRAND, SEGMENTS } from '@/data/content'
+import { ESTAGIOS, PASSOS_DO_PRIMEIRO_USO, TRAVAS, TRES_PERGUNTAS } from '@/data/produto'
 import './como-funciona.css'
 
-const STEPS_USER = [
-  {
-    n: '01',
-    title: 'Instale no computador que já existe em casa',
-    text: `Instalador para ${PLATFORMS.long}. Nenhum equipamento novo e nenhuma câmera especial: a webcam do notebook basta.`,
-  },
-  {
-    n: '02',
-    title: 'Deixe o sistema preparar o posto de uso',
-    text: 'Antes de calibrar, a IrisFlow confere distância, enquadramento, postura e iluminação — inclusive reflexo nos óculos — e ajusta a câmera sozinha quando dá. Quando o ajuste depende de algo físico, ela diz exatamente o que mudar.',
-  },
-  {
-    n: '03',
-    title: 'Calibre em cerca de meio minuto',
-    text: 'A pessoa só acompanha com o olhar alguns pontos que aparecem na tela. Em cerca de meio minuto, a calibração aprende o jeito de olhar dela, naquele computador e naquela posição.',
-  },
-  {
-    n: '04',
-    title: 'Comece a falar',
-    text: 'Teclado com sugestões que aprendem com a pessoa, frases prontas, pictogramas e síntese de voz — e, no Modo Computador, o Windows inteiro. A emergência fica sempre no mesmo lugar, em todas as telas.',
-  },
-]
-
-const SAFETY: { icon: IconName; title: string; text: string }[] = [
-  {
-    icon: 'relogio',
-    title: 'Tempo de fixação configurável',
-    text: 'De 0,4 a 4 segundos, com atalhos para 0,8, 1,5 e 2,5 s, e retorno visual em três estágios. O usuário tem uma janela explícita para desistir antes que a seleção se complete.',
-  },
-  {
-    icon: 'bloqueio',
-    title: 'Pausa depois de cada seleção',
-    text: 'Depois de cada acionamento, o mesmo alvo fica bloqueado por um instante, o que impede o disparo duplo enquanto o olho ainda está sobre ele.',
-  },
-  {
-    icon: 'alerta',
-    title: 'Bloqueio em estado degradado',
-    text: 'Quando o rastreamento perde confiabilidade, nenhuma seleção é aceita. A exceção é deliberada: o botão de emergência continua acionável, com tempo de fixação ampliado.',
-  },
-  {
-    icon: 'olho',
-    title: 'Avisos de postura e de cansaço',
-    text: 'Quando a cabeça sai da posição da calibração, a tela avisa e oferece um reajuste de dois segundos; se a precisão cai além do medido, sugere recalibrar. O sistema também acompanha sinais de cansaço visual.',
-  },
-]
-
+/**
+ * /como-funciona — do primeiro uso à seleção pelo olhar. A abertura mostra os
+ * quatro passos com as telas de verdade; depois vêm o caminho do vídeo até o
+ * clique, a prancha para experimentar, as travas contra o clique sem querer e
+ * para quem o IrisFlow serve.
+ */
 export default function ComoFunciona() {
   return (
     <>
       <PageHead
         eyebrow="Como funciona"
-        title="Do olho até a palavra, sem nada sair do computador."
-        highlight={['sem', 'nada', 'sair']}
-        lead="As imagens da câmera, a posição dos olhos e os dados de calibração são processados e permanecem exclusivamente no computador do usuário. Nenhuma imagem e nenhum dado de calibração trafega pela rede."
+        title="Do olhar à voz, em quatro passos."
+        highlight={['voz,']}
+        lead="Instalar, preparar, calibrar e falar. O primeiro uso leva poucos minutos, e nada do que a câmera vê sai do computador."
+        visual={<PassosComTela passos={PASSOS_DO_PRIMEIRO_USO} />}
       />
 
-      <section className="section">
+      <section className="faixa on-light" aria-labelledby="estagios-titulo">
         <div className="container">
-          <div className="how__split">
-            <ol className="how__steps">
-              {STEPS_USER.map((s, i) => (
-                <Reveal key={s.n} anim="right" delay={i * 110} as="li">
-                  <div className="how__step">
-                    <span className="how__n">{s.n}</span>
-                    <div>
-                      <h3 className="how__step-title">{s.title}</h3>
-                      <p className="how__step-text">{s.text}</p>
-                    </div>
-                  </div>
-                </Reveal>
-              ))}
-            </ol>
-
-            <Parallax speed={-0.08}>
-              <IrisMark size={320} />
-            </Parallax>
+          <Capitulo
+            id="estagios-titulo"
+            titulo="Como o olhar vira clique."
+            texto="Seis etapas, dezenas de vezes por segundo, todas dentro do computador."
+          />
+          <Estagios itens={ESTAGIOS} />
+          <div className="como__tecnico">
+            <Detalhe resumo="Para quem quer o detalhe técnico">
+              <p>
+                O rosto e a íris são localizados com o MediaPipe. Um modelo por olho, ajustado na
+                calibração, estima o ponto da tela; depois vêm as compensações de postura, a
+                correção dos cantos e um filtro que segura o cursor sem atrasá-lo.
+              </p>
+              <p>
+                Na medição de referência da equipe, com o modelo de pesquisa, o erro médio ficou em
+                1,40° — cerca de 1,5 cm na tela, a 60 cm. Trabalhos publicados com webcam ficam,
+                em geral, entre 2,4° e 4,2°. Foi uma medição com um só operador, em ambiente
+                controlado; a versão da beta, que roda sem o modelo de pesquisa, ainda vai ser
+                medida.
+              </p>
+              <p>
+                <a href={BRAND.code} target="_blank" rel="noopener noreferrer" className="link-seta">
+                  Código, protocolo e medições no GitHub
+                  <span className="sr-only"> (abre em outra aba)</span>
+                </a>
+              </p>
+            </Detalhe>
           </div>
         </div>
       </section>
 
-      <Pipeline />
-      <DwellDemo />
+      <div className="on-dark como__demo">
+        <DwellDemo />
+      </div>
 
-      <section className="section">
+      <section className="faixa on-light" aria-labelledby="travas-titulo">
         <div className="container">
-          <Reveal anim="fade">
-            <span className="eyebrow">Segurança da seleção</span>
-          </Reveal>
-          <Reveal anim="up">
-            <h2 className="section-title">Quatro mecanismos contra o acionamento acidental.</h2>
-          </Reveal>
-          <Reveal anim="up" delay={120}>
-            <p className="lead section-lead">
-              A taxa de falsos cliques ainda não foi medida em uso contínuo real. Medi-la exige
-              sessões longas com o público-alvo, que é justamente o objetivo do programa de
-              validação. A meta declarada é ficar abaixo de um acionamento acidental por hora.
-            </p>
-          </Reveal>
+          <Capitulo
+            id="travas-titulo"
+            titulo="Quatro travas contra o clique sem querer."
+            texto="A meta é menos de um acionamento acidental por hora. A medição em uso contínuo vem com o programa de validação."
+          />
+          <Recursos itens={TRAVAS} colunas={4} />
+        </div>
+      </section>
 
-          <div className="grid grid--2">
-            {SAFETY.map((s, i) => (
-              <Reveal key={s.title} anim="up" delay={i * 90}>
-                <Card as="div">
-                  <CardIcon tone={i % 2 === 0 ? 'teal' : 'blue'}>
-                    <Icon name={s.icon} size={26} />
-                  </CardIcon>
-                  <h3>{s.title}</h3>
-                  <p>{s.text}</p>
-                </Card>
+      <section className="faixa on-dark" id="para-quem" aria-labelledby="para-quem-titulo">
+        <AmbientBackground variante="suave" />
+        <div className="container">
+          <Capitulo
+            id="para-quem-titulo"
+            titulo="Para quem é."
+            texto="Condições diferentes, o mesmo canal: o olhar. O que muda é o ritmo, o vocabulário e o cuidado na avaliação."
+          />
+          <ul className="condicoes">
+            {SEGMENTS.map((s, i) => (
+              <Reveal key={s.id} as="li" anim="up" delay={60 * i} className="condicoes__item" id={`para-${s.id}`}>
+                <span className="condicoes__icone">
+                  <Icon name={s.icon} size={22} />
+                </span>
+                <h3 className="condicoes__titulo">{s.title}</h3>
+                <p className="condicoes__texto">{s.fit}</p>
+                <p className="condicoes__cuidado">
+                  <Icon name="info" size={16} />
+                  <span>{s.caveat}</span>
+                </p>
               </Reveal>
             ))}
+            <Reveal as="li" anim="up" delay={60 * SEGMENTS.length} className="condicoes__item condicoes__item--outra">
+              <h3 className="condicoes__titulo">Outra condição?</h3>
+              <p className="condicoes__texto">
+                Distrofias musculares, síndrome do encarceramento e outros quadros com o olhar
+                preservado também podem funcionar. Conte o caso.
+              </p>
+              <Link to="/contato" className="link-seta">
+                Falar com a equipe
+              </Link>
+            </Reveal>
+          </ul>
+
+          <div className="como__perguntas">
+            <Reveal anim="up">
+              <h3 className="como__perguntas-titulo">Três perguntas antes de instalar</h3>
+              <p className="como__perguntas-texto">
+                Se a resposta for sim para as três, vale testar — de graça, com a webcam que já está
+                em casa.
+              </p>
+            </Reveal>
+            <Recursos itens={TRES_PERGUNTAS} numerar />
+            <Reveal anim="up" className="como__perguntas-acoes">
+              <Button to={BETA.ativo ? BETA_CTA.to : '/baixar'}>{BETA.ativo ? BETA_CTA.label : 'Baixar grátis'}</Button>
+              <Link to="/contato" className="link-seta">
+                Ficou em dúvida? A equipe responde caso a caso
+              </Link>
+            </Reveal>
           </div>
         </div>
       </section>

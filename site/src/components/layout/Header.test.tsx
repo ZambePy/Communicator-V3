@@ -48,12 +48,31 @@ describe('<Header />', () => {
     expect(within(beta).queryByText('novo')).not.toBeInTheDocument()
   })
 
-  it('depois do lançamento: volta o selo "novo"', async () => {
+  it('depois do lançamento: volta o selo "novo" e a chamada vira "Baixar grátis"', async () => {
     apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: '2020-11-10T03:00:00Z' }
     montar()
     const nav = screen.getByRole('navigation', { name: 'Navegação principal' })
-    expect(await within(nav).findByText('novo')).toBeInTheDocument()
+    // A pílula da navegação tem uma cópia visual dos rótulos, fora do leitor de
+    // tela: a busca vai dentro do link de verdade.
+    const beta = within(nav).getByRole('link', { name: /Beta/ })
+    expect(await within(beta).findByText('novo')).toBeInTheDocument()
     expect(nav.querySelector('.etiqueta-lancamento')).toBeNull()
+    expect((await screen.findAllByRole('link', { name: 'Baixar grátis' }))[0]).toHaveAttribute('href', '/baixar')
+  })
+
+  it('a cópia visual da pílula fica fora do leitor de tela', () => {
+    montar()
+    const nav = screen.getByRole('navigation', { name: 'Navegação principal' })
+    const copia = nav.querySelector('.nav-pilula__links--aceso')
+    expect(copia).not.toBeNull()
+    expect(copia).toHaveAttribute('aria-hidden', 'true')
+    expect(within(nav).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
+      '/solucao',
+      '/como-funciona',
+      '/cuidador',
+      '/planos',
+      '/beta',
+    ])
   })
 
   it('sem sessão: "Entrar" e "Entrar na beta"', () => {

@@ -47,19 +47,19 @@ export const BRAND = {
   instagram: 'https://www.instagram.com/irisflow.ia',
   linkedin: 'https://www.linkedin.com/company/irisflowia/',
   /** Código-fonte público (GPL-3.0): o mesmo repositório dos instaladores
-      (VITE_RELEASES_REPO). Ver CODE_POSITION. */
+      (VITE_RELEASES_REPO). */
   code: `https://github.com/${RELEASES_REPO}`,
 }
 
 /** Texto do hero da home. */
 export const HERO = {
-  eyebrow: 'Comunicação assistiva por rastreamento ocular',
   title: 'Seu olhar tem voz',
-  /** Palavra do título em gradiente. */
+  /** Trecho do título na cor de destaque. */
   titleAccent: 'voz',
-  lead: 'O IrisFlow Communicator transforma o olhar em comunicação e controle do computador, usando uma webcam comum.',
-  primary: 'Experimente sem risco',
-  secondary: 'Ver como funciona',
+  lead: 'O IrisFlow Communicator transforma o olhar em escrita, voz e controle do computador. Só com a webcam que você já tem.',
+  /** Chamada principal fora da beta (na beta, é a do BETA_CTA). */
+  primary: 'Ver os planos',
+  secondary: 'Como funciona',
 }
 
 /* ---------------- quem espera do outro lado ----------------
@@ -77,11 +77,6 @@ export const HUMAN = {
   report:
     'Uma das respondentes da nossa pesquisa é médica e filha de uma paciente. Ela contou que a mãe havia perdido a fala na semana anterior e que estava muito abalada com a dificuldade de se comunicar. Não é um caso raro. É a semana em que essa família estava vivendo quando respondeu o formulário.',
   source: 'Pesquisa de mercado IrisFlow, 2026',
-  close:
-    'A IrisFlow precisa se pagar para continuar existindo, e levamos essa parte a sério. Mas não é ela a razão de existir. A razão é uma família voltar a conversar.',
-  /** A frase de missão, ao lado da foto dos três. */
-  mission:
-    'Nenhuma família com ELA ou AVC no Brasil deveria ficar sem voz por causa do preço de um aparelho.',
 }
 
 /* ---------------- por condição ----------------
@@ -134,58 +129,11 @@ export const SEGMENTS: {
   },
 ]
 
-/* ---------------- checklist de elegibilidade ---------------- */
-
-export const ELIGIBILITY = {
-  title: 'O IrisFlow serve para a pessoa que você tem em mente?',
-  lead: 'Três perguntas resolvem a maior parte dos casos. Se a resposta for sim para as três, vale instalar e testar na beta — de graça, com a webcam que já está em casa.',
-  items: [
-    {
-      q: 'Consegue fixar o olhar em um ponto por cerca de um segundo?',
-      why: 'É o gesto que substitui o clique. Tremor leve e óculos não atrapalham, e o tempo de fixação é ajustável de 0,4 a 4 segundos.',
-    },
-    {
-      q: 'Compreende o que é dito e reconhece letras ou figuras?',
-      why: 'O teclado pede leitura; a prancha de pictogramas, não. Basta que a pessoa entenda o que quer comunicar.',
-    },
-    {
-      q: 'A visão está preservada, ao menos em um dos olhos?',
-      why: 'A câmera precisa ver a íris. Visão dupla, nistagmo intenso ou baixa visão severa podem impedir o rastreamento.',
-    },
-  ],
-  extra: 'Se ficou em dúvida em alguma resposta, escreva para a gente: a equipe responde caso a caso, sem compromisso.',
-}
-
-/* ---------------- o problema ---------------- */
+/* ---------------- o problema, em números da pesquisa ----------------
+   Pesquisa de mercado de 2026 (38 respondentes, a maioria profissionais
+   de saúde), com a ressalva de amostra sempre junto. */
 
 export const PROBLEM = {
-  title: 'Quem perde a fala e o movimento continua com tudo a dizer — e com os olhos.',
-  lead: 'A IrisFlow é feita para pessoas com esclerose lateral amiotrófica (ELA), sequela grave de AVC, esclerose múltipla avançada, tetraplegia alta por lesão medular, paralisia cerebral severa ou distrofia muscular avançada. São condições diferentes, com uma coisa em comum: a pessoa perde a fala e o movimento das mãos, mas continua lúcida, com opiniões, dor, vontades e afetos — e com o controle dos olhos preservado. É esse movimento que vira palavra.',
-  /** As condições que o produto atende, no nível de detalhe que a família reconhece (tópico 1.2 do plano). */
-  conditions: [
-    {
-      name: 'Esclerose lateral amiotrófica (ELA)',
-      text: 'Doença neurodegenerativa progressiva: a pessoa perde a fala e os movimentos ao longo de meses ou anos, e o controle dos olhos costuma ser o último canal voluntário a permanecer. É o público prioritário da IrisFlow, porque aqui o olhar não é uma alternativa — é frequentemente a única via.',
-    },
-    {
-      name: 'Tetraplegia alta por lesão medular',
-      text: 'Lesão na coluna cervical que interrompe o movimento do pescoço para baixo. O quadro é estável, a cognição e a visão ficam intactas, e o usuário costuma ser mais jovem e familiarizado com tecnologia.',
-    },
-    {
-      name: 'Sequela grave de AVC',
-      text: 'Quando o acidente vascular cerebral atinge as áreas da fala e do movimento, mas preserva a compreensão. Exige avaliação caso a caso: a IrisFlow serve quando o controle ocular e a cognição estão preservados.',
-    },
-    {
-      name: 'Esclerose múltipla avançada',
-      text: 'Quando a disartria e a perda de função das mãos tornam fala e digitação impraticáveis. A fadiga varia dia a dia, por isso o tempo de fixação é ajustável; visão dupla e nistagmo pedem avaliação antes.',
-    },
-    {
-      name: 'Paralisia cerebral severa e distrofias musculares avançadas',
-      text: 'Condições em que a fala e as mãos não respondem, mas o olhar sim. Entram como extensão natural do produto, com adaptação de interface conforme o caso.',
-    },
-  ],
-  /** Por que a tecnologia não chega: vem DEPOIS da pessoa, não antes. */
-  why: 'A tecnologia que transforma o movimento dos olhos em comunicação existe há mais de vinte anos. O que impede que ela chegue à casa dessas famílias no Brasil é o preço do equipamento dedicado — e é essa a lacuna que a IrisFlow existe para fechar.',
   stats: [
     {
       value: 60.5,
@@ -207,179 +155,15 @@ export const PROBLEM = {
     },
   ],
   note: 'Amostra não probabilística, por conveniência, de 38 respondentes, a maioria profissionais de saúde, coletada por formulário eletrônico. Serve como indício de percepção qualificada. Não vale como estimativa estatística da população brasileira.',
-  contrast: {
-    them: {
-      label: 'Sistema de rastreamento ocular dedicado',
-      price: 'R$ 15.000 a R$ 80.000',
-      detail: 'Hardware proprietário, licença de software à parte, revenda física.',
-    },
-    us: {
-      label: 'IrisFlow Communicator',
-      // Sem `price` aqui de propósito: o "a partir de R$ X por mês" é
-      // montado no ProblemSection com o menor preço vindo do banco
-      // (usePlans), para o número não ficar duplicado neste arquivo.
-      detail: 'Sem equipamento, sem fidelidade e com avaliação gratuita antes da primeira cobrança. A família só paga se o paciente conseguir operar.',
-    },
-  },
 }
 
 /* ---------------- módulos do aplicativo ----------------
-   O que o IrisFlow Communicator tem hoje, na ordem em que a família
-   encontra (a Home mostra os seis primeiros). Cada descrição foi conferida
-   no aplicativo; "Experimental" é o mesmo selo que o próprio app mostra.
+   A lista dos módulos, com a tela de cada um, está em src/data/produto.ts
+   (MODULOS_EM_TELA). "Experimental" é o mesmo selo que o próprio app mostra.
    ------------------------------------------------------------------ */
 
 export type ModuleState = 'Implementado' | 'Experimental'
 
-export const MODULES: {
-  icon: IconName
-  name: string
-  description: string
-  state: ModuleState
-}[] = [
-    {
-      icon: 'teclado',
-      name: 'Comunicação',
-      description:
-        'Teclado em dois passos — primeiro o grupo de letras, depois a letra —, frases rápidas e pictogramas, tudo falado em voz alta em português. Letras e botões grandes, sempre no mesmo lugar.',
-      state: 'Implementado',
-    },
-    {
-      icon: 'monitor',
-      name: 'Modo Computador',
-      description:
-        'O cursor do olhar sai do aplicativo e controla o Windows inteiro: clicar, clicar duas vezes, clicar com o botão direito, arrastar, rolar e digitar em qualquer programa, com uma lupa para os alvos pequenos.',
-      state: 'Implementado',
-    },
-    {
-      icon: 'conversa',
-      name: 'Conversa com o cuidador',
-      description:
-        'O que a pessoa escreve com os olhos chega ao app do cuidador no celular; o que a família responde aparece e é falado na tela do computador, com respostas rápidas que o cuidador cadastra.',
-      state: 'Implementado',
-    },
-    {
-      icon: 'alerta',
-      name: 'Emergência',
-      description:
-        'Botão de socorro no mesmo lugar em todas as telas. Dispara um alarme no computador e aparece em tela cheia no app do cuidador; se ninguém confirmar no prazo, o pedido é reforçado.',
-      state: 'Implementado',
-    },
-    {
-      icon: 'lazer',
-      name: 'Lazer e bem-estar',
-      description:
-        'Jogos feitos para o olhar (Estoura Bolhas, Siga o Alvo, Jogo da Memória e Desenho), notícias, meditação, câmera com álbum de fotos e um modo descanso para os olhos.',
-      state: 'Implementado',
-    },
-    {
-      icon: 'alvo',
-      name: 'Primeiros passos e calibração',
-      description:
-        'Tutorial de dez passos nas telas de verdade, um perfil por paciente, preparo do posto de uso e calibração guiada de cerca de meio minuto, com teste de precisão ao final.',
-      state: 'Implementado',
-    },
-    {
-      icon: 'ajustes',
-      name: 'Área do cuidador',
-      description:
-        'Protegida por PIN: tempo de fixação, estabilidade do cursor, som, voz e idioma, painel com o estado do rastreamento, guia de instalação e um relatório de suporte que nunca inclui o que a pessoa escreveu.',
-      state: 'Implementado',
-    },
-    {
-      icon: 'documento',
-      name: 'Assistente de escrita',
-      description:
-        'Aprende as palavras e as frases que a pessoa usa e as sugere no teclado e na conversa, para que repetir o que já foi dito custe uma fixação em vez de vinte. Roda inteiro no computador.',
-      state: 'Implementado',
-    },
-    {
-      icon: 'voz',
-      name: 'Voz personalizada',
-      description:
-        'O que a pessoa escreve sai na própria voz dela, recriada no computador a partir de uma gravação antiga — só com autorização expressa, porque voz é dado biométrico. Pede um computador com mais memória.',
-      state: 'Experimental',
-    },
-  ]
-
-/* ---------------- como funciona: os seis estágios, em linguagem de benefício ----------------
-   Aqui entra o QUE cada etapa entrega a quem usa, não a técnica (bibliotecas,
-   modelos, parâmetros): quem quiser o detalhe tem o código aberto e o README. */
-
-/** A versão em três frases, para quem não é engenheiro. Fica acima do pipeline. */
-export const PIPELINE_SIMPLE = [
-  'A webcam filma o rosto e o programa encontra os olhos, dezenas de vezes por segundo.',
-  'Uma calibração de cerca de meio minuto ensina ao programa para onde aquela pessoa está olhando, inclusive nos cantos da tela.',
-  'Olhar fixo em uma tecla por um instante vira letra, frase e voz — tudo dentro do computador.',
-]
-
-export const PIPELINE = [
-  {
-    step: '01',
-    title: 'Captura',
-    text: 'A webcam comum do computador filma o rosto em vídeo contínuo. Nenhum equipamento adicional, nenhuma câmera especial.',
-  },
-  {
-    step: '02',
-    title: 'Leitura do rosto',
-    text: 'A cada quadro, o programa localiza o rosto e os olhos, íris incluída, dentro do próprio computador. Nenhuma imagem sai dele.',
-  },
-  {
-    step: '03',
-    title: 'Leitura do olhar',
-    text: 'Dos olhos e da posição da cabeça sai a estimativa de para onde a pessoa está olhando, sem exigir que ela fique imóvel.',
-  },
-  {
-    step: '04',
-    title: 'Calibração pessoal',
-    text: 'Uma calibração rápida ensina ao sistema, na hora, o jeito de olhar daquela pessoa, naquele computador, naquela posição.',
-  },
-  {
-    step: '05',
-    title: 'Cursor estável',
-    text: 'O cursor fica firme sem ficar atrasado, e dá para escolher entre mais estabilidade ou mais agilidade conforme o perfil motor de quem usa.',
-  },
-  {
-    step: '06',
-    title: 'Interação',
-    text: 'O cursor de fixação entra na interface: olhar fixo em um alvo confirma a escolha, com tempo ajustável e uma pausa que evita a reativação acidental.',
-  },
-]
-
-/* ---------------- diferenciais ---------------- */
-
-export const DIFFERENTIATORS: { icon: IconName; title: string; text: string }[] = [
-  {
-    icon: 'olho',
-    title: 'Calibração que aprende o seu olhar',
-    text: 'Em cerca de meio minuto, o sistema aprende o jeito de olhar de cada pessoa, naquele computador e naquela posição, e percebe quando um ponto da calibração saiu ruim para que ele não estrague o resultado. Ao final, um teste mede a precisão alcançada.',
-  },
-  {
-    icon: 'inclinacao',
-    title: 'A cabeça não precisa ficar imóvel',
-    text: 'Movimentos pequenos — virar, inclinar, aproximar ou afastar o rosto — são compensados automaticamente. Quando a postura muda muito, a tela avisa e um reajuste de dois segundos resolve, sem refazer a calibração.',
-  },
-  {
-    icon: 'webcam',
-    title: 'Preparação automática do posto de uso',
-    text: 'Antes de calibrar, o sistema confere distância, enquadramento, postura e iluminação, inclusive reflexo nos óculos, e ajusta zoom, brilho e contraste da câmera sozinho quando dá. Quando não dá, diz qual providência tomar em vez de fingir que ajustou.',
-  },
-  {
-    icon: 'teclado',
-    title: 'Escrever custa cada vez menos',
-    text: 'O teclado tem letras enormes, escolhidas em dois passos, e o assistente de escrita aprende o vocabulário da pessoa: sugere a próxima palavra, a frase inteira e até a resposta que ela costuma dar a cada pergunta do cuidador.',
-  },
-  {
-    icon: 'offline',
-    title: 'Funciona sem internet',
-    text: 'Rastreamento, teclado, frases e o alarme de emergência no computador funcionam offline. Isso foi apontado como essencial por 57,9% dos respondentes da nossa pesquisa, à frente até da síntese de voz — em casas com conexão instável, depender da internet seria fragilidade.',
-  },
-  {
-    icon: 'cadeado',
-    title: 'Privacidade por desenho',
-    text: 'O rastreamento é 100% local: imagens da câmera, marcos do rosto, calibração e registros brutos de sessão nunca saem do computador. Com a conta vinculada, sai só o que a pessoa escolheu dizer, os alertas e números agregados de uso. A voz personalizada depende de autorização expressa e revogável. E o código é aberto: qualquer pessoa pode conferir essas promessas.',
-  },
-]
 
 /* ---------------- princípios de acessibilidade ---------------- */
 
@@ -415,7 +199,7 @@ export const A11Y_PRINCIPLES = [
 export const COMPARISON = {
   columns: ['IrisFlow', 'Eye tracker dedicado', 'Comunicador nacional por assinatura'],
   rows: [
-    { feature: 'Custo no primeiro ano', values: ['grátis na beta; depois, R$ 2.988 a R$ 7.788 (previsto)', 'R$ 15.000 a R$ 80.000', 'R$ 708 a R$ 1.490'] },
+    { feature: 'Custo no primeiro ano', values: ['grátis na beta; depois, R$ 2.988 a R$ 7.788 (previsto)', 'R$ 15.000 a R$ 120.000', 'R$ 708 a R$ 1.490'] },
     { feature: 'Compra de equipamento', values: ['não', 'sim', 'parcial'] },
     { feature: 'Apontamento direto pelo olhar', values: ['sim', 'sim', 'não'] },
     { feature: 'Controle do sistema operacional', values: ['sim', 'sim', 'não'] },
@@ -425,7 +209,7 @@ export const COMPARISON = {
     { feature: 'Adoção institucional consolidada', values: ['não', 'sim', 'sim'] },
   ],
   honesty:
-    'Duas coisas precisam ser ditas aqui, e nenhuma delas ajuda a vender. A primeira: a IrisFlow não é a solução mais barata do mercado brasileiro de tecnologia assistiva. Existem comunicadores nacionais por assinatura que custam menos, com distribuição consolidada e adoção por grandes centros de reabilitação — mas eles não apontam direto pelo olhar. Entre as soluções que apontam pelo olhar, cujo equipamento custa de R$ 15 mil a R$ 80 mil, a IrisFlow é a de menor custo de entrada que conhecemos no país: não há nada para comprar, e durante a beta o uso é gratuito. A segunda: a IrisFlow ainda não tem estudo clínico publicado, e nisso perde para quem tem décadas de vantagem. Essa distância não se fecha com texto de site. Fecha com execução, e o programa de validação de noventa dias é o começo dela.',
+    'A IrisFlow não é a opção mais barata de tecnologia assistiva no Brasil: há comunicadores por assinatura que custam menos, mas não apontam pelo olhar. Entre os que apontam, é a de menor custo de entrada que conhecemos, porque não há nada para comprar. E ainda não temos estudo clínico publicado: é isso que o programa de validação de noventa dias começa a responder.',
 }
 
 /* ---------------- planos de assinatura ---------------- */
@@ -469,7 +253,7 @@ export const BETA = {
  * aparece no topo de cada tela do fluxo (/beta e /confirmar-email) para quem
  * está no meio do caminho saber onde está e o que falta.
  */
-export const ETAPAS_DA_BETA = ['Criar conta', 'Confirmar e-mail', 'Pesquisa rápida', 'Download']
+export const ETAPAS_DA_BETA = ['Criar conta', 'Código do e-mail', 'Pesquisa rápida', 'Download']
 
 /** Rótulos de chamada usados no cabeçalho, no hero e nas chamadas finais. */
 export const BETA_CTA = {
@@ -525,21 +309,22 @@ export type Plan = {
  * offline já aparece como indisponível, igual ao que o banco diz.
  */
 export const PLANS: Plan[] = ([
+  // Os recursos de cada plano seguem a aba "2. PRODUTOS" da planilha financeira
+  // (descrições dos três planos, revisadas em 26/09/2026). Mudou lá, muda aqui.
   {
     id: 'essencial',
     name: 'Essencial',
     price: 249,
     period: 'por mês',
-    tagline: 'Comunicação e controle do computador, para quem precisa do essencial pelo menor preço.',
+    tagline: 'Comunicar e usar o computador pelo olhar, com a família conectada pelo celular.',
     devices: '1 dispositivo ativo',
     support: 'Suporte por e-mail e tutoriais',
     includes: [
-      'Comunicação por olhar: teclado, frases rápidas, pictogramas e voz em português',
-      'Modo Computador: o Windows inteiro pelo olhar',
-      'App do cuidador no celular, com conversa e alertas de emergência',
-      'Lazer e bem-estar: jogos pelo olhar, notícias e meditação',
-      'Calibração guiada e preparação automática do posto',
-      `Instalador para ${PLATFORMS.long}, com funcionamento offline`,
+      'Comunicação pelo olhar: teclado em dois passos, frases rápidas e pictogramas, falados em voz alta',
+      'Modo Computador: o Windows inteiro pelo olhar — clicar, arrastar, rolar e digitar',
+      'Botão de emergência em todas as telas, com alerta no celular e reenvio se ninguém responder',
+      'App IrisFlow Cuidador, com conversa em tempo real e ajustes a distância',
+      'Calibração guiada de 13 pontos, tutorial em 10 passos e uso offline',
     ],
   },
   {
@@ -547,16 +332,16 @@ export const PLANS: Plan[] = ([
     name: 'Completo',
     price: 399,
     period: 'por mês',
-    tagline: 'O plano recomendado. O assistente de escrita poupa o esforço de escrever letra a letra, e os relatórios mostram à família como está o uso.',
+    tagline: 'O recomendado: lazer pelo olhar, assistente de escrita e relatórios para a família.',
     devices: 'Até 3 dispositivos ativos',
-    support: 'Suporte prioritário por mensagem',
+    support: 'Suporte prioritário por WhatsApp',
     recommended: true,
     includes: [
-      'Tudo do plano Essencial',
-      'Assistente de escrita, que aprende as palavras e as frases da pessoa',
-      'Relatórios de uso e do teste de precisão no app do cuidador',
-      'O mesmo acesso em mais de um computador',
-      'Uma sessão de calibração assistida no primeiro mês',
+      'Tudo do Essencial',
+      'Lazer e bem-estar pelo olhar: Estoura Bolhas, Siga o Alvo, Memória e Desenho, álbum de fotos, leituras em voz alta e meditação guiada',
+      'Assistente de escrita, que aprende e sugere as palavras e as frases da pessoa',
+      'Relatórios no IrisFlow Cuidador: frases, tempo de uso e precisão de cada sessão, com 7 dias de histórico',
+      'Calibração assistida no primeiro mês',
     ],
   },
   {
@@ -564,15 +349,16 @@ export const PLANS: Plan[] = ([
     name: 'Voz',
     price: 649,
     period: 'por mês',
-    tagline: 'A voz do próprio paciente, reconstruída a partir de gravações anteriores à perda da fala.',
-    note: 'A voz personalizada está em fase experimental: é gerada e roda no próprio computador, pede um computador com 16 GB de memória para funcionar bem e só é ativada com autorização expressa da família, porque o áudio de referência é dado biométrico. O plano Voz só entra em comercialização quando esse recurso for validado — até lá, indicamos o Completo.',
+    tagline: 'As frases na voz do próprio usuário, recriada a partir de gravações de antes da perda da fala.',
+    note: 'A clonagem de voz está em fase experimental e pede um computador com 16 GB de memória. O plano Voz só entra em venda quando o recurso for validado; até lá, indicamos o Completo.',
     devices: 'Até 5 dispositivos ativos',
-    support: 'Suporte dedicado, com prioridade',
+    support: 'Suporte dedicado, em até 4 horas úteis',
     includes: [
-      'Tudo do plano Completo',
-      'Voz personalizada: a própria voz do paciente, recriada no computador',
-      'Onboarding assistido, com sessão de configuração acompanhada',
-      'Canal direto com a equipe técnica',
+      'Tudo do Completo',
+      'Clonagem de voz: as frases saem na voz do próprio usuário, com o modelo rodando no computador — o áudio não vai para a nuvem',
+      'Ativação só com autorização da família',
+      'Preparação da voz acompanhada pela equipe, da escolha das gravações à configuração',
+      'Canal direto com a equipe',
     ],
   },
 ] satisfies Plan[]).map((p) => ({ ...p, purchasable: !BETA.ativo }))
@@ -593,11 +379,10 @@ export const BETA_PLAN: Plan = {
   support: 'Canal direto com a equipe',
   purchasable: false,
   includes: [
-    'Comunicação por olhar: teclado, frases rápidas, pictogramas e voz em português',
-    'Modo Computador: o Windows inteiro pelo olhar',
-    'App do cuidador no celular, com conversa, alertas de emergência e relatórios',
+    'Tudo o que os três planos terão: comunicação, Modo Computador e emergência',
+    'App IrisFlow Cuidador, com conversa, alertas e relatórios',
     'Assistente de escrita, lazer e bem-estar',
-    'Voz personalizada, em fase experimental',
+    'Clonagem de voz, em fase experimental',
     `Instalador para ${PLATFORMS.long}, com atualizações automáticas durante a beta`,
   ],
 }
@@ -795,17 +580,11 @@ export const TEAM_PHOTO = {
 /* ---------------- história de origem e números ---------------- */
 
 export const ORIGIN = {
-  title: 'Começou como projeto de estudo. Virou a única coisa que a gente queria fazer.',
+  title: 'Começou como projeto de escola. Virou a única coisa que a gente queria fazer.',
   paragraphs: [
-    'O projeto começou em ambiente acadêmico, acompanhado por orientadores, com uma pergunta técnica: dá para estimar o olhar com precisão suficiente, só com a webcam comum e sem hardware dedicado, para escolher uma tecla na tela?',
-    'A resposta veio junto com uma pesquisa de mercado. Entre os 38 respondentes — a maioria profissionais de saúde — 60,5 % apontaram o preço como a principal barreira das soluções existentes, e uma delas, médica, contou que a própria mãe tinha perdido a fala na semana anterior. A pergunta deixou de ser técnica.',
-    'Daí nasceu a IrisFlow: três pessoas, um aplicativo para o computador, um app para o celular do cuidador e um programa beta gratuito aberto às famílias. O código é público, e as medições de precisão são publicadas com as condições em que foram feitas — inclusive quando o resultado não favorece.',
-  ],
-  numbers: [
-    { value: 100, suffix: ' %', label: 'do processamento da imagem feito no próprio computador' } as { value: number; suffix: string; label: string; decimals?: number },
-    { value: 1, suffix: ' min', label: 'ou menos para calibrar, olhando para alguns pontos na tela' },
-    { value: 60.5, suffix: ' %', decimals: 1, label: 'dos respondentes da nossa pesquisa apontam o preço como a principal barreira' },
-    { value: 0, suffix: '', label: 'imagens da câmera enviadas para a internet' },
+    'Começou na escola, com orientadores e uma pergunta técnica: dá para saber para onde a pessoa olha só com a webcam comum, com precisão para escolher uma tecla na tela?',
+    'A resposta veio junto com uma pesquisa com 38 pessoas, a maioria profissionais de saúde. Para 60,5 %, o preço é a principal barreira. Uma delas, médica, contou que a mãe tinha perdido a fala na semana anterior. A pergunta deixou de ser técnica.',
+    'Hoje são um app para o computador, um app para o celular de quem cuida e uma beta gratuita aberta às famílias. O código é público, e as medições de precisão saem com as condições em que foram feitas.',
   ],
 }
 
@@ -818,22 +597,22 @@ export const COMMITMENTS: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'pessoas',
     title: 'Beta gratuita de verdade',
-    text: 'Durante a beta, o aplicativo completo e o app do cuidador são gratuitos, sem cartão cadastrado. Quando ela terminar, nada é cobrado automaticamente: plano pago só com contratação expressa da família.',
+    text: 'Sem cartão e sem cobrança durante a beta. Quando ela acabar, nada é cobrado sozinho: plano pago, só se a família contratar.',
   },
   {
     icon: 'cadeado-aberto',
     title: 'Código aberto',
-    text: 'O código do aplicativo, do site e do app do cuidador é público, sob a licença GPL-3.0. A promessa de que a imagem da câmera não sai do computador pode ser conferida por qualquer pessoa, e não apenas declarada por nós.',
+    text: 'O código do app, do site e do app do cuidador é público, sob a GPL-3.0. Qualquer pessoa pode conferir que a imagem da câmera não sai do computador.',
   },
   {
     icon: 'notebook',
     title: 'Menos descarte, não mais',
-    text: 'Não produzimos, embalamos, transportamos nem descartamos hardware. Rodar no computador que a família já tem prolonga a vida útil de um equipamento em vez de exigir outro.',
+    text: 'Não fabricamos nem vendemos aparelho. Rodar no computador que a família já tem prolonga a vida dele em vez de pedir outro.',
   },
   {
     icon: 'cadeado',
-    title: 'O que o processamento local não resolve',
-    text: 'Manter o rastreamento inteiro no computador reduz o risco na origem, mas não elimina as obrigações da LGPD. Continuamos tratando dados de conta, de suporte e o texto que a pessoa escolhe enviar ao celular do cuidador. A política de privacidade diz exatamente quais, por quanto tempo e como pedir a exclusão.',
+    title: 'O que o local não resolve',
+    text: 'Dados de conta, de suporte e o texto enviado ao celular do cuidador seguem a LGPD. A política de privacidade diz quais, por quanto tempo e como excluir.',
   },
 ]
 
@@ -841,27 +620,9 @@ export const COMMITMENTS: { icon: IconName; title: string; text: string }[] = [
 export const SDGS = [
   { n: 3, title: 'Saúde e bem-estar', text: 'Restabelecer a comunicação permite que a pessoa relate dor e desconforto, informação clínica hoje frequentemente inacessível.' },
   { n: 9, title: 'Indústria e inovação', text: 'Tecnologia assistiva desenvolvida no Brasil, em um segmento historicamente dependente de importação.' },
-  { n: 10, title: 'Redução das desigualdades', text: 'Um eye tracker dedicado custa de R$ 15 mil a R$ 80 mil, pago de uma vez. O IrisFlow roda no computador que a família já tem, é gratuito durante a beta e, depois, será uma assinatura mensal cancelável.' },
+  { n: 10, title: 'Redução das desigualdades', text: 'Um eye tracker dedicado custa de R$ 15 mil a R$ 120 mil, pago de uma vez. O IrisFlow roda no computador que a família já tem, é gratuito durante a beta e, depois, será uma assinatura mensal cancelável.' },
   { n: 17, title: 'Parcerias', text: 'Buscamos associações de pacientes, profissionais de saúde e instituições de ensino para validar o produto com quem vai usá-lo e levá-lo a mais famílias.' },
 ]
-
-/* ---------------- código aberto ----------------
-   O repositório do produto é público, sob a GPL-3.0 (LICENSE na raiz).
-   O link vem de BRAND.code — o mesmo repositório dos instaladores.
-   ------------------------------------------------------- */
-
-export const CODE_POSITION = {
-  title: 'O código é aberto, do rastreamento à interface.',
-  lead: 'O código-fonte do IrisFlow Communicator, do site e do app do cuidador é público no GitHub, sob a licença GPL-3.0.',
-  what: {
-    title: 'O que está aberto',
-    text: 'O rastreamento e a calibração, a interface operada pelo olhar, o app do cuidador, este site e o banco de dados, junto com o protocolo de medição de precisão e os resultados obtidos, com as condições em que foram medidos.',
-  },
-  why: {
-    title: 'Por que aberto',
-    text: 'Em tecnologia assistiva, o que precisa ser auditável é o que o software faz com a imagem da câmera e com o que a pessoa escreve. Com o código público, qualquer pessoa pode conferir que nada disso sai do computador sem autorização.',
-  },
-}
 
 export const ROADMAP = [
   {
@@ -894,17 +655,4 @@ export const ROADMAP = [
     title: 'Programa de validação de 90 dias',
     text: 'Com parceiros clínicos: medição de precisão em uso continuado, ciclos quinzenais de ajuste e documentação de casos.',
   },
-]
-
-export const MARQUEE_ITEMS = [
-  'ELA · AVC · esclerose múltipla · lesão medular · paralisia cerebral',
-  'webcam comum',
-  'processamento local',
-  'sem hardware proprietário',
-  'teclado em português',
-  'síntese de voz',
-  'funciona offline',
-  'painel do cuidador',
-  'emergência sempre acessível',
-  'código aberto',
 ]

@@ -19,7 +19,14 @@ interface ImportMetaEnv {
   readonly VITE_RELEASES_AVAILABLE?: string
   /** Token do Cloudflare Web Analytics. Vazio = nenhuma estatística é coletada. */
   readonly VITE_CF_ANALYTICS_TOKEN?: string
+  /** Página do IrisFlow Cuidador na App Store. Vazio = selo "em breve". */
+  readonly VITE_APP_STORE_URL?: string
+  /** Página do IrisFlow Cuidador no Google Play. Vazio = endereço do pacote Android. */
+  readonly VITE_GOOGLE_PLAY_URL?: string
 }
+
+/** Verdadeiro quando site/public/badges/ tem os selos oficiais (vite.config.ts). */
+declare const __SELOS_OFICIAIS__: boolean
 
 interface ImportMeta {
   readonly env: ImportMetaEnv

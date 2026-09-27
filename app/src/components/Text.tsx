@@ -3,7 +3,7 @@ import { Text as RNText, TextProps as RNTextProps, StyleSheet } from 'react-nati
 import { fonts, fontScaleCap, typeScale, TypeVariant, useTheme } from '@/theme';
 
 export type TextTone = 'default' | 'muted' | 'primary' | 'accent' | 'danger' | 'warning' | 'onPrimary' | 'onDark' | 'onDarkMuted';
-export type TextWeight = 'regular' | 'medium' | 'semibold' | 'bold' | 'display';
+export type TextWeight = 'regular' | 'medium' | 'semibold' | 'bold' | 'display' | 'heading' | 'headingSemibold';
 
 export interface TextProps extends RNTextProps {
   variant?: TypeVariant;
@@ -13,7 +13,7 @@ export interface TextProps extends RNTextProps {
 }
 
 /**
- * Tipografia da IrisFlow (Inter). Tamanho, altura de linha e tracking vêm de
+ * Tipografia da IrisFlow: Sora nos títulos, Inter no texto. Tamanho, altura de linha e tracking vêm de
  * `typeScale`; o limite de ampliação pela fonte do sistema, de `fontScaleCap`
  * (o corpo acompanha até 2×). `tone` escolhe só cores que passam em AA.
  */
@@ -44,11 +44,11 @@ export function Text({ variant = 'body', tone = 'default', weight, center, style
 function defaultWeight(v: TypeVariant): TextWeight {
   switch (v) {
     case 'display':
-      return 'display';
     case 'h1':
     case 'h2':
-      return 'bold';
+      return 'heading';
     case 'h3':
+      return 'headingSemibold';
     case 'label':
     case 'tab':
     case 'badge':

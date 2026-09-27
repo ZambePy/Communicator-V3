@@ -22,10 +22,7 @@
   line-height: 1;
   letter-spacing: -0.03em;
   margin: var(--sp-4) 0 var(--sp-2);
-  background-image: linear-gradient(96deg, var(--blue-300), var(--teal-300));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
 }
 
 .not-found__title {

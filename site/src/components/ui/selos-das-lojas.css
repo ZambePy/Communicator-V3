@@ -1,0 +1,105 @@
+/* Selos das lojas (SelosDasLojas.tsx). */
+
+.selos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.selo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 12px;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) ease;
+}
+
+.selo:hover {
+  transform: translateY(-2px);
+}
+
+/* ---------- imagens oficiais ---------- */
+/* Os dois selos (public/badges) têm a mesma proporção, 3,05 : 1, e cantos de
+   7 px nessa altura; o foco segue o mesmo contorno. */
+.selo--oficial {
+  border-radius: 8px;
+}
+
+.selo--oficial img {
+  display: block;
+  height: 44px;
+  width: auto;
+  border-radius: 7px;
+}
+
+/* Sobre fundo escuro, o contorno cinza do selo oficial da Apple (#A6A6A6)
+   separa o preto do selo do azul-marinho da página. */
+.selos--claro .selo--oficial img {
+  box-shadow: 0 0 0 1px #a6a6a6;
+}
+
+/* No selo oficial o texto vai até a borda de cima: o "em breve" fica acima
+   dele, encostando só na margem do selo. */
+.selo--oficial .selo__breve {
+  top: auto;
+  bottom: calc(100% - 5px);
+  right: -6px;
+}
+
+/* ---------- botões próprios (sem os arquivos oficiais) ---------- */
+.selo--proprio {
+  gap: 10px;
+  min-height: 48px;
+  padding: 7px 18px 7px 14px;
+  background: #0b1220;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 6px 18px -8px rgba(2, 7, 16, 0.5);
+}
+
+.selos--claro .selo--proprio {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.selo__icone {
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+
+.selo__textos {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.selo__linha {
+  font-size: 0.72rem;
+  opacity: 0.8;
+  letter-spacing: 0.02em;
+}
+
+.selo__loja {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.selo__breve {
+  position: absolute;
+  top: -9px;
+  right: -8px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--teal);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}

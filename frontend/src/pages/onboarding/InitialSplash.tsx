@@ -1,3 +1,5 @@
+import logoNegativo from '../../assets/brand/irisflow-wordmark-negativo.png';
+import simbolo from '../../assets/brand/irisflow-simbolo.png';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -96,16 +98,23 @@ export const InitialSplash: React.FC = () => {
         }}
       >
         {!logoQuebrada ? (
-          <img
-            src="/LOGO.png"
-            alt="IrisFlow Communicator"
-            style={{
-              width: 300,
-              height: 'auto',
-              filter: 'drop-shadow(0 20px 40px rgba(27,84,168,0.18))',
-            }}
-            onError={() => setLogoQuebrada(true)}
-          />
+          // A marca em negativo: o fundo do app é sempre o marinho escuro, e o
+          // LOGO.png (letras escuras) sumia nele — só o símbolo aparecia.
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem' }}>
+            <img
+              src={simbolo}
+              alt=""
+              draggable={false}
+              style={{ width: 104, height: 104, filter: 'drop-shadow(0 18px 36px rgba(27,84,168,0.35))' }}
+            />
+            <img
+              src={logoNegativo}
+              alt="IrisFlow Communicator"
+              draggable={false}
+              style={{ width: 260, height: 'auto' }}
+              onError={() => setLogoQuebrada(true)}
+            />
+          </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--color-primary)' }}>
             <Eye size={44} aria-hidden="true" />

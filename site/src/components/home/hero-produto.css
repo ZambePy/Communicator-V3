@@ -1,0 +1,112 @@
+/* Abertura da home (HeroProduto.tsx). Texto centrado em poucas linhas e o
+   monitor logo abaixo, grande, inclinado até a página rolar. */
+
+.hero-produto {
+  position: relative;
+  overflow: hidden;
+  padding-top: calc(var(--header-h) + clamp(40px, 7vh, 88px));
+  padding-bottom: clamp(56px, 9vh, 112px);
+  background: var(--navy-deep);
+  isolation: isolate;
+}
+
+.hero-produto__texto {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.hero-produto__aviso {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-5);
+  padding: 6px 16px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.92rem;
+  color: var(--text-soft);
+}
+
+.hero-produto__aviso > span:only-child {
+  padding-left: 10px;
+}
+
+.hero-produto__titulo {
+  font-size: var(--fs-display);
+  line-height: 1.02;
+  letter-spacing: -0.038em;
+  max-width: 14ch;
+  margin: 0 0 var(--sp-5);
+}
+
+.hero-produto__lead {
+  font-size: clamp(1.1rem, 1.6vw, 1.32rem);
+  line-height: 1.55;
+  color: var(--text-soft);
+  max-width: 44ch;
+  margin: 0 0 var(--sp-6);
+}
+
+.hero-produto__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-3);
+}
+
+.hero-produto__fatos {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2) var(--sp-5);
+  list-style: none;
+  margin: var(--sp-6) 0 0;
+  padding: 0;
+  font-size: 0.92rem;
+  color: var(--text-dim);
+}
+
+.hero-produto__fatos li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.hero-produto__fatos li::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal-300);
+  opacity: 0.8;
+}
+
+.hero-produto__aparelho {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, calc(100% - 2 * var(--sp-5)));
+  margin: clamp(48px, 8vh, 88px) auto 0;
+  animation: entrada 1100ms var(--ease-out) 380ms both;
+}
+
+@media (max-width: 720px) {
+  .hero-produto__titulo {
+    max-width: 11ch;
+  }
+  .hero-produto__acoes {
+    width: 100%;
+    flex-direction: column;
+  }
+  .hero-produto__acoes .btn {
+    width: 100%;
+  }
+  .hero-produto__aparelho {
+    width: calc(100% - 2 * var(--sp-4));
+  }
+}

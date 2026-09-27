@@ -1,33 +1,15 @@
-.limits__list {
-  padding-left: 1.1rem;
+/* Página do produto (Solucao.tsx). O grosso do visual vem do explorador de
+   módulos e das peças de components/pagina. */
+
+.solucao__limites {
   margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: var(--sp-3);
+  max-width: 72ch;
 }
 
-.limits__list li {
-  font-size: 0.96rem;
-}
-
-.section-title--center,
-.section-lead--center {
-  margin-inline: auto;
-}
-
-.section-lead--center {
-  --lead-w: 58ch;
-  margin-bottom: 0;
-}
-
-.download-strip__fine {
-  margin: var(--sp-4) 0 0;
-  font-size: 0.95rem;
-  color: var(--text-dim);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.download-strip .dl {
-  margin-top: var(--sp-6);
+.solucao__limites li {
+  margin: 0;
+  color: var(--text-soft);
 }

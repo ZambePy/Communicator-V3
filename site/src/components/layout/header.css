@@ -56,32 +56,10 @@
 .header__nav {
   display: flex;
   align-items: center;
-  gap: var(--sp-5);
   margin-left: auto;
 }
 
-.header__link {
-  position: relative;
-  font-size: 0.96rem;
-  font-weight: 550;
-  color: currentColor;
-  opacity: 0.76;
-  padding-block: 4px;
-  transition: opacity var(--dur) var(--ease-out);
-  white-space: nowrap;
-}
-
-.header__link:hover,
-.header__link[aria-current='page'] {
-  opacity: 1;
-}
-
-/* Destaque leve do item "Beta": um pontinho e o selo "novo". */
-.header__link--beta {
-  opacity: 1;
-  font-weight: 650;
-}
-
+/* Selo "novo" do item Beta depois do lançamento. */
 .header__badge {
   display: inline-block;
   margin-left: 6px;
@@ -102,6 +80,11 @@
   color: var(--ok);
 }
 
+.nav-pilula__link--destaque {
+  color: #fff;
+  font-weight: 650;
+}
+
 .header__actions {
   display: flex;
   align-items: center;
@@ -112,15 +95,6 @@
   padding: 0.62rem 1.1rem;
   font-size: 0.94rem;
   white-space: nowrap;
-}
-
-@media (max-width: 1240px) {
-  .header__nav {
-    gap: var(--sp-4);
-  }
-  .header__link {
-    font-size: 0.92rem;
-  }
 }
 
 /* Enquanto o cabeçalho esta sobre o hero escuro, o botão secundario

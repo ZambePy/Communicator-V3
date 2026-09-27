@@ -1,16 +1,11 @@
 /* ============================================================
-   Biblioteca de animações do site da IrisFlow
-   Efeitos derivados do repertorio catalogado pela SVGator em
-   "31 Website Animation Examples and Effects":
-     ambient background motion, animated gradients, liquid motion,
-     self-drawing / line animation, morphing, faux 3D, parallax,
-     scrollytelling reveals, hero animation, expressive typography,
-     microinteractions, hover effects, glassmorphism, neumorphism,
-     loading skeletons, loaders e page transitions.
-   Todas respeitam prefers-reduced-motion (ver global.css).
+   Animações do site. Poucas e curtas: entrada dos blocos ao rolar,
+   subida das palavras do título, transição de página, carregamento
+   e os retornos de fixação. Tudo respeita prefers-reduced-motion
+   (ver global.css).
    ============================================================ */
 
-/* ---------- 1. gradiente animado / liquid motion ---------- */
+/* ---------- gradiente do fundo do checkout ---------- */
 @keyframes gradient-drift {
   0% {
     background-position: 0% 50%;
@@ -23,102 +18,7 @@
   }
 }
 
-@keyframes text-shimmer {
-  to {
-    background-position: 220% center;
-  }
-}
-
-@keyframes blob-morph {
-  0%,
-  100% {
-    border-radius: 62% 38% 44% 56% / 48% 56% 44% 52%;
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
-  }
-  33% {
-    border-radius: 38% 62% 58% 42% / 62% 38% 62% 38%;
-    transform: translate3d(3%, -4%, 0) rotate(60deg) scale(1.06);
-  }
-  66% {
-    border-radius: 55% 45% 34% 66% / 40% 62% 38% 60%;
-    transform: translate3d(-3%, 3%, 0) rotate(120deg) scale(0.96);
-  }
-}
-
-/* ---------- 2. ambient background motion ---------- */
-@keyframes float-slow {
-  0%,
-  100% {
-    transform: translateY(0) translateX(0);
-  }
-  50% {
-    transform: translateY(-22px) translateX(10px);
-  }
-}
-
-@keyframes drift-particle {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0;
-  }
-  10% {
-    opacity: var(--p-opacity, 0.6);
-  }
-  90% {
-    opacity: var(--p-opacity, 0.6);
-  }
-  100% {
-    transform: translate3d(var(--p-dx, 30px), var(--p-dy, -120px), 0) scale(1.4);
-    opacity: 0;
-  }
-}
-
-@keyframes scan-line {
-  0% {
-    transform: translateY(-100%);
-    opacity: 0;
-  }
-  12% {
-    opacity: 0.55;
-  }
-  88% {
-    opacity: 0.55;
-  }
-  100% {
-    transform: translateY(100vh);
-    opacity: 0;
-  }
-}
-
-/* ---------- 3. self-drawing / line animation ---------- */
-@keyframes draw-stroke {
-  from {
-    stroke-dashoffset: var(--draw-length, 1000);
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes dash-orbit {
-  to {
-    stroke-dashoffset: -1000;
-  }
-}
-
-/* ---------- 4. símbolo da marca ---------- */
-@keyframes iris-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.9;
-  }
-  50% {
-    transform: scale(1.08);
-    opacity: 1;
-  }
-}
-
+/* ---------- anel que se expande (confirmação de sucesso) ---------- */
 @keyframes ring-expand {
   0% {
     transform: scale(0.6);
@@ -130,18 +30,7 @@
   }
 }
 
-@keyframes blink-lid {
-  0%,
-  92%,
-  100% {
-    transform: scaleY(1);
-  }
-  95% {
-    transform: scaleY(0.04);
-  }
-}
-
-/* ---------- 5. reveals de scrollytelling ---------- */
+/* ---------- entrada dos blocos ao rolar ---------- */
 @keyframes fade-up {
   from {
     opacity: 0;
@@ -195,11 +84,11 @@
   }
 }
 
-/* ---------- 6. tipografia expressiva ---------- */
+/* ---------- palavras do título ---------- */
 @keyframes word-rise {
   from {
     opacity: 0;
-    transform: translateY(0.85em) rotate(3deg);
+    transform: translateY(0.7em);
   }
   to {
     opacity: 1;
@@ -207,48 +96,7 @@
   }
 }
 
-@keyframes caret-blink {
-  0%,
-  49% {
-    opacity: 1;
-  }
-  50%,
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes glitch-shift {
-  0%,
-  92%,
-  100% {
-    transform: none;
-    clip-path: none;
-  }
-  93% {
-    transform: translateX(-3px);
-    clip-path: inset(12% 0 62% 0);
-  }
-  95% {
-    transform: translateX(3px);
-    clip-path: inset(58% 0 18% 0);
-  }
-  97% {
-    transform: translateX(-2px);
-    clip-path: inset(32% 0 44% 0);
-  }
-}
-
-/* ---------- 7. microinteracoes e loaders ---------- */
-@keyframes dwell-fill {
-  from {
-    stroke-dashoffset: var(--dash, 264);
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
+/* ---------- carregamento e confirmações ---------- */
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -278,15 +126,6 @@
   }
 }
 
-@keyframes marquee-scroll {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
 @keyframes pulse-dot {
   0%,
   100% {
@@ -297,38 +136,11 @@
   }
 }
 
-/* ---------- 8. transições de página ---------- */
+/* ---------- transição de página ---------- */
 @keyframes page-enter {
   from {
     opacity: 0;
     transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-@keyframes wipe-out {
-  from {
-    transform: scaleY(1);
-  }
-  to {
-    transform: scaleY(0);
-  }
-}
-
-/* ---------- 9. símbolo da íris: rotação lenta e contínua ---------- */
-@keyframes iris-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes lift-in {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.97);
   }
   to {
     opacity: 1;
@@ -392,14 +204,6 @@ html.vt .anim-page {
   ::view-transition-new(root) {
     animation: none;
   }
-}
-
-.anim-float {
-  animation: float-slow 9s var(--ease-in-out) infinite;
-}
-
-.anim-blob {
-  animation: blob-morph 20s var(--ease-in-out) infinite;
 }
 
 .anim-spin {
@@ -486,4 +290,34 @@ html.vt .anim-page {
 .underline-grow:hover::after,
 .underline-grow[aria-current='page']::after {
   transform: scaleX(1);
+}
+
+/* ---------- entrada escalonada (aberturas das páginas) ----------
+   Usada pelo hero da home e pelo cabeçalho das páginas de dentro: por
+   isso mora aqui, e não no CSS de uma página só. */
+.anim-entrada {
+  animation: entrada 900ms var(--ease-out) both;
+}
+.anim-entrada--2 {
+  animation-delay: 70ms;
+}
+.anim-entrada--3 {
+  animation-delay: 140ms;
+}
+.anim-entrada--4 {
+  animation-delay: 210ms;
+}
+.anim-entrada--5 {
+  animation-delay: 280ms;
+}
+
+@keyframes entrada {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }

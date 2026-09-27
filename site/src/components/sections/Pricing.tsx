@@ -6,7 +6,6 @@ import {
   BETA,
   BETA_CTA,
   BETA_PLAN,
-  CONDITIONS_SHORT,
   PLAN_GUARANTEES,
   TRIAL_DAYS,
   type Plan,
@@ -67,48 +66,10 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
     )
 
   return (
-    <section className={`section pricing${compact ? ' pricing--compact' : ''}`} id="planos">
+    <section className={`faixa pricing${compact ? ' pricing--compact' : ''}`} id="planos" aria-label="Planos">
       <div className="container">
-        <Reveal anim="fade">
-          <span className="eyebrow">Planos</span>
-        </Reveal>
-
-        <Reveal anim="up">
-          <h2 className="pricing__title">
-            {beta ? (
-              <>
-                Grátis durante a beta. <span className="gradient-text">Planos pagos só depois.</span>
-              </>
-            ) : (
-              <>
-                Três planos. <span className="gradient-text">Sem hardware, sem fidelidade.</span>
-              </>
-            )}
-          </h2>
-        </Reveal>
-
-        <Reveal anim="up" delay={120}>
-          <p className="lead pricing__lead">
-            {beta ? (
-              <>
-                Para famílias com {CONDITIONS_SHORT}: enquanto durar a beta, o aplicativo completo é
-                gratuito, sem cartão e sem cobrança. Os planos abaixo são os previstos para depois
-                da beta — ainda não dá para contratá-los, e os valores podem mudar até o
-                lançamento.
-              </>
-            ) : (
-              <>
-                Para famílias com {CONDITIONS_SHORT}: escolha pelo que a pessoa precisa hoje, não
-                pelo que ela talvez venha a precisar. Dá para mudar de plano depois, e os{' '}
-                {TRIAL_DAYS} dias de avaliação valem para os três, antes de qualquer cobrança e sem
-                cartão.
-              </>
-            )}
-          </p>
-        </Reveal>
-
         {beta && (
-          <Reveal anim="zoom" delay={160}>
+          <Reveal anim="up">
             <article className="plan plan--beta panel" aria-labelledby="plano-beta-titulo">
               <div className="plan-beta__main">
                 <span className="plan__status plan__status--now">Disponível agora</span>
@@ -132,14 +93,14 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
         )}
 
         {beta && (
-          <Reveal anim="fade" delay={200}>
+          <Reveal anim="fade">
             <h3 className="pricing__future-title">Depois da beta · preços previstos</h3>
           </Reveal>
         )}
 
         <div className="plans">
           {plans.map((plan, i) => (
-            <Reveal key={plan.id} anim="zoom" delay={220 + i * 110}>
+            <Reveal key={plan.id} anim="up" delay={i * 80}>
               <article
                 className={`plan panel${plan.recommended && !beta ? ' plan--recommended' : ''}${beta ? ' plan--soon' : ''}`}
               >
@@ -200,7 +161,7 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
 
         <div className="pricing__guarantees">
           {PLAN_GUARANTEES.map((g, i) => (
-            <Reveal key={g.title} anim="up" delay={520 + i * 100}>
+            <Reveal key={g.title} anim="up" delay={i * 80}>
               <div className="guarantee">
                 <span className="guarantee__icon">
                   <Icon name={g.icon} size={24} />
@@ -214,7 +175,7 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
           ))}
         </div>
 
-        <Reveal anim="fade" delay={860}>
+        <Reveal anim="fade">
           <p className="pricing__note">
             Para clínicas, associações de pacientes e profissionais prescritores, o acesso durante
             o programa de validação é gratuito. E, se depois da beta a mensalidade não couber no

@@ -192,6 +192,28 @@
   flex: 1 1 200px;
 }
 
+/* --- etapa 2: o código do e-mail --- */
+.beta__codigo {
+  text-align: center;
+}
+
+.beta__codigo .stepper {
+  text-align: left;
+}
+
+.beta__codigo-titulo {
+  margin: var(--sp-6) auto var(--sp-3);
+}
+
+.beta__codigo-dica {
+  margin-top: var(--sp-6);
+  text-align: left;
+}
+
+.beta__codigo .beta__confirme-secundarias {
+  justify-content: center;
+}
+
 /* --- etapa 4: download --- */
 .beta__trilha-final {
   margin-bottom: var(--sp-6);
@@ -211,13 +233,35 @@
 }
 
 .beta__cuidador {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  flex-wrap: wrap;
+  display: grid;
+  gap: var(--sp-5);
   margin-top: var(--sp-5);
   padding: var(--sp-5);
+}
+
+.beta__cuidador-cabeca {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+}
+
+.beta__cuidador-icone {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+}
+
+.beta__cuidador-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+}
+
+.beta__cuidador-acoes .link-seta {
+  margin-top: 0;
 }
 
 .beta__cuidador-title {

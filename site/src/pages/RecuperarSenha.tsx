@@ -50,7 +50,7 @@ export default function RecuperarSenha() {
 
   return (
     <div className="flow">
-      <AmbientBackground particles={12} scan={false} light />
+      <AmbientBackground variante="suave" />
 
       <div className="container flow__inner" style={{ maxWidth: 520 }}>
         <Reveal anim="fade">

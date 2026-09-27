@@ -6,22 +6,24 @@ import './footer.css'
 
 const COLUMNS = [
   {
-    title: 'A solução',
+    title: 'Produto',
     links: [
-      { to: '/solucao', label: 'O que a IrisFlow faz' },
+      { to: '/solucao', label: 'IrisFlow Communicator' },
+      { to: '/cuidador', label: 'IrisFlow Cuidador' },
       { to: '/como-funciona', label: 'Como funciona' },
-      { to: '/acessibilidade', label: 'Acessibilidade' },
-      // Durante a beta, a porta de entrada é /beta; a grade de planos continua visível.
-      ...(BETA.ativo ? [{ to: BETA_CTA.to, label: 'Programa beta' }] : []),
-      { to: '/planos', label: 'Planos e preço' },
+      { to: '/planos', label: 'Planos' },
+      { to: '/baixar', label: 'Baixar' },
     ],
   },
   {
     title: 'Empresa',
     links: [
       { to: '/sobre', label: 'Sobre a IrisFlow' },
-      { to: '/contato', label: 'Fale com a gente' },
+      // Durante a beta, a porta de entrada é /beta.
+      ...(BETA.ativo ? [{ to: BETA_CTA.to, label: 'Programa beta' }] : []),
       { to: '/contato#validacao', label: 'Programa de validação' },
+      { to: '/acessibilidade', label: 'Acessibilidade' },
+      { to: '/contato', label: 'Contato' },
     ],
   },
   {

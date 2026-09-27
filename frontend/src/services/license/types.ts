@@ -41,7 +41,7 @@ export interface Plan {
    * app trata como liberado (é o cache de uma licença válida, não uma
    * recusa).
    */
-  features?: { relatorios?: boolean; multiplos_dispositivos?: boolean; assistente?: boolean; voz?: boolean };
+  features?: { relatorios?: boolean; multiplos_dispositivos?: boolean; assistente?: boolean; voz?: boolean; lazer?: boolean };
 }
 
 export interface DeviceBinding {

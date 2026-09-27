@@ -58,6 +58,7 @@ create table auth.users (
   raw_app_meta_data jsonb default '{}'::jsonb,
   raw_user_meta_data jsonb default '{}'::jsonb,
   confirmation_token text default '',
+  confirmation_sent_at timestamptz,
   recovery_token text default '',
   email_change_token_new text default '',
   email_change text default '',
@@ -154,7 +155,7 @@ for f in "${MIGRACOES[@]}"; do
   aplicar "$f"
 done
 
-echo "== cenário (beta, 22/09 e 23/09)"
+echo "== cenário (beta, 22/09, 23/09 e código de confirmação, 26/09)"
 psql -v ON_ERROR_STOP=1 "$URL" -f scripts/db-local-test.sql
 
 echo "== seed (duas vezes: tem de ser idempotente)"
