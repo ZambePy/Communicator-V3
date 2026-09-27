@@ -36,6 +36,10 @@ import type { LicencaResposta, PareamentoResposta, VinculoLocal } from '../../cl
 
 /** Disparado no `window` logo antes de revogar o computador (ver CloudContext). */
 export const EVENTO_ANTES_DE_SAIR = 'irisflow:cloud-antes-de-sair';
+/** `detail` do evento de saída: quem ouve pode pedir que a saída espere uma promessa. */
+export interface DetalheAntesDeSair {
+  esperar?: (p: Promise<unknown>) => void;
+}
 
 /**
  * Sistema do computador no vocabulário do banco (`release_os_t`), a partir de
@@ -224,8 +228,20 @@ export function createSupabaseLicenseService(op: OpcoesDoServico = {}): LicenseS
     async verify(token, deviceId) {
       if (!token) return { ok: false, reason: 'invalid-token' };
       const controller = new AbortController();
+      // O prazo cobre a resposta INTEIRA, corpo incluído. Antes o timer era
+      // desligado assim que chegavam os cabeçalhos: um corpo que travasse
+      // deixava a licença em `checking` para sempre ("Carregando…" em todas
+      // as rotas protegidas). Abortar interrompe também a leitura do corpo,
+      // que cai no `catch` abaixo como corpo vazio → `unreachable`.
       const timer = setTimeout(() => controller.abort(), 8_000);
       let res: Response;
+      let corpo: {
+        error?: string;
+        device?: { id: string; name: string };
+        beneficiary?: { id: string; user_name: string } | null;
+        license?: LicencaResposta | null;
+        devices_active?: number;
+      } = {};
       try {
         res = await fetchImpl(cloudConfig.desktopSyncUrl, {
           method: 'POST',
@@ -237,20 +253,12 @@ export function createSupabaseLicenseService(op: OpcoesDoServico = {}): LicenseS
           body: JSON.stringify({ action: 'device.info' }),
           signal: controller.signal,
         });
+        try { corpo = await res.json(); } catch { /* sem corpo, ou corpo abortado pelo prazo */ }
       } catch {
         return { ok: false, reason: 'unreachable' };
       } finally {
         clearTimeout(timer);
       }
-
-      let corpo: {
-        error?: string;
-        device?: { id: string; name: string };
-        beneficiary?: { id: string; user_name: string } | null;
-        license?: LicencaResposta | null;
-        devices_active?: number;
-      } = {};
-      try { corpo = await res.json(); } catch { /* sem corpo */ }
 
       if (res.status === 403 && corpo.error === 'device_revoked') return { ok: false, reason: 'revoked' };
       if (res.status === 401 && corpo.error === 'unauthorized') return { ok: false, reason: 'invalid-token' };
@@ -300,9 +308,18 @@ export function createSupabaseLicenseService(op: OpcoesDoServico = {}): LicenseS
       // Avisa o CloudProvider ANTES de revogar: ele fecha a sessão no banco
       // (session.end) enquanto a chave ainda vale. Depois disso, o LicenseContext
       // zera a licença e o provider desliga sozinho.
+      // Quem ouve pode pedir que a saída espere (a fila offline tenta sair
+      // enquanto a chave ainda vale — inclusive socorros); no máximo 5 s.
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event(EVENTO_ANTES_DE_SAIR));
-        await new Promise((r) => setTimeout(r, 250));
+        const esperas: Promise<unknown>[] = [];
+        window.dispatchEvent(new CustomEvent<DetalheAntesDeSair>(EVENTO_ANTES_DE_SAIR, {
+          detail: { esperar: (p) => { esperas.push(p); } },
+        }));
+        const teto = new Promise((r) => setTimeout(r, esperas.length ? 5000 : 0));
+        await Promise.all([
+          new Promise((r) => setTimeout(r, 250)),
+          Promise.race([Promise.allSettled(esperas), teto]),
+        ]);
       }
       const vinculo = await cofre.lerJson<VinculoLocal>(CHAVES.vinculo);
       const sb = cliente();

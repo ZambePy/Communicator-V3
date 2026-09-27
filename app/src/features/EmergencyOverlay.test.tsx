@@ -11,9 +11,9 @@
  *    "Tentar de novo" — em vez de fingir que o computador do paciente foi avisado.
  */
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { HelpRequest, PatientSettings } from '@/data/types';
-import { EmergencyOverlay } from './EmergencyOverlay';
+import { acaoDoVoltar, EmergencyOverlay, TRAVA_DO_RESOLVIDO_MS } from './EmergencyOverlay';
 
 // `useApp` é a única entrada do overlay. Substituir o hook (e não o provider
 // inteiro) mantém o teste sobre o componente, sem rede, sem realtime e sem os
@@ -25,6 +25,9 @@ const mockApp = {
   acknowledgeAlert: jest.fn(),
   resolveAlert: jest.fn(),
   dismissPendingAlert: jest.fn(),
+  pendingAlertMinimized: false,
+  minimizePendingAlert: jest.fn(),
+  restorePendingAlert: jest.fn(),
 };
 jest.mock('@/store/AppProvider', () => ({ useApp: () => mockApp }));
 
@@ -65,6 +68,9 @@ beforeEach(() => {
   mockApp.acknowledgeAlert.mockReset();
   mockApp.resolveAlert.mockReset();
   mockApp.dismissPendingAlert.mockReset();
+  mockApp.minimizePendingAlert.mockReset();
+  mockApp.restorePendingAlert.mockReset();
+  mockApp.pendingAlertMinimized = false;
   mockApp.settings = ajustes();
 });
 
@@ -212,5 +218,105 @@ describe('EmergencyOverlay', () => {
     // Sem contagem regressiva nem "Estou indo!": o próximo passo é "Resolvido".
     expect(screen.queryByTestId('prazo')).toBeNull();
     expect(screen.getByText('Resolvido')).toBeTruthy();
+  });
+
+  // APP-1: em 360×568 com a fonte do sistema a 1,3× o botão saía da tela, nada
+  // rolava e o Voltar do Android era ignorado — o cuidador ficava preso no alerta.
+  describe('nunca prende o cuidador', () => {
+    it('a resposta fica no rodapé fixo, fora da rolagem; o texto e os contatos rolam', async () => {
+      mockApp.pendingAlert = alerta({ escalated_at: new Date(AGORA).toISOString() });
+
+      await render(<EmergencyOverlay />);
+
+      const rodape = screen.getByTestId('acoes-do-alerta');
+      const rolagem = screen.getByTestId('rolagem-do-alerta');
+      expect(within(rodape).getByText('Estou indo!')).toBeTruthy();
+      expect(within(rolagem).queryByText('Estou indo!')).toBeNull();
+      // Justamente quando os contatos aparecem (prazo estourado) é que o botão sumia.
+      expect(within(rolagem).getByText('Mariana (esposa)')).toBeTruthy();
+      expect(within(rolagem).getByTestId('prazo')).toBeTruthy();
+    });
+
+    it('depois de confirmado, "Resolvido" e "Ver depois" também ficam no rodapé', async () => {
+      mockApp.pendingAlert = alerta({ acknowledged_at: new Date(AGORA - 5_000).toISOString() });
+
+      await render(<EmergencyOverlay />);
+
+      const rodape = screen.getByTestId('acoes-do-alerta');
+      expect(within(rodape).getByText('Resolvido')).toBeTruthy();
+      expect(within(rodape).getByText('Ver depois')).toBeTruthy();
+      expect(within(screen.getByTestId('rolagem-do-alerta')).getByTestId('confirmado')).toBeTruthy();
+    });
+
+    it('"Minimizar" tira da tela cheia sem confirmar nada', async () => {
+      mockApp.pendingAlert = alerta();
+
+      await render(<EmergencyOverlay />);
+      await fireEvent.press(screen.getByText('Minimizar'));
+
+      expect(mockApp.minimizePendingAlert).toHaveBeenCalledTimes(1);
+      expect(mockApp.acknowledgeAlert).not.toHaveBeenCalled();
+    });
+
+    it('Voltar do Android: minimiza um pedido sem resposta e vira "Ver depois" depois de confirmado', () => {
+      expect(acaoDoVoltar(alerta())).toBe('minimizar');
+      expect(acaoDoVoltar(alerta({ acknowledged_at: new Date(AGORA).toISOString() }))).toBe('ver-depois');
+    });
+
+    it('minimizado: só a faixa do topo, que reabre o alerta; sem vibrar e sem a tela cheia', async () => {
+      mockApp.pendingAlert = alerta();
+      mockApp.pendingAlertMinimized = true;
+
+      await render(<EmergencyOverlay />);
+
+      expect(screen.queryByTestId('acoes-do-alerta')).toBeNull();
+      const faixa = screen.getByTestId('alerta-minimizado');
+      expect(faixa).toHaveTextContent(/Pedido de socorro sem resposta/);
+      expect(faixa).toHaveTextContent(/Carlos ainda espera/);
+      await fireEvent.press(faixa);
+      expect(mockApp.restorePendingAlert).toHaveBeenCalledTimes(1);
+    });
+
+    it('minimizado e confirmado em outro celular: a faixa não diz mais "sem resposta"', async () => {
+      mockApp.pendingAlert = alerta({ acknowledged_at: new Date(AGORA).toISOString() });
+      mockApp.pendingAlertMinimized = true;
+
+      await render(<EmergencyOverlay />);
+
+      const faixa = screen.getByTestId('alerta-minimizado');
+      expect(faixa).not.toHaveTextContent(/sem resposta/);
+      expect(faixa).toHaveTextContent(/confirmado/);
+    });
+  });
+
+  // Achado no reteste do APP-1: com o rodapé fixo, "Resolvido" nasce no mesmo
+  // lugar de "Estou indo!" — um toque duplo confirmava E resolvia o socorro.
+  it('toque duplo em "Estou indo!" não resolve o socorro: "Resolvido" espera um instante', async () => {
+    mockApp.pendingAlert = alerta();
+    mockApp.acknowledgeAlert.mockResolvedValueOnce(undefined);
+    mockApp.resolveAlert.mockResolvedValue(undefined);
+    const tela = await render(<EmergencyOverlay />);
+
+    await fireEvent.press(screen.getByText('Estou indo!'));
+    await waitFor(() => expect(mockApp.acknowledgeAlert).toHaveBeenCalledTimes(1));
+    // O servidor confirmou: o alerta chega confirmado (o segundo toque cai em "Resolvido").
+    mockApp.pendingAlert = alerta({ acknowledged_at: new Date(AGORA).toISOString() });
+    await tela.rerender(<EmergencyOverlay />);
+    await fireEvent.press(screen.getByText('Resolvido'));
+    expect(mockApp.resolveAlert).not.toHaveBeenCalled();
+
+    await act(() => {
+      jest.advanceTimersByTime(TRAVA_DO_RESOLVIDO_MS);
+    });
+    await fireEvent.press(screen.getByText('Resolvido'));
+    await waitFor(() => expect(mockApp.resolveAlert).toHaveBeenCalledWith('hr-1'));
+  });
+
+  it('alerta que já abre confirmado (outro celular confirmou antes): "Resolvido" responde na hora', async () => {
+    mockApp.pendingAlert = alerta({ acknowledged_at: new Date(AGORA - 60_000).toISOString() });
+    mockApp.resolveAlert.mockResolvedValue(undefined);
+    await render(<EmergencyOverlay />);
+    await fireEvent.press(screen.getByText('Resolvido'));
+    await waitFor(() => expect(mockApp.resolveAlert).toHaveBeenCalledTimes(1));
   });
 });

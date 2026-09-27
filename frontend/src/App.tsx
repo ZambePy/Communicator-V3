@@ -9,6 +9,9 @@ import { TransicaoDeRota } from './components/ui/TransicaoDeRota';
 import { FechaPaineisAoNavegar } from './components/FechaPaineisAoNavegar';
 import { PreparoGate } from './pages/setup/PreparoGate';
 import { GraceBanner } from './components/ui/GraceBanner';
+import { AvisoDeBloqueio } from './components/AvisoDeBloqueio';
+import { TravaDoCuidador } from './components/TravaDoCuidador';
+import { FronteiraDeErroDaTela } from './components/FronteiraDeErroDaTela';
 import { SettingsProvider } from './context/SettingsContext';
 import { ToastProvider } from './context/ToastContext';
 import { FaixaDeApresentacao } from './components/FaixaDeApresentacao';
@@ -195,6 +198,8 @@ function App() {
                       <ConviteDeRelatos />
                       <FaixaDeAtualizacao />
                       <GraceBanner />
+                      <AvisoDeBloqueio />
+                      <TravaDoCuidador />
                       <CloudBanners />
                       <FechaPaineisAoNavegar />
                       <DebugHUD />
@@ -206,6 +211,7 @@ function App() {
                           e das faixas de aviso, que ficam acima dele e não
                           entram na animação — ver `TransicaoDeRota`. */}
                         <TransicaoDeRota>
+                          <FronteiraDeErroDaTela>
                           <Routes>
                             {/* Onboarding — públicas */}
                             <Route path="/" element={<InitialSplash />} />
@@ -247,7 +253,7 @@ function App() {
                             <Route
                               path="/conta"
                               element={
-                                <ProtectedRoute>
+                                <ProtectedRoute requireCaregiver>
                                   <ContaEAssinatura />
                                 </ProtectedRoute>
                               }
@@ -263,7 +269,7 @@ function App() {
                             <Route
                               path="/historico"
                               element={
-                                <ProtectedRoute>
+                                <ProtectedRoute requireCaregiver>
                                   <HistoricoDeSessoes />
                                 </ProtectedRoute>
                               }
@@ -271,7 +277,7 @@ function App() {
                             <Route
                               path="/relatorio"
                               element={
-                                <ProtectedRoute>
+                                <ProtectedRoute requireCaregiver>
                                   <RelatorioDaSessao />
                                 </ProtectedRoute>
                               }
@@ -338,14 +344,15 @@ function App() {
                                 </ProtectedRoute>
                               }
                             />
-                            <Route
-                              path="/emergency"
-                              element={
-                                <ProtectedRoute>
-                                  <EmergencyEscalation />
-                                </ProtectedRoute>
-                              }
-                            />
+                            {/* Emergência FORA do portão de licença, termo e
+                                perfil: o alarme local não depende de conta.
+                                Com a licença bloqueada (7 dias sem internet,
+                                assinatura vencida, cofre ilegível) ou ainda em
+                                verificação, esta rota mandava para o login — e
+                                o paciente perdia o único pedido de socorro que
+                                funciona sem ninguém digitar senha. Sem vínculo
+                                o pedido não sai daqui, e a tela diz isso. */}
+                            <Route path="/emergency" element={<EmergencyEscalation />} />
                             <Route
                               path="/options"
                               element={
@@ -391,7 +398,7 @@ function App() {
                             <Route
                               path="/caregiver/guide"
                               element={
-                                <ProtectedRoute>
+                                <ProtectedRoute requireCaregiver>
                                   <CaregiverGuide />
                                 </ProtectedRoute>
                               }
@@ -507,7 +514,7 @@ function App() {
                             <Route
                               path="/settings/voice"
                               element={
-                                <ProtectedRoute>
+                                <ProtectedRoute requireCaregiver>
                                   <VozScreen />
                                 </ProtectedRoute>
                               }
@@ -527,6 +534,7 @@ function App() {
                                 numa tela em branco sem alvo nenhum. */}
                             <Route path="*" element={<Navigate to="/menu" replace />} />
                           </Routes>
+                          </FronteiraDeErroDaTela>
                         </TransicaoDeRota>
                       </Suspense>
                     </EmergencyProvider>

@@ -57,6 +57,7 @@ import {
   type TuningStep,
 } from '@tracker/cameraTuner';
 import { getSaturacaoDoOlhar, type SuspensaoDaCalibracao } from '@tracker/calibration';
+import { aoClicar, aoNavegar, criarRearme, filtrarAlvo } from '@tracker/interaction/rearmePorSaida';
 import { detectFlicker, inferPowerLineHz } from '@tracker/flickerDetector';
 import { AvisoDeDistancia } from '@tracker/distanceAdvisory';
 import { useSettings } from './SettingsContext';
@@ -67,7 +68,7 @@ import {
   limparEstadoDoOlhar,
   confirmarSelecao,
 } from '../utils/feedbackVisual';
-import { limitarDwellMs } from '../dwellMs';
+import { dwellDoAlvo, limitarDwellMs } from '../dwellMs';
 
 export type {
   GazeEngine,
@@ -439,6 +440,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // redutor puro de `src/interaction/dwell.ts`. Refs soltos mutados em pontos
   // diferentes do callback saem de sincronia (dwell completando de olho fechado).
   const dwellStateRef = useRef(createDwellState());
+  /** Rearme por saída (FE-7): alvo recém-clicado ou herdado da tela anterior. */
+  const rearmeRef = useRef(criarRearme());
+  /** Última rota vista pelo dispatcher (o provider fica fora do router). */
+  const ultimoHashRef = useRef<string | null>(null);
   /** Estado da rolagem por borda: em qual faixa o olhar está e desde quando. */
   const bordaRef = useRef(estadoInicialDeBorda());
   /** Instante da última amostra, para converter velocidade em deslocamento. */
@@ -1159,11 +1164,47 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         dwellStateRef.current = createDwellState();
       } else {
         const el = document.elementFromPoint(sample.x, sample.y);
-        const node = el?.closest(DWELL_SELECTOR) as HTMLElement | null;
+        // `?? null`: sem elemento sob o olhar, `el?.closest` dá `undefined`.
+        const node = (el?.closest(DWELL_SELECTOR) as HTMLElement | null | undefined) ?? null;
+
+        // Rearme por saída (FE-7): o alvo recém-clicado — e, numa tela nova,
+        // o que estiver sob o olhar "herdado" da anterior — só vale depois que
+        // o olhar sair dele. A rota é lida do hash (o provider fica fora do
+        // router).
+        // Mesmo relógio do dwell: o carimbo da amostra.
+        const tDaAmostra = Number.isFinite(sample.timestamp) ? sample.timestamp : now;
+        const hashAgora = window.location.hash;
+        if (ultimoHashRef.current === null) {
+          // Primeira amostra: não é troca de tela.
+          ultimoHashRef.current = hashAgora;
+        } else if (hashAgora !== ultimoHashRef.current) {
+          ultimoHashRef.current = hashAgora;
+          rearmeRef.current = aoNavegar(tDaAmostra);
+        }
+        const rearme = filtrarAlvo(rearmeRef.current, node, tDaAmostra);
+        rearmeRef.current = rearme.estado;
 
         // `data-dwell-ms` inválido (NaN) não pode virar dwell instantâneo.
+        // `data-dwell-mult`: piso relativo ao dwell do paciente (FE-13).
         const rawCustom = node?.dataset.dwellMs ? parseInt(node.dataset.dwellMs, 10) : NaN;
-        const customDwellMs = Number.isFinite(rawCustom) && rawCustom > 0 ? rawCustom : null;
+        const rawMult = node?.dataset.dwellMult ? parseFloat(node.dataset.dwellMult) : NaN;
+        const customDwellMs = dwellDoAlvo(
+          Number.isFinite(rawCustom) && rawCustom > 0 ? rawCustom : null,
+          Number.isFinite(rawMult) && rawMult > 0 ? rawMult : null,
+          dwellMsRef.current,
+        );
+
+        // Telas sem cursor (a jornada até a calibração, operada pelo cuidador
+        // com o mouse): o olhar só aciona a Emergência, o CANCELAR dela e os
+        // alvos de recuperação. Antes o dwell clicava "no escuro" — escolhia
+        // perfil, aceitava o termo, abria links do login — sem ninguém ver
+        // onde o olhar estava (FE-3). A regra é a MESMA do cursor.
+        const semCursorNaRota = !rotaMostraCursor(hashAgora);
+        const alvoPermitidoSemCursor =
+          node !== null &&
+          (node.dataset.emergency === 'true' ||
+            node.dataset.recovery === 'true' ||
+            node.dataset.cancelarEmergencia === 'true');
 
         const target: DwellTarget | null = node
           ? {
@@ -1180,7 +1221,9 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               isDisabled:
                 (node as HTMLButtonElement).disabled ||
                 node.getAttribute('aria-disabled') === 'true' ||
-                node.dataset.noDwell === 'true',
+                node.dataset.noDwell === 'true' ||
+                rearme.bloqueado ||
+                (semCursorNaRota && !alvoPermitidoSemCursor),
             }
           : null;
 
@@ -1250,6 +1293,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             clearDwellVisuals();
             dwellStateRef.current = createDwellState();
             if (alvoDaPiscada?.isConnected) {
+              rearmeRef.current = aoClicar(alvoDaPiscada, alvoDaPiscada.dataset.repetir === 'true');
               confirmarSelecao(alvoDaPiscada);
               alvoDaPiscada.click();
             }
@@ -1315,6 +1359,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // sob o mesmo olhar e o loop segue vivo.
           try {
             if (alvo.isConnected) {
+              rearmeRef.current = aoClicar(alvo, alvo.dataset.repetir === 'true');
               confirmarSelecao(alvo);
               alvo.click();
             }

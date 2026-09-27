@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { AppState, FlatList, KeyboardAvoidingView, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,7 +9,8 @@ import { Message } from '@/data/types';
 import { useApp } from '@/store/AppProvider';
 import { fonts, layout, motion, radius, sizes, spacing, typeScale, useEntrada, useTheme } from '@/theme';
 import { mensagemDeErro } from '@/utils/errors';
-import { dateLong, firstName, hm } from '@/utils/format';
+import { firstName, hm } from '@/utils/format';
+import { agruparPorDia, LinhaDaConversa } from '@/utils/conversa';
 
 const SUGESTOES = ['Já estou indo', 'Precisa de algo?', 'Quer água?', 'Está confortável?', 'Vou trocar de posição', 'Te amo'];
 
@@ -17,36 +18,41 @@ export default function Conversa() {
   const { colors, mode } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { patient, messages, sendMessage, markRead, session, devices, unreadCount, patientLoaded, error, refresh } = useApp();
+  const { patient, messages, sendMessage, markRead, session, devices, unreadCount, patientLoaded, patientVerified, refresh } = useApp();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [falha, setFalha] = useState<string | null>(null);
-  const list = useRef<FlatList<Row>>(null);
-  const focada = useRef(false);
+  const list = useRef<FlatList<LinhaDaConversa>>(null);
+  const [focada, setFocada] = useState(false);
+  // "Está vendo" = aba em foco E app na frente. Só o foco não basta: com a
+  // Conversa aberta e o celular no bolso (app em segundo plano, tempo real
+  // ainda vivo), a mensagem do paciente era marcada como lida — em todos os
+  // celulares da conta — sem ninguém ter lido.
+  const [naFrente, setNaFrente] = useState(AppState.currentState === 'active');
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (estado) => setNaFrente(estado === 'active'));
+    return () => sub.remove();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      focada.current = true;
-      markRead().catch(() => undefined);
-      return () => {
-        focada.current = false;
-      };
-    }, [markRead]),
+      setFocada(true);
+      return () => setFocada(false);
+    }, []),
   );
 
-  // Mensagem nova chegando COM a aba em foco: marca como lida na hora. Antes
-  // só o focus marcava, então o selo de não lidas subia enquanto o cuidador
-  // estava olhando exatamente para a conversa.
+  // Ao abrir a aba, ao voltar para o app com ela aberta e a cada mensagem nova
+  // chegando enquanto o cuidador olha: marca como lidas.
   useEffect(() => {
-    if (focada.current && unreadCount > 0) markRead().catch(() => undefined);
-  }, [unreadCount, markRead]);
+    if (focada && naFrente && unreadCount > 0) markRead().catch(() => undefined);
+  }, [focada, naFrente, unreadCount, markRead]);
 
   useEffect(() => {
     const t = setTimeout(() => list.current?.scrollToEnd({ animated: true }), 120);
     return () => clearTimeout(t);
   }, [messages.length]);
 
-  const rows = useMemo(() => groupByDay(messages), [messages]);
+  const rows = useMemo(() => agruparPorDia(messages), [messages]);
   const device = devices.find((d) => !d.revoked_at);
   const online = device?.online ?? false;
   const nome = patient ? firstName(patient.user_name) : 'o paciente';
@@ -101,7 +107,7 @@ export default function Conversa() {
         ListEmptyComponent={
           !patientLoaded ? (
             <ConversationSkeleton />
-          ) : error ? (
+          ) : !patientVerified ? (
             <EmptyState icon="cloud-offline-outline" title="Não deu para carregar a conversa" body="Confira a internet e tente de novo." action={{ label: 'Tentar de novo', icon: 'refresh', onPress: () => void refresh() }} />
           ) : (
             <EmptyState icon="chatbubbles-outline" title="Nenhuma mensagem ainda" body={`Quando ${nome} escrever com os olhos, aparece aqui. O que você mandar é falado na tela do computador.`} />
@@ -170,23 +176,6 @@ function Chip({ label, icon, tone = 'primary', onPress, disabled, nome }: { labe
       </Text>
     </PressableScale>
   );
-}
-
-type Row = { type: 'day'; key: string; label: string } | { type: 'msg'; key: string; message: Message };
-
-function groupByDay(messages: Message[]): Row[] {
-  const rows: Row[] = [];
-  let lastDay = '';
-  for (const m of messages) {
-    const day = new Date(m.created_at).toDateString();
-    if (day !== lastDay) {
-      const today = new Date().toDateString();
-      rows.push({ type: 'day', key: `day-${day}`, label: day === today ? 'Hoje' : dateLong(m.created_at) });
-      lastDay = day;
-    }
-    rows.push({ type: 'msg', key: m.id, message: m });
-  }
-  return rows;
 }
 
 function DayLabel({ label }: { label: string }) {

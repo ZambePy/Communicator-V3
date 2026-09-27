@@ -17,8 +17,8 @@ const mockApp = {
   settings: null,
   patient: { user_name: 'Paciente IrisFlow' },
   patientLoaded: true,
+  patientVerified: true,
   pushError: null as null | 'permissao' | 'registro',
-  error: null as string | null,
 };
 jest.mock('@/store/AppProvider', () => ({ useApp: () => mockApp }));
 
@@ -28,7 +28,7 @@ function alerta(extra: Partial<HelpRequest> = {}): HelpRequest {
 
 beforeEach(() => {
   mockApp.helpRequests = [];
-  mockApp.error = null;
+  mockApp.patientVerified = true;
   mockApp.pushError = null;
   mockApp.acknowledgeAlert.mockClear();
   mockApp.resolveAlert.mockClear();
@@ -43,7 +43,7 @@ describe('Alertas', () => {
   });
 
   it('carga com falha: não afirma que está tudo bem e oferece tentar de novo', async () => {
-    mockApp.error = 'TypeError: Failed to fetch';
+    mockApp.patientVerified = false;
     await render(<Alertas />);
     expect(screen.queryByText('Tudo tranquilo por aqui')).toBeNull();
     expect(screen.getByText('Não deu para verificar os alertas')).toBeTruthy();
@@ -70,5 +70,22 @@ describe('Alertas', () => {
     await render(<Alertas />);
     expect(screen.getByText('Notificações desligadas')).toBeTruthy();
     expect(screen.getByText('Ativar nos ajustes do celular')).toBeTruthy();
+  });
+
+  // APP-2: a decisão era pela string de erro — fechar o aviso bastava para a
+  // tela passar a dizer "Tudo tranquilo" sem nada verificado.
+  it('sem verificação, "Tudo tranquilo" não aparece nem depois de o aviso de erro ser fechado', async () => {
+    mockApp.patientVerified = false; // o aviso global pode estar fechado: não importa
+    await render(<Alertas />);
+    expect(screen.queryByText('Tudo tranquilo por aqui')).toBeNull();
+    expect(screen.getByText('Não deu para verificar os alertas')).toBeTruthy();
+  });
+
+  it('com alertas na tela mas a atualização falhando: avisa que podem faltar os mais novos', async () => {
+    mockApp.patientVerified = false;
+    mockApp.helpRequests = [alerta()];
+    await render(<Alertas />);
+    expect(screen.getByTestId('alertas-desatualizados')).toBeTruthy();
+    expect(screen.getByText('Estou ciente')).toBeTruthy();
   });
 });

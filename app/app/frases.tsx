@@ -8,6 +8,7 @@ import { useData } from '@/data/DataContext';
 import { QuickPhrase } from '@/data/types';
 import { haptics } from '@/lib/haptics';
 import { useApp } from '@/store/AppProvider';
+import { proximaPosicao } from '@/utils/frases';
 import { radius, sizes, spacing, useEntrada, useTheme } from '@/theme';
 import { mensagemDeErro } from '@/utils/errors';
 import { firstName } from '@/utils/format';
@@ -68,7 +69,7 @@ export default function Frases() {
     setBusy(true);
     setFalha(null);
     try {
-      const p = await data.saveQuickPhrase({ beneficiary_id: patient.id, text: t, category: cat, position: phrases?.length ?? 0 });
+      const p = await data.saveQuickPhrase({ beneficiary_id: patient.id, text: t, category: cat, position: proximaPosicao(phrases ?? []) });
       haptics.sucesso();
       setPhrases((s) => [...(s ?? []), p]);
       setText('');

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import React from 'react';
@@ -85,5 +85,30 @@ describe('KeyboardScreen — Varredura Hierárquica 2x3', () => {
 
     // Permanece no mesmo grupo (conforme regra)
     expect(screen.getByText('Apagar')).toBeInTheDocument();
+  });
+});
+
+describe('KeyboardScreen — rascunho que sobrevive a sair e voltar (FE-6)', () => {
+  beforeEach(() => sessionStorage.clear());
+
+  const montar = () =>
+    render(
+      <BrowserRouter>
+        <SettingsProvider>
+          <KeyboardScreen />
+        </SettingsProvider>
+      </BrowserRouter>
+    );
+
+  it('o que foi escrito volta quando a tela reabre na mesma sessão', () => {
+    const primeira = montar();
+    fireEvent.click(screen.getByText('A B C'));
+    fireEvent.click(screen.getByText('C'));
+    expect(sessionStorage.getItem('irisflow.rascunhoDoTeclado')).toBe('C');
+    primeira.unmount();
+
+    montar();
+    expect(screen.getAllByText('C').length).toBeGreaterThan(0);
+    expect(sessionStorage.getItem('irisflow.rascunhoDoTeclado')).toBe('C');
   });
 });

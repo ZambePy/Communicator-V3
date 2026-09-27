@@ -25,9 +25,15 @@ vi.mock('../../context/LicenseContext', () => ({
   useLicense: () => ({ sair, ...estado }),
 }));
 
+let filaPendente = 0;
+vi.mock('../../cloud/CloudContext', () => ({
+  useCloud: () => ({ filaPendente }),
+}));
+
 beforeEach(async () => {
   await i18n.changeLanguage('pt-BR');
   sair.mockClear();
+  filaPendente = 0;
   estado = {
     status: 'active',
     lastVerifiedAt: Date.now(),
@@ -137,6 +143,29 @@ describe('sair desta máquina', () => {
     fireEvent.click(screen.getByRole('button', { name: /sair desta máquina/i }));
     fireEvent.click(screen.getByRole('button', { name: /cancelar/i }));
     expect(sair).not.toHaveBeenCalled();
+  });
+});
+
+describe('sair desta máquina: só com o mouse, e sem perder socorro calado (FE-1, FE-22)', () => {
+  it('o botão e a confirmação não são alvos do olhar', () => {
+    montar();
+    const botao = screen.getByRole('button', { name: /sair desta máquina/i });
+    expect(botao.getAttribute('data-no-dwell')).toBe('true');
+    fireEvent.click(botao);
+    expect(screen.getByRole('button', { name: /sim, sair/i }).getAttribute('data-no-dwell')).toBe('true');
+  });
+
+  it('com envios esperando internet, a confirmação avisa que eles se perdem', () => {
+    filaPendente = 2;
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: /sair desta máquina/i }));
+    expect(screen.getByTestId('aviso-fila-ao-sair').textContent).toMatch(/2 envios esperando internet/);
+  });
+
+  it('sem nada na fila, não há aviso de fila', () => {
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: /sair desta máquina/i }));
+    expect(screen.queryByTestId('aviso-fila-ao-sair')).toBeNull();
   });
 });
 

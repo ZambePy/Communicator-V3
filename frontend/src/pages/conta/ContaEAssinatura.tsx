@@ -11,6 +11,7 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { useCloud } from '../../cloud/CloudContext';
 import { BackButton } from '../../components/ui/BackButton';
 import { useLicense } from '../../context/LicenseContext';
 import { idadeEmTexto } from '../../idadeEmTexto';
@@ -34,6 +35,9 @@ export const ContaEAssinatura: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { status, license, lastVerifiedAt, sair } = useLicense();
+  // Envios esperando internet (inclusive socorros): sair os descarta, e o
+  // aviso tem de dizer isso antes (FE-22).
+  const { filaPendente } = useCloud();
   const [confirmando, setConfirmando] = useState(false);
 
   const porExtenso = (iso: string) => {
@@ -160,7 +164,9 @@ export const ContaEAssinatura: React.FC = () => {
             type="button"
             variant="secondary"
             onClick={() => setConfirmando(true)}
-            data-dwell-ms="2500"
+            // Só com o mouse: sair deixa o paciente sem acesso até alguém
+            // digitar e-mail e senha.
+            data-no-dwell="true"
             style={{ alignSelf: 'flex-start' }}
           >
             <LogOut size={17} aria-hidden="true" /> {t('sessao.conta.sair')}
@@ -199,9 +205,17 @@ export const ContaEAssinatura: React.FC = () => {
               />
               {t('sessao.conta.sairAviso')}
             </span>
+            {filaPendente > 0 && (
+              <span
+                data-testid="aviso-fila-ao-sair"
+                style={{ fontSize: '0.96rem', lineHeight: 1.55, color: 'var(--color-text-base)', fontWeight: 700 }}
+              >
+                {t('sessao.conta.sairFila', { count: filaPendente })}
+              </span>
+            )}
 
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-              <PrimaryButton type="button" variant="danger" onClick={() => void confirmarSaida()}>
+              <PrimaryButton type="button" variant="danger" data-no-dwell="true" onClick={() => void confirmarSaida()}>
                 {t('sessao.conta.sairConfirmar')}
               </PrimaryButton>
               <PrimaryButton type="button" variant="ghost" onClick={() => setConfirmando(false)}>

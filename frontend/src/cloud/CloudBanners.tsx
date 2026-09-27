@@ -25,11 +25,19 @@ export const CloudBanners: React.FC = () => {
     || pathname === '/login';
   if (escondido || !mensagemNaTela) return null;
 
+  // No teclado o cartão fica só para leitura e transparente ao olhar
+  // (`pointer-events: none`: o `elementFromPoint` do dwell atravessa até as
+  // teclas). Antes ele cobria a última fileira por 15 s, e "Responder" levava
+  // para a conversa — a frase em composição se perdia (FE-6).
+  const soLeitura = pathname === '/keyboard';
+
   return (
     <div
       role="status"
       aria-live="polite"
+      data-testid="cartao-mensagem-do-cuidador"
       style={{
+        pointerEvents: soLeitura ? 'none' : undefined,
         position: 'fixed', left: '50%', bottom: '2rem', transform: 'translateX(-50%)',
         zIndex: 99970, width: 'min(760px, 92vw)',
         background: '#1B54A8', color: '#fff', borderRadius: '1.75rem',
@@ -44,7 +52,7 @@ export const CloudBanners: React.FC = () => {
         </div>
         <div style={{ fontSize: '1.5rem', fontWeight: 800, lineHeight: 1.3, wordBreak: 'break-word' }}>{mensagemNaTela.text}</div>
       </div>
-      <GazeButton
+      {!soLeitura && <GazeButton
         onClick={repetirUltimaMensagem}
         width={92}
         height={72}
@@ -53,8 +61,8 @@ export const CloudBanners: React.FC = () => {
         style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '2px solid rgba(255,255,255,0.5)', borderRadius: '1.25rem' }}
       >
         <Volume2 size={30} />
-      </GazeButton>
-      <GazeButton
+      </GazeButton>}
+      {!soLeitura && <GazeButton
         onClick={() => { dispensarMensagemNaTela(); navigate('/conversation'); }}
         width={170}
         height={72}
@@ -62,7 +70,7 @@ export const CloudBanners: React.FC = () => {
         style={{ background: '#fff', color: '#1B54A8', border: 'none', borderRadius: '1.25rem' }}
       >
         <span style={{ fontSize: '1.15rem', fontWeight: 900 }}>Responder</span>
-      </GazeButton>
+      </GazeButton>}
     </div>
   );
 };

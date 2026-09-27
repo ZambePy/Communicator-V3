@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { AccessibilityInfo, Linking, Modal, Platform, StyleSheet, Vibration, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Linking, Modal, Platform, ScrollView, StyleSheet, useWindowDimensions, Vibration, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,12 @@ import { firstName, helpKindLabel, hm } from '@/utils/format';
 const PADRAO_VIBRACAO = [0, 400, 200, 400, 200, 400];
 const REPETIR_A_CADA_MS = 2500;
 /**
+ * Depois da confirmação, "Resolvido" aparece no MESMO lugar do rodapé em que
+ * estava "Estou indo!". Por este tempo ele não aceita toque: um toque duplo
+ * (comum no susto) confirmava e, no segundo toque, dava o socorro por resolvido.
+ */
+export const TRAVA_DO_RESOLVIDO_MS = 1500;
+/**
  * A partir deste atraso entre o pedido (no computador) e a chegada ao
  * servidor, o overlay diz as duas horas. Mesmo limiar da notificação
  * (supabase/functions/desktop-sync/horario.ts).
@@ -32,13 +38,21 @@ const ATRASO_RELEVANTE_MS = 2 * 60_000;
  * Nunca fica escondido: no Android e no web é um `Modal` (janela própria, acima
  * de tudo); no iOS, um `FullWindowOverlay` — uma janela do sistema acima até das
  * telas apresentadas como modal, onde um `Modal` comum não conseguiria abrir.
+ *
+ * E nunca prende o cuidador: o texto rola e a ação principal fica num rodapé
+ * fixo, sempre à vista — em celular pequeno, com a fonte do sistema grande, e
+ * justamente quando os contatos aparecem (antes o botão saía da tela, nada
+ * rolava e o Voltar do Android era ignorado). Voltar, ou "Minimizar", tira o
+ * alerta da tela cheia SEM confirmar nada: fica um aviso vermelho no topo, que
+ * reabre o alerta; se o servidor reenviar o pedido (escalonamento), ele volta
+ * sozinho para a tela cheia.
  */
 export function EmergencyOverlay() {
-  const { pendingAlert, dismissPendingAlert } = useApp();
+  const { pendingAlert, dismissPendingAlert, pendingAlertMinimized, minimizePendingAlert } = useApp();
   if (!pendingAlert) return null;
 
   const urgent = pendingAlert.kind === 'emergencia' || pendingAlert.kind === 'ajuda';
-  const podeFechar = Boolean(pendingAlert.acknowledged_at);
+  if (pendingAlertMinimized) return <AlertaMinimizado alerta={pendingAlert} urgent={urgent} />;
   const conteudo = <Conteudo alerta={pendingAlert} urgent={urgent} />;
 
   if (Platform.OS === 'ios') {
@@ -54,20 +68,72 @@ export function EmergencyOverlay() {
       animationType="fade"
       statusBarTranslucent
       navigationBarTranslucent
-      // Voltar do Android não some com um pedido sem resposta; depois de
-      // confirmado, equivale a "Ver depois".
-      onRequestClose={() => (podeFechar ? dismissPendingAlert() : undefined)}
+      // Voltar do Android: depois de confirmado, equivale a "Ver depois"; antes,
+      // minimiza — o pedido continua sem resposta e o aviso fica no topo.
+      onRequestClose={() => (acaoDoVoltar(pendingAlert) === 'ver-depois' ? dismissPendingAlert() : minimizePendingAlert())}
     >
       {conteudo}
     </Modal>
   );
 }
 
+/**
+ * O que o Voltar do Android faz no alerta: depois da confirmação, "Ver depois";
+ * antes, minimizar — nunca ignorar o toque (o cuidador ficava preso) e nunca
+ * confirmar por ele.
+ */
+export function acaoDoVoltar(alerta: HelpRequest): 'ver-depois' | 'minimizar' {
+  return alerta.acknowledged_at ? 'ver-depois' : 'minimizar';
+}
+
+/**
+ * O alerta minimizado: uma faixa no topo, acima das telas do app, que não some
+ * enquanto o pedido estiver sem resposta. Tocar reabre a tela cheia.
+ */
+function AlertaMinimizado({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) {
+  const { restorePendingAlert, patient } = useApp();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const nome = patient ? firstName(patient.user_name) : 'O paciente';
+  // Confirmado em outro celular enquanto estava minimizado: a faixa não pode
+  // continuar dizendo "sem resposta".
+  const confirmado = Boolean(alerta.acknowledged_at);
+  const titulo = confirmado ? `${helpKindLabel[alerta.kind]} · confirmado` : `${helpKindLabel[alerta.kind]} sem resposta`;
+  const detalhe = confirmado ? 'Toque para ver ou marcar como resolvido.' : urgent ? `${nome} ainda espera. Toque para responder.` : 'Toque para ver o aviso.';
+  return (
+    <View pointerEvents="box-none" style={[styles.minimizadoWrap, { top: insets.top + spacing.sm }]}>
+      <PressableScale
+        onPress={restorePendingAlert}
+        haptic="medium"
+        accessibilityRole="button"
+        accessibilityLabel={`${titulo}. ${detalhe}`}
+        testID="alerta-minimizado"
+        style={[styles.minimizado, { backgroundColor: urgent ? lightColors.dangerStrong : lightColors.primaryStrong }]}
+      >
+        {confirmado ? <View style={[styles.kickerDot, { backgroundColor: colors.onDark }]} /> : <LiveDot color={colors.onDark} />}
+        <View style={styles.flex}>
+          <Text variant="bodySmall" tone="onDark" weight="semibold">
+            {titulo}
+          </Text>
+          <Text variant="caption" tone="onDark">
+            {detalhe}
+          </Text>
+        </View>
+        <Ionicons name="expand" size={sizes.icon.md} color={colors.onDark} />
+      </PressableScale>
+    </View>
+  );
+}
+
 function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) {
-  const { acknowledgeAlert, resolveAlert, dismissPendingAlert, patient, settings } = useApp();
+  const { acknowledgeAlert, resolveAlert, dismissPendingAlert, minimizePendingAlert, patient, settings } = useApp();
   const { colors } = useTheme();
   const entrada = useEntrada();
   const insets = useSafeAreaInsets();
+  // Tela baixa ou fonte do sistema grande: sai o bloco decorativo (anéis +
+  // ícone, ~190 dp que não encolhiam) e o espaço fica para o texto.
+  const { height, fontScale } = useWindowDimensions();
+  const compacto = height < 720 || fontScale > 1.15;
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState<'ack' | 'resolve' | null>(null);
   const [falha, setFalha] = useState<string | null>(null);
@@ -89,6 +155,21 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
   }, [alertId, recebidoEm]);
+  // Confirmado agora, com a tela aberta: "Resolvido" espera um instante.
+  const [resolverTravado, setResolverTravado] = useState(false);
+  const ackVisto = useRef({ id: alertId, ack });
+  useEffect(() => {
+    const antes = ackVisto.current;
+    ackVisto.current = { id: alertId, ack };
+    if (antes.id !== alertId || !ack) {
+      setResolverTravado(false);
+      return;
+    }
+    if (antes.ack) return;
+    setResolverTravado(true);
+    const t = setTimeout(() => setResolverTravado(false), TRAVA_DO_RESOLVIDO_MS);
+    return () => clearTimeout(t);
+  }, [alertId, ack]);
   /** O pedido esperou (fila offline do computador) antes de chegar ao servidor? */
   const chegouAtrasado = new Date(recebidoEm).getTime() - new Date(alerta.created_at).getTime() >= ATRASO_RELEVANTE_MS;
 
@@ -149,7 +230,7 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
    * "Seu cuidador viu o pedido às HH:MM" quando está com internet.
    */
   const executar = async (acao: 'ack' | 'resolve') => {
-    if (busy) return;
+    if (busy || (acao === 'resolve' && resolverTravado)) return;
     setBusy(acao);
     setFalha(null);
     try {
@@ -184,126 +265,155 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
       colors={gradient}
       start={{ x: 0, y: 0 }}
       end={{ x: 0.4, y: 1 }}
-      style={[styles.root, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }]}
+      style={[styles.root, { paddingTop: insets.top + spacing.lg }]}
       accessibilityViewIsModal
     >
       <StatusBar style="light" />
-      <Animated.View entering={entrada.cascata(0)} style={styles.top}>
-        <View style={[styles.kicker, { backgroundColor: colors.onDarkFill }]}>
-          {/* Pulsa enquanto ninguém respondeu; parado depois da confirmação. */}
-          {ack ? <View style={[styles.kickerDot, { backgroundColor: colors.onDark }]} /> : <LiveDot color={colors.onDark} />}
-          <Text variant="label" tone="onDark">
-            {urgent ? 'Emergência' : 'Aviso da sessão'} · {hm(alerta.created_at)}
+      <ScrollView style={styles.flex} contentContainerStyle={styles.rolagem} testID="rolagem-do-alerta" showsVerticalScrollIndicator>
+        <Animated.View entering={entrada.cascata(0)} style={styles.top}>
+          <View style={[styles.kicker, { backgroundColor: colors.onDarkFill }]}>
+            {/* Pulsa enquanto ninguém respondeu; parado depois da confirmação. */}
+            {ack ? <View style={[styles.kickerDot, { backgroundColor: colors.onDark }]} /> : <LiveDot color={colors.onDark} />}
+            <Text variant="label" tone="onDark">
+              {urgent ? 'Emergência' : 'Aviso da sessão'} · {hm(alerta.created_at)}
+            </Text>
+          </View>
+          <Text variant="display" tone="onDark" accessibilityRole="header" style={styles.title}>
+            {helpKindLabel[alerta.kind]}
           </Text>
-        </View>
-        <Text variant="display" tone="onDark" accessibilityRole="header" style={styles.title}>
-          {helpKindLabel[alerta.kind]}
-        </Text>
-        <Text variant="h3" tone="onDarkMuted" weight="medium">
-          {urgent ? `${nome} precisa de você agora.` : patient?.user_name ?? 'Paciente'}
-        </Text>
-      </Animated.View>
+          <Text variant="h3" tone="onDarkMuted" weight="medium">
+            {urgent ? `${nome} precisa de você agora.` : patient?.user_name ?? 'Paciente'}
+          </Text>
+        </Animated.View>
 
-      <View style={styles.center} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-        <PulseRings paused={ack} />
-        <View style={[styles.iconCircle, { backgroundColor: colors.onDark }]}>
-          <Ionicons name={icone} size={sizes.icon.hero} color={corIcone} />
-        </View>
-      </View>
-
-      <Animated.View entering={entrada.cascata(2)} style={styles.bottom}>
-        {alerta.message ? (
-          <View style={[styles.msgBox, { backgroundColor: colors.onDarkFill }]}>
-            <Text variant="body" tone="onDark" center>
-              {alerta.message}
-            </Text>
+        {!compacto ? (
+          <View style={styles.center} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden testID="alerta-decoracao">
+            <PulseRings paused={ack} />
+            <View style={[styles.iconCircle, { backgroundColor: colors.onDark }]}>
+              <Ionicons name={icone} size={sizes.icon.hero} color={corIcone} />
+            </View>
           </View>
-        ) : null}
-
-        {/* Pedido que esperou na fila offline do computador: o horário do
-            topo é o do pedido; aqui, quando chegou. Sem isto, um socorro de
-            horas atrás pareceria acontecer agora — ou o inverso. */}
-        {chegouAtrasado ? (
-          <View style={styles.prazoRow}>
-            <Ionicons name="cloud-offline-outline" size={sizes.icon.sm} color={colors.onDarkMuted} style={styles.prazoIcon} />
-            <Text variant="bodySmall" tone="onDarkMuted" style={styles.flex} testID="atraso">
-              Pedido feito às {hm(alerta.created_at)} no computador do paciente; chegou às {hm(recebidoEm)}.
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Três estados, em ordem de verdade: (1) o servidor já reenviou —
-            mostra o horário dele; (2) o cronômetro local zerou mas o carimbo
-            ainda não chegou — o servidor roda a cada minuto; (3) contagem
-            regressiva. Em nenhum deles alguém é telefonado sozinho. */}
-        {urgent && !ack ? (
-          <View style={styles.prazoRow}>
-            <Ionicons name={escalado ? 'send' : 'time-outline'} size={sizes.icon.sm} color={colors.onDarkMuted} style={styles.prazoIcon} />
-            {/* Sem região "ao vivo": a contagem muda a cada segundo e o leitor
-                de tela repetiria o texto sem parar. O alerta já é anunciado ao abrir. */}
-            <Text variant="bodySmall" tone="onDarkMuted" style={styles.flex} testID="prazo">
-              {textoPrazo}
-            </Text>
-          </View>
-        ) : null}
-
-        {falha ? (
-          <View style={[styles.falha, { backgroundColor: colors.scrim }]} accessibilityLiveRegion="assertive">
-            <Ionicons name="cloud-offline-outline" size={sizes.icon.md} color={colors.onDark} />
-            <Text variant="bodySmall" tone="onDark" style={styles.flex}>
-              Não deu para registrar: {falha} A confirmação NÃO foi gravada — o alerta segue sem resposta e o paciente não foi avisado.
-            </Text>
-          </View>
-        ) : null}
-
-        {mostrarContatos ? (
-          <View style={styles.contacts}>
-            {/* Todos os contatos, não só os dois primeiros: o terceiro pode ser
-                justamente quem está perto agora. */}
-            {contacts.map((c, i) => (
-              <PressableScale
-                key={`${c.phone}-${i}`}
-                onPress={() => void Linking.openURL(`tel:${c.phone}`).catch(() => undefined)}
-                haptic="medium"
-                accessibilityRole="button"
-                accessibilityLabel={`Ligar para ${c.name}`}
-                style={[styles.contact, { backgroundColor: colors.onDarkFill, borderColor: colors.onDarkBorder }]}
-              >
-                <Ionicons name="call" size={sizes.icon.sm} color={colors.onDark} />
-                <Text variant="bodySmall" tone="onDark" weight="semibold" style={styles.flexShrink}>
-                  {c.name}
-                </Text>
-              </PressableScale>
-            ))}
-          </View>
-        ) : null}
-
-        {!ack ? (
-          <Button
-            title={falha ? 'Tentar de novo' : urgent ? 'Estou indo!' : 'Entendi'}
-            variant={urgent ? 'lightDanger' : 'light'}
-            size="xl"
-            icon={falha ? 'refresh' : 'checkmark-circle'}
-            loading={busy === 'ack'}
-            accessibilityHint={urgent ? `Avisa ${nome} e os outros celulares que você está indo` : undefined}
-            onPress={() => void executar('ack')}
-          />
         ) : (
-          <>
-            {/* O que a confirmação fez, sem prometer o que não existe: o pedido
-                está marcado como visto no servidor; o computador do paciente
-                mostra e fala o aviso se estiver com internet. */}
+          <View style={styles.espaco} />
+        )}
+
+        <Animated.View entering={entrada.cascata(2)} style={styles.bottom}>
+          {alerta.message ? (
+            <View style={[styles.msgBox, { backgroundColor: colors.onDarkFill }]}>
+              <Text variant="body" tone="onDark" center>
+                {alerta.message}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Pedido que esperou na fila offline do computador: o horário do
+              topo é o do pedido; aqui, quando chegou. Sem isto, um socorro de
+              horas atrás pareceria acontecer agora — ou o inverso. */}
+          {chegouAtrasado ? (
+            <View style={styles.prazoRow}>
+              <Ionicons name="cloud-offline-outline" size={sizes.icon.sm} color={colors.onDarkMuted} style={styles.prazoIcon} />
+              <Text variant="bodySmall" tone="onDarkMuted" style={styles.flex} testID="atraso">
+                Pedido feito às {hm(alerta.created_at)} no computador do paciente; chegou às {hm(recebidoEm)}.
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Três estados, em ordem de verdade: (1) o servidor já reenviou —
+              mostra o horário dele; (2) o cronômetro local zerou mas o carimbo
+              ainda não chegou — o servidor roda a cada minuto; (3) contagem
+              regressiva. Em nenhum deles alguém é telefonado sozinho. */}
+          {urgent && !ack ? (
+            <View style={styles.prazoRow}>
+              <Ionicons name={escalado ? 'send' : 'time-outline'} size={sizes.icon.sm} color={colors.onDarkMuted} style={styles.prazoIcon} />
+              {/* Sem região "ao vivo": a contagem muda a cada segundo e o leitor
+                  de tela repetiria o texto sem parar. O alerta já é anunciado ao abrir. */}
+              <Text variant="bodySmall" tone="onDarkMuted" style={styles.flex} testID="prazo">
+                {textoPrazo}
+              </Text>
+            </View>
+          ) : null}
+
+          {falha ? (
+            <View style={[styles.falha, { backgroundColor: colors.scrim }]} accessibilityLiveRegion="assertive">
+              <Ionicons name="cloud-offline-outline" size={sizes.icon.md} color={colors.onDark} />
+              <Text variant="bodySmall" tone="onDark" style={styles.flex}>
+                Não deu para registrar: {falha} A confirmação NÃO foi gravada — o alerta segue sem resposta e o paciente não foi avisado.
+              </Text>
+            </View>
+          ) : null}
+
+          {mostrarContatos ? (
+            <View style={styles.contacts}>
+              {/* Todos os contatos, não só os dois primeiros: o terceiro pode ser
+                  justamente quem está perto agora. */}
+              {contacts.map((c, i) => (
+                <PressableScale
+                  key={`${c.phone}-${i}`}
+                  onPress={() => void Linking.openURL(`tel:${c.phone}`).catch(() => undefined)}
+                  haptic="medium"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Ligar para ${c.name}`}
+                  style={[styles.contact, { backgroundColor: colors.onDarkFill, borderColor: colors.onDarkBorder }]}
+                >
+                  <Ionicons name="call" size={sizes.icon.sm} color={colors.onDark} />
+                  <Text variant="bodySmall" tone="onDark" weight="semibold" style={styles.flexShrink}>
+                    {c.name}
+                  </Text>
+                </PressableScale>
+              ))}
+            </View>
+          ) : null}
+
+          {ack ? (
+            // O que a confirmação fez, sem prometer o que não existe: o pedido
+            // está marcado como visto no servidor; o computador do paciente
+            // mostra e fala o aviso se estiver com internet.
             <View style={styles.prazoRow}>
               <Ionicons name="checkmark-circle" size={sizes.icon.sm} color={colors.onDark} style={styles.prazoIcon} />
               <Text variant="bodySmall" tone="onDarkMuted" style={styles.flex} testID="confirmado">
                 Confirmado às {hm(alerta.acknowledged_at ?? new Date().toISOString())}. A tela do paciente avisa que você viu quando está com internet.
               </Text>
             </View>
-            <Button title={falha ? 'Tentar de novo' : 'Resolvido'} variant="light" size="lg" icon={falha ? 'refresh' : 'checkmark-done'} loading={busy === 'resolve'} onPress={() => void executar('resolve')} />
+          ) : null}
+        </Animated.View>
+      </ScrollView>
+
+      {/* Rodapé fixo, fora da rolagem: a resposta ao pedido nunca sai da tela. */}
+      <View style={[styles.rodape, { paddingBottom: insets.bottom + spacing.lg }]} testID="acoes-do-alerta">
+        {!ack ? (
+          <>
+            <Button
+              title={falha ? 'Tentar de novo' : urgent ? 'Estou indo!' : 'Entendi'}
+              variant={urgent ? 'lightDanger' : 'light'}
+              size="xl"
+              icon={falha ? 'refresh' : 'checkmark-circle'}
+              loading={busy === 'ack'}
+              accessibilityHint={urgent ? `Avisa ${nome} e os outros celulares que você está indo` : undefined}
+              onPress={() => void executar('ack')}
+            />
+            <Button
+              title="Minimizar"
+              variant="glass"
+              icon="contract"
+              accessibilityHint="Não confirma nada: o alerta continua sem resposta e fica um aviso no topo da tela"
+              onPress={minimizePendingAlert}
+            />
+          </>
+        ) : (
+          <>
+            <Button
+              title={falha ? 'Tentar de novo' : 'Resolvido'}
+              variant="light"
+              size="lg"
+              icon={falha ? 'refresh' : 'checkmark-done'}
+              loading={busy === 'resolve'}
+              disabled={resolverTravado}
+              onPress={() => void executar('resolve')}
+            />
             <Button title="Ver depois" variant="glass" onPress={dismissPendingAlert} />
           </>
         )}
-      </Animated.View>
+      </View>
     </LinearGradient>
   );
 }
@@ -337,7 +447,12 @@ function Ring({ delay, paused, estatico }: { delay: number; paused: boolean; est
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   flexShrink: { flexShrink: 1 },
-  root: { flex: 1, paddingHorizontal: layout.gutter + spacing.xs, justifyContent: 'space-between', zIndex: zIndex.overlay },
+  root: { flex: 1, paddingHorizontal: layout.gutter + spacing.xs, zIndex: zIndex.overlay },
+  rolagem: { flexGrow: 1, gap: spacing.md, paddingBottom: spacing.md, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
+  rodape: { gap: spacing.sm, paddingTop: spacing.md, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
+  espaco: { flexGrow: 1, minHeight: spacing.sm },
+  minimizadoWrap: { position: 'absolute', left: layout.gutter, right: layout.gutter, zIndex: zIndex.overlay },
+  minimizado: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: sizes.touch + spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.lg },
   top: { alignItems: 'flex-start' },
   kicker: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
   kickerDot: { width: sizes.dot, height: sizes.dot, borderRadius: radius.pill },

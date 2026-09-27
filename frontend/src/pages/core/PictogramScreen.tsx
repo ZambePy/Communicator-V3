@@ -39,7 +39,7 @@ export const PictogramScreen: React.FC = () => {
   return (
     <GazePageLayout
       showBack={true}
-      backRoute="/menu"
+      backRoute="/phrases"
       titulo="Pictogramas"
       subtitulo={`Página ${currentPage + 1} de ${totalPages} · Olhe para selecionar e falar`}
     >

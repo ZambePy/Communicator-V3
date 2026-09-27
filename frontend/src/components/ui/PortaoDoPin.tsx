@@ -194,6 +194,7 @@ export const PortaoDoPin: React.FC<{
             </GazeButton>
             <button
               type="submit"
+              data-no-dwell="true"
               aria-label={t('settings.auth.submit')}
               style={{
                 flex: 1,
@@ -218,6 +219,9 @@ export const PortaoDoPin: React.FC<{
   );
 };
 
+// Teclado do PIN: só mouse e teclado (`data-no-dwell`). Pelo olhar, o paciente
+// digitaria o PIN — que é o mesmo em todo instalador — e abriria a área do
+// cuidador. A saída pelo olhar é o "Cancelar", alto e com dwell longo.
 const Tecla: React.FC<{
   onClick: () => void;
   tom?: 'digito' | 'perigo' | 'neutro';
@@ -225,6 +229,7 @@ const Tecla: React.FC<{
 }> = ({ onClick, tom = 'digito', children }) => (
   <button
     type="button"
+    data-no-dwell="true"
     onClick={onClick}
     style={{
       minHeight: ALTURA_DA_TECLA_PX,

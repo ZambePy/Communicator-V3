@@ -326,8 +326,10 @@ aviso de distância e no de postura; não tem botão de cancelar próprio (2 s �
 menos que o tempo de achar um botão com o olhar), mas a Emergência fica por
 cima dele, e acioná-la cancela o reajuste e descarta a coleta. A calibração
 completa é pedida pelo **vigia de recalibração** quando o
-modelo deixou de descrever a pessoa: dispersão recente (mediana da BCEA de 20
-fixações) acima de 3× a do último teste de precisão salvo, viés acima de 2× o
+modelo deixou de descrever a pessoa: dispersão recente (mediana da BCEA das
+últimas 20 fixações dos últimos 2 min — fixação é a janela de 500 ms cujos
+quatro quartos têm o centro no mesmo lugar, sem teto para o tamanho do ruído)
+acima de 3× a do último teste de precisão salvo, viés acima de 2× o
 de lá (piso 48 px, teto 80 px), ou a correção por dwell a 90 % do seu teto —
 este último critério vale mesmo sem teste salvo. O vigia é consultado a cada
 15 s; o aviso só aparece depois de duas consultas positivas seguidas, com
@@ -795,21 +797,25 @@ pessoa não confirmar, o caminho de volta é uma flag.
    sentido, e então **o que se faz com isso**: falar uma frase pronta,
    **escrever uma frase própria**, responder na conversa, abrir um jogo, o
    resto do app no mapa mental, e a emergência por último (é dwell mais
-   longo). A segunda metade acontece **nas telas de verdade**: o passo manda a
+   longo, e o passo tem um **ensaio** que não envia nada — vale uma vez e dura
+   no máximo 60 s; depois dele, o botão volta a valer). A segunda metade acontece **nas telas de verdade**: o passo manda a
    pessoa ao teclado, a tela avisa quando ela escreveu, e o passo destrava.
    Desenhar miniaturas dentro do tutorial ensinaria uma interface que não
    existe. *Pular* está em todos os passos e a trilha navega livre; o único
    passo que espera é o de escrever a frase — é a única coisa do tutorial que
    ninguém aprende assistindo — e mesmo ele libera sozinho em 90 s, porque
-   trava sem saída em app assistivo é armadilha. **Configurações fica de fora
+   trava sem saída em app assistivo é armadilha. Voltar e Continuar ficam num
+   rodapé preso à borda de baixo, à vista em 1366×768 e com escala do Windows.
+   **Configurações fica de fora
    da jornada do paciente de propósito**: é lá que uma escolha errada quebra a
    calibração que ele acabou de fazer.
 3. **Calibração** (`/calibration-check`): preparação com verificação de
    prontidão, coleta dos alvos, revisão (deriva de pose, alvos ignorados) e
    teste de precisão. O botão de emergência fica compacto e sai de cima dos
-   alvos.
-4. **Menu** (`/menu`) e telas do paciente: teclado, frases rápidas,
-   pictogramas, jogos, câmera, galeria, descanso, emergência, **conversa**
+   alvos. "Usar a calibração salva" só aparece para o paciente que a fez: depois
+   de trocar de perfil, o novo paciente calibra.
+4. **Menu** (`/menu`) e telas do paciente: teclado, frases rápidas (a última
+   página leva aos pictogramas), jogos, câmera, galeria, descanso, emergência, **conversa**
    (`/conversation`) com o celular do cuidador e **Computador**
    (`/virtual-mouse`), que liga o Modo Computador. O botão de emergência é um
    alerta local (som e tela) e, com a conta ligada, também chega ao celular.
@@ -820,11 +826,23 @@ pessoa não confirmar, o caminho de volta é uma flag.
    movimento" do sistema
    ([`ParticulasDeFundo.tsx`](frontend/src/components/ui/ParticulasDeFundo.tsx)).
 5. **Área do cuidador** (`/settings`, `/settings/voice`, `/caregiver`,
-   `/caregiver/guide`): configurações por seção (rastreamento, tela,
+   `/caregiver/guide`, `/conta`, `/historico`, `/relatorio`): pede o PIN
+   (teclado só com mouse, fora do alcance do olhar) e **tranca sozinha** ao
+   sair dela ou depois de 5 min sem uso; "Encerrar acesso" tranca só a área do
+   cuidador, sem tirar o paciente da sessão. Configurações por seção (rastreamento, tela,
    calibração, voz personalizada, sugestões de escrita, dados), painel com
    estado do rastreamento e alertas, guia de instalação e leitura do teste de
    precisão. É também de onde saem o **modo apresentação** e o **relatório de
-   suporte**, descritos adiante.
+   suporte**, descritos adiante. Lembretes (que abrem sobre a tela do paciente
+   na hora marcada) e a rotina do painel começam **vazios**: só existem os que
+   o cuidador cadastrar. O convite dos relatos automáticos aparece só aqui.
+   Remover um perfil pede confirmação e apaga o que o assistente aprendeu com
+   ele.
+
+Ações que custam caro — Emergência, "Falar", "Voltar" e "Início" do teclado —
+têm dwell próprio (`data-dwell-ms`) e um piso relativo ao do paciente
+(`data-dwell-mult`, 1,3× a 1,7×): quem usa dwell de 4 s não dispara a
+Emergência com 2 s, antes de uma letra. O CANCELAR da emergência continua curto.
 
 Regras da interface do paciente: alvos de no mínimo 160×120 px, nada se move
 sob o olhar (sem `transform` em hover), uma ação principal por tela, zona de
@@ -1060,14 +1078,18 @@ Onde aparece: **sugestão de palavra no teclado**, **sugestão de frase inteira
 no teclado** e **sugestão de frase inteira na tela de Conversa**. Em
 Configurações há liga/desliga e um botão **apagar aprendizado** — o modelo é
 JSON puro no `localStorage` justamente para que exportar, auditar e apagar seja
-trivial.
+trivial. O modelo é **por paciente** (`irisflow.assistente.v1.<perfil>`): o que
+um paciente falou não vira sugestão para outro que divide o computador. O
+modelo de antes (uma chave só) passa uma vez para o primeiro paciente que abrir
+o teclado.
 
 `frontend/src/utils/wordPredictor.ts` continua existindo, mas virou
 **adaptador** do motor novo: as telas e os testes que já importavam
 `learnWord`, `learnBigram`, `learnSentence` e `getPredictions` seguem
 funcionando, e o vocabulário antigo (`irisflow_user_words`,
-`irisflow_user_bigrams`) é **migrado uma única vez** na primeira leitura —
-ninguém perde o que já tinha ensinado ao app. Para código novo, use
+`irisflow_user_bigrams`) é **migrado uma única vez** na primeira leitura (e
+apagado em seguida, para não ir para outro paciente) — ninguém perde o que já
+tinha ensinado ao app. Para código novo, use
 `services/assistente` diretamente: é ele que sugere frases, onde está a
 economia real de fixações.
 
@@ -1096,7 +1118,8 @@ que é estado do sistema continua (heartbeat, abertura e fim de sessão, rótulo
 da voz em uso, relatório de suporte), e as mensagens do cuidador continuam
 chegando e sendo faladas. Ele também troca o nome do paciente por
 "Paciente demonstração" e mantém uma **faixa fixa na tela**, para que ninguém
-na plateia confunda demonstração com uso real. O que ele **não** faz é simular
+na plateia confunda demonstração com uso real. Desliga sozinho em **2 horas**:
+esquecido ligado, ele cortaria os pedidos de socorro de verdade. O que ele **não** faz é simular
 dados: as telas continuam mostrando o estado verdadeiro do rastreamento, da
 calibração e da voz. Uma demonstração que inventa números não prova nada a quem
 entende do assunto e mente para quem não entende.
@@ -1187,7 +1210,14 @@ no celular com a hora real ("pedido às HH:MM, chegou com atraso"). Sem nuvem
 configurada ou sem computador vinculado **nada é enfileirado** — mensagem
 para ninguém não fica no disco esperando quem vincular depois —, itens de
 outro vínculo são descartados antes do envio e uma chave recusada esvazia a
-fila. As telas só emitem no barramento
+fila. O **socorro não depende da licença nem da conta**: a rota `/emergency`
+fica fora dos portões, e o alarme local toca mesmo com a licença bloqueada. A
+tela de emergência diz o que aconteceu com o pedido — enviando, enviado ao
+celular, sem internet (sai quando ela voltar), alarme só local (computador sem
+vínculo, ou falha no envio) e modo apresentação (nada enviado) — em vez de
+"alerta enviado" sem saber; a resposta do cuidador
+aparece e é falada nela. "Sair desta máquina" com itens na fila avisa quantos
+são e tenta enviá-los antes de sair. As telas só emitem no barramento
 [`cloud/eventos.ts`](frontend/src/cloud/eventos.ts), e é nele que o [modo
 apresentação](#modo-apresentação-e-relatório-de-suporte) corta fala, socorro,
 calibração e contadores; heartbeat, sessão, `voice.status` e relatório de
@@ -1242,8 +1272,18 @@ com a chave anon marcaria a própria assinatura como paga.
 | `devices`, `sessions`, `support_reports` | o dono | nada | `desktop-sync`, `pair_device()`, pg_cron |
 | `messages` | o dono | insere só como `cuidador`; marca lida | `desktop-sync` (`paciente`), escalonamento |
 | `help_requests` | o dono | confirma e resolve | `desktop-sync` |
-| `quick_phrases`, `patient_settings`, `push_tokens` | o dono | o dono | `desktop-sync` (`voice.status`) |
+| `quick_phrases`, `patient_settings` | o dono | o dono | `desktop-sync` (`voice.status`) |
+| `push_tokens` | o dono | o dono; o app registra e remove por `registrar_push_token()` / `remover_push_token()` (o aparelho passa para a conta logada nele) | — |
 | `gateway_events` | ninguém | nada | `payment-webhook` |
+
+**Colunas que o cliente escreve** (revisão de 27/09/2026): o Supabase dá a
+`authenticated` UPDATE e INSERT em todas as colunas, e as políticas limitam a
+linha, não a coluna. Por isso, desde as migrações de 27/09, o dono só grava em
+`profiles` o nome, o telefone e as novidades (e-mail e CPF vêm do Auth e do
+cadastro); em `messages` só marca lida e insere como `cuidador`, sem
+`kind = 'sistema'`; em `help_requests` só confirma e resolve. O formulário de
+contato aceita no máximo 3 mensagens por e-mail a cada 10 min e 30 por minuto
+no total (erro `limite_de_contato`).
 
 **Funções** (`security definer`, `search_path` fixo; o de `pair_device` inclui
 `extensions`, onde o Supabase põe o pgcrypto). `desktop_license()` →
@@ -1257,7 +1297,10 @@ RPCs de cadastro estão na tabela do site; só a `service_role` roda
 **pg_cron**, a cada minuto: `escalar-pedidos-de-ajuda` marca `escalated_at` no
 socorro sem confirmação após `emergency_timeout_s` (padrão 45 s), grava uma
 mensagem de sistema e reenvia push a todos os celulares — não telefona para
-ninguém; `encerrar-sessoes-orfas` fecha sessões sem heartbeat há mais de 5 min.
+ninguém. Enquanto ninguém confirma nem resolve, o aviso é reenviado mais duas
+vezes, com 5 min de intervalo (migração `20260927105153_escalonamento_reenvio`);
+cada pedido roda numa subtransação, e um que falhe não trava os outros.
+`encerrar-sessoes-orfas` fecha sessões sem heartbeat há mais de 5 min.
 O prazo conta da chegada ao servidor (`received_at`, migração
 `20260924020011_help_requests_received_at`), não de quando o pedido aconteceu
 no computador, e a mensagem só diz que reenviou quando havia celular
@@ -1280,7 +1323,11 @@ conteúdo inválido (classes 22/23 do Postgres) e 503 no resto, para o desktop
 reenviar; `help.create` aceita o `id` escolhido no computador e um reenvio com
 o mesmo id não cria outro pedido nem outro push; o heartbeat com `session_id`
 responde `sessao_aberta`; e o push tem prazo de 6 s, para não segurar a
-resposta. `payment-webhook` é
+resposta. Desde a v4 (27/09): o heartbeat mantém viva só a sessão que o
+computador informa (uma sessão largada aberta é encerrada pelo job), a fala do
+paciente (`message.send`) também aceita o `id` do computador — um reenvio da
+fila não duplica a mensagem —, e o push de socorro vai com
+`interruptionLevel: 'time-sensitive'` e canal `emergencia`. `payment-webhook` é
 **esqueleto, não publicado**: HMAC de Stripe, Mercado Pago ou Pagar.me
 (`PAYMENT_GATEWAY`, `PAYMENT_WEBHOOK_SECRET`; sem segredo recusa tudo) →
 `gateway_events` → `register_charge()`. Na beta não há gateway: todo plano tem
@@ -1522,10 +1569,10 @@ python app/scripts/gerar-icones.py           # ícones, capa e imagem da loja (c
 
 | tela | o que faz |
 |---|---|
-| Início | sessão ao vivo (computador visto há < 90 s), última mensagem, alertas, câmera e calibração |
-| Conversa | chat em tempo real; o que o cuidador envia é falado na tela do paciente e marcado "falado na tela" |
-| Alertas | alerta em tela cheia: "Estou indo!" (o desktop avisa o paciente), "Resolvido", ligar para os contatos, horário do escalonamento |
-| Relatórios | 7 dias de uso e o Teste de precisão de cada sessão (planos Completo, Voz e Beta) |
+| Início | sessão ao vivo (computador visto há < 90 s), última mensagem, alertas, câmera e calibração; "Tudo tranquilo" e "Ainda sem mensagens" só com a última carga verificada |
+| Conversa | chat em tempo real; o que o cuidador envia é falado na tela do paciente e marcado "falado na tela"; marca como lidas só com o app na frente |
+| Alertas | alerta em tela cheia: "Estou indo!" (o desktop avisa o paciente), "Resolvido", ligar para os contatos, horário do escalonamento. O texto rola e a resposta fica num rodapé fixo (celular pequeno, fonte grande); Voltar ou "Minimizar" deixa uma faixa vermelha no topo, que volta à tela cheia sozinha se o servidor reenviar o pedido |
+| Relatórios | 7 dias de uso e o Teste de precisão de cada sessão (planos Completo, Voz e Beta, pela licença do servidor — `desktop_license()`, a mesma do desktop); o relatório de uma sessão aberto pelo Início segue a mesma regra |
 | Ajustes | fixação, suavização (nulo = não definido), prazo de emergência e contatos, voz em uso, exclusão da conta; teclado e sensibilidade aparecem desativados, com "Em breve" |
 | Frases, Paciente, Assinatura | respostas rápidas da Conversa do desktop; computadores vinculados (tocar desvincula); "Programa beta", sem compra |
 
@@ -1536,8 +1583,15 @@ não aplica este ajuste", em vez de gravar um valor que não faz nada. O tipo
 desktop só envia pedidos de socorro (`emergencia`). O "Esqueci a senha" do app
 manda o cuidador para `<site>/nova-senha` (`EXPO_PUBLIC_SITE_URL`).
 
-**Push.** O token Expo vai para `push_tokens` e recebe o socorro e o
-escalonamento. **Não funciona no Expo Go** nem em emulador. Em build, o token usa o
+**Push.** O token Expo é registrado por `registrar_push_token()` — o
+aparelho passa a ser da conta logada nele, mesmo que antes fosse de outra — e
+recebe o socorro e o escalonamento. Ao sair, `remover_push_token()` tira o
+token obtido na hora e o de aberturas anteriores; sem rede, a remoção fica
+guardada (com a credencial daquela sessão) e é concluída quando a rede voltar.
+O registro é refeito ao voltar dos ajustes do celular, depois de uma falha e
+quando o sistema troca o token. No Android, a tela de Alertas avisa quando o
+canal de emergência não fura o "Não perturbe" e abre os ajustes do canal (o
+app pede, mas só o cuidador pode ligar). **Não funciona no Expo Go** nem em emulador. Em build, o token usa o
 `extra.eas.projectId` do `app.json` (projeto EAS criado em 24/09/2026); no Android,
 o FCM pede o `google-services.json` (`GOOGLE_SERVICES_JSON` no EAS, lido pelo
 `app.config.js`) e, no iOS, a chave APNs da conta Apple paga. Enquanto isso não
@@ -1553,7 +1607,12 @@ builds do EAS vêm do `env` de cada perfil do [`eas.json`](app/eas.json).
 [Hospedagem e publicação](#hospedagem-e-publicação).
 
 **Sessão e falhas.** A sessão fica no Keychain/Keystore (`expo-secure-store`, em
-pedaços de menos de 2 KB), nunca no AsyncStorage. O Sentry só liga com
+pedaços de menos de 2 KB), nunca no AsyncStorage. Sem rede para renovar um
+token vencido o cuidador continua logado (o app diz "sem internet"); as
+cargas da conta e do paciente tentam de novo sozinhas (espera crescente até
+30 s, ao voltar para a frente e quando o token é renovado), e enviar ou salvar
+sem a conta carregada avisa que nada saiu. Os ajustes gravam com concorrência
+otimista (`updated_at`): contato cadastrado em outro celular não some. O Sentry só liga com
 `EXPO_PUBLIC_SENTRY_DSN`, em build de release, sem IP, captura de tela nem texto
 de mensagens.
 
@@ -2024,14 +2083,15 @@ o replay de gravação real (`docs/MEDICOES.md` §15), que precisa de uma
 gravação. Os instaladores dos três sistemas saem de
 `.github/workflows/release.yml` ([Instalador](#instalador-e-atualização-automática)).
 
-**Estado medido nesta versão (27/09/2026):** núcleo com **1968 testes (mais 2 pulados) em 178 arquivos**,
-interface com **1212 em 138 arquivos**, site com **238 em 27 arquivos** e app do
-cuidador com **103 em 12 suítes** — 3521 testes ao todo; checagem de tipos sem
+**Estado medido nesta versão (27/09/2026, segunda rodada):** núcleo com **2013 testes (mais 2 pulados) em 185 arquivos**,
+interface com **1328 em 152 arquivos**, site com **296 em 32 arquivos** e app do
+cuidador com **179 em 16 suítes** — 3816 testes ao todo; checagem de tipos sem
 erro nos cinco projetos (núcleo, Electron, interface, site e app), configuração
 pública sem segredo, os builds de produção da interface e do site passando;
-banco local com as 19 migrações (aplicadas duas vezes), o cenário — agora com o
-código de confirmação e o Lazer por plano — e o seed passando. O teste Deno da `desktop-sync` (15)
-passou na versão de 24/09 e a função não mudou desde então.
+banco local com as 26 migrações (aplicadas duas vezes), o cenário e o seed
+passando; teste Deno da `desktop-sync` com 23 casos passando. Os testes do motor
+de voz em Python não rodaram aqui (exigem o PyTorch); o motor não mudou nesta
+versão.
 
 Os testes do núcleo cobrem os módulos puros, onde os limiares e as leis de
 controle vivem: calibração (inclusive a correção local dos cantos, com um olho
@@ -2090,7 +2150,7 @@ diz qual ajuste físico é necessário.
 
 ## Pendências e riscos
 
-Estado em 26/09/2026.
+Estado em 27/09/2026.
 
 1. **Pesos do L2CS — decisão jurídica.** A licença do Gaze360 é *research-only* e proíbe
    uso comercial, inclusive de modelos treinados na base; a decisão de 15/09/2026 é não
@@ -2143,6 +2203,17 @@ Estado em 26/09/2026.
    pagamento real (`attach_payment_method` sem gateway + cancelar + reativar) e o limite
    de computadores de Completo/Voz anunciado no site não é aplicado pelo banco;
    avisos de postura/fadiga previstos no banco que o desktop não envia.
+12. **Auditoria de 27/09/2026 — o que ficou para depois.** No desktop: alvos
+    abaixo do mínimo declarado (a Emergência tem 200×64 px; Voltar e controles
+    de alguns jogos e da meditação); teclado sem acentos, "ç", números e
+    pontuação; textos fora do i18n (a versão em inglês mistura português); a
+    calibração guardada continua sendo uma só no núcleo (a conferência só
+    oferece reaproveitá-la ao paciente que a fez); "Estou bem", "Minhas opções"
+    e o relatório da sessão ainda sem caminho pela interface. No app do
+    cuidador: o iOS só fura o Foco com o direito *Time Sensitive* (exige novo
+    build) e o Android só toca no "Não perturbe" se o cuidador ligar no canal
+    (o app avisa e abre o ajuste); o overlay e os alertas foram conferidos no
+    export web e em testes, falta conferir num aparelho real.
 10. **Primeiro cadastro real com o código.** A função foi testada num Postgres
     local, com o hash calculado como o Auth calcula, e o modelo usa `slice`, função do
     próprio Go template que o Supabase usa nos e-mails; mas nenhum e-mail com o código

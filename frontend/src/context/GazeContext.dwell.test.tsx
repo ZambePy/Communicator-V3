@@ -44,9 +44,10 @@ vi.mock('@tracker/tracker/engine', async (orig) => {
   return { ...real, createGazeEngine: () => engineMock };
 });
 
+let dwellDasSettings = 1500;
 vi.mock('./SettingsContext', () => ({
   useSettings: () => ({
-    settings: { dwellMs: 1500, filterPreset: 'balanceado-v2', eyeDominance: 'both' },
+    settings: { dwellMs: dwellDasSettings, filterPreset: 'balanceado-v2', eyeDominance: 'both' },
     updateSettings: vi.fn(),
   }),
 }));
@@ -91,8 +92,12 @@ function montar(botao: React.ReactElement) {
 
 describe('GazeContext — casca DOM do dispatcher', () => {
   beforeEach(() => {
+    // Uma tela do paciente (com cursor): nas telas sem cursor o olhar só
+    // aciona Emergência, CANCELAR e recuperação (FE-3).
+    window.location.hash = '#/menu';
     estadoEngine = 'tracking';
     calibrado = true;
+    dwellDasSettings = 1500;
     emitir = () => {};
     empurrarEstado = () => {};
     vi.clearAllMocks();
@@ -110,6 +115,33 @@ describe('GazeContext — casca DOM do dispatcher', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  // FE-13: com dwell de 4 s, o "Falar" (2 s) e a Emergência (2 s) disparavam
+  // antes de uma letra comum.
+  it('alvo caro (data-dwell-mult) não fica mais fácil que uma letra para quem usa dwell longo', () => {
+    dwellDasSettings = 4000;
+    const { onClick } = montar(
+      <button data-testid="alvo" data-dwell-ms="2000" data-dwell-mult="1.3">
+        Falar
+      </button>
+    );
+    const t = olhar(2600, 0);
+    expect(onClick).not.toHaveBeenCalled();
+    olhar(2800, t + 1000 / 30);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('no dwell padrão, o alvo caro continua no absoluto dele', () => {
+    const { onClick } = montar(
+      <button data-testid="alvo" data-dwell-ms="2000" data-dwell-mult="1.3">
+        Falar
+      </button>
+    );
+    const t = olhar(1800, 0);
+    expect(onClick).not.toHaveBeenCalled();
+    olhar(400, t + 1000 / 30);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
   it('clica de verdade quando o olhar fica no alvo pelo dwell inteiro', () => {
@@ -315,5 +347,101 @@ describe('GazeContext — casca DOM do dispatcher', () => {
     const comum = montar(<button data-testid="alvo">Ok</button>);
     olhar(5000, 0, { degraded: true });
     expect(comum.onClick).not.toHaveBeenCalled();
+  });
+});
+
+describe('GazeContext — rearme por saída (FE-7)', () => {
+  beforeEach(() => {
+    estadoEngine = 'tracking';
+    calibrado = true;
+    emitir = () => {};
+    empurrarEstado = () => {};
+    vi.clearAllMocks();
+    window.location.hash = '#/menu';
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn(async () => { throw new Error('sem câmera no teste'); }) },
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    window.location.hash = '';
+    vi.restoreAllMocks();
+  });
+
+  it('com o olhar parado no alvo depois do clique, ele NÃO dispara de novo (antes: a cada ~2 s)', () => {
+    const { onClick } = montar(<button data-testid="alvo">Pode mudar de posição?</button>);
+    olhar(7000, 0);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('sair do alvo e voltar rearma', () => {
+    const { onClick, el } = montar(<button data-testid="alvo">Ok</button>);
+    let t = olhar(DWELL_MS + 200, 0);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    document.elementFromPoint = vi.fn(() => null);
+    t = olhar(400, t + 33);
+    document.elementFromPoint = vi.fn(() => el);
+    olhar(DWELL_MS + 1200, t + 33);
+    expect(onClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('tecla repetível (data-repetir, ex.: Apagar) continua repetindo com o olhar parado', () => {
+    const { onClick } = montar(<button data-testid="alvo" data-repetir="true">Apagar</button>);
+    olhar(7000, 0);
+    expect(onClick.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('tela nova: o botão sob o olhar herdado não é selecionado sozinho', () => {
+    const { onClick, el } = montar(<button data-testid="alvo">Gostaria de conversar</button>);
+    // uma amostra na tela anterior, sem alvo
+    document.elementFromPoint = vi.fn(() => null);
+    let t = olhar(100, 0);
+    // troca de tela; o botão novo cai sob o olhar parado
+    window.location.hash = '#/phrases';
+    document.elementFromPoint = vi.fn(() => el);
+    t = olhar(6000, t + 33);
+    expect(onClick).not.toHaveBeenCalled();
+    // o paciente olha de propósito: sai e volta
+    document.elementFromPoint = vi.fn(() => null);
+    t = olhar(400, t + 33);
+    document.elementFromPoint = vi.fn(() => el);
+    olhar(DWELL_MS + 1200, t + 33);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('GazeContext — telas sem cursor (FE-3)', () => {
+  beforeEach(() => {
+    estadoEngine = 'tracking';
+    calibrado = true;
+    emitir = () => {};
+    empurrarEstado = () => {};
+    vi.clearAllMocks();
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn(async () => { throw new Error('sem câmera no teste'); }) },
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    window.location.hash = '';
+    vi.restoreAllMocks();
+  });
+
+  it('na escolha de perfil (sem cursor), o olhar não escolhe nada "no escuro"', () => {
+    window.location.hash = '#/profiles';
+    const { onClick } = montar(<button data-testid="alvo">Joana</button>);
+    olhar(6000, 0);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('mas a Emergência e os alvos de recuperação continuam valendo', () => {
+    window.location.hash = '#/calibration-check';
+    const { onClick } = montar(<button data-testid="alvo" data-recovery="true">Recalibração rápida</button>);
+    olhar(6000, 0);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 });

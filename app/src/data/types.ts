@@ -58,6 +58,48 @@ export interface Subscription {
 }
 
 /**
+ * Licença calculada no servidor por `license_for_profile()` e devolvida por
+ * `desktop_license()` — a MESMA que o desktop recebe no login e o site mostra
+ * na Conta (`frontend/src/cloud/types.ts` → `LicencaResposta`). O app não
+ * recalcula nada: `features` diz o que o plano inclui e `allowed` se o acesso
+ * vale agora (beta encerrada, avaliação vencida → false).
+ */
+export interface License {
+  allowed: boolean;
+  reason: 'beta' | 'beta_encerrada' | 'avaliacao' | 'avaliacao_encerrada' | 'ativa' | 'inadimplente' | 'cancelada' | 'sem_assinatura' | string;
+  status: SubscriptionStatus | null;
+  plan_id: PlanId | null;
+  plan_name: string | null;
+  trial_ends_at: string | null;
+  next_charge_at: string | null;
+  /** Até quando o acesso vale sem nada mudar (fim da beta, da avaliação, do período pago). */
+  access_until: string | null;
+  checked_at: string;
+  /** `lazer` chegou em 27/09/2026: servidores anteriores não o mandam. */
+  features: { relatorios: boolean; multiplos_dispositivos: boolean; assistente: boolean; voz: boolean; lazer?: boolean };
+}
+
+export type LicenseFeature = 'relatorios' | 'lazer' | 'assistente' | 'voz' | 'multiplos_dispositivos';
+
+/**
+ * A regra do servidor, sem recálculo: o recurso faz parte do plano E o acesso
+ * vale agora. `features` sozinho não basta — `license_for_profile()` o calcula
+ * só pelo plano, então uma beta encerrada continua com tudo `true` lá dentro.
+ * Sem licença carregada, nada é liberado.
+ */
+export function licenseAllows(license: License | null | undefined, feature: LicenseFeature): boolean {
+  if (!license?.allowed) return false;
+  // Chave ausente = servidor anterior a ela (hoje só `lazer`): liberado, como no desktop.
+  return license.features?.[feature] !== false;
+}
+
+/** Beta da conta segundo a licença: `ativa` (acesso completo até `access_until`), `encerrada`, ou `null` fora da beta. */
+export function betaStatus(license: License | null | undefined): 'ativa' | 'encerrada' | null {
+  if (license?.plan_id !== 'beta') return null;
+  return license.allowed ? 'ativa' : 'encerrada';
+}
+
+/**
  * Inscrição no programa beta (`beta_registrations`, select próprio). Só existe para
  * contas criadas pela página /beta do site; contas antigas com plano pago não têm.
  */
@@ -231,11 +273,30 @@ export interface AuthUser {
   email: string;
 }
 
+/**
+ * Outro celular (ou o computador) gravou os ajustes depois da leitura em que
+ * a mudança se baseou. Nada foi gravado; quem chama recarrega e reaplica.
+ * Identificado por `name` (e não por `instanceof`, que não sobrevive a toda
+ * transpilação de subclasses de `Error`).
+ */
+export class ConflitoDeAjustes extends Error {
+  constructor() {
+    super('Outro celular mudou os ajustes ao mesmo tempo. Confira e tente de novo.');
+    this.name = 'ConflitoDeAjustes';
+  }
+}
+
+export function ehConflitoDeAjustes(e: unknown): e is ConflitoDeAjustes {
+  return e instanceof Error && e.name === 'ConflitoDeAjustes';
+}
+
 export interface RealtimeHandlers {
   onMessage?: (m: Message) => void;
   onHelpRequest?: (h: HelpRequest) => void;
   onSession?: (s: Session) => void;
   onDevice?: (d: Device) => void;
+  /** Ajustes gravados por outro celular da conta (ou pelo computador, no rótulo da voz). */
+  onSettings?: (s: PatientSettings) => void;
   /**
    * Canal inscrito — a primeira vez e a cada reinscrição depois de a conexão
    * cair. O tempo real não reenvia o que chegou com o canal fora: quem ouve
@@ -250,10 +311,33 @@ export interface RealtimeHandlers {
  */
 export interface DataProvider {
   // auth
+  /**
+   * Quem está logado neste aparelho. Sem rede para renovar um token vencido a
+   * sessão continua guardada e o cuidador continua logado (as cargas avisam
+   * "sem internet" e o supabase-js renova quando a rede volta).
+   */
   getUser(): Promise<AuthUser | null>;
+  /**
+   * Rejeita — como falha de conexão — quando não há sessão válida AGORA (token
+   * vencido e sem rede para renovar). Sem sessão o supabase-js consulta como
+   * anônimo, e a RLS devolve listas VAZIAS em vez de erro: "tudo tranquilo"
+   * sem ter verificado nada. As cargas chamam isto antes de ler.
+   */
+  garantirSessao(): Promise<void>;
   signIn(email: string, password: string): Promise<AuthUser>;
-  signOut(): Promise<void>;
+  /**
+   * Sai só deste celular. `pushToken` é o token do aparelho obtido agora (pode
+   * ser null): ele e o último registrado deixam de receber os alertas da conta.
+   * Sem rede, a remoção fica pendente (`concluirSaidaPendente`).
+   */
+  signOut(pushToken?: string | null): Promise<void>;
+  /** `null` só com saída explícita (SIGNED_OUT) — falta de rede não tira ninguém da conta. */
   onAuthChange(cb: (u: AuthUser | null) => void): () => void;
+  /**
+   * Conclui a remoção do token de push de uma saída feita sem rede. `true`
+   * quando não sobra nada pendente; `false` para tentar de novo mais tarde.
+   */
+  concluirSaidaPendente(): Promise<boolean>;
   /**
    * Pede ao Supabase o e-mail de redefinição de senha. Resolve SEM dizer se a
    * conta existe (a tela mostra uma mensagem neutra) e rejeita só por falhas
@@ -266,6 +350,8 @@ export interface DataProvider {
   getProfile(): Promise<Profile>;
   listBeneficiaries(): Promise<Beneficiary[]>;
   getSubscription(): Promise<{ subscription: Subscription; plan: Plan } | null>;
+  /** `desktop_license()`: a licença que o servidor calcula para a conta logada (`can()` e o selo da beta vêm daqui). */
+  getLicense(): Promise<License>;
   /** Inscrição na beta da conta logada; null para contas fora do programa (plano pago antigo). */
   getBetaRegistration(): Promise<BetaRegistration | null>;
 
@@ -279,13 +365,15 @@ export interface DataProvider {
 
   // alertas
   listHelpRequests(beneficiaryId: string): Promise<HelpRequest[]>;
+  /** Rejeita também quando nada foi gravado (RLS nega com UPDATE 0, sem erro). */
   acknowledgeHelpRequest(id: string): Promise<void>;
   resolveHelpRequest(id: string): Promise<void>;
 
   // conversa
   listMessages(beneficiaryId: string): Promise<Message[]>;
   sendMessage(beneficiaryId: string, text: string, kind?: MessageKind): Promise<Message>;
-  markMessagesRead(beneficiaryId: string): Promise<void>;
+  /** Marca como lidas as mensagens do paciente; devolve as que o banco de fato marcou. Rejeita na falha. */
+  markMessagesRead(beneficiaryId: string): Promise<Pick<Message, 'id' | 'read_at'>[]>;
 
   // frases rápidas (exibidas na tela do paciente)
   listQuickPhrases(beneficiaryId: string): Promise<QuickPhrase[]>;
@@ -295,8 +383,14 @@ export interface DataProvider {
   // ajuste remoto de parâmetros
   /** `null` enquanto o cuidador nunca salvou um ajuste (sem linha em `patient_settings`). */
   getSettings(beneficiaryId: string): Promise<PatientSettings | null>;
-  /** Upsert parcial: só os campos do `patch` são gravados; a linha nasce na primeira gravação. */
-  updateSettings(beneficiaryId: string, patch: Partial<PatientSettings>): Promise<PatientSettings>;
+  /**
+   * Gravação parcial (só os campos do `patch`) com concorrência otimista:
+   * `lidoEm` é o `updated_at` da linha sobre a qual o patch foi calculado
+   * (`null` = não havia linha, e ela nasce aqui). Se outro celular ou o
+   * computador gravou depois dessa leitura, rejeita com `ConflitoDeAjustes`
+   * sem gravar nada — quem chama recarrega e reaplica.
+   */
+  updateSettings(beneficiaryId: string, patch: Partial<PatientSettings>, lidoEm: string | null): Promise<PatientSettings>;
 
   // tempo real
   subscribe(beneficiaryId: string, handlers: RealtimeHandlers): () => void;

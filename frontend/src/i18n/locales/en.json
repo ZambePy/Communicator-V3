@@ -162,7 +162,7 @@
     "title": "MEDICAL EMERGENCY",
     "alertSent": "ALERT SENT!",
     "waiting": "Signal for {{label}} triggered. Please wait.",
-    "cancelAndReturn": "Cancel Alert and Return",
+    "cancelAndReturn": "Stop the alarm and go back",
     "chooseType": "Select the type of emergency",
     "items": {
       "pain": "SEVERE PAIN",
@@ -170,7 +170,33 @@
       "cold": "COLD / FEVER",
       "other": "OTHER EMERGENCY"
     },
-    "triggerAria": "Trigger emergency alert: {{label}}"
+    "triggerAria": "Trigger emergency alert: {{label}}",
+    "entrega": {
+      "enviando": {
+        "titulo": "SENDING THE ALERT…",
+        "detalhe": "Signal for {{label}} triggered. Notifying the caregiver’s phone."
+      },
+      "enviado": {
+        "titulo": "ALERT SENT!",
+        "detalhe": "Signal for {{label}} triggered. The caregiver’s phone was notified."
+      },
+      "na_fila": {
+        "titulo": "NO INTERNET",
+        "detalhe": "The alarm is ringing here. The caregiver’s phone will be notified as soon as the internet is back."
+      },
+      "sem_nuvem": {
+        "titulo": "LOCAL ALARM",
+        "detalhe": "This computer is not linked to a caregiver’s phone: the alarm rings only here."
+      },
+      "falhou": {
+        "titulo": "LOCAL ALARM",
+        "detalhe": "The caregiver’s phone could not be notified. The alarm is ringing here."
+      },
+      "ensaio": {
+        "titulo": "PRESENTATION MODE",
+        "detalhe": "Nothing was sent to the caregiver’s phone: presentation mode is on."
+      }
+    }
   },
   "onboarding": {
     "splash": {
@@ -260,6 +286,9 @@
     "new": "New patient",
     "start": "Start session",
     "remove": "Remove",
+    "removeConfirmTitle": "Remove {{name}}'s profile?",
+    "removeConfirmBody": "The profile and the phrases the assistant learned from this person are removed from this computer, and this can't be undone. To use IrisFlow Communicator with this person again, you'll need to create a new profile and calibrate again.",
+    "removeConfirm": "Remove profile",
     "form": {
       "title": "New patient",
       "name": "Name",
@@ -591,7 +620,9 @@
       "sair": "Sign out of this computer",
       "sairAviso": "The patient loses access until someone signs in again. Calibration and profiles stay saved.",
       "sairConfirmar": "Yes, sign out",
-      "sairCancelar": "Cancel"
+      "sairCancelar": "Cancel",
+      "sairFila_one": "There is 1 item waiting for the internet (it may be a help request). The app tries to send it before signing out; without internet it is lost.",
+      "sairFila_other": "There are {{count}} items waiting for the internet (they may include help requests). The app tries to send them before signing out; without internet they are lost."
     },
     "perfil": {
       "title": "Patient",
@@ -644,6 +675,23 @@
   "pin": {
     "limpar": "Clear",
     "apagar": "Delete"
+  },
+  "bloqueio": {
+    "titulo": "This computer's access is blocked",
+    "motivo": {
+      "grace-expired": "IrisFlow has not been able to confirm the subscription over the internet for more than {{dias}} days.",
+      "expired": "The subscription has expired or a payment is overdue.",
+      "revoked": "This computer was unlinked from the account, or the subscription was cancelled.",
+      "device-unbound": "The subscription is active on another computer.",
+      "invalid-token": "This computer's key is no longer valid.",
+      "desconhecido": "The subscription could not be confirmed."
+    },
+    "oQueFazer": {
+      "grace-expired": "Connect this computer to the internet: access comes back on its own as soon as the subscription is confirmed. You can also sign in again with the email and password.",
+      "expired": "Settle the subscription on the website and sign in again with the email and password.",
+      "padrao": "Sign in again with the subscription email and password."
+    },
+    "emergencia": "The Emergency button still works on this computer: it sounds the alarm here. While access is blocked, the call does not reach the caregiver's phone."
   },
   "checksCamera": {
     "rosto": "Face found",

@@ -43,9 +43,11 @@ describe('reserva do botão de Emergência', () => {
     expect(document.documentElement.getAttribute('data-emergencia')).toBe('topo');
   });
 
-  it('sem botão (telas do cuidador), sem reserva', () => {
+  it('sem botão (a própria tela de emergência), sem reserva', () => {
+    // O botão agora existe em toda tela, inclusive nas do cuidador (que
+    // reservam o canto como as do paciente); só a tela de emergência não o tem.
     render(
-      <MemoryRouter initialEntries={['/settings']}>
+      <MemoryRouter initialEntries={['/emergency']}>
         <EmergencyProvider>
           <div />
         </EmergencyProvider>
@@ -106,6 +108,7 @@ describe('reserva do botão de Emergência', () => {
     ['pages/games/FollowTarget.tsx', 'reserva-emergencia'],
     ['pages/BubblePopGame.tsx', 'reserva-emergencia'],
     ['components/ui/PageHeader.tsx', 'reserva-emergencia'],
+    ['components/ui/CaregiverPageLayout.tsx', 'reserva-emergencia'],
     ['pages/tutorial/TutorialWizard.tsx', 'coluna-livre-da-emergencia'],
     ['pages/setup/SetupWizard.tsx', 'coluna-livre-da-emergencia'],
     ['pages/VirtualMouseScreen.tsx', 'coluna-livre-da-emergencia'],

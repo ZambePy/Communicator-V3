@@ -54,7 +54,12 @@ export type AcaoSync =
   | { action: 'session.upsert'; session: SessaoRemota }
   | ({ action: 'session.end'; session_id: string; utterances?: number; chars_typed?: number; modules_used?: string[] } & ComHorario)
   | ({ action: 'calibration.result'; session_id?: string; calibration: SessaoRemota; report: SessaoRemota['accuracy_report'] } & ComHorario)
-  | ({ action: 'message.send'; text: string; kind: MessageKind } & ComHorario)
+  /**
+   * `id` (UUID): escolhido neste computador, como no `help.create`, e mantido
+   * nos reenvios da fila — uma resposta perdida depois de o servidor gravar
+   * não vira mensagem repetida no celular do cuidador.
+   */
+  | ({ action: 'message.send'; id?: string; text: string; kind: MessageKind } & ComHorario)
   | ({ action: 'message.spoken'; message_id: string } & ComHorario)
   | { action: 'messages.pending' }
   /**
@@ -95,6 +100,12 @@ export interface RespostaSync {
   sessao_aberta?: boolean;
   /** `help.create`: o pedido com este id já existia (reenvio). */
   repetido?: boolean;
+  /**
+   * Só nas respostas locais de falha: o evento ficou na fila offline e sai
+   * quando a conexão voltar (a tela de emergência diz isso em vez de
+   * "alerta enviado").
+   */
+  enfileirado?: boolean;
   messages?: Message[];
   settings?: PatientSettings | null;
   phrases?: QuickPhrase[];
@@ -196,6 +207,11 @@ export interface OpcoesSync {
   aoPerderCredencial?: () => void;
   /** Relógio (testes). */
   agora?: () => number;
+  /**
+   * Um evento que esperava na fila foi entregue agora. A tela de emergência
+   * usa para trocar "sem internet, na fila" por "enviado".
+   */
+  aoEntregarDaFila?: (acao: AcaoSync) => void;
 }
 
 export class DesktopSync {
@@ -255,8 +271,13 @@ export class DesktopSync {
         return { ok: false, error: e.message };
       }
       // rede, servidor fora, gateway sem JWT, limite de taxa: tenta depois
-      if (ENFILEIRAVEIS.has(acao.action)) await this.enfileirar(comHorario, chave).catch(() => undefined);
-      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      let enfileirado = false;
+      if (ENFILEIRAVEIS.has(acao.action)) {
+        // Mesmo que o cofre recuse gravar, o item fica na fila em memória e sai
+        // com o app aberto; `enfileirado` diz isso.
+        enfileirado = await this.enfileirar(comHorario, chave).then(() => true, () => this.fila.some((it) => it.acao === comHorario));
+      }
+      return { ok: false, error: e instanceof Error ? e.message : String(e), ...(enfileirado ? { enfileirado: true } : {}) };
     }
   }
 
@@ -266,9 +287,11 @@ export class DesktopSync {
    */
   private carimbar(acao: AcaoSync): AcaoSync {
     let a = acao;
-    // O id do pedido nasce aqui, antes da primeira tentativa, e viaja com o
-    // item da fila: é o mesmo em todos os reenvios (ver `AcaoSync`).
+    // O id do pedido (e o da mensagem) nasce aqui, antes da primeira
+    // tentativa, e viaja com o item da fila: é o mesmo em todos os reenvios
+    // (ver `AcaoSync`).
     if (a.action === 'help.create' && !a.id) a = { ...a, id: novoIdDePedido() };
+    if (a.action === 'message.send' && !a.id) a = { ...a, id: novoIdDePedido() };
     if (!ENFILEIRAVEIS.has(a.action) || ('occurred_at' in a && a.occurred_at)) return a;
     return { ...a, occurred_at: new Date(this.agora()).toISOString() } as AcaoSync;
   }
@@ -305,6 +328,7 @@ export class DesktopSync {
           await this.chamar(item.acao, chave);
           this.fila.shift();
           enviados++;
+          try { this.op.aoEntregarDaFila?.(item.acao); } catch { /* aviso à tela: não trava a fila */ }
         } catch (e) {
           if (e instanceof ErroDeSync && e.credencialInvalida) {
             await this.perderCredencial();

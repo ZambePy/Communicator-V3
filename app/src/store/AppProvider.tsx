@@ -1,14 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState as EstadoDoApp } from 'react-native';
 import { useData } from '@/data/DataContext';
-import type { FalhaPush } from '@/hooks/usePushNotifications';
+import { obterTokenDoAparelho, type FalhaPush } from '@/hooks/usePushNotifications';
 import { haptics } from '@/lib/haptics';
 import {
   AuthUser,
   Beneficiary,
   Device,
+  ehConflitoDeAjustes,
   HelpRequest,
   isSessionLive,
+  License,
+  LicenseFeature,
+  licenseAllows,
   Message,
   MessageKind,
   PatientSettings,
@@ -26,6 +30,8 @@ interface AppState {
   patient: Beneficiary | null;
   subscription: Subscription | null;
   plan: Plan | null;
+  /** Licença calculada pelo servidor (`desktop_license()`); null enquanto não carregou. */
+  license: License | null;
   devices: Device[];
   /** Sessão AO VIVO (não encerrada e com heartbeat do computador). Órfãs viram null. */
   session: Session | null;
@@ -35,19 +41,34 @@ interface AppState {
   settings: PatientSettings | null;
   unreadCount: number;
   pendingAlert: HelpRequest | null;
+  /** Chave (`chaveDoAlerta`) do alerta que o cuidador minimizou; ver `pendingAlertMinimized`. */
+  minimizedAlertKey: string | null;
   loading: boolean;
   /**
-   * A conta (perfil, pacientes, assinatura) já carregou ao menos uma vez nesta
-   * sessão. Com ela carregada e sem paciente, as abas mostram o que fazer em
-   * vez de esqueletos para sempre.
+   * A lista de pacientes da conta já carregou ao menos uma vez nesta sessão.
+   * Com ela carregada e sem paciente, as abas mostram o que fazer em vez de
+   * esqueletos para sempre.
    */
   accountLoaded: boolean;
-  /** Primeira carga do paciente selecionado concluída (para os esqueletos das telas). */
+  /**
+   * A tentativa de carregar os dados do paciente terminou — com sucesso ou não
+   * (inclusive quando nem a conta carregou). Só decide entre esqueleto e
+   * conteúdo; se os dados valem, quem diz é `patientVerified`.
+   */
   patientLoaded: boolean;
+  /**
+   * A última carga dos dados do paciente (alertas, conversa, computador,
+   * ajustes) deu certo. É o que autoriza uma tela a afirmar "tudo tranquilo",
+   * "ainda sem mensagens" ou "nenhum computador" — a string `error` não serve
+   * para isso: o cuidador a apaga ao fechar o aviso.
+   */
+  patientVerified: boolean;
   error: string | null;
   /** Por que o registro do push falhou nesta execução; null = registrado ou não tentado. */
   pushError: FalhaPush | null;
 }
+
+type MudancaDeAjustes = Partial<PatientSettings> | ((atual: PatientSettings | null) => Partial<PatientSettings>);
 
 interface AppActions {
   signIn(email: string, password: string): Promise<void>;
@@ -56,24 +77,37 @@ interface AppActions {
   requestPasswordReset(email: string): Promise<void>;
   selectPatient(id: string): void;
   refresh(): Promise<void>;
-  /** Limpa o banner de erro global sem recarregar. */
+  /** Fecha o aviso global. As novas tentativas seguem; ele volta só depois de um sucesso e uma nova falha. */
   clearError(): void;
   /** Registrado pelo hook de push; a tela de Alertas mostra o que fazer. */
   reportPushError(falha: FalhaPush | null): void;
+  /** Rejeita quando nada foi enviado (inclusive se a conta ainda não carregou). */
   sendMessage(text: string, kind?: MessageKind): Promise<void>;
   markRead(): Promise<void>;
   acknowledgeAlert(id: string): Promise<void>;
   resolveAlert(id: string): Promise<void>;
   dismissPendingAlert(): void;
-  /** Otimista: a tela muda na hora e volta ao valor anterior se o banco recusar. */
-  updateSettings(patch: Partial<PatientSettings>): Promise<void>;
+  /** Voltar (ou "Minimizar") num alerta sem resposta: sai da tela cheia e fica um aviso no topo. */
+  minimizePendingAlert(): void;
+  /** Volta o alerta minimizado para a tela cheia. */
+  restorePendingAlert(): void;
+  /**
+   * Otimista: a tela muda na hora e volta ao que vale no servidor se o banco
+   * recusar. Aceita uma função sobre os ajustes atuais do servidor — é ela que
+   * é reaplicada quando outro celular gravou antes (adicionar/remover um
+   * contato sem perder o que o outro fez). Gravações entram em fila.
+   */
+  updateSettings(mudanca: MudancaDeAjustes): Promise<void>;
   /** Desvincula um computador; a partir daí o desktop precisa entrar de novo com e-mail e senha. */
   revokeDevice(id: string): Promise<void>;
-  /** Recursos que dependem do plano (Quadro 9 do plano de negócios). */
-  can(feature: 'relatorios' | 'lazer' | 'assistente' | 'voz' | 'multiplos_dispositivos'): boolean;
+  /** Recursos do plano, pela licença do servidor (a mesma do desktop). */
+  can(feature: LicenseFeature): boolean;
 }
 
-const AppContext = createContext<(AppState & AppActions) | null>(null);
+const AppContext = createContext<(AppState & AppActions & { pendingAlertMinimized: boolean }) | null>(null);
+
+/** Por que uma ação não fez nada: sem paciente carregado não há onde gravar. */
+export const SEM_CONTA = 'A conta ainda não carregou neste celular, então nada foi enviado nem salvo. Tente de novo em instantes.';
 
 /** Reavalia `online` dos computadores a partir de `last_seen_at` — o valor mapeado envelhece. */
 function refreshDeviceLiveness(devices: Device[], now: number): Device[] {
@@ -142,6 +176,116 @@ export function escolherAlerta(atual: HelpRequest | null, candidato: HelpRequest
   return pesoDoAlerta(candidato) > pesoDoAlerta(vivo) ? candidato : vivo;
 }
 
+/**
+ * Identidade do alerta para "minimizado": o pedido E o seu escalonamento. Um
+ * pedido novo — ou o mesmo pedido escalado, quando o servidor acabou de
+ * reenviar o push a todos os celulares — volta a ocupar a tela.
+ */
+export function chaveDoAlerta(h: HelpRequest): string {
+  return `${h.id}:${h.escalated_at ?? ''}`;
+}
+
+/**
+ * Qual sessão alimenta o Início quando chega um evento de `sessions`: a atual
+ * (atualizada, ou encerrada → nenhuma) ou uma MAIS NOVA e viva. Evento de uma
+ * sessão anterior — o heartbeat de uma sessão que sobrou de um travamento, um
+ * `session.end` atrasado da fila offline — não troca a sessão ao vivo.
+ */
+export function escolherSessao(atual: Session | null, recebida: Session, devices: Device[], agora = Date.now()): Session | null {
+  if (atual && recebida.id === atual.id) return isSessionLive(recebida, devices, agora) ? recebida : null;
+  if (recebida.status === 'ended' || !isSessionLive(recebida, devices, agora)) return atual;
+  if (atual && Date.parse(recebida.started_at) <= Date.parse(atual.started_at)) return atual;
+  return recebida;
+}
+
+/**
+ * Insere (ou atualiza) mantendo a ordem por `created_at`. Uma mensagem que
+ * esperou na fila offline do computador chega pelo tempo real DEPOIS das de
+ * hoje com o horário real (de ontem, até 24 h antes): anexada no fim, ela
+ * aparecia abaixo das novas, com um segundo rótulo "ontem".
+ */
+export function inserirMensagem(lista: Message[], m: Message): Message[] {
+  if (lista.some((x) => x.id === m.id)) return lista.map((x) => (x.id === m.id ? m : x));
+  const t = Date.parse(m.created_at);
+  let i = lista.length;
+  while (i > 0 && Date.parse(lista[i - 1].created_at) > t) i -= 1;
+  return [...lista.slice(0, i), m, ...lista.slice(i)];
+}
+
+/**
+ * Entre a versão dos ajustes que o app tem e a que chegou do servidor, a mais
+ * recente pelo `updated_at` (carimbado pelo banco). Evita que uma recarga ou um
+ * evento atrasado volte a tela para um estado anterior ao da última gravação.
+ */
+export function ajustesMaisRecentes(atual: PatientSettings | null, recebido: PatientSettings | null): PatientSettings | null {
+  if (!recebido) return atual && atual.beneficiary_id ? atual : null;
+  if (!atual || atual.beneficiary_id !== recebido.beneficiary_id) return recebido;
+  const a = Date.parse(atual.updated_at);
+  const r = Date.parse(recebido.updated_at);
+  if (!Number.isFinite(a) || !Number.isFinite(r)) return recebido;
+  return r >= a ? recebido : atual;
+}
+
+/**
+ * Espera antes da n-ésima nova tentativa: 2 s, 4 s, 8 s… até 30 s. Sem
+ * detector de conectividade no app, é esse teto que decide quanto o cuidador
+ * espera depois de a rede voltar — por isso curto: cada tentativa é barata.
+ */
+export function esperaDaTentativa(n: number): number {
+  return Math.min(30_000, 1_000 * 2 ** Math.max(1, n));
+}
+
+/**
+ * Roda `carregar` agora e, enquanto ele devolver `false` (ou rejeitar), de novo
+ * com espera crescente — e na hora em que o app volta para a frente, que é
+ * quando a rede costuma ter voltado (não há detector de conectividade no app).
+ * Com `sempreAoVoltar`, recarrega ao voltar para a frente mesmo sem falha.
+ * Devolve a limpeza do efeito.
+ */
+export function comNovasTentativas(carregar: () => Promise<boolean>, opcoes: { sempreAoVoltar?: boolean } = {}): () => void {
+  let vivo = true;
+  let emAndamento = false;
+  let falhas = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const tentar = async () => {
+    if (!vivo || emAndamento) return;
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+    emAndamento = true;
+    const ok = await carregar().catch(() => false);
+    emAndamento = false;
+    if (!vivo) return;
+    if (ok) {
+      falhas = 0;
+      return;
+    }
+    falhas += 1;
+    timer = setTimeout(() => void tentar(), esperaDaTentativa(falhas));
+  };
+  void tentar();
+  const sub = EstadoDoApp.addEventListener('change', (estado) => {
+    if (estado !== 'active') return;
+    if (!opcoes.sempreAoVoltar && !timer) return;
+    falhas = 0;
+    void tentar();
+  });
+  return () => {
+    vivo = false;
+    if (timer) clearTimeout(timer);
+    sub.remove();
+  };
+}
+
+/** O que cada plano inclui (Quadro 9 do plano de negócios), só para quando a licença do servidor ainda não carregou. */
+export function planoPermite(planId: string | null, feature: LicenseFeature): boolean {
+  const rank = planId === 'voz' || planId === 'beta' ? 3 : planId === 'completo' ? 2 : 1;
+  return feature === 'voz' ? rank >= 3 : rank >= 2;
+}
+
+function motivo(e: unknown): string {
+  return e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : 'Falha ao carregar.';
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const data = useData();
   const [state, setState] = useState<AppState>({
@@ -152,6 +296,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     patient: null,
     subscription: null,
     plan: null,
+    license: null,
     devices: [],
     session: null,
     helpRequests: [],
@@ -159,9 +304,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     settings: null,
     unreadCount: 0,
     pendingAlert: null,
+    minimizedAlertKey: null,
     loading: false,
     accountLoaded: false,
     patientLoaded: false,
+    patientVerified: false,
     error: null,
     pushError: null,
   });
@@ -169,13 +316,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, ...(typeof p === 'function' ? p(s) : p) }));
   }, []);
 
+  // Quem está logado e qual paciente está na tela AGORA: uma carga ou gravação
+  // que termina depois de o cuidador sair (ou trocar de paciente) é descartada
+  // — senão o erro dela aparecia na tela de login, e os dados, na conta seguinte.
+  // Declarados antes dos outros efeitos: rodam primeiro em cada commit.
+  const usuarioAtual = useRef<string | null>(null);
+  const pacienteAtual = useRef<string | null>(null);
+  useEffect(() => {
+    usuarioAtual.current = state.user?.id ?? null;
+  }, [state.user]);
+
+  // ----- aviso global de falha -----
+  // Conta e paciente falham (e se recuperam) separadamente; o aviso mostra a
+  // primeira falha em aberto. Fechado pelo cuidador, fica fechado enquanto as
+  // novas tentativas seguem falhando — senão reapareceria a cada tentativa.
+  const falhas = useRef<{ conta: string | null; paciente: string | null; dispensado: boolean }>({ conta: null, paciente: null, dispensado: false });
+  /** Renovações do token com carga falhando: cada uma dispara nova tentativa na hora. */
+  const [renovacoes, setRenovacoes] = useState(0);
+  /**
+   * O último usuário definido — já no instante em que é definido, sem esperar
+   * o render (vários eventos do auth chegam juntos na abertura). `undefined`
+   * = ainda nenhum.
+   */
+  const usuarioVisto = useRef<AuthUser | null | undefined>(undefined);
+  const definirUsuario = useCallback(
+    (u: AuthUser | null) => {
+      usuarioVisto.current = u;
+      patch({ user: u });
+    },
+    [patch],
+  );
+  const mostrarFalha = useCallback(() => {
+    const f = falhas.current;
+    const atual = f.conta ?? f.paciente;
+    if (!atual) f.dispensado = false;
+    patch({ error: atual && !f.dispensado ? atual : null });
+  }, [patch]);
+
   // ----- bootstrap de autenticação -----
   useEffect(() => {
     let mounted = true;
     data
       .getUser()
       .then((u) => {
-        if (mounted) patch({ user: u, ready: true });
+        if (!mounted) return;
+        // Um evento do auth pode ter chegado antes (login concluído, saída):
+        // ele vale mais que a leitura da sessão guardada.
+        if (usuarioVisto.current === undefined) definirUsuario(u);
+        patch({ ready: true });
       })
       .catch((e: unknown) => {
         // Sem este catch o app travava para sempre: `ready` só virava true
@@ -184,64 +372,132 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // erro e sem saída. Seguir como deslogado dá uma saída de verdade — o
         // login — e a mensagem fica guardada para a tela mostrar.
         if (!mounted) return;
+        if (usuarioVisto.current === undefined) definirUsuario(null);
         patch({
-          user: null,
           ready: true,
           error: e instanceof Error ? e.message : 'Não foi possível ler a sessão guardada neste aparelho.',
         });
       });
-    const off = data.onAuthChange((u) => patch({ user: u }));
+    const off = data.onAuthChange((u) => {
+      // Mesmo usuário (a sessão inicial, cada renovação do token): o objeto
+      // fica o mesmo — senão toda renovação recarregava a conta e o paciente
+      // em dobro. Mas se há carga falhando (abertura sem internet), a
+      // renovação é justamente o sinal de que a rede voltou: tenta já.
+      const atual = usuarioVisto.current;
+      if (u && atual && u.id === atual.id && u.email === atual.email) {
+        if (falhas.current.conta || falhas.current.paciente) setRenovacoes((n) => n + 1);
+        return;
+      }
+      definirUsuario(u);
+    });
     return () => {
       mounted = false;
       off();
     };
-  }, [data, patch]);
+  }, [data, patch, definirUsuario]);
+
+  // Saída feita sem rede: o token de push daquela conta ainda precisa sair do
+  // banco (senão este celular segue recebendo os socorros dela). Tenta ao
+  // abrir o app e depois de cada saída, com espera crescente e sempre que o
+  // app volta para a frente.
+  const [saidas, setSaidas] = useState(0);
+  useEffect(() => comNovasTentativas(() => data.concluirSaidaPendente()), [data, saidas]);
 
   // ----- carga da conta ao autenticar -----
-  const loadAccount = useCallback(async () => {
-    patch({ loading: true, error: null });
+  // Devolve `true` só quando tudo carregou. Pacientes, perfil e licença são
+  // independentes: a falha de um não segura os outros — em especial, o
+  // paciente (e com ele o tempo real e os alertas) entra assim que a lista
+  // dele carrega, mesmo que o perfil ou o plano ainda estejam falhando.
+  const loadAccount = useCallback(async (): Promise<boolean> => {
+    const quem = usuarioAtual.current;
+    const descartada = () => usuarioAtual.current !== quem;
+    patch({ loading: true });
+    const semPaciente = { patientLoaded: true, patientVerified: false };
     try {
-      const [profile, beneficiaries, sub] = await Promise.all([data.getProfile(), data.listBeneficiaries(), data.getSubscription()]);
-      patch((s) => ({
-        profile,
-        beneficiaries,
-        patient: s.patient && beneficiaries.some((b) => b.id === s.patient?.id) ? s.patient : beneficiaries[0] ?? null,
-        subscription: sub?.subscription ?? null,
-        plan: sub?.plan ?? null,
-        loading: false,
-        accountLoaded: true,
-      }));
+      await data.garantirSessao();
     } catch (e) {
-      patch({ loading: false, error: (e as Error).message });
+      if (descartada()) return true;
+      falhas.current.conta = motivo(e);
+      patch((s) => ({ loading: false, ...(s.patient ? {} : semPaciente) }));
+      mostrarFalha();
+      return false;
     }
-  }, [data, patch]);
+    const [ben, perfil, licenca, assinatura] = await Promise.allSettled([data.listBeneficiaries(), data.getProfile(), data.getLicense(), data.getSubscription()]);
+    if (descartada()) return true;
+    patch((s) => {
+      const p: Partial<AppState> = { loading: false };
+      if (ben.status === 'fulfilled') {
+        const lista = ben.value;
+        p.beneficiaries = lista;
+        p.patient = s.patient && lista.some((b) => b.id === s.patient?.id) ? s.patient : lista[0] ?? null;
+        p.accountLoaded = true;
+      } else if (!s.patient) Object.assign(p, semPaciente);
+      if (perfil.status === 'fulfilled') p.profile = perfil.value;
+      if (licenca.status === 'fulfilled') p.license = licenca.value;
+      if (assinatura.status === 'fulfilled') {
+        p.subscription = assinatura.value?.subscription ?? null;
+        p.plan = assinatura.value?.plan ?? null;
+      }
+      return p;
+    });
+    const falha = [ben, perfil, licenca, assinatura].find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    falhas.current.conta = falha ? motivo(falha.reason) : null;
+    mostrarFalha();
+    return !falha;
+  }, [data, patch, mostrarFalha]);
+
+  // Sem conta carregada nada funciona — nem o tempo real, que depende do
+  // paciente. Antes era uma tentativa só: com a rede instável na abertura o
+  // app ficava sem tempo real até o cuidador puxar para atualizar. Agora tenta
+  // de novo com espera crescente, ao voltar para a frente e quando o token é
+  // renovado com a carga falhando (a rede voltou depois de uma abertura sem
+  // internet): recarrega na hora.
+  useEffect(() => {
+    if (!state.user) return;
+    return comNovasTentativas(loadAccount);
+  }, [state.user, loadAccount, renovacoes]);
 
   useEffect(() => {
-    if (state.user) loadAccount();
-    else
-      patch({
-        profile: null,
-        beneficiaries: [],
-        patient: null,
-        subscription: null,
-        plan: null,
-        devices: [],
-        session: null,
-        helpRequests: [],
-        messages: [],
-        settings: null,
-        unreadCount: 0,
-        pendingAlert: null,
-        accountLoaded: false,
-        patientLoaded: false,
-      });
-  }, [state.user, loadAccount, patch]);
+    if (state.user) return;
+    // Saiu da conta: nada da conta anterior sobrevive — nem o erro dela, que
+    // aparecia em vermelho na tela de login ("Sem internet…") com a rede boa.
+    falhas.current = { conta: null, paciente: null, dispensado: false };
+    patch({
+      profile: null,
+      beneficiaries: [],
+      patient: null,
+      subscription: null,
+      plan: null,
+      license: null,
+      devices: [],
+      session: null,
+      helpRequests: [],
+      messages: [],
+      settings: null,
+      unreadCount: 0,
+      pendingAlert: null,
+      minimizedAlertKey: null,
+      accountLoaded: false,
+      patientLoaded: false,
+      patientVerified: false,
+      error: null,
+    });
+  }, [state.user, patch]);
+
+  // Espelho dos ajustes que o SERVIDOR confirmou (carga, gravação, tempo
+  // real) — base das gravações e destino do rollback. O estado da tela pode
+  // ter um valor otimista por cima.
+  const ajustesDoServidor = useRef<PatientSettings | null>(null);
+  const filaDeAjustes = useRef<Promise<unknown>>(Promise.resolve());
 
   // ----- carga do paciente selecionado -----
   const patientId = state.patient?.id ?? null;
-  const loadPatient = useCallback(async () => {
-    if (!patientId) return;
+  const loadPatient = useCallback(async (): Promise<boolean> => {
+    if (!patientId) return true;
+    const descartada = () => pacienteAtual.current !== patientId || !usuarioAtual.current;
     try {
+      // Sem sessão válida as leituras seriam anônimas e voltariam vazias.
+      await data.garantirSessao();
       const [devices, current, helpRequests, messages, settings] = await Promise.all([
         data.listDevices(patientId),
         data.getCurrentSession(patientId),
@@ -249,13 +505,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         data.listMessages(patientId),
         data.getSettings(patientId),
       ]);
+      if (descartada()) return true;
       const session = isSessionLive(current, devices) ? current : null;
+      const ajustes = ajustesMaisRecentes(ajustesDoServidor.current?.beneficiary_id === patientId ? ajustesDoServidor.current : null, settings);
+      ajustesDoServidor.current = ajustes;
       patch((s) => ({
         devices,
         session,
         helpRequests,
         messages,
-        settings,
+        settings: ajustes,
         unreadCount: messages.filter((m) => m.sender === 'paciente' && !m.read_at).length,
         // O alerta em tela ganha a versão atual do banco (confirmado ou
         // resolvido em outro celular enquanto este estava sem conexão) e cede
@@ -266,35 +525,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           derivePendingAlert(helpRequests),
         ),
         patientLoaded: true,
-        error: null,
+        patientVerified: true,
       }));
+      falhas.current.paciente = null;
+      mostrarFalha();
+      return true;
     } catch (e) {
-      patch({ error: (e as Error).message, patientLoaded: true });
+      if (descartada()) return true;
+      falhas.current.paciente = motivo(e);
+      patch({ patientLoaded: true, patientVerified: false });
+      mostrarFalha();
+      return false;
     }
-  }, [data, patientId, patch]);
+  }, [data, patientId, patch, mostrarFalha]);
 
+  // Paciente novo: esqueletos até a primeira carga, e a base dos ajustes
+  // recomeça. Depois, carrega com novas tentativas e sempre que o app volta
+  // para a frente — com o app suspenso o tempo real cai, e o que chegou nesse
+  // intervalo (um socorro inclusive) não seria reenviado. Também quando o
+  // token é renovado com a carga falhando: uma carga que rodou sem sessão
+  // válida é refeita assim que ela volta.
+  const logado = Boolean(state.user);
   useEffect(() => {
-    patch({ patientLoaded: false });
-    loadPatient();
-  }, [loadPatient, patch]);
-
-  // Voltou para a frente (celular desbloqueado, app reaberto pelo ícone):
-  // recarrega. Com o app suspenso o tempo real cai, e o que chegou nesse
-  // intervalo — um socorro inclusive — não seria reenviado.
-  useEffect(() => {
-    if (!patientId) return;
-    const sub = EstadoDoApp.addEventListener('change', (estado) => {
-      if (estado === 'active') void loadPatient();
-    });
-    return () => sub.remove();
-  }, [patientId, loadPatient]);
-
-  // Espelho dos ajustes correntes para o rollback otimista (o updater do
-  // setState roda depois, não dá para capturar o valor anterior dentro dele).
-  const settingsRef = useRef<PatientSettings | null>(null);
-  useEffect(() => {
-    settingsRef.current = state.settings;
-  }, [state.settings]);
+    if (pacienteAtual.current !== patientId) {
+      pacienteAtual.current = patientId;
+      ajustesDoServidor.current = null;
+      filaDeAjustes.current = Promise.resolve();
+      falhas.current.paciente = null;
+      patch({ patientLoaded: false, patientVerified: false });
+    }
+    if (!patientId || !logado) return;
+    return comNovasTentativas(loadPatient, { sempreAoVoltar: true });
+  }, [patientId, loadPatient, patch, logado, renovacoes]);
 
   // Reavalia a cada 30 s: um computador que parou de bater deixa de ser
   // "online" e a sessão dele deixa de ser "ao vivo" — sem esperar um evento.
@@ -312,15 +574,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(t);
   }, [patientId, patch]);
 
+  // A sessão ao vivo encerrou: pode haver outra aberta (mais antiga, de outro
+  // computador); quem decide qual é a atual é o servidor.
+  const sessaoRef = useRef<Session | null>(null);
+  useEffect(() => {
+    sessaoRef.current = state.session;
+  }, [state.session]);
+  const recarregarSessao = useCallback(async () => {
+    if (!patientId) return;
+    try {
+      const atual = await data.getCurrentSession(patientId);
+      patch((s) => ({ session: atual && isSessionLive(atual, s.devices) ? atual : null }));
+    } catch {
+      // Sem rede: fica "sem sessão" até a próxima carga.
+    }
+  }, [data, patientId, patch]);
+
   // ----- tempo real -----
-  const pendingRef = useRef<HelpRequest | null>(null);
   useEffect(() => {
     if (!patientId) return;
     const off = data.subscribe(patientId, {
       onMessage: (m) =>
         patch((s) => {
           const exists = s.messages.some((x) => x.id === m.id);
-          const messages = exists ? s.messages.map((x) => (x.id === m.id ? m : x)) : [...s.messages, m];
+          const messages = inserirMensagem(s.messages, m);
           if (!exists && m.sender === 'paciente') haptics.sucesso();
           return { messages, unreadCount: messages.filter((x) => x.sender === 'paciente' && !x.read_at).length };
         }),
@@ -333,10 +610,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         patch((s) => {
           const exists = s.helpRequests.some((x) => x.id === h.id);
           if (!exists) {
-            const urgent = h.kind === 'emergencia' || h.kind === 'ajuda';
-            if (urgent) haptics.erro();
+            if (urgente(h)) haptics.erro();
             else haptics.aviso();
-            pendingRef.current = h;
             // Um aviso (postura, fadiga...) não cobre um socorro sem resposta.
             return { helpRequests: [h, ...s.helpRequests], pendingAlert: escolherAlerta(s.pendingAlert, h) };
           }
@@ -357,19 +632,83 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // o próximo pedido aberto, se houver, assume a tela.
           return { helpRequests, pendingAlert: h.resolved_at ? derivePendingAlert(helpRequests) : h };
         }),
-      onSession: (sess) =>
-        patch((s) => ({ session: isSessionLive(sess, s.devices) ? sess : null })),
+      onSession: (sess) => {
+        // A sessão ao vivo encerrou: recarrega a atual pelo servidor.
+        if (sessaoRef.current?.id === sess.id && sess.status === 'ended') void recarregarSessao();
+        patch((s) => ({ session: escolherSessao(s.session, sess, s.devices) }));
+      },
       // INSERT (computador recém-pareado pelo desktop) entra na lista; UPDATE substitui.
       onDevice: (d) =>
         patch((s) => {
           const devices = s.devices.some((x) => x.id === d.id) ? s.devices.map((x) => (x.id === d.id ? d : x)) : [d, ...s.devices];
           return { devices, session: isSessionLive(s.session, devices) ? s.session : null };
         }),
+      // Outro celular (ou o computador) gravou os ajustes: a tela acompanha.
+      onSettings: (linha) => {
+        const maisNova = ajustesMaisRecentes(ajustesDoServidor.current, linha);
+        if (maisNova === ajustesDoServidor.current) return;
+        ajustesDoServidor.current = maisNova;
+        patch({ settings: maisNova });
+      },
       // Inscrição (re)confirmada: recarrega o que pode ter chegado com o canal fora.
       onSubscribed: () => void loadPatient(),
     });
     return off;
-  }, [data, patientId, patch, loadPatient]);
+  }, [data, patientId, patch, loadPatient, recarregarSessao]);
+
+  /**
+   * Uma gravação de ajustes, já na vez dela na fila: calcula a mudança sobre o
+   * que o servidor confirmou, mostra na hora e grava. Se outro celular (ou o
+   * computador) gravou antes, recarrega e REAPLICA a mudança sobre a versão
+   * nova — adicionar um contato continua adicionando, sem apagar o do outro.
+   */
+  const gravarAjustes = useCallback(
+    async (id: string, calcular: (atual: PatientSettings | null) => Partial<PatientSettings>) => {
+      const padrao: PatientSettings = {
+        beneficiary_id: id,
+        dwell_ms: null,
+        filter_preset: null,
+        keyboard_layout: null,
+        sensitivity: null,
+        voice: 'pt-BR padrão',
+        emergency_timeout_s: 45,
+        emergency_contacts: [],
+        updated_at: '',
+      };
+      // Terminou depois de o cuidador sair ou trocar de paciente: não toca a tela.
+      const outro = () => pacienteAtual.current !== id;
+      let base = ajustesDoServidor.current;
+      for (let tentativa = 1; ; tentativa++) {
+        const mudanca = calcular(base);
+        patch({ settings: { ...(base ?? padrao), ...mudanca } });
+        try {
+          const salvo = await data.updateSettings(id, mudanca, base ? base.updated_at : null);
+          if (outro()) return;
+          ajustesDoServidor.current = ajustesMaisRecentes(ajustesDoServidor.current, salvo);
+          patch({ settings: ajustesDoServidor.current });
+          haptics.sucesso();
+          return;
+        } catch (e) {
+          let erro = e;
+          if (ehConflitoDeAjustes(e) && tentativa < 3 && !outro()) {
+            try {
+              base = await data.getSettings(id);
+              if (outro()) return;
+              ajustesDoServidor.current = base;
+              continue;
+            } catch (e2) {
+              erro = e2;
+            }
+          }
+          if (outro()) throw erro;
+          // Volta ao que vale no servidor e deixa a tela explicar.
+          patch({ settings: ajustesDoServidor.current });
+          throw erro;
+        }
+      }
+    },
+    [data, patch],
+  );
 
   // ----- ações -----
   const actions = useMemo<AppActions>(
@@ -378,11 +717,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         patch({ error: null });
         const u = await data.signIn(email, password);
         haptics.sucesso();
-        patch({ user: u });
+        definirUsuario(u);
       },
       async signOut() {
-        await data.signOut();
-        patch({ user: null, pushError: null });
+        // O token do aparelho obtido AGORA (não só o registrado nesta execução):
+        // ele deixa de receber os alertas desta conta. Sem rede, a remoção fica
+        // pendente e é concluída quando a rede voltar.
+        const token = await obterTokenDoAparelho();
+        try {
+          await data.signOut(token);
+        } catch (e) {
+          // A tela sai da conta de qualquer jeito: foi o que o cuidador pediu.
+          console.warn('[IrisFlow Cuidador] saída concluída com falha:', motivo(e));
+        } finally {
+          definirUsuario(null);
+          patch({ pushError: null });
+          setSaidas((n) => n + 1);
+        }
       },
       async requestPasswordReset(email) {
         await data.requestPasswordReset(email);
@@ -391,27 +742,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         patch((s) => ({ patient: s.beneficiaries.find((b) => b.id === id) ?? s.patient }));
       },
       async refresh() {
+        falhas.current.dispensado = false;
         await Promise.all([loadAccount(), loadPatient()]);
       },
       clearError() {
+        falhas.current.dispensado = true;
         patch({ error: null });
       },
       reportPushError(falha) {
         patch({ pushError: falha });
       },
       async sendMessage(text, kind = 'texto') {
-        if (!patientId) return;
+        if (!patientId) throw new Error(SEM_CONTA);
         const m = await data.sendMessage(patientId, text, kind);
         haptics.toque();
-        patch((s) => ({ messages: s.messages.some((x) => x.id === m.id) ? s.messages : [...s.messages, m] }));
+        patch((s) => ({ messages: inserirMensagem(s.messages, m) }));
       },
       async markRead() {
-        if (!patientId) return;
-        await data.markMessagesRead(patientId);
-        patch((s) => ({
-          messages: s.messages.map((m) => (m.sender === 'paciente' && !m.read_at ? { ...m, read_at: new Date().toISOString() } : m)),
-          unreadCount: 0,
-        }));
+        if (!patientId) throw new Error(SEM_CONTA);
+        // Só o que o banco marcou muda na tela (e só depois de marcar).
+        const marcadas = await data.markMessagesRead(patientId);
+        if (marcadas.length === 0) return;
+        const lidas = new Map(marcadas.map((m) => [m.id, m.read_at]));
+        patch((s) => {
+          const messages = s.messages.map((m) => (lidas.has(m.id) && !m.read_at ? { ...m, read_at: lidas.get(m.id) ?? new Date().toISOString() } : m));
+          return { messages, unreadCount: messages.filter((m) => m.sender === 'paciente' && !m.read_at).length };
+        });
       },
       async acknowledgeAlert(id) {
         await data.acknowledgeHelpRequest(id);
@@ -442,62 +798,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // se houver, assume a tela.
         patch((s) => ({ pendingAlert: derivePendingAlert(s.helpRequests.filter((h) => h.id !== s.pendingAlert?.id)) }));
       },
-      async updateSettings(p) {
-        if (!patientId) return;
-        // Otimista: o controle muda na hora. Se o banco recusar, volta ao
-        // que valia antes e o erro sobe para a tela explicar.
-        const anterior = settingsRef.current;
-        patch((s) => {
-          const base: PatientSettings = s.settings ?? {
-            beneficiary_id: patientId,
-            dwell_ms: null,
-            filter_preset: null,
-            keyboard_layout: null,
-            sensitivity: null,
-            voice: 'pt-BR padrão',
-            emergency_timeout_s: 45,
-            emergency_contacts: [],
-            updated_at: new Date().toISOString(),
-          };
-          return { settings: { ...base, ...p } };
-        });
-        try {
-          const settings = await data.updateSettings(patientId, p);
-          haptics.sucesso();
-          patch({ settings });
-        } catch (e) {
-          patch({ settings: anterior });
-          throw e;
-        }
+      minimizePendingAlert() {
+        patch((s) => ({ minimizedAlertKey: s.pendingAlert ? chaveDoAlerta(s.pendingAlert) : null }));
+      },
+      restorePendingAlert() {
+        patch({ minimizedAlertKey: null });
+      },
+      async updateSettings(mudanca) {
+        const id = patientId;
+        if (!id) throw new Error(SEM_CONTA);
+        const calcular = typeof mudanca === 'function' ? mudanca : () => mudanca;
+        // Uma de cada vez: toques rápidos no prazo gravavam 60, 75 e 90 em
+        // paralelo e, com latências diferentes, o banco ficava com 60.
+        const vez = filaDeAjustes.current.catch(() => undefined).then(() => gravarAjustes(id, calcular));
+        filaDeAjustes.current = vez;
+        return vez;
       },
       async revokeDevice(id) {
-        if (!patientId) return;
+        if (!patientId) throw new Error(SEM_CONTA);
         await data.revokeDevice(id);
-        const devices = await data.listDevices(patientId);
         haptics.aviso();
-        patch((s) => ({ devices, session: isSessionLive(s.session, devices) ? s.session : null }));
-      },
-      can(feature) {
-        const planId = state.plan?.id ?? 'essencial';
-        // Beta libera tudo (rank 3), como `license_for_profile()` (migração 20260923022616_beta.sql).
-        const rank = planId === 'voz' || planId === 'beta' ? 3 : planId === 'completo' ? 2 : 1;
-        switch (feature) {
-          case 'relatorios':
-          case 'lazer':
-          case 'assistente':
-          case 'multiplos_dispositivos':
-            return rank >= 2;
-          case 'voz':
-            return rank >= 3;
-          default:
-            return true;
+        // Desvinculado. Atualiza a lista na hora; se a releitura falhar, a
+        // tela não pode dizer "não foi possível desvincular" — já foi.
+        const agora = new Date().toISOString();
+        patch((s) => {
+          const devices = s.devices.map((d) => (d.id === id ? { ...d, revoked_at: d.revoked_at ?? agora, online: false } : d));
+          return { devices, session: isSessionLive(s.session, devices) ? s.session : null };
+        });
+        try {
+          const devices = await data.listDevices(patientId);
+          patch((s) => ({ devices, session: isSessionLive(s.session, devices) ? s.session : null }));
+        } catch {
+          // A próxima carga traz a lista do servidor.
         }
       },
+      can(feature) {
+        // A licença calculada pelo servidor decide (a mesma do desktop e do
+        // site: beta encerrada ou avaliação vencida não liberam nada). Sem ela
+        // carregada — a função falhou e a nova tentativa ainda não voltou —,
+        // vale o plano da assinatura, para não trancar à toa o que a conta paga.
+        if (state.license) return licenseAllows(state.license, feature);
+        return planoPermite(state.plan?.id ?? null, feature);
+      },
     }),
-    [data, patch, patientId, loadAccount, loadPatient, state.plan?.id],
+    [data, patch, definirUsuario, patientId, loadAccount, loadPatient, gravarAjustes, state.license, state.plan?.id],
   );
 
-  const value = useMemo(() => ({ ...state, ...actions }), [state, actions]);
+  const pendingAlertMinimized = Boolean(state.pendingAlert && state.minimizedAlertKey === chaveDoAlerta(state.pendingAlert));
+  const value = useMemo(() => ({ ...state, ...actions, pendingAlertMinimized }), [state, actions, pendingAlertMinimized]);
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 

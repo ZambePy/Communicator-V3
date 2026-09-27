@@ -233,9 +233,12 @@ export const ResultadoDaCalibracao: React.FC<{
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
           {/* Sempre habilitado, em TODOS os vereditos. */}
+          {/* Recuperação: quem recalibrou sozinho segue pelo olhar numa tela
+              sem cursor (FE-3/FE-4). */}
           <PrimaryButton
             type="button"
             fullWidth
+            data-recovery="true"
             onClick={() => (aoSeguir ? aoSeguir() : navigate(destino, { replace: true }))}
             style={{ padding: '0.95rem' }}
           >
@@ -246,6 +249,7 @@ export const ResultadoDaCalibracao: React.FC<{
             type="button"
             variant="secondary"
             fullWidth
+            data-recovery="true"
             onClick={() => navigate('/calibration-check')}
           >
             <RefreshCw size={17} aria-hidden="true" /> {t('calib.resultado.refazerBtn')}

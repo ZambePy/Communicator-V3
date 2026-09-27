@@ -126,6 +126,13 @@ describe('FatigueIndicator', () => {
     expect(screen.queryByTestId('fatigue-indicator')).toBeNull();
   });
 
+  it('NUNCA aparece no teclado — cobria a tecla Apagar e navegava, e a frase se perdia (FE-6)', () => {
+    mockBlinkRate = 40;
+    renderAt('/keyboard');
+    advancePolls(MIN_CONSECUTIVE_ABOVE + 2);
+    expect(screen.queryByTestId('fatigue-indicator')).toBeNull();
+  });
+
   it('NUNCA aparece em rotas de cuidador (/settings, /caregiver/*)', () => {
     mockBlinkRate = 40;
     const { unmount } = renderAt('/settings');

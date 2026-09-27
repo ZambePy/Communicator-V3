@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ShieldCheck, X } from 'lucide-react';
 import { useCloud } from '../cloud/CloudContext';
+import { ehRotaDoCuidador } from './TravaDoCuidador';
 import {
   conviteJaVisto,
   definirRelatosAutomaticos,
@@ -20,9 +22,14 @@ import {
  * Cada botão leva `data-no-dwell`: o dispatcher lê a marca no próprio botão
  * (não no ancestral), e sem ela um olhar de 1,5 s em "Ligar" autorizaria o
  * envio.
+ *
+ * Só na área do cuidador (Configurações, Conta…): antes o cartão, fixo no
+ * canto inferior direito, aparecia sobre o teclado, as frases, o menu e até a
+ * calibração, cobrindo alvos do paciente até alguém clicar (FE-16).
  */
 export const ConviteDeRelatos: React.FC = () => {
   const cloud = useCloud();
+  const { pathname } = useLocation();
   const [visivel, setVisivel] = useState(false);
 
   useEffect(() => {
@@ -31,7 +38,7 @@ export const ConviteDeRelatos: React.FC = () => {
     setVisivel(true);
   }, [cloud.vinculo]);
 
-  if (!visivel) return null;
+  if (!visivel || !ehRotaDoCuidador(pathname)) return null;
 
   const fechar = (ligar: boolean) => {
     if (ligar) definirRelatosAutomaticos(true);

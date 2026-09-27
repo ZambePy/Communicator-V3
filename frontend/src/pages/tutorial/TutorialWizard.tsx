@@ -367,7 +367,22 @@ export const TutorialWizard: React.FC = () => {
           é a mesma dos outros alvos de olhar do app (modal de lembrete, FAB
           de emergência).
         */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
+        {/* Rodapé preso à borda de baixo da caixa que rola: o "Continuar" do
+            passo 1 ficava abaixo da dobra em 1366×768, 1280×720 e 1920×1080 a
+            125% — e rolar pela borda é algo que o tutorial ainda não ensinou (FE-17). */}
+        <div
+          data-testid="navegacao-do-tutorial"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 1,
+            padding: '0.75rem 0 0.25rem',
+            background: 'var(--settings-bg)',
+          }}
+        >
           <GazeButton
             type="button"
             height={76}

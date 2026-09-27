@@ -52,6 +52,9 @@ export const LICENSE_KEY = 'irisflow_license';
  */
 export const GRACE_PERIOD_MS = cloudConfig.carenciaOfflineDias * 24 * 60 * 60 * 1000;
 
+/** Intervalo das novas tentativas quando o bloqueio é só falta de internet. */
+export const REVERIFICACAO_SEM_INTERNET_MS = 5 * 60 * 1000;
+
 export type LicenseStatus = 'checking' | 'active' | 'grace' | 'none' | 'blocked';
 
 /** Motivo do bloqueio, para a tela poder explicar o que fazer. */
@@ -250,10 +253,23 @@ export const LicenseProvider: React.FC<{
 
     // Silêncio da rede: a licença em cache ainda pode valer.
     if (r.reason === 'unreachable') {
-      const idade = Date.now() - gravada.lastVerifiedAt;
+      const agora = Date.now();
+      let verificadaEm = gravada.lastVerifiedAt;
+      // Relógio ATRÁS da última verificação (bateria da placa, fuso trocado, ou
+      // uma verificação feita com o relógio adiantado): a idade dava negativa
+      // e a tolerância durava até o relógio alcançar a data gravada — um ano,
+      // se o relógio esteve um ano adiantado. A carência passa a contar de
+      // agora, o instante em que o app percebeu; nunca é infinita, e o
+      // paciente não é bloqueado por causa do relógio.
+      if (verificadaEm > agora) {
+        verificadaEm = agora;
+        const metadados = lerMetadados();
+        if (metadados) gravarMetadados({ ...metadados, lastVerifiedAt: agora });
+      }
+      const idade = agora - verificadaEm;
       if (idade < GRACE_PERIOD_MS) {
-        setLicense(paraAtiva(gravada, device));
-        setLastVerifiedAt(gravada.lastVerifiedAt);
+        setLicense(paraAtiva({ ...gravada, lastVerifiedAt: verificadaEm }, device));
+        setLastVerifiedAt(verificadaEm);
         setBlockedReason(null);
         setStatus('grace');
       } else {
@@ -274,6 +290,22 @@ export const LicenseProvider: React.FC<{
   useEffect(() => {
     void verificar();
   }, [verificar]);
+
+  // Bloqueado só por falta de internet: tenta de novo quando a conexão volta e,
+  // por garantia, a cada poucos minutos (o evento `online` não dispara quando a
+  // rede já estava de pé e só o servidor não respondia). Antes, só reabrir o
+  // app desbloqueava — e a tela de bloqueio não dizia isso. A licença gravada
+  // não é apagada nesse bloqueio, então a verificação tem o que conferir.
+  useEffect(() => {
+    if (status !== 'blocked' || blockedReason !== 'grace-expired') return;
+    const tentar = () => void verificar();
+    window.addEventListener('online', tentar);
+    const id = setInterval(tentar, REVERIFICACAO_SEM_INTERNET_MS);
+    return () => {
+      window.removeEventListener('online', tentar);
+      clearInterval(id);
+    };
+  }, [status, blockedReason, verificar]);
 
   const aplicarLogin = useCallback((r: LoginResult): LoginResult => {
     geracao.current++;

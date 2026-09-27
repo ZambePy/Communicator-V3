@@ -30,8 +30,58 @@ describe('DesktopSync — envio, fila offline e credencial', () => {
     expect((init.headers as Record<string, string>)['x-device-key']).toBe('chave-123');
     expect(JSON.parse(String(init.body))).toEqual({
       action: 'message.send', text: 'oi', kind: 'texto',
+      // id escolhido aqui (DB-4): o reenvio não duplica a mensagem
+      id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
       occurred_at: '2026-09-23T12:00:00.000Z', sent_at: '2026-09-23T12:00:00.000Z',
     });
+  });
+
+  it('mensagem: o mesmo id na primeira tentativa e no reenvio da fila (DB-4)', async () => {
+    let online = false;
+    const ids: string[] = [];
+    const fetchImpl = vi.fn(async (_u: string | URL | Request, init?: RequestInit) => {
+      ids.push(JSON.parse(String(init?.body)).id);
+      if (!online) throw new TypeError('Failed to fetch');
+      return respostaHttp(200, { ok: true });
+    });
+    const s = new DesktopSync({ url: URL_FN, chave: () => 'k', fetchImpl: fetchImpl as unknown as typeof fetch });
+    const r = await s.enviar({ action: 'message.send', text: 'água', kind: 'frase' });
+    expect(r).toMatchObject({ ok: false, enfileirado: true });
+    online = true;
+    await s.drenar();
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).toBeTruthy();
+    expect(ids[1]).toBe(ids[0]);
+    // Um id escolhido por quem chama é respeitado.
+    await s.enviar({ action: 'message.send', id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', text: 'x', kind: 'texto' });
+    expect(ids[2]).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  });
+
+  it('socorro que esperava na fila: quem criou o sync fica sabendo quando ele sai (FE-9)', async () => {
+    let online = false;
+    const entregues: string[] = [];
+    const fetchImpl = vi.fn(async () => {
+      if (!online) throw new TypeError('Failed to fetch');
+      return respostaHttp(200, { ok: true });
+    });
+    const s = new DesktopSync({
+      url: URL_FN, chave: () => 'k', fetchImpl: fetchImpl as unknown as typeof fetch,
+      aoEntregarDaFila: (a) => { if (a.action === 'help.create' && a.id) entregues.push(a.id); },
+    });
+    const r = await s.enviar({ action: 'help.create', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', kind: 'emergencia', message: 'dor' });
+    expect(r.enfileirado).toBe(true);
+    expect(entregues).toEqual([]);
+    online = true;
+    await s.drenar();
+    expect(entregues).toEqual(['bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb']);
+  });
+
+  it('erro definitivo (conteúdo recusado) não diz que ficou na fila', async () => {
+    const fetchImpl = vi.fn(async () => respostaHttp(400, { error: 'texto vazio' }));
+    const s = new DesktopSync({ url: URL_FN, chave: () => 'k', fetchImpl });
+    const r = await s.enviar({ action: 'help.create', kind: 'emergencia', message: 'x' });
+    expect(r.ok).toBe(false);
+    expect(r.enfileirado).toBeUndefined();
   });
 
   it('sem rede, mensagem e socorro vão para a fila; heartbeat não', async () => {

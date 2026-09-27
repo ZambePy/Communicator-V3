@@ -20,10 +20,29 @@ import { bcea } from './accuracy';
 export const JANELA_DE_FIXACAO_MS = 500;
 /** Menos amostras que isto e a BCEA não significa nada. */
 export const AMOSTRAS_MINIMAS_DA_FIXACAO = 8;
-/** Raio máximo (px) da nuvem para a janela contar como fixação, e não sacada. */
-export const RAIO_DE_FIXACAO_PX = 60;
+/**
+ * Distância máxima (px) entre os centros dos QUARTOS da janela (dois a dois)
+ * para ela contar como fixação. Acima disto o olhar se deslocou (sacada,
+ * perseguição, ida e volta).
+ *
+ * Antes o portão era o RAIO da nuvem (60 px): a dispersão recente só era
+ * medida em janelas que coubessem num círculo de 60 px, enquanto a referência
+ * (teste de precisão) era medida sem corte. Resultado: o limiar (3× a
+ * referência) ficava ACIMA do máximo que uma janela aceita consegue medir, e
+ * quando o modelo piorava as janelas deixavam de se qualificar — a mediana
+ * congelava no valor antigo e bom, e o vigia nunca pedia os nove pontos pela
+ * dispersão (CORE-8). O centro de cada quarto da janela ficar no mesmo lugar
+ * separa deslocamento de ruído sem pôr teto no tamanho do ruído, que é
+ * justamente o que se quer medir.
+ */
+export const SALTO_MAXIMO_PX = 100;
 /** Quantas fixações recentes entram na mediana. */
 export const FIXACOES_LEMBRADAS = 20;
+/**
+ * Fixações mais antigas que isto saem da mediana: ela acompanha o estado
+ * ATUAL do modelo (antes uma mediana boa de horas atrás nunca expirava).
+ */
+export const MEMORIA_DAS_FIXACOES_MS = 120_000;
 
 /** Fator sobre a referência a partir do qual a BCEA recente acusa. */
 export const FATOR_BCEA = 3;
@@ -147,14 +166,15 @@ export function avaliarNecessidadeDeRecalibracao(
  * Acumula a BCEA das fixações recentes a partir das predições PRÉ-filtro.
  *
  * Pré-filtro porque a BCEA mede o modelo; depois do One Euro e do
- * estabilizador ela mediria o filtro. A fixação é detectada pelo raio da
- * nuvem numa janela de 500 ms — sem alvo conhecido, é o que dá para saber.
+ * estabilizador ela mediria o filtro. A fixação é detectada pela ESTABILIDADE
+ * do centro numa janela de 500 ms (as duas metades no mesmo lugar) — sem alvo
+ * conhecido, é o que dá para saber sem limitar o tamanho do ruído medido.
  */
 export class VigiaDeRecalibracao {
   private xs: number[] = [];
   private ys: number[] = [];
   private ts: number[] = [];
-  private bceas: number[] = [];
+  private bceas: { area: number; t: number }[] = [];
   private ultimaAvaliacaoMs = -Infinity;
 
   registrarPredicao(x: number, y: number, tMs: number): void {
@@ -169,25 +189,32 @@ export class VigiaDeRecalibracao {
     if (this.ts.length < AMOSTRAS_MINIMAS_DA_FIXACAO) return;
     if (tMs - this.ts[0] < JANELA_DE_FIXACAO_MS * 0.8) return;
     this.ultimaAvaliacaoMs = tMs;
+    // O que envelheceu sai, mesmo que esta janela não conte.
+    while (this.bceas.length > 0 && tMs - this.bceas[0].t > MEMORIA_DAS_FIXACOES_MS) this.bceas.shift();
 
     const n = this.xs.length;
-    let mx = 0, my = 0;
-    for (let i = 0; i < n; i++) { mx += this.xs[i]; my += this.ys[i]; }
-    mx /= n; my /= n;
-    let raio = 0;
-    for (let i = 0; i < n; i++) raio = Math.max(raio, Math.hypot(this.xs[i] - mx, this.ys[i] - my));
-    if (raio > RAIO_DE_FIXACAO_PX) return;
+    const centro = (de: number, ate: number) => {
+      let cx = 0, cy = 0;
+      for (let i = de; i < ate; i++) { cx += this.xs[i]; cy += this.ys[i]; }
+      return { x: cx / (ate - de), y: cy / (ate - de) };
+    };
+    const quartos = [0, 1, 2, 3].map((q) => centro(Math.floor((q * n) / 4), Math.floor(((q + 1) * n) / 4)));
+    for (let i = 0; i < quartos.length; i++) {
+      for (let j = i + 1; j < quartos.length; j++) {
+        if (Math.hypot(quartos[i].x - quartos[j].x, quartos[i].y - quartos[j].y) > SALTO_MAXIMO_PX) return;
+      }
+    }
 
     const area = bcea(this.xs, this.ys);
     if (area === null) return;
-    this.bceas.push(area);
+    this.bceas.push({ area, t: tMs });
     if (this.bceas.length > FIXACOES_LEMBRADAS) this.bceas.shift();
   }
 
   /** Mediana da BCEA das fixações recentes; `null` sem fixação medida. */
   bceaRecentePx2(): number | null {
     if (this.bceas.length === 0) return null;
-    const s = [...this.bceas].sort((a, b) => a - b);
+    const s = this.bceas.map((f) => f.area).sort((a, b) => a - b);
     const m = s.length >> 1;
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
   }

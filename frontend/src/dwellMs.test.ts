@@ -3,6 +3,7 @@ import {
   DWELL_MIN_MS,
   DWELL_MAX_MS,
   PRESETS_DE_DWELL,
+  dwellDoAlvo,
   dwellMsDoLegado,
   limitarDwellMs,
   presetMaisProximo,
@@ -104,5 +105,32 @@ describe('presetMaisProximo — qual atalho destacar', () => {
 
   it('tolera arredondamento do slider', () => {
     expect(presetMaisProximo(1495)?.id).toBe('normal');
+  });
+});
+
+// FE-13: a Emergência (2 s) e o "Falar" (2 s) disparavam antes de uma letra
+// comum para quem usa dwell de 2,5–4 s.
+describe('dwellDoAlvo', () => {
+  it('sem tempo próprio: o alvo usa o dwell do paciente (null)', () => {
+    expect(dwellDoAlvo(null, null, 1500)).toBeNull();
+  });
+
+  it('só absoluto: vale o absoluto (jogos, cancelar a emergência)', () => {
+    expect(dwellDoAlvo(1000, null, 4000)).toBe(1000);
+  });
+
+  it('absoluto + múltiplo: vale o maior — nunca mais curto que a tecla comum', () => {
+    // Paciente no padrão: nada muda.
+    expect(dwellDoAlvo(2000, 1.3, 1500)).toBe(2000);
+    // Paciente lento: a Emergência passa a pedir mais que uma letra.
+    expect(dwellDoAlvo(2000, 1.3, 2500)).toBe(3250);
+    expect(dwellDoAlvo(2000, 1.3, 4000)).toBe(5200);
+    expect(dwellDoAlvo(2000, 1.3, 4000)).toBeGreaterThan(4000);
+  });
+
+  it('valores inválidos não viram dwell instantâneo', () => {
+    expect(dwellDoAlvo(NaN, null, 1500)).toBeNull();
+    expect(dwellDoAlvo(null, NaN, 1500)).toBeNull();
+    expect(dwellDoAlvo(null, 1.3, NaN)).toBe(Math.round(1.3 * 1500));
   });
 });

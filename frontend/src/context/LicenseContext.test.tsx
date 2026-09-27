@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import React from 'react';
 import {
@@ -6,6 +6,7 @@ import {
   useLicense,
   LICENSE_KEY,
   GRACE_PERIOD_MS,
+  REVERIFICACAO_SEM_INTERNET_MS,
 } from './LicenseContext';
 import {
   createMockLicenseService,
@@ -13,7 +14,7 @@ import {
   SENHA_DE_TESTE,
   MOCK_NETWORK_KEY,
 } from '../services/license';
-import { getDeviceId } from '../services/license/deviceId';
+import { getDeviceBinding, getDeviceId } from '../services/license/deviceId';
 import type { LicenseService } from '../services/license';
 
 // -----------------------------------------------------------------------------
@@ -158,6 +159,66 @@ describe('tolerância offline — as bordas', () => {
     montar();
 
     await waitFor(() => expect(status()).toBe('blocked'));
+  });
+});
+
+describe('bloqueio por falta de internet volta sozinho', () => {
+  /** Licença que o serviço simulado conhece, verificada há mais que a carência. */
+  async function semearLicencaVencidaPelaCarencia() {
+    const r = await service.login(CONTAS_DE_TESTE.ativa, SENHA_DE_TESTE, getDeviceBinding());
+    if (!r.ok) throw new Error('o mock deveria aceitar a conta ativa');
+    semearLicenca(Date.now() - (GRACE_PERIOD_MS + 60_000), r.license.token);
+    localStorage.setItem(MOCK_NETWORK_KEY, 'offline');
+  }
+
+  it('quando a conexão volta (evento online), reverifica e desbloqueia', async () => {
+    // Antes só reabrir o app desbloqueava — e a tela não dizia isso.
+    await semearLicencaVencidaPelaCarencia();
+    montar();
+    await waitFor(() => expect(status()).toBe('blocked'));
+
+    localStorage.setItem(MOCK_NETWORK_KEY, 'online');
+    act(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await waitFor(() => expect(status()).toBe('active'));
+  });
+
+  it('sem o evento (rede de pé, servidor fora), tenta de novo a cada poucos minutos', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await semearLicencaVencidaPelaCarencia();
+      montar();
+      await waitFor(() => expect(status()).toBe('blocked'));
+
+      localStorage.setItem(MOCK_NETWORK_KEY, 'online');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(REVERIFICACAO_SEM_INTERNET_MS + 100);
+      });
+
+      await waitFor(() => expect(status()).toBe('active'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('relógio atrás da última verificação', () => {
+  it('não vira carência infinita: a tolerância passa a contar de agora', async () => {
+    // Verificação gravada com o relógio um ano adiantado; depois o relógio foi
+    // corrigido. A idade dava negativa e a carência durava até o relógio
+    // alcançar a data gravada.
+    const umAnoAFrente = Date.now() + 365 * 24 * 60 * 60 * 1000;
+    semearLicenca(umAnoAFrente);
+    localStorage.setItem(MOCK_NETWORK_KEY, 'offline');
+
+    montar();
+
+    await waitFor(() => expect(status()).toBe('grace'));
+    const gravado = JSON.parse(localStorage.getItem(LICENSE_KEY)!).lastVerifiedAt as number;
+    expect(gravado).toBeLessThanOrEqual(Date.now());
+    expect(gravado).toBeGreaterThan(Date.now() - 60_000);
   });
 });
 

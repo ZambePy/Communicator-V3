@@ -195,6 +195,35 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     await waitFor(() => expect(screen.getByTestId('nao-faladas').textContent).toBe('0'));
   });
 
+  it('mensagem do cuidador interrompida (ex.: pelo alarme) NÃO sai como falada para o celular (FE-5)', async () => {
+    await montarComLicencaAtiva();
+    fetchMock.mockClear();
+    vi.stubGlobal('speechSynthesis', {
+      cancel: vi.fn(),
+      speak: vi.fn((u: { onerror?: (e: { error: string }) => void }) => u.onerror?.({ error: 'interrupted' })),
+    });
+    const m = { id: 'm-10', beneficiary_id: 'ben-1', sender: 'cuidador', kind: 'texto', text: 'A ambulância já foi chamada', created_at: new Date().toISOString(), read_at: null, spoken: false };
+    await act(async () => {
+      realtime.handlers.messages({ new: m });
+    });
+    await waitFor(() => expect(screen.getByTestId('banner').textContent).toBe('A ambulância já foi chamada'));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(chamadas(fetchMock).find((c) => c.action === 'message.spoken')).toBeUndefined();
+    expect(screen.getByTestId('nao-faladas').textContent).toBe('1');
+  });
+
+  it('mensagem do cliente sai com o id que a cópia local já tem (DB-4)', async () => {
+    await montarComLicencaAtiva();
+    fetchMock.mockClear();
+    await act(async () => {
+      await acoes!.enviarFalaDoPaciente('Quero água', 'frase');
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(chamadas(fetchMock).find((c) => c.action === 'message.send')).toBeDefined());
+    const envio = chamadas(fetchMock).find((c) => c.action === 'message.send') as Record<string, unknown>;
+    expect(String(envio.id)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
   it('ajuste remoto: tempo de fixação em ms, preset -v2 e a sessão aberta é atualizada', async () => {
     await montarComLicencaAtiva();
     fetchMock.mockClear();

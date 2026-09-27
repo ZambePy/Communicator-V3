@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import React from 'react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { EmergencyEscalation } from './EmergencyEscalation';
+import { informarEntrega, _limparOuvintes } from '../../cloud/eventos';
 
 // O único envio da tela é o pedido de ajuda no barramento da nuvem (que o modo
 // apresentação corta). Nada de backend de demonstração em localhost.
 const emitirPedidoDeAjuda = vi.fn();
-vi.mock('../../cloud/eventos', () => ({
+vi.mock('../../cloud/eventos', async (original) => ({
+  // O registro de entrega (informarEntrega/ouvirEntrega) é o de verdade.
+  ...(await original<typeof import('../../cloud/eventos')>()),
   emitirPedidoDeAjuda: (...a: unknown[]) => emitirPedidoDeAjuda(...a),
 }));
 const fetchEspiao = vi.fn();
@@ -18,7 +21,11 @@ vi.mock('../../components/ui/GazePageLayout', () => ({
 }));
 
 // Estado da nuvem controlado pelo teste: prazo remoto e confirmação do cuidador.
-const cloud: { ajustesRemotos: { emergency_timeout_s: number } | null; reconhecimento: { id: string; kind: string; created_at: string; acknowledged_at: string; resolved_at: string | null } | null } = {
+const cloud: {
+  ajustesRemotos: { emergency_timeout_s: number } | null;
+  reconhecimento: { id: string; kind: string; created_at: string; acknowledged_at: string; resolved_at: string | null } | null;
+  mensagens?: Array<{ id: string; sender: string; kind: string; text: string; created_at: string }>;
+} = {
   ajustesRemotos: null,
   reconhecimento: null,
 };
@@ -55,7 +62,7 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
     // O terceiro argumento é o id do pedido, escolhido aqui (UUID).
     expect(emitirPedidoDeAjuda).toHaveBeenCalledWith('emergencia', 'emergency.items.pain', expect.stringMatching(/^[0-9a-f-]{36}$/));
     expect(fetchEspiao).not.toHaveBeenCalled();
-    expect(screen.getByText(/Seu alerta foi enviado. Aguarde atendimento./i)).toBeInTheDocument();
+    expect(screen.getByText(/Alerta disparado. Aguarde atendimento./i)).toBeInTheDocument();
   });
 
   it('deve autodisparar se a URL vier com autoTrigger e escalar para crítico após 15 segundos', () => {
@@ -169,6 +176,55 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
     expect(screen.getByText(/Seu cuidador viu o pedido/i)).toBeInTheDocument();
   });
 
+  it('voltar ao menu depois do autodisparo NÃO manda um segundo pedido de socorro (FE-2)', () => {
+    // O `setTriggered(null)` renderizava antes da navegação (que vai em
+    // transição) com `autoTrigger` ainda na URL: o efeito disparava de novo —
+    // segundo push no celular, segundo pedido no banco, alarme de novo.
+    render(
+      <MemoryRouter initialEntries={['/emergency?autoTrigger=other']}>
+        <Routes>
+          <Route path="/emergency" element={<EmergencyEscalation />} />
+          <Route path="/menu" element={<div>tela do menu</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(emitirPedidoDeAjuda).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /emergency.cancelAndReturn/i }));
+    });
+
+    expect(screen.getByText('tela do menu')).toBeInTheDocument();
+    expect(emitirPedidoDeAjuda).toHaveBeenCalledTimes(1);
+  });
+
+  it('o parâmetro autoTrigger é consumido da URL logo depois do disparo', () => {
+    // Enquanto ele ficasse na URL, qualquer render com `triggered` nulo — o
+    // StrictMode do desenvolvimento, uma volta pelo histórico — disparava outro.
+    let busca = '';
+    const Sonda: React.FC = () => {
+      busca = useLocation().search;
+      return null;
+    };
+    render(
+      <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
+        <Routes>
+          <Route
+            path="/emergency"
+            element={
+              <>
+                <EmergencyEscalation />
+                <Sonda />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(emitirPedidoDeAjuda).toHaveBeenCalledTimes(1);
+    expect(busca).not.toContain('autoTrigger');
+  });
+
   it('um reconhecimento ANTIGO (anterior ao disparo) não é tratado como resposta a este pedido', () => {
     cloud.reconhecimento = { id: 'hr-0', kind: 'emergencia', created_at: '2026-01-01T10:00:00Z', acknowledged_at: '2026-01-01T10:00:30Z', resolved_at: null };
     render(
@@ -178,5 +234,83 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
     );
     expect(screen.queryByText(/Seu cuidador viu/i)).toBeNull();
     expect(screen.getByText(/Aguarde atendimento/i)).toBeInTheDocument();
+  });
+});
+
+describe('EmergencyEscalation — a tela diz o que aconteceu com o pedido (FE-9)', () => {
+  beforeEach(() => {
+    emitirPedidoDeAjuda.mockClear();
+    cloud.ajustesRemotos = null;
+    cloud.reconhecimento = null;
+    _limparOuvintes();
+  });
+
+  function disparar(): string {
+    render(
+      <MemoryRouter initialEntries={['/emergency']}>
+        <EmergencyEscalation />
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /emergency.items.pain/i }));
+    return emitirPedidoDeAjuda.mock.calls[0][2] as string;
+  }
+
+  it('antes da resposta: "enviando"; depois, o que o envio respondeu — e nunca "enviado" sem ter sido', () => {
+    const id = disparar();
+    expect(screen.getByText('emergency.entrega.enviando.titulo')).toBeInTheDocument();
+
+    act(() => informarEntrega(id, 'na_fila'));
+    expect(screen.getByText('emergency.entrega.na_fila.titulo')).toBeInTheDocument();
+    expect(screen.queryByText('emergency.entrega.enviado.titulo')).toBeNull();
+
+    // A fila entregou quando a internet voltou.
+    act(() => informarEntrega(id, 'enviado'));
+    expect(screen.getByText('emergency.entrega.enviado.titulo')).toBeInTheDocument();
+  });
+
+  it('sem celular vinculado ou no modo apresentação, a tela diz que o alarme é só local', () => {
+    const id = disparar();
+    act(() => informarEntrega(id, 'sem_nuvem'));
+    expect(screen.getByText('emergency.entrega.sem_nuvem.titulo')).toBeInTheDocument();
+    act(() => informarEntrega(id, 'ensaio'));
+    expect(screen.getByText('emergency.entrega.ensaio.titulo')).toBeInTheDocument();
+  });
+
+  it('a entrega de OUTRO pedido não muda esta tela', () => {
+    disparar();
+    act(() => informarEntrega('00000000-0000-4000-8000-000000000000', 'enviado'));
+    expect(screen.getByText('emergency.entrega.enviando.titulo')).toBeInTheDocument();
+  });
+});
+
+describe('EmergencyEscalation — a resposta do cuidador aparece na tela de emergência (FE-5)', () => {
+  beforeEach(() => {
+    emitirPedidoDeAjuda.mockClear();
+    cloud.ajustesRemotos = null;
+    cloud.reconhecimento = null;
+    cloud.mensagens = [];
+  });
+
+  it('mostra a mensagem do cuidador que chegou depois do pedido; não mostra as antigas nem as de sistema', () => {
+    const agora = Date.now();
+    cloud.mensagens = [
+      { id: 'velha', sender: 'cuidador', kind: 'texto', text: 'mensagem de ontem', created_at: new Date(agora - 86_400_000).toISOString() },
+      { id: 'sis', sender: 'cuidador', kind: 'sistema', text: 'Ninguém confirmou o pedido', created_at: new Date(agora + 1000).toISOString() },
+    ];
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/emergency']}>
+        <EmergencyEscalation />
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /emergency.items.pain/i }));
+    expect(screen.queryByTestId('mensagem-do-cuidador-na-emergencia')).toBeNull();
+
+    cloud.mensagens = [...cloud.mensagens, { id: 'nova', sender: 'cuidador', kind: 'texto', text: 'Estou chegando em dois minutos', created_at: new Date(agora + 2000).toISOString() }];
+    rerender(
+      <MemoryRouter initialEntries={['/emergency']}>
+        <EmergencyEscalation />
+      </MemoryRouter>
+    );
+    expect(screen.getByTestId('mensagem-do-cuidador-na-emergencia').textContent).toContain('Estou chegando em dois minutos');
   });
 });

@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { AppState, Linking, Platform } from 'react-native';
 import * as Device from 'expo-device';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useData } from '@/data/DataContext';
@@ -83,10 +83,80 @@ export interface PushHandlers {
   onOpen?: (payload: PushPayload) => void;
 }
 
+/** Canal dos socorros e pedidos de ajuda no Android (o push do servidor manda `channelId: 'emergencia'`). */
+export const CANAL_EMERGENCIA = 'emergencia';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ModuloDeNotificacoes = any;
+
+/** Cria (ou mantém) os canais do Android. Idempotente: o sistema ignora o que o usuário já mudou. */
+async function garantirCanais(Notifications: ModuloDeNotificacoes) {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync(CANAL_EMERGENCIA, {
+    name: 'Emergência e pedidos de ajuda',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 400, 200, 400, 200, 400],
+    lightColor: brand.blue,
+    sound: 'default',
+    // Pedido, não garantia: sem acesso à política de notificações o Android
+    // descarta este valor. Quem liga de verdade é o cuidador, nas
+    // configurações do canal — a tela de Alertas avisa e leva até lá
+    // (`useCanalDeEmergencia`).
+    bypassDnd: true,
+  });
+  await Notifications.setNotificationChannelAsync('default', {
+    name: 'Avisos da sessão',
+    importance: Notifications.AndroidImportance.DEFAULT,
+  });
+}
+
+/** Tempo máximo para obter o token na hora de sair: sem rede, a Expo não responde e a saída não pode esperar. */
+const PRAZO_DO_TOKEN_MS = 4_000;
+
+/**
+ * O token Expo Push deste aparelho, obtido agora — ou `null` (Expo Go,
+ * emulador, sem projeto, sem permissão, sem rede). Nunca rejeita. Usado ao
+ * sair da conta: o token precisa sair do banco mesmo que o registro desta
+ * execução tenha falhado (o de uma abertura anterior pode ter dado certo).
+ */
+export async function obterTokenDoAparelho(): Promise<string | null> {
+  if (pushIndisponivel()) return null;
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return null;
+  try {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return null;
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId as string;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const token = await Promise.race([
+      Notifications.getExpoPushTokenAsync({ projectId }).then((r: { data: string }) => r.data),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), PRAZO_DO_TOKEN_MS);
+      }),
+    ]).finally(() => clearTimeout(timer));
+    return typeof token === 'string' && token ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Espera antes da n-ésima nova tentativa de registro: 2 s, 4 s, 8 s… até 5 min. */
+export function esperaDoRegistro(n: number): number {
+  return Math.min(5 * 60_000, 1_000 * 2 ** Math.max(1, n));
+}
+
+/** Registro bem-sucedido há menos que isto não é refeito ao voltar para a frente. */
+export const REVALIDAR_REGISTRO_MS = 60 * 60_000;
+
 /**
  * Registra o token Expo Push do cuidador. A Edge Function `desktop-sync` envia
  * notificações de alta prioridade quando o paciente pede ajuda ou socorro.
  * Não faz nada no Expo Go, em emulador ou em build sem projeto EAS.
+ *
+ * O registro não é de uma vez só: é refeito (idempotente) quando o app volta
+ * para a frente — é assim que o cuidador volta dos ajustes do celular depois
+ * de ativar as notificações, o caminho que a tela de Alertas indica —, depois
+ * de uma falha com espera crescente, e quando o sistema troca o token.
  */
 export function usePushNotifications(enabled: boolean, handlers: PushHandlers = {}) {
   const data = useData();
@@ -129,53 +199,136 @@ export function usePushNotifications(enabled: boolean, handlers: PushHandlers = 
       );
       return;
     }
+    const Notifications = getNotificationsModule();
+    if (!Notifications) return;
     const projectId = Constants.expoConfig?.extra?.eas?.projectId as string;
 
-    let isMounted = true;
+    let vivo = true;
+    let emAndamento = false;
+    let pediuPermissao = false;
+    let falhas = 0;
+    let registradoEm = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const reportar = (falha: FalhaPush | null) => {
+      if (vivo) handlersRef.current.onRegisterError?.(falha);
+    };
 
-    (async () => {
+    const registrar = async (devicePushToken?: unknown) => {
+      if (!vivo || emAndamento) return;
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      emAndamento = true;
       try {
-        const Notifications = getNotificationsModule();
-        if (!Notifications) return;
-
-        if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('emergencia', {
-            name: 'Emergência e pedidos de ajuda',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 400, 200, 400, 200, 400],
-            lightColor: brand.blue,
-            sound: 'default',
-            bypassDnd: true,
-          });
-          await Notifications.setNotificationChannelAsync('default', {
-            name: 'Avisos da sessão',
-            importance: Notifications.AndroidImportance.DEFAULT,
-          });
-        }
-
+        await garantirCanais(Notifications);
         const { status: existing } = await Notifications.getPermissionsAsync();
         let status = existing;
-        if (existing !== 'granted') status = (await Notifications.requestPermissionsAsync()).status;
+        // O pedido do sistema aparece uma vez por execução: repetir a cada volta
+        // para a frente só gastaria as poucas vezes que o Android deixa pedir.
+        if (existing !== 'granted' && !pediuPermissao) {
+          pediuPermissao = true;
+          status = (await Notifications.requestPermissionsAsync()).status;
+        }
         if (status !== 'granted') {
-          if (isMounted) handlersRef.current.onRegisterError?.('permissao');
+          // Depende do cuidador (ajustes do celular): confere de novo quando ele voltar.
+          reportar('permissao');
           return;
         }
-
-        const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-        if (isMounted) {
-          await data.registerPushToken(token);
-          handlersRef.current.onRegisterError?.(null);
-        }
+        // Permissão concedida: o aviso "Notificações desligadas" sai já.
+        reportar(null);
+        // No ouvinte de troca de token, o token novo vem junto — pedir o do
+        // aparelho de novo dispararia o ouvinte outra vez.
+        const opcoes = devicePushToken ? { projectId, devicePushToken } : { projectId };
+        const token = (await Notifications.getExpoPushTokenAsync(opcoes)).data;
+        if (!vivo) return;
+        await data.registerPushToken(token);
+        falhas = 0;
+        registradoEm = Date.now();
+        reportar(null);
       } catch (err) {
         // Não derruba o app: sem push ele continua funcionando com a tela
         // aberta. O motivo técnico vai para o console; a tela recebe só o tipo.
         console.warn('[IrisFlow Cuidador] Registro de push não concluído:', err);
-        if (isMounted) handlersRef.current.onRegisterError?.('registro');
+        reportar('registro');
+        falhas += 1;
+        if (vivo) timer = setTimeout(() => void registrar(), esperaDoRegistro(falhas));
+      } finally {
+        emAndamento = false;
       }
-    })().catch(() => undefined);
+    };
 
+    void registrar();
+    const subApp = AppState.addEventListener('change', (estado) => {
+      if (estado !== 'active') return;
+      // Voltou para a frente: pode ter ativado as notificações nos ajustes, a
+      // rede pode ter voltado. Um registro recente e bem-sucedido não é refeito.
+      if (registradoEm && Date.now() - registradoEm < REVALIDAR_REGISTRO_MS) return;
+      falhas = 0;
+      void registrar();
+    });
+    // O FCM/APNs trocou o token com o app aberto: o antigo deixa de valer.
+    const subToken = Notifications.addPushTokenListener?.((novo: unknown) => {
+      registradoEm = 0;
+      void registrar(novo);
+    });
     return () => {
-      isMounted = false;
+      vivo = false;
+      if (timer) clearTimeout(timer);
+      subApp.remove();
+      subToken?.remove?.();
     };
   }, [enabled, data]);
+}
+
+/**
+ * Canal de emergência no Android: o socorro fura o "Não perturbe"?
+ *
+ * O app pede `bypassDnd` ao criar o canal, mas o Android só honra esse pedido
+ * para apps com acesso à política de notificações — que o app não tem. Quem
+ * liga é o cuidador, nas configurações do canal. Aqui se lê o estado real do
+ * canal (ao abrir e sempre que o app volta para a frente, que é quando o
+ * cuidador volta das configurações). `null` = não se aplica ou não deu para ler.
+ */
+export function useCanalDeEmergencia(): { furaNaoPerturbe: boolean | null; abrirAjustesDoCanal: () => Promise<void> } {
+  const [furaNaoPerturbe, setFura] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'android' || pushIndisponivel()) return;
+    const Notifications = getNotificationsModule();
+    if (!Notifications?.getNotificationChannelAsync) return;
+    let vivo = true;
+    const ler = async () => {
+      try {
+        await garantirCanais(Notifications);
+        const canal = await Notifications.getNotificationChannelAsync(CANAL_EMERGENCIA);
+        if (vivo) setFura(canal ? Boolean(canal.bypassDnd) : null);
+      } catch {
+        if (vivo) setFura(null);
+      }
+    };
+    void ler();
+    const sub = AppState.addEventListener('change', (estado) => {
+      if (estado === 'active') void ler();
+    });
+    return () => {
+      vivo = false;
+      sub.remove();
+    };
+  }, []);
+  return { furaNaoPerturbe, abrirAjustesDoCanal };
+}
+
+/**
+ * Abre as configurações do canal de emergência (onde fica "Substituir Não
+ * perturbe"); se o aparelho não abrir essa tela, as configurações do app.
+ */
+export async function abrirAjustesDoCanal(): Promise<void> {
+  const pacote = Constants.expoConfig?.android?.package;
+  try {
+    if (Platform.OS !== 'android' || !pacote) throw new Error('sem tela do canal');
+    await Linking.sendIntent('android.settings.CHANNEL_NOTIFICATION_SETTINGS', [
+      { key: 'android.provider.extra.APP_PACKAGE', value: pacote },
+      { key: 'android.provider.extra.CHANNEL_ID', value: CANAL_EMERGENCIA },
+    ]);
+  } catch {
+    await Linking.openSettings().catch(() => undefined);
+  }
 }

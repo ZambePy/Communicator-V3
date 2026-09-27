@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import React from 'react';
 import i18n from '../../i18n';
@@ -105,14 +105,38 @@ describe('escolher um perfil', () => {
   });
 });
 
+// FE-15: remover era UM clique, sem confirmação, num botão de 32 px dentro do
+// cartão de "Iniciar sessão".
 describe('remover um perfil', () => {
-  it('tira da lista', () => {
+  it('pede confirmação com o nome e só tira da lista depois do "Remover perfil"', async () => {
     criarPerfil({ name: 'Joana' });
     montar();
 
     fireEvent.click(screen.getByRole('button', { name: /remover joana/i }));
+    const dialogo = await screen.findByRole('alertdialog');
+    expect(dialogo).toHaveTextContent(/Remover o perfil de Joana\?/);
+    expect(listarPerfis()).toHaveLength(1);
 
-    expect(screen.queryByText('Joana')).toBeNull();
-    expect(listarPerfis()).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Remover perfil' }));
+    await waitFor(() => expect(listarPerfis()).toHaveLength(0));
+    expect(screen.queryByRole('button', { name: /remover joana/i })).toBeNull();
+  });
+
+  it('cancelar mantém o perfil', async () => {
+    criarPerfil({ name: 'Joana' });
+    montar();
+
+    fireEvent.click(screen.getByRole('button', { name: /remover joana/i }));
+    await screen.findByRole('alertdialog');
+    fireEvent.click(screen.getByRole('button', { name: /cancelar/i }));
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(listarPerfis()).toHaveLength(1);
+  });
+
+  it('a lixeira não responde ao olhar (data-no-dwell)', () => {
+    criarPerfil({ name: 'Joana' });
+    montar();
+    expect(screen.getByRole('button', { name: /remover joana/i })).toHaveAttribute('data-no-dwell');
   });
 });

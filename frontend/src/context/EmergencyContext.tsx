@@ -5,6 +5,7 @@ import { AlertOctagon } from 'lucide-react';
 import { GazeButton } from '../components/ui/GazeButton';
 import { Z_DO_REAJUSTE } from '../components/ReancoragemOverlay';
 import { useGaze } from './GazeContext';
+import { useAuth } from './AuthContext';
 import { playTickSound, playCancelSound } from '../utils/emergencyAudio';
 
 interface EmergencyContextValue {
@@ -33,6 +34,13 @@ export const EMERGENCIA_ALTURA_PX = 64;
 
 /** Camada normal do botão flutuante. */
 export const Z_EMERGENCIA = 99990;
+
+/**
+ * Quanto tempo o ensaio do tutorial fica armado. Antes ele durava enquanto o
+ * passo estivesse aberto: um paciente parado ali (cansaço, cuidador saiu)
+ * ficava com o socorro inoperante pelo tempo que fosse (FE-14).
+ */
+export const PRAZO_DO_ENSAIO_MS = 60_000;
 /**
  * Camada do botão durante o reajuste rápido: logo ACIMA do overlay preto do
  * reajuste, que cobre todo o resto. A Emergência nunca some.
@@ -40,6 +48,8 @@ export const Z_EMERGENCIA = 99990;
 export const Z_EMERGENCIA_NO_REAJUSTE = Z_DO_REAJUSTE + 1;
 
 const EmergencyContext = createContext<EmergencyContextValue | null>(null);
+
+const ROTAS_SEM_AVISO_DE_DEGRADADO = new Set(['/', '/login', '/calibration-check', '/emergency']);
 
 export const useEmergency = () => {
   const ctx = useContext(EmergencyContext);
@@ -63,20 +73,8 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isConfirming, setIsConfirming] = useState(false);
   const [countdown, setCountdown] = useState(5);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Determina se a tela atual é de uso do paciente
-  const isPatientScreen = () => {
-    const path = location.pathname;
-    if (
-      path === '/' ||
-      path === '/login' ||
-      path.startsWith('/caregiver') ||
-      path.startsWith('/settings')
-    ) {
-      return false;
-    }
-    return true;
-  };
+  // Fora do AuthProvider (testes de tela) vem `{}`: sem cuidador conectado.
+  const { isCaregiver } = useAuth();
 
   // o som vem de `utils/emergencyAudio`, que mantém UM `AudioContext`
   // para a sessão inteira.
@@ -99,6 +97,8 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const startEmergencyCountdown = () => {
     if (isConfirming) return;
     interromperReajuste();
+    ensaioNestaConfirmacaoRef.current = modoEnsaioRef.current;
+    setConfirmacaoDeEnsaio(modoEnsaioRef.current);
     setIsConfirming(true);
     setCountdown(5);
     playTickSound();
@@ -111,6 +111,8 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     setIsConfirming(false);
     setCountdown(5);
+    ensaioNestaConfirmacaoRef.current = false;
+    setConfirmacaoDeEnsaio(false);
 
     // Som de cancelamento (bip duplo rápido de confirmação de recuo).
     // reutiliza o contexto compartilhado; ver o comentário acima.
@@ -123,14 +125,46 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
    * enviado durante um ensaio.
    */
   const modoEnsaioRef = useRef(false);
-  const [modoEnsaio, setModoEnsaioState] = useState(false);
   const [ensaioDisparado, setEnsaioDisparado] = useState(false);
+  const prazoDoEnsaioRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Se a confirmação em curso começou como ENSAIO. Decidido na abertura e
+   * mantido até o fim: o título que o paciente viu ("ENSAIO — NADA SERÁ
+   * ENVIADO") vale para aquela contagem, mesmo que o prazo do ensaio vença
+   * no meio dela.
+   */
+  const ensaioNestaConfirmacaoRef = useRef(false);
+  const [confirmacaoDeEnsaio, setConfirmacaoDeEnsaio] = useState(false);
+
+  const limparPrazoDoEnsaio = () => {
+    if (prazoDoEnsaioRef.current) {
+      clearTimeout(prazoDoEnsaioRef.current);
+      prazoDoEnsaioRef.current = null;
+    }
+  };
 
   const setModoEnsaio = useCallback((on: boolean) => {
+    limparPrazoDoEnsaio();
     modoEnsaioRef.current = on;
-    setModoEnsaioState(on);
-    if (!on) setEnsaioDisparado(false);
+    if (!on) {
+      setEnsaioDisparado(false);
+      return;
+    }
+    // Ensaio com prazo: passado o tempo, o botão volta a valer sozinho.
+    prazoDoEnsaioRef.current = setTimeout(() => {
+      prazoDoEnsaioRef.current = null;
+      modoEnsaioRef.current = false;
+    }, PRAZO_DO_ENSAIO_MS);
   }, []);
+
+  /** Um ensaio só: depois do primeiro acionamento, o próximo é de verdade. */
+  const concluirEnsaio = () => {
+    limparPrazoDoEnsaio();
+    modoEnsaioRef.current = false;
+    ensaioNestaConfirmacaoRef.current = false;
+    setConfirmacaoDeEnsaio(false);
+    setEnsaioDisparado(true);
+  };
 
   const triggerEmergencyImmediately = () => {
     interromperReajuste();
@@ -143,10 +177,13 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // O ENSAIO PARA AQUI. O envio não mora neste contexto — a navegação para
     // `/emergency?autoTrigger=other` é o que faz o `EmergencyEscalation`
     // emitir o pedido de ajuda (`emitirPedidoDeAjuda`). Não navegar é não enviar.
-    if (modoEnsaioRef.current) {
-      setEnsaioDisparado(true);
+    const ehEnsaio = isConfirming ? ensaioNestaConfirmacaoRef.current : modoEnsaioRef.current;
+    if (ehEnsaio) {
+      concluirEnsaio();
       return;
     }
+    ensaioNestaConfirmacaoRef.current = false;
+    setConfirmacaoDeEnsaio(false);
 
     navigate('/emergency?autoTrigger=other');
   };
@@ -190,13 +227,15 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // Segundo caminho até o envio: a contagem chegando a zero. Sem esta
       // guarda, esperar o contador durante o ensaio mandaria o alerta de
       // verdade — e é justamente o que um paciente curioso faria.
-      if (modoEnsaioRef.current) {
-        setEnsaioDisparado(true);
+      if (ensaioNestaConfirmacaoRef.current) {
+        concluirEnsaio();
         return;
       }
+      setConfirmacaoDeEnsaio(false);
 
       navigate('/emergency?autoTrigger=other');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirming, countdown, navigate]);
 
   // Desliga ao desmontar. Um ensaio que ficasse ligado transformaria o botão de
@@ -204,14 +243,26 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(
     () => () => {
       modoEnsaioRef.current = false;
+      limparPrazoDoEnsaio();
     },
     []
   );
 
-  // Durante o reajuste rápido o botão aparece em QUALQUER tela (menos a própria
-  // emergência): o overlay preto do reajuste cobre todo o resto, e a Emergência
-  // tem de continuar ao alcance — do olhar, do mouse e do teclado.
-  const showEmergencyButton = (isPatientScreen() || reancorando === true) && location.pathname !== '/emergency';
+  // O botão aparece em TODA tela, menos a própria tela de emergência — inclusive
+  // no login, no portão do PIN e nas telas do cuidador.
+  //
+  // Antes a regra era por ROTA: `/`, `/login`, `/settings*` e `/caregiver*` não
+  // eram "telas de paciente". Mas o menu do paciente leva a `/settings`, uma
+  // área do cuidador esquecida destravada fica na frente do paciente, e uma
+  // licença bloqueada (ou uma verificação que não responde) joga tudo no
+  // `/login`: em todos esses casos o paciente ficava sem socorro. O alarme
+  // local não depende de conta nem de licença (a rota `/emergency` também não
+  // passa pelo portão da licença — ver App.tsx). As telas do cuidador reservam
+  // o canto do botão como as do paciente (`reserva-emergencia`).
+  //
+  // Durante o reajuste rápido o overlay preto cobre todo o resto, e o botão
+  // continua ao alcance — do olhar, do mouse e do teclado.
+  const showEmergencyButton = location.pathname !== '/emergency';
 
   useEffect(() => {
     if (!showEmergencyButton) {
@@ -285,11 +336,12 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [posicaoDoBotao]);
   useEffect(() => () => document.documentElement.removeAttribute('data-emergencia'), []);
 
+  // O "Recalibre aqui" é caminho do PACIENTE: não aparece com o cuidador
+  // conectado (ele usa o mouse), nem onde recalibrar não leva a lugar nenhum —
+  // splash, login (sem licença a calibração devolve para o login), a própria
+  // calibração e a emergência.
   const showDegradedBanner =
-    isPatientScreen() &&
-    location.pathname !== '/calibration-check' &&
-    location.pathname !== '/emergency' &&
-    isDegraded;
+    !isCaregiver && !ROTAS_SEM_AVISO_DE_DEGRADADO.has(location.pathname) && isDegraded;
 
   return (
     <EmergencyContext.Provider
@@ -383,6 +435,9 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             height={medindo ? 52 : EMERGENCIA_ALTURA_PX}
             onClick={startEmergencyCountdown}
             data-dwell-ms={isDegraded ? 3600 : 2000}
+            // Nunca mais fácil de acionar que uma tecla comum: para quem usa
+            // dwell longo, pelo menos 1,3× o dele (FE-13). O CANCELAR fica curto.
+            data-dwell-mult={1.3}
             aria-label="Disparar Emergência Médica"
           >
             <AlertOctagon size={24} /> Emergência
@@ -438,7 +493,7 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             {/* Durante o ensaio do tutorial a confirmação é IDÊNTICA à real.
                 Um cuidador entrando na sala nesse momento acharia que está
                 acontecendo de verdade — daí o rótulo. */}
-            {modoEnsaio ? 'ENSAIO — NADA SERÁ ENVIADO' : 'EMERGÊNCIA ACIONADA'}
+            {confirmacaoDeEnsaio ? 'ENSAIO — NADA SERÁ ENVIADO' : 'EMERGÊNCIA ACIONADA'}
           </h1>
 
           <p
