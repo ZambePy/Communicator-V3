@@ -1245,7 +1245,7 @@ suporte continuam, e as mensagens do cuidador seguem sendo faladas.
 |---|---|---|
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | ligam a nuvem; a origem entra na CSP | modo local (abaixo) |
 | `VITE_DESKTOP_SYNC_URL` | Edge Function hospedada fora (também entra na CSP) | `<URL>/functions/v1/desktop-sync` |
-| `VITE_SITE_URL` | links do login ("esqueci a senha", "criar conta", `/conta`) | `https://irisflow-communicator.pages.dev` |
+| `VITE_SITE_URL` | links do login ("esqueci a senha", "criar conta", `/conta`) | `https://irisflow.ia.br` |
 | `VITE_LICENSE_OFFLINE_DAYS` | dias de carência offline de uma licença já verificada | 7 |
 
 **Sem as variáveis**, nada sai e a licença vem do serviço simulado
@@ -1509,7 +1509,7 @@ que o `.env.local`. Para desenvolver (`npm run dev`), copie
 | variável | uso | sem ela |
 |---|---|---|
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | contas, planos, beta | site abre; ação de conta diz "serviço indisponível" |
-| `VITE_SITE_URL` | canonical, og:*, sitemap, destino dos e-mails | `https://irisflow-communicator.pages.dev` |
+| `VITE_SITE_URL` | canonical, og:*, sitemap, destino dos e-mails | `https://irisflow.ia.br` |
 | `VITE_RELEASES_REPO` / `VITE_RELEASES_AVAILABLE` | de onde vêm os instaladores / quais sistemas o site oferece | `ZambePy/Communicator-V3` / `windows` |
 | `VITE_APP_CUIDADOR_URL` | APK do app do cuidador (anexado a cada release), em `/beta` | "o link chega por e-mail" |
 | `VITE_GOOGLE_PLAY_URL` | troca o endereço do Google Play | `…/store/apps/details?id=br.com.irisflow.cuidador`, que passa a funcionar sozinho quando o app for publicado com esse pacote |
@@ -1840,7 +1840,7 @@ painel, que teria prioridade sobre o arquivo sem aparecer no repositório.
 | variável | valor |
 |---|---|
 | `VITE_SUPABASE_URL` / `_ANON_KEY` | `https://xouznaqxhqzjdgeshlmh.supabase.co` / chave *anon* (a proteção é a RLS) |
-| `VITE_SITE_URL` | `https://irisflow-communicator.pages.dev`: canonical, `og:*`, sitemap, robots e links dos e-mails |
+| `VITE_SITE_URL` | `https://irisflow.ia.br`: canonical, `og:*`, sitemap, robots e links dos e-mails |
 | `VITE_RELEASES_REPO` / `_AVAILABLE` | `ZambePy/Communicator-V3` / `windows` (`windows,macos,linux` quando testados) |
 | `VITE_CF_ANALYTICS_TOKEN`, `VITE_APP_CUIDADOR_URL` | token do Web Analytics e link do APK; ausentes, o site segue sem eles |
 
@@ -1889,13 +1889,15 @@ com o destino novo. **Não apague esse projeto enquanto houver APK ou instalador
 endereço antigo:** a Cloudflare reserva o nome de um projeto apagado, e o
 `irisflow.pages.dev` não voltaria.
 
-### Domínio próprio (depois)
+### Domínio próprio
 
-O domínio é o **`irisflow.ia.br`**, já adicionado como zona (plano Free, pendente) nesta
-conta da Cloudflare, com os nameservers `natasha.ns.cloudflare.com` e
-`rodney.ns.cloudflare.com`. Falta quem administra o registro (na Hostinger) trocar os
-nameservers para esses dois e **remover o DNSSEC** (hoje há registro DS: sem remover, o site
-não resolve depois da troca). Com a zona ativa, siga daqui.
+O domínio é o **`irisflow.ia.br`**: zona ativa (plano Free) nesta conta da Cloudflare desde
+27/09/2026, nameservers `natasha.ns.cloudflare.com` e `rodney.ns.cloudflare.com`, DNSSEC
+removido no registro (religar depois pela Cloudflare é opcional). Já no ar: *Custom domain*
+`irisflow.ia.br` no projeto do Pages, `www` redirecionando (Redirect Rule 301, com a query
+string, e registro `A www 192.0.2.1` com proxy), Supabase com a Site URL e as Redirect URLs
+do domínio (as do `pages.dev` continuam na lista) e as variáveis abaixo trocadas. O roteiro
+abaixo fica como referência para outro domínio.
 
 Compre (`.com.br` só no Registro.br, R$ 40/ano; outros TLDs no Cloudflare Registrar, a
 preço de custo, ou em qualquer registrador — olhe a renovação: o `.tech` sai a US$ 9,99
@@ -1943,8 +1945,8 @@ Projeto **IrisFlow Communicator**, ref `xouznaqxhqzjdgeshlmh`, São Paulo (`sa-e
 
 | Authentication → | valor | por quê |
 |---|---|---|
-| URL Configuration → Site URL | `https://irisflow-communicator.pages.dev` | de fábrica é `http://localhost:3000`, e é o destino de qualquer link sem `redirectTo` e o `{{ .SiteURL }}` dos modelos de e-mail; o site e o app passam `redirectTo` em todos os fluxos |
-| URL Configuration → Redirect URLs | `https://irisflow-communicator.pages.dev/entrar`, `…/nova-senha`, `…/confirmar-email`, os dois primeiros também de `https://irisflow.pages.dev` (builds antigos do app) e `http://localhost:5173/**` | fora da lista o destino é ignorado; as prévias usam `VITE_SITE_URL` |
+| URL Configuration → Site URL | `https://irisflow.ia.br` | de fábrica é `http://localhost:3000`, e é o destino de qualquer link sem `redirectTo` e o `{{ .SiteURL }}` dos modelos de e-mail; o site e o app passam `redirectTo` em todos os fluxos |
+| URL Configuration → Redirect URLs | `https://irisflow.ia.br/entrar`, `…/nova-senha`, `…/confirmar-email`, as mesmas três de `https://irisflow-communicator.pages.dev` (a transição), os dois primeiros também de `https://irisflow.pages.dev` (builds antigos do app) e `http://localhost:5173/**` | fora da lista o destino é ignorado; as prévias usam `VITE_SITE_URL` |
 | Emails → SMTP Settings | Gmail: `smtp.gmail.com`, porta 465, usuário e remetente = o Gmail, senha de app | o SMTP padrão só entrega à equipe do projeto, 2 por hora |
 | Rate Limits → e-mails | 20/h | com SMTP próprio o padrão é 30/h, que passaria dos 500/dia do Gmail |
 | Sign In / Providers | *Confirm email* ligado; Email → *Minimum password length* 8, sem exigir tipos de caractere | o mesmo `SENHA_MINIMA` do site; sem SMTP ninguém de fora recebe o link |
@@ -2026,12 +2028,12 @@ o que o app envia (`app/src/data/supabaseProvider.ts`, `usePushNotifications.ts`
 | ID do dispositivo | token de push (`push_tokens`) | não | funcionalidade | sim |
 | falhas e diagnóstico | só com `EXPO_PUBLIC_SENTRY_DSN` (sem PII, sem captura de tela) | — | análise | não |
 
-Criptografado em trânsito: sim. Exclusão: sim (`https://irisflow-communicator.pages.dev/privacidade#direitos`
+Criptografado em trânsito: sim. Exclusão: sim (`https://irisflow.ia.br/privacidade#direitos`
 e Ajustes → "Excluir conta e dados", que abre um pedido por e-mail). Compartilhamento com
 terceiros e rastreamento: não — Supabase, Expo/Google/Apple (push) e Sentry são
 prestadores. Não coleta localização, agenda, fotos, áudio, arquivos nem identificador de
 publicidade; não há SDK de estatística. Demais respostas: política
-`https://irisflow-communicator.pages.dev/privacidade`; público 18+; mensagens privadas entre pessoas da
+`https://irisflow.ia.br/privacidade`; público 18+; mensagens privadas entre pessoas da
 mesma conta; recurso de saúde declarado, sem ser dispositivo médico; iOS sem criptografia
 não isenta (`usesNonExemptEncryption: false`) e sem iPad (`supportsTablet: false`: só
 capturas de iPhone). Ligar o Sentry exige atualizar os dois formulários e a política.
