@@ -61,11 +61,14 @@ export const DicaContextual: React.FC<{ id: IdDaDica }> = ({ id }) => {
       >
         {t(`dicas.${id}`)}
       </p>
+      {/* 180×120, o mínimo declarado para alvos de olhar (FE-18): era 150×64,
+          uma faixa baixa em que o tremor vertical do olhar zerava o dwell. Sem
+          `isolado`: a dica fica logo abaixo do cabeçalho, e uma zona ampliada
+          para cima encostaria na da Emergência. */}
       <GazeButton
         onClick={entendi}
-        height={64}
-        width={150}
-        isolado
+        height={120}
+        width={180}
         style={{ borderRadius: 'var(--radius-md)', fontSize: '1.05rem', flexShrink: 0 }}
       >
         {t('dicas.entendi')}

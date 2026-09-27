@@ -82,7 +82,7 @@ export const GalleryScreen: React.FC = () => {
           <GazeButton
             onClick={() => navigate('/games')}
             width={200}
-            height={72}
+            height={96}
             isolado
             style={{
               borderRadius: '1.5rem',
@@ -139,7 +139,7 @@ export const GalleryScreen: React.FC = () => {
         <GazeButton
           onClick={() => navigate('/photo')}
           width={260}
-          height={72}
+          height={96}
           isolado
           style={{
             borderRadius: '1.5rem',
@@ -363,7 +363,7 @@ export const GalleryScreen: React.FC = () => {
               <GazeButton
                 onClick={() => setSelectedPhoto(null)}
                 width={220}
-                height={76}
+                height={96}
                 isolado
                 style={{
                   borderRadius: '1.25rem',
@@ -409,7 +409,7 @@ export const GalleryScreen: React.FC = () => {
                 onClick={() => handleDeletePhoto(selectedPhoto.id)}
                 data-dwell-ms={DWELL_DE_APAGAR_MS}
                 width={260}
-                height={76}
+                height={96}
                 isolado
                 style={{
                   borderRadius: '1.5rem',

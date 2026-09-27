@@ -155,7 +155,7 @@ export const MemoryGame: React.FC = () => {
         <GazeButton
           onClick={() => navigate('/games')}
           width={200}
-          height={68}
+          height={96}
           isolado
           style={{
             borderRadius: '1.5rem',
@@ -299,7 +299,7 @@ export const MemoryGame: React.FC = () => {
               <GazeButton
                 onClick={reiniciar}
                 width={280}
-                height={84}
+                height={120}
                 style={{
                   borderRadius: '1.75rem',
                   background: 'linear-gradient(135deg, #22c55e, #15803d)',
@@ -316,7 +316,7 @@ export const MemoryGame: React.FC = () => {
               <GazeButton
                 onClick={() => navigate('/games')}
                 width={260}
-                height={84}
+                height={120}
                 style={{
                   borderRadius: '1.75rem',
                   background: 'var(--color-card-bg)',

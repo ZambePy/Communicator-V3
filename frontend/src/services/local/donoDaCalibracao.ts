@@ -1,34 +1,30 @@
+import { atribuirCalibracoesSemDono } from '@tracker/calibration';
+
 /**
- * De qual paciente é a calibração guardada neste computador.
+ * Migração do "dono da calibração" (FE-11 → calibração por paciente).
  *
- * O núcleo guarda UMA calibração (a mais recente) e a restaura para quem
- * estiver na frente da câmera. Ao trocar de paciente, a conferência oferecia
- * "Usar a calibração salva" — a do paciente anterior: o cursor do novo
- * paciente passava a seguir o mapeamento de outra pessoa, sem aviso (FE-11).
- * Aqui fica só o dono; reaproveitar é permitido para ele.
+ * Na versão anterior o núcleo guardava as calibrações sem dono e a interface
+ * anotava aqui QUEM tinha feito a última — só para não oferecer ao paciente B
+ * a calibração do paciente A. Agora cada calibração gravada leva o paciente
+ * (`meta.paciente`, ver `definirPacienteDaCalibracao` no núcleo), e esta chave
+ * só serve uma vez: as calibrações antigas passam a ser do dono anotado, e a
+ * chave sai. Sem dono anotado, a calibração antiga fica para o primeiro
+ * paciente que a carregar.
  */
 const CHAVE = 'irisflow.calibracao.dono';
 
-/** Marca a calibração atual como deste paciente (calibrou agora, ou reaproveitou a que já era dele). */
-export function registrarDonoDaCalibracao(perfilId: string | null): void {
+export function migrarDonoLegadoDaCalibracao(): void {
+  let dono: string | null = null;
   try {
-    if (perfilId) localStorage.setItem(CHAVE, perfilId);
-    else localStorage.removeItem(CHAVE);
+    dono = localStorage.getItem(CHAVE);
   } catch {
-    /* sem armazenamento: vale só nesta sessão */
+    return; // sem armazenamento: não há o que migrar
   }
-}
-
-/**
- * A calibração guardada pode ser reaproveitada por este paciente? Sem dono
- * registrado (calibrações feitas antes desta versão), sim — e a partir daí
- * ela passa a ter dono.
- */
-export function calibracaoEhDoPerfil(perfilId: string | null): boolean {
+  if (!dono) return;
+  atribuirCalibracoesSemDono(dono);
   try {
-    const dono = localStorage.getItem(CHAVE);
-    return !dono || !perfilId || dono === perfilId;
+    localStorage.removeItem(CHAVE);
   } catch {
-    return true;
+    /* fica para a próxima abertura; atribuir de novo é inofensivo */
   }
 }

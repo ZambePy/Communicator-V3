@@ -311,7 +311,7 @@ describe('o alvo do reajuste nunca fica sob a Emergência', () => {
   it('as constantes da conta são as do CSS e da janela mínima', () => {
     expect(css).toMatch(/--pagina-margem-x:\s*clamp\(1rem,\s*2\.5vw,\s*3rem\)/);
     expect(css).toMatch(/--pagina-margem-topo:\s*clamp\(1rem,\s*2\.5vh,\s*2rem\)/);
-    expect(css).toMatch(/--emergencia-topo:\s*calc\(var\(--pagina-margem-topo\)\s*\+\s*16px\)/);
+    expect(css).toMatch(/--emergencia-topo:\s*var\(--pagina-margem-topo\);/);
     expect(mainDoElectron).toMatch(/minWidth:\s*1024/);
     expect(mainDoElectron).toMatch(/minHeight:\s*640/);
   });
@@ -330,7 +330,7 @@ describe('o alvo do reajuste nunca fica sob a Emergência', () => {
     };
     // Botão no topo (uso normal): `right: --emergencia-direita`, `top: --emergencia-topo`.
     const direita = clamp(16, 0.025 * w, 48);
-    const topo = clamp(16, 0.025 * h, 32) + 16;
+    const topo = clamp(16, 0.025 * h, 32);
     const noTopo: Retangulo = {
       x0: w - direita - EMERGENCIA_LARGURA_PX,
       x1: w - direita,

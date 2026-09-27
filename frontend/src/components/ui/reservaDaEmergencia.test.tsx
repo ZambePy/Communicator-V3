@@ -81,9 +81,38 @@ describe('reserva do botão de Emergência', () => {
     expect(caixa.style.right).toBe('var(--emergencia-direita)');
   });
 
+  it('FE-18: no topo, 96 px de altura e a zona indo até as bordas de cima e da direita — sem crescer para baixo', () => {
+    render(
+      <MemoryRouter initialEntries={['/menu']}>
+        <EmergencyProvider>
+          <div />
+        </EmergencyProvider>
+      </MemoryRouter>
+    );
+    const botao = screen.getByRole('button', { name: /Emergência/ });
+    expect(EMERGENCIA_ALTURA_PX).toBeGreaterThanOrEqual(96);
+    // Até 96 px; em janela baixa, termina 16 px antes de onde o conteúdo começa.
+    expect(botao.style.height).toBe('var(--emergencia-altura)');
+    expect(css).toMatch(
+      /--emergencia-altura:\s*min\(96px,\s*calc\(var\(--pagina-conteudo-topo\) - var\(--pagina-margem-topo\) - 16px\)\)/,
+    );
+    // Folga lateral maior que as duas zonas de acerto somadas (12 + 12 px).
+    expect(parseInt(css.match(/--emergencia-folga:\s*(\d+)px/)?.[1] ?? '0', 10)).toBeGreaterThan(24);
+    expect(botao.parentElement?.className).toContain('emergencia-fab--topo');
+    const regra = css.match(/\.emergencia-fab--topo \.gaze-button-hit-area \{([^}]*)\}/)?.[1] ?? '';
+    // Até a borda da janela e além (a sobra cobre a borda do botão).
+    expect(regra).toMatch(/top:\s*calc\(-1 \* var\(--emergencia-topo\) - \d+px\)/);
+    expect(regra).toMatch(/right:\s*calc\(-1 \* var\(--emergencia-direita\) - \d+px\)/);
+    // Logo abaixo começa o conteúdo: a Emergência não rouba o olhar de um cartão.
+    expect(regra).toMatch(/bottom:\s*0;/);
+    // Alinhada à linha do cabeçalho canônico (Voltar de 96 px).
+    expect(css).toMatch(/--emergencia-topo:\s*var\(--pagina-margem-topo\);/);
+  });
+
   it('as constantes do botão batem com as variáveis do CSS', () => {
     expect(css).toMatch(new RegExp(`--emergencia-largura:\\s*${EMERGENCIA_LARGURA_PX}px`));
-    expect(css).toMatch(new RegExp(`--emergencia-altura:\\s*${EMERGENCIA_ALTURA_PX}px`));
+    // A altura é adaptável, com teto na constante (ver o teste FE-18 abaixo).
+    expect(css).toMatch(new RegExp(`--emergencia-altura:\\s*min\\(${EMERGENCIA_ALTURA_PX}px,`));
   });
 
   it('a reserva só age com o botão no topo, e desconta a largura dele', () => {

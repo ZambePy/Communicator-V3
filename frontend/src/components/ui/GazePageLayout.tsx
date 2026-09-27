@@ -67,7 +67,9 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
         // devolve ~90 px à grade — sem encolher alvo nenhum.
         padding: bare
           ? 0
-          : 'clamp(6.5rem, 4rem + 7vh, 9.5rem) clamp(1rem, 2.5vw, 3rem) clamp(1rem, 3vh, 3rem)',
+          : // O topo vem da mesma variável que a altura da Emergência usa
+            // (index.css): os dois precisam concordar sobre onde o conteúdo começa.
+            'var(--pagina-conteudo-topo) clamp(1rem, 2.5vw, 3rem) clamp(1rem, 3vh, 3rem)',
         fontFamily: 'var(--font-body)',
         display: 'flex',
         flexDirection: 'column',

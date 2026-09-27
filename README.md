@@ -812,13 +812,23 @@ pessoa não confirmar, o caminho de volta é uma flag.
 3. **Calibração** (`/calibration-check`): preparação com verificação de
    prontidão, coleta dos alvos, revisão (deriva de pose, alvos ignorados) e
    teste de precisão. O botão de emergência fica compacto e sai de cima dos
-   alvos. "Usar a calibração salva" só aparece para o paciente que a fez: depois
-   de trocar de perfil, o novo paciente calibra.
-4. **Menu** (`/menu`) e telas do paciente: teclado, frases rápidas (a última
-   página leva aos pictogramas), jogos, câmera, galeria, descanso, emergência, **conversa**
+   alvos. A calibração é **por paciente**: cada perfil gravado leva o paciente
+   que calibrou (até 3 por paciente, 12 no disco), escolher o paciente carrega a
+   dele, e "Usar a calibração salva" só aparece para a do próprio paciente —
+   quem ainda não calibrou calibra, sem herdar o mapeamento de outra pessoa.
+4. **Menu** (`/menu`) e telas do paciente: teclado (letras e uma segunda
+   camada com acentos, "ç", números e pontuação — a troca fica no lugar do
+   Voltar), frases rápidas (a última página leva aos pictogramas e às frases
+   favoritas, "Minhas opções"), jogos, câmera, galeria, descanso, emergência, **conversa**
    (`/conversation`) com o celular do cuidador e **Computador**
    (`/virtual-mouse`), que liga o Modo Computador. O botão de emergência é um
-   alerta local (som e tela) e, com a conta ligada, também chega ao celular.
+   alerta local (som e tela) e, com a conta ligada, também chega ao celular:
+   200×96 px, na linha do cabeçalho, com a zona de acerto indo até as bordas
+   de cima e da direita da janela (o olhar que passa da borda é preso nela) e
+   sem crescer para baixo, onde começa o conteúdo. "Estou bem" é uma das
+   respostas prontas da conversa. O app é só em português por enquanto: o
+   inglês (`locales/en.json`) sai do seletor até todas as telas passarem pelo
+   i18n.
    No menu, a largura dos cartões acompanha a altura disponível (proporção
    1,6 : 1, com piso para o texto não quebrar), a grade só rola se as linhas
    não couberem no alvo mínimo de 5°, e as partículas do site derivam ao fundo
@@ -832,8 +842,8 @@ pessoa não confirmar, o caminho de volta é uma flag.
    cuidador, sem tirar o paciente da sessão. Configurações por seção (rastreamento, tela,
    calibração, voz personalizada, sugestões de escrita, dados), painel com
    estado do rastreamento e alertas, guia de instalação e leitura do teste de
-   precisão. É também de onde saem o **modo apresentação** e o **relatório de
-   suporte**, descritos adiante. Lembretes (que abrem sobre a tela do paciente
+   precisão (Configurações → "Relatório da última medição"). É também de onde
+   saem o **modo apresentação** e o **relatório de suporte**, descritos adiante. Lembretes (que abrem sobre a tela do paciente
    na hora marcada) e a rotina do painel começam **vazios**: só existem os que
    o cuidador cadastrar. O convite dos relatos automáticos aparece só aqui.
    Remover um perfil pede confirmação e apaga o que o assistente aprendeu com
@@ -844,9 +854,14 @@ têm dwell próprio (`data-dwell-ms`) e um piso relativo ao do paciente
 (`data-dwell-mult`, 1,3× a 1,7×): quem usa dwell de 4 s não dispara a
 Emergência com 2 s, antes de uma letra. O CANCELAR da emergência continua curto.
 
-Regras da interface do paciente: alvos de no mínimo 160×120 px, nada se move
-sob o olhar (sem `transform` em hover), uma ação principal por tela, zona de
-descanso sem alvos, textos curtos e sem jargão.
+Regras da interface do paciente: alvos de no mínimo 160×120 px (ou, quando o
+botão é menor e não tem vizinho, zona de acerto `isolado` ampliada até os 5°
+— o Voltar dos cabeçalhos e do Lazer), nada se move sob o olhar (sem
+`transform` em hover), uma ação principal por tela, zona de descanso sem
+alvos, textos curtos e sem jargão. No Desenho, cor, traço e "Apagar tudo"
+ficam num painel de alvos grandes sobre o canvas (o pincel para enquanto ele
+está aberto); na Meditação, duração e controles ficam em colunas ao lado do
+círculo.
 
 ### Lazer e bem-estar
 
@@ -2083,9 +2098,9 @@ o replay de gravação real (`docs/MEDICOES.md` §15), que precisa de uma
 gravação. Os instaladores dos três sistemas saem de
 `.github/workflows/release.yml` ([Instalador](#instalador-e-atualização-automática)).
 
-**Estado medido nesta versão (27/09/2026, segunda rodada):** núcleo com **2013 testes (mais 2 pulados) em 185 arquivos**,
-interface com **1328 em 152 arquivos**, site com **296 em 32 arquivos** e app do
-cuidador com **179 em 16 suítes** — 3816 testes ao todo; checagem de tipos sem
+**Estado medido nesta versão (27/09/2026, terceira rodada):** núcleo com **2022 testes (mais 2 pulados) em 186 arquivos**,
+interface com **1344 em 154 arquivos**, site com **296 em 32 arquivos** e app do
+cuidador com **179 em 16 suítes** — 3841 testes ao todo; checagem de tipos sem
 erro nos cinco projetos (núcleo, Electron, interface, site e app), configuração
 pública sem segredo, os builds de produção da interface e do site passando;
 banco local com as 26 migrações (aplicadas duas vezes), o cenário e o seed
@@ -2185,8 +2200,8 @@ Estado em 27/09/2026.
 6. **App do cuidador sem push:** o projeto EAS existe e o APK de teste vai em todo
    release, mas o push depende do Firebase (`GOOGLE_SERVICES_JSON`) no Android e da conta
    Apple paga no iOS; sem ele, os alertas chegam só com o app aberto (realtime).
-7. **macOS e Linux sem teste real:** o CI só gera a pasta Linux (`--dir`), o `.dmg` nunca
-   foi gerado (sai no primeiro release) e nenhum dos dois foi instalado numa máquina real.
+7. **macOS e Linux sem teste real:** o release gera `.dmg`/`.zip` e AppImage/`.deb`/`.rpm`
+   (o CI só a pasta Linux, `--dir`), mas nenhum dos dois foi instalado numa máquina real.
    O site só oferece esses botões quando `VITE_RELEASES_AVAILABLE` os listar.
 8. **Repositório privado depois:** os releases dele somem para visitantes e apps, e o
    Actions cai para 2 000 min/mês (macOS custa ~10× o Linux). Caminho: repositório público
@@ -2203,17 +2218,6 @@ Estado em 27/09/2026.
    pagamento real (`attach_payment_method` sem gateway + cancelar + reativar) e o limite
    de computadores de Completo/Voz anunciado no site não é aplicado pelo banco;
    avisos de postura/fadiga previstos no banco que o desktop não envia.
-12. **Auditoria de 27/09/2026 — o que ficou para depois.** No desktop: alvos
-    abaixo do mínimo declarado (a Emergência tem 200×64 px; Voltar e controles
-    de alguns jogos e da meditação); teclado sem acentos, "ç", números e
-    pontuação; textos fora do i18n (a versão em inglês mistura português); a
-    calibração guardada continua sendo uma só no núcleo (a conferência só
-    oferece reaproveitá-la ao paciente que a fez); "Estou bem", "Minhas opções"
-    e o relatório da sessão ainda sem caminho pela interface. No app do
-    cuidador: o iOS só fura o Foco com o direito *Time Sensitive* (exige novo
-    build) e o Android só toca no "Não perturbe" se o cuidador ligar no canal
-    (o app avisa e abre o ajuste); o overlay e os alertas foram conferidos no
-    export web e em testes, falta conferir num aparelho real.
 10. **Primeiro cadastro real com o código.** A função foi testada num Postgres
     local, com o hash calculado como o Auth calcula, e o modelo usa `slice`, função do
     próprio Go template que o Supabase usa nos e-mails; mas nenhum e-mail com o código
@@ -2227,6 +2231,14 @@ Estado em 27/09/2026.
     publicado com o pacote `br.com.irisflow.cuidador`; o da App Store precisa de
     `VITE_APP_STORE_URL` em `site/.env.production` depois do cadastro no App Store
     Connect — até lá o selo da Apple fica "em breve".
+12. **Auditoria de 27/09/2026 — o que ainda depende de fora do código.** No
+    app do cuidador: alertas com o app fechado dependem do Firebase no Android
+    (item 6); furar o Foco do iPhone exige o direito *Time Sensitive* num build
+    de iOS (conta Apple paga); no Android, o "Não perturbe" só é furado se o
+    cuidador liberar o canal (o app avisa e abre o ajuste). O alerta e o overlay
+    foram conferidos no export web e em testes — falta conferir num celular
+    real. No desktop, a tradução para o inglês fica para quando todas as telas
+    passarem pelo i18n (hoje o app é só em português).
 
 ---
 

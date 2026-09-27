@@ -83,11 +83,14 @@ describe('ao aceitar', () => {
 });
 
 describe('idioma', () => {
-  it('mostra o termo em inglês quando o idioma é inglês', async () => {
-    // Se a escolha de idioma da tela de boas-vindas não alcançar o termo, o
-    // usuário aceita um texto que não consegue ler.
+  it('o termo sai sempre em português, mesmo com um pedido de inglês (FE-24)', async () => {
+    // O inglês saiu do seletor até todas as telas passarem pelo i18n: um termo
+    // em inglês cercado de telas em português (ou o contrário) é texto que o
+    // usuário aceita sem conseguir ler por inteiro.
     await i18n.changeLanguage('en');
     montar();
-    expect(screen.getByText(/never leave this machine/i)).toBeInTheDocument();
+    expect(screen.queryByText(/never leave this machine/i)).not.toBeInTheDocument();
+    expect(i18n.resolvedLanguage).toBe('pt-BR');
+    await i18n.changeLanguage('pt-BR');
   });
 });

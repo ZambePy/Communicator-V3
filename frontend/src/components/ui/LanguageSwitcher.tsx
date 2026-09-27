@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react';
-import { supportedLngs, type SupportedLng } from '../../i18n';
+import { haEscolhaDeIdioma, supportedLngs, type SupportedLng } from '../../i18n';
 
 interface LanguageSwitcherProps {
   compact?: boolean;
@@ -10,6 +10,9 @@ interface LanguageSwitcherProps {
 export const LanguageSwitcher: React.FC<LanguageSwitcherProps> = ({ compact }) => {
   const { t, i18n } = useTranslation();
   const current = (i18n.resolvedLanguage ?? 'pt-BR') as SupportedLng;
+
+  // Com um idioma só (ver i18n/index.ts), não há o que escolher.
+  if (!haEscolhaDeIdioma) return null;
 
   return (
     <div

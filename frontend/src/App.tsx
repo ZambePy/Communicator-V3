@@ -123,7 +123,6 @@ const MeditationScreen = lazyNamed(
   () => import('./pages/health/MeditationScreen'),
   'MeditationScreen'
 );
-const IAmOkScreen = lazyNamed(() => import('./pages/caregiver/IAmOkScreen'), 'IAmOkScreen');
 const VirtualMouseScreen = lazyNamed(
   () => import('./pages/VirtualMouseScreen'),
   'VirtualMouseScreen'
@@ -413,14 +412,10 @@ function App() {
                                 </ProtectedRoute>
                               }
                             />
-                            <Route
-                              path="/iamok"
-                              element={
-                                <ProtectedRoute>
-                                  <IAmOkScreen />
-                                </ProtectedRoute>
-                              }
-                            />
+                            {/* "Estou bem" não tem tela própria: é uma das respostas prontas
+                                da Conversa, que chega ao celular do cuidador pelo mesmo
+                                caminho. A antiga /iamok não tinha caminho pela interface e
+                                disparava sozinha em 30 s (FE-23). */}
 
                             {/* Lazer */}
                             <Route

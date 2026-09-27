@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
  *
  * A trilha de passos já foi um `div` inerte que parecia abas, e depois dez
  * `<button>` de ~60×56 px — abaixo do alvo mínimo, inoperáveis pelo dwell.
- * Agora ela é só indicador: quem navega são Voltar e Continuar, de 76 px, e
+ * Agora ela é só indicador: quem navega são Voltar e Continuar, de 120 px, e
  * Pular, que virou alvo de olhar em vez de um texto de 130×20.
  *
  * Estes testes travam o contrato mínimo: dá para chegar do primeiro ao último
@@ -177,11 +177,11 @@ describe('TutorialWizard — navegar pelo olhar', () => {
     expect(screen.getByText('passo-pratica')).toBeInTheDocument();
   });
 
-  it('Pular é um alvo de olhar (GazeButton, 76 px), não um texto', () => {
+  it('Pular é um alvo de olhar (GazeButton, 96 px, zona ampliada), não um texto', () => {
     montar();
     const pular = screen.getByRole('button', { name: /tutorial\.skip/ });
     expect(pular.className).toContain('gaze-button');
-    expect(pular.style.height).toBe('76px');
+    expect(pular.style.height).toBe('96px');
     expect(pular).toHaveAttribute('data-isolado', 'true');
   });
 

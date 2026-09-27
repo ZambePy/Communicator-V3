@@ -9,7 +9,7 @@ import { hoverAndFocus, hoverAndFocusBackground } from '../../components/ui/hove
 import { startAccuracyTest } from '@tracker/accuracy';
 import { montarMetaDeMedicao } from '../../utils/autoTestMeta';
 import { emitirResultadoDeCalibracao } from '../../cloud/eventos';
-import { getCalibrationTimestampMs } from '@tracker/calibration';
+import { calibracaoEmUsoEhDoPaciente, getCalibrationTimestampMs } from '@tracker/calibration';
 import { idadeEmTexto } from '../../idadeEmTexto';
 import type { OpticalCondition } from '@tracker/calibrationProfiles';
 import type { VeredictoDeriva } from '@tracker/calibration';
@@ -25,7 +25,6 @@ import { PreparoDaCalibracao } from '../calibration/PreparoDaCalibracao';
 import { ordemDaGrade } from '../calibration/ordemDaGrade';
 import { tutorialConcluido } from '../../services/local/tutorialProfile';
 import { useAuth } from '../../context/AuthContext';
-import { calibracaoEhDoPerfil, registrarDonoDaCalibracao } from '../../services/local/donoDaCalibracao';
 
 interface CalibrationPointUI {
   x: number;
@@ -355,8 +354,8 @@ export const CalibrationCheck: React.FC = () => {
 
   const finishAndTransition = () => {
     setStage('transitioning');
-    // A calibração nova é deste paciente: só ele pode reaproveitá-la depois.
-    registrarDonoDaCalibracao(perfilAtual?.id ?? null);
+    // A calibração nova já foi gravada como deste paciente pelo núcleo
+    // (`definirPacienteDaCalibracao`): só ele a reaproveita depois.
     // O resultado da calibração vem ANTES de seguir. O diagnóstico de ajuste
     // já era calculado e só aparecia embutido nesta tela; agora ele tem uma
     // leitura própria, em linguagem de cuidador.
@@ -679,9 +678,10 @@ export const CalibrationCheck: React.FC = () => {
    * ativado ou a calibração é invalidada em tempo de execução, e um valor
    * memoizado ofereceria reaproveitar um modelo que já não existe.
    */
-  // Só a do próprio paciente: depois de trocar de perfil, a calibração salva
-  // é a do paciente anterior e não serve para este (FE-11).
-  const temCalibracaoSalva = calibration.isCalibrated() && calibracaoEhDoPerfil(perfilAtual?.id ?? null);
+  // Só a do próprio paciente (FE-11). O núcleo carrega a calibração de cada
+  // paciente ao trocar de perfil; a checagem do dono aqui é a última guarda.
+  const temCalibracaoSalva =
+    calibration.isCalibrated() && calibracaoEmUsoEhDoPaciente(perfilAtual?.id ?? null);
 
   /**
    * "de hoje", "há 3 dias" — o que decide se vale reaproveitar.
@@ -700,7 +700,6 @@ export const CalibrationCheck: React.FC = () => {
    * algo foi medido agora.
    */
   const seguirComCalibracaoSalva = () => {
-    registrarDonoDaCalibracao(perfilAtual?.id ?? null);
     const destino = perfilAtual && !tutorialConcluido(perfilAtual.id) ? '/tutorial' : '/menu';
     navigate(destino, { replace: true });
   };

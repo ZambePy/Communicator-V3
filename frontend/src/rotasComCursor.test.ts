@@ -41,7 +41,7 @@ describe('rotaMostraCursor', () => {
     for (const rota of ['#/welcome', '#/menu', '#/keyboard', '#/phrases', '#/pictograms',
                         '#/emergency', '#/conversation', '#/games', '#/games/bubble',
                         '#/drawing', '#/gallery', '#/news', '#/meditation', '#/rest',
-                        '#/iamok', '#/virtual-mouse', '#/tutorial']) {
+                        '#/options', '#/virtual-mouse', '#/tutorial']) {
       expect(rotaMostraCursor(rota), rota).toBe(true);
     }
   });

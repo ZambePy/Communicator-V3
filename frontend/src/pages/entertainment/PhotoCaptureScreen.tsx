@@ -329,7 +329,8 @@ export const PhotoCaptureScreen: React.FC = () => {
           <GazeButton
             onClick={() => navigate('/games')}
             width={200}
-            height={68}
+            height={96}
+            isolado
             style={{
               borderRadius: '1.5rem',
               boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
@@ -383,7 +384,8 @@ export const PhotoCaptureScreen: React.FC = () => {
         <GazeButton
           onClick={() => navigate('/gallery')}
           width={240}
-          height={68}
+          height={96}
+          isolado
           style={{
             borderRadius: '1.5rem',
             background: 'linear-gradient(135deg, rgba(147, 51, 234, 0.15), rgba(79, 70, 229, 0.15))',

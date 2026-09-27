@@ -59,13 +59,13 @@ describe('NewsScreen — Leituras', () => {
     expect(screen.getByText('Capítulo 3')).toBeInTheDocument();
   });
 
-  it('lê a leitura em voz alta por um alvo de fixação de 76 px, e permite parar', async () => {
+  it('lê a leitura em voz alta por um alvo de fixação de 96 px (FE-18), e permite parar', async () => {
     guardar([{ id: 'a', titulo: 'Carta da Ana', texto: 'Oi, pai.', criadoEm: '2026-01-01T00:00:00Z' }]);
     let resolver: (v: unknown) => void = () => {};
     voz.falar.mockImplementationOnce(() => new Promise((r) => (resolver = r)));
     renderizar();
     const ouvir = screen.getByLabelText('Ouvir Carta da Ana em voz alta');
-    expect(ouvir.style.height).toBe('76px');
+    expect(ouvir.style.height).toBe('96px');
     fireEvent.click(ouvir);
     expect(voz.falar).toHaveBeenCalledWith('Carta da Ana. Oi, pai.', { rate: 0.9 });
 

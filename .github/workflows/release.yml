@@ -169,7 +169,10 @@ jobs:
   # -------------------------------------------------------------------------
   preparar:
     name: Versão
-    runs-on: ubuntu-latest
+    # Ubuntu fixo em 24.04 (o que `ubuntu-latest` é hoje): o GitHub passa o
+    # `ubuntu-latest` para o Ubuntu 26 a partir de 19/10/2026, e uma troca de
+    # sistema no meio de um release não pode vir sem ninguém pedir.
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       versao: ${{ steps.v.outputs.versao }}
@@ -247,7 +250,7 @@ jobs:
             os: macos-latest
             alvo: --mac
           - plataforma: linux
-            os: ubuntu-latest
+            os: ubuntu-24.04
             alvo: --linux
     runs-on: ${{ matrix.os }}
     # Windows empacota o motor de voz (PyInstaller sobre torch): demora.
@@ -449,7 +452,7 @@ jobs:
     name: Publicar release
     needs: [preparar, pacote]
     if: needs.preparar.outputs.publicar == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: write

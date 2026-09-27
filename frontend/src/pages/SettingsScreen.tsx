@@ -55,6 +55,7 @@ import {
 import { useCloud } from '../cloud/CloudContext';
 import { infoDoApp } from '../cloud/armazenamento';
 import { LanguageSwitcher } from '../components/ui/LanguageSwitcher';
+import { haEscolhaDeIdioma } from '../i18n';
 import { PortaoDoPin } from '../components/ui/PortaoDoPin';
 import { INTRO_SEEN_KEY } from './onboarding/bootDestination';
 import { limparTutorial } from '../services/local/tutorialProfile';
@@ -962,25 +963,28 @@ export const SettingsScreen: React.FC = () => {
           </div>
         </section>
 
-        {/* Idioma */}
-        <section aria-labelledby="language-title" style={cardStyle}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              marginBottom: '1.25rem',
-            }}
-          >
-            <h2
-              id="language-title"
-              className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}
+        {/* Idioma — só quando há o que escolher (hoje, só português; ver
+            i18n/index.ts). */}
+        {haEscolhaDeIdioma && (
+          <section aria-labelledby="language-title" style={cardStyle}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                marginBottom: '1.25rem',
+              }}
             >
-              {t('settings.language.title')}
-            </h2>
-          </div>
-          <LanguageSwitcher />
-        </section>
+              <h2
+                id="language-title"
+                className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}
+              >
+                {t('settings.language.title')}
+              </h2>
+            </div>
+            <LanguageSwitcher />
+          </section>
+        )}
 
         {/* Voz personalizada (clonagem local) — a tela própria tem o termo de
             consentimento, o download do modelo e a importação do áudio. */}
@@ -1833,6 +1837,28 @@ export const SettingsScreen: React.FC = () => {
               }}
             >
               <MousePointer2 size={20} aria-hidden="true" /> Verificar com cursor
+            </button>
+
+            {/* O relatório da última medição (erro em graus, geometria da tela,
+                bloco e exportação) existia sem nenhum caminho pela interface
+                (FE-23). Mora aqui, ao lado do teste que o produz. */}
+            <button
+              type="button"
+              onClick={() => navigate('/relatorio')}
+              style={{
+                padding: '1rem 1.5rem',
+                borderRadius: '1rem',
+                border: '2px solid var(--color-card-border)',
+                background: 'transparent',
+                color: 'var(--color-text-base)',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <FileText size={20} aria-hidden="true" /> Relatório da última medição
             </button>
           </div>
           <p

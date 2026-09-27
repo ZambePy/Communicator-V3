@@ -24,7 +24,7 @@ import { GazeButton } from '../../components/ui/GazeButton';
 import { useSettings, TEMA_FIXO } from '../../context/SettingsContext';
 import { useCloud } from '../../cloud/CloudContext';
 import { presetMaisProximo } from '../../dwellMs';
-import { supportedLngs, type SupportedLng } from '../../i18n';
+import { haEscolhaDeIdioma, supportedLngs, type SupportedLng } from '../../i18n';
 import {
   emPorcento,
   emSegundos,
@@ -192,22 +192,37 @@ export const AccessibilityScreen: React.FC = () => {
           </>
         ) : (
           <>
-            <Valor
-              icone={<Globe size={34} aria-hidden="true" />}
-              titulo="Idioma"
-              valor={idioma === 'pt-BR' ? 'Português' : 'English'}
-              detalhe="Textos da tela e voz"
-            />
-            {supportedLngs.map((lng) => (
-              <Alvo
-                key={lng}
-                icone={<Globe size={36} aria-hidden="true" />}
-                rotulo={lng === 'pt-BR' ? 'Português' : 'English'}
-                ligado={idioma === lng}
-                aria-pressed={idioma === lng}
-                onClick={() => void i18n.changeLanguage(lng)}
-              />
-            ))}
+            {haEscolhaDeIdioma ? (
+              <>
+                <Valor
+                  icone={<Globe size={34} aria-hidden="true" />}
+                  titulo="Idioma"
+                  valor={idioma === 'pt-BR' ? 'Português' : 'English'}
+                  detalhe="Textos da tela e voz"
+                />
+                {supportedLngs.map((lng) => (
+                  <Alvo
+                    key={lng}
+                    icone={<Globe size={36} aria-hidden="true" />}
+                    rotulo={lng === 'pt-BR' ? 'Português' : 'English'}
+                    ligado={idioma === lng}
+                    aria-pressed={idioma === lng}
+                    onClick={() => void i18n.changeLanguage(lng)}
+                  />
+                ))}
+              </>
+            ) : (
+              // Um idioma só (ver i18n/index.ts): a linha diz qual é, sem
+              // oferecer um alvo que não troca nada.
+              <div style={{ gridColumn: '1 / -1', display: 'grid', minWidth: 0 }}>
+                <Valor
+                  icone={<Globe size={34} aria-hidden="true" />}
+                  titulo="Idioma"
+                  valor="Português"
+                  detalhe="Textos da tela e voz"
+                />
+              </div>
+            )}
 
             <Alvo
               icone={<Crosshair size={40} aria-hidden="true" />}

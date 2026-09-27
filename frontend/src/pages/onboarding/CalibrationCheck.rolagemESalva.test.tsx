@@ -27,6 +27,8 @@ import React from 'react';
 
 let calibrado = false;
 let carimboDaCalibracao: number | null = null;
+/** Paciente dono do modelo carregado (o núcleo guarda a calibração por paciente). */
+let donoDoModelo: string | null = null;
 
 vi.mock('../../context/GazeContext', () => ({
   useGaze: () => ({
@@ -63,7 +65,12 @@ vi.mock('../../context/AuthContext', () => ({
 
 vi.mock('@tracker/calibration', async (orig) => {
   const real = await orig<typeof import('@tracker/calibration')>();
-  return { ...real, getCalibrationTimestampMs: () => carimboDaCalibracao };
+  return {
+    ...real,
+    getCalibrationTimestampMs: () => carimboDaCalibracao,
+    calibracaoEmUsoEhDoPaciente: (id: string | null) =>
+      calibrado && (!id || donoDoModelo === null || donoDoModelo === id),
+  };
 });
 
 import { CalibrationCheck } from './CalibrationCheck';
@@ -85,7 +92,7 @@ const principal = () => document.querySelector('main') as HTMLElement;
 beforeEach(() => {
   calibrado = false;
   carimboDaCalibracao = null;
-  localStorage.removeItem('irisflow.calibracao.dono');
+  donoDoModelo = null;
   vi.clearAllMocks();
   Object.defineProperty(navigator, 'mediaDevices', {
     configurable: true,
@@ -169,23 +176,25 @@ describe('reaproveitar a calibração salva', () => {
 
   // FE-11: depois de trocar de paciente, "Usar a calibração salva" oferecia a
   // do paciente anterior — o cursor do novo seguiria o mapeamento de outra pessoa.
-  it('NÃO oferece a calibração de outro paciente (quem está é o p1; a salva é do p2)', () => {
+  it('NÃO oferece a calibração de outro paciente (quem está é o p1; o modelo em uso é do p2)', () => {
     calibrado = true;
     carimboDaCalibracao = Date.now();
-    localStorage.setItem('irisflow.calibracao.dono', 'p2');
+    donoDoModelo = 'p2';
     montar();
     expect(screen.queryByTestId('usar-calibracao-salva')).toBeNull();
     expect(screen.getByTestId('start-calibration-full')).toBeInTheDocument();
   });
 
-  it('oferece a do próprio paciente, e reaproveitar marca o dono (calibração antiga, sem dono)', () => {
+  it('oferece a do próprio paciente', () => {
     calibrado = true;
     carimboDaCalibracao = Date.now();
+    donoDoModelo = 'p1';
     montar();
+    expect(screen.getByTestId('usar-calibracao-salva')).toBeInTheDocument();
     act(() => {
       screen.getByTestId('usar-calibracao-salva').click();
     });
-    expect(localStorage.getItem('irisflow.calibracao.dono')).toBe('p1');
+    expect(screen.getByText(/tela de menu|tela de tutorial/)).toBeInTheDocument();
   });
 
   it('leva ao destino, sem passar pela coleta', () => {

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Eraser, Eye, EyeOff, ImageDown, Check, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Eraser, Eye, EyeOff, ImageDown, Check, AlertTriangle, Palette, X } from 'lucide-react';
 import { GazeButton } from '../../components/ui/GazeButton';
 import { useGaze } from '../../context/GazeContext';
 import { canvasParaAlbum, salvarNoAlbum } from '../entertainment/album';
@@ -59,6 +59,13 @@ export const DrawingGame: React.FC = () => {
   const [pincelLigado, setPincelLigado] = useState(false);
   const [cor, setCor] = useState(CORES[0].valor);
   const [espessuraIdx, setEspessuraIdx] = useState(1);
+  /**
+   * Painel de ferramentas (cor, traço e apagar) aberto sobre o canvas (FE-18).
+   * Na barra lateral estreita, as quatro cores (140×100) e os botões de 88 px
+   * ficavam abaixo do alvo mínimo; no painel, cada um ocupa uma célula grande.
+   * Enquanto ele está aberto o pincel não pinta.
+   */
+  const [ferramentasAbertas, setFerramentasAbertas] = useState(false);
 
   // O callback do gaze roda a 30 Hz fora do ciclo de render: ler o state
   // direto dele congelaria os valores do primeiro render. Refs mantêm a
@@ -66,9 +73,11 @@ export const DrawingGame: React.FC = () => {
   const pincelRef = useRef(pincelLigado);
   const corRef = useRef(cor);
   const espessuraRef = useRef(ESPESSURAS[espessuraIdx].valor);
+  const ferramentasRef = useRef(ferramentasAbertas);
   pincelRef.current = pincelLigado;
   corRef.current = cor;
   espessuraRef.current = ESPESSURAS[espessuraIdx].valor;
+  ferramentasRef.current = ferramentasAbertas;
 
   /** Último ponto pintado, em coordenadas do canvas. `null` = traço novo. */
   const ultimoPontoRef = useRef<{ x: number; y: number } | null>(null);
@@ -129,6 +138,12 @@ export const DrawingGame: React.FC = () => {
   useEffect(() => {
     const cancelar = subscribe((sample) => {
       if (!pincelRef.current) return;
+      // Painel de ferramentas aberto por cima do canvas: escolher uma cor não
+      // pode riscar o desenho que está embaixo. O traço recomeça ao fechar.
+      if (ferramentasRef.current) {
+        ultimoPontoRef.current = null;
+        return;
+      }
       // Sem rosto a posição é a última válida, não onde o paciente está
       // olhando — pintar aí deixaria um borrão no ponto em que ele piscou.
       if (!sample.hasFace) return;
@@ -240,11 +255,13 @@ export const DrawingGame: React.FC = () => {
           overflowY: 'auto',
         }}
       >
+        {/* Todos os controles com pelo menos 120 px de altura (o Voltar, com a
+            zona ampliada até o alvo mínimo). Cor, traço e apagar ficam no
+            painel de ferramentas, sobre o canvas (FE-18). */}
         <GazeButton
           onClick={() => navigate('/games')}
-          width={290}
-          height={64}
-          noWarn
+          width={280}
+          height={96}
           isolado
           style={{
             borderRadius: '1.25rem',
@@ -253,8 +270,8 @@ export const DrawingGame: React.FC = () => {
           }}
           aria-label={t('lazer.voltarAria')}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.2rem', fontWeight: 800 }}>
-            <ArrowLeft size={26} /> Voltar
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.25rem', fontWeight: 800 }}>
+            <ArrowLeft size={28} /> Voltar
           </span>
         </GazeButton>
 
@@ -265,8 +282,8 @@ export const DrawingGame: React.FC = () => {
         <GazeButton
           onClick={alternarPincel}
           data-dwell-ms={DWELL_DO_PINCEL_MS}
-          width={290}
-          height={120}
+          width={280}
+          height={130}
           aria-pressed={pincelLigado}
           aria-label={pincelLigado ? 'Desligar o pincel' : 'Ligar o pincel'}
           style={{
@@ -289,97 +306,53 @@ export const DrawingGame: React.FC = () => {
           </span>
         </GazeButton>
 
-        <span style={{ fontSize: '1rem', fontWeight: 800, opacity: 0.7, marginTop: '0.25rem' }}>
-          Cor
-        </span>
-        <div
-          role="radiogroup"
-          aria-label="Cor do pincel"
-          style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}
-        >
-          {CORES.map((c) => (
-            <GazeButton
-              key={c.valor}
-              onClick={() => setCor(c.valor)}
-              role="radio"
-              aria-checked={cor === c.valor}
-              aria-label={`Cor ${c.nome}`}
-              // 140×100 fica abaixo do alvo mínimo de 5°: o canvas precisa do
-              // resto da tela. O vão de 0,75rem é o que protege a escolha —
-              // errar o alvo cai numa cor vizinha (inofensivo), não no canvas.
-              noWarn
-              width={140}
-              height={100}
-              style={{
-                borderRadius: '1.25rem',
-                background: c.valor,
-                border: cor === c.valor ? '5px solid var(--color-text-base)' : '3px solid rgba(255,255,255,0.6)',
-                color: '#ffffff',
-                fontSize: '1.05rem',
-                fontWeight: 800,
-                textShadow: '0 1px 4px rgba(0,0,0,0.45)',
-              }}
-            >
-              {c.nome}
-            </GazeButton>
-          ))}
-        </div>
-
         <GazeButton
-          onClick={() => setEspessuraIdx((i) => (i + 1) % ESPESSURAS.length)}
-          width={290}
-          height={88}
-          noWarn
-          aria-label={`Espessura ${espessura.nome}. Acione para trocar.`}
+          onClick={() => setFerramentasAbertas((a) => !a)}
+          width={280}
+          height={130}
+          aria-expanded={ferramentasAbertas}
+          aria-label={ferramentasAbertas ? 'Fechar as ferramentas' : 'Cor e traço'}
           style={{
-            borderRadius: '1.25rem',
-            border: '3px solid var(--color-card-border)',
+            borderRadius: '1.5rem',
+            border: ferramentasAbertas ? '3px solid var(--color-primary)' : '3px solid var(--color-card-border)',
             background: 'var(--color-bg-base)',
           }}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-            <span
-              aria-hidden="true"
-              style={{
-                width: espessura.valor,
-                height: espessura.valor,
-                borderRadius: '50%',
-                background: cor,
-                flexShrink: 0,
-              }}
-            />
-            <span style={{ fontSize: '1.15rem', fontWeight: 800 }}>
-              Espessura: {espessura.nome}
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.45rem' }}>
+            {ferramentasAbertas ? (
+              <X size={34} aria-hidden="true" />
+            ) : (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <Palette size={32} aria-hidden="true" />
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: Math.max(14, espessura.valor),
+                    height: Math.max(14, espessura.valor),
+                    borderRadius: '50%',
+                    background: cor,
+                  }}
+                />
+              </span>
+            )}
+            <span style={{ fontSize: '1.25rem', fontWeight: 900 }}>
+              {ferramentasAbertas ? 'Fechar' : 'Cor e traço'}
             </span>
-          </span>
-        </GazeButton>
-
-        <GazeButton
-          onClick={apagarTudo}
-          width={290}
-          height={88}
-          noWarn
-          aria-label="Apagar todo o desenho"
-          style={{
-            borderRadius: '1.25rem',
-            border: '3px solid #fecaca',
-            background: '#fee2e2',
-            color: '#b91c1c',
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', fontSize: '1.2rem', fontWeight: 800 }}>
-            <Eraser size={28} /> Apagar tudo
+            {!ferramentasAbertas && (
+              <span style={{ fontSize: '0.95rem', fontWeight: 600, opacity: 0.8 }}>
+                {CORES.find((c) => c.valor === cor)?.nome} · traço {espessura.nome.toLowerCase()}
+              </span>
+            )}
           </span>
         </GazeButton>
 
         <GazeButton
           onClick={guardarNoAlbum}
-          width={290}
-          height={88}
-          noWarn
+          width={280}
+          height={130}
           aria-label="Guardar o desenho no álbum"
           style={{
-            borderRadius: '1.25rem',
+            borderRadius: '1.5rem',
             border: '3px solid var(--color-primary)',
             background: guardado === 'ok' ? 'var(--tint-ok-bg)' : 'var(--color-bg-base)',
             color: guardado === 'ok' ? 'var(--tint-ok-text)' : 'var(--color-primary)',
@@ -444,6 +417,103 @@ export const DrawingGame: React.FC = () => {
           style={{ display: 'block', width: '100%', height: '100%', cursor: 'crosshair', touchAction: 'none' }}
         />
 
+        {ferramentasAbertas && (
+          <div
+            role="dialog"
+            aria-label="Ferramentas de desenho"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 5,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+              gridTemplateRows: 'repeat(2, minmax(0, 1fr))',
+              gap: 'clamp(16px, 2.4vh, 28px)',
+              padding: 'clamp(1rem, 3vh, 2rem)',
+              // A primeira linha começa abaixo da Emergência (fixa no canto de
+              // cima): sem isto, "Verde" ficava sob o botão — e a zona dele,
+              // que vai até as bordas da janela, pegava o olhar da cor.
+              paddingTop: 'calc(var(--reserva-emergencia-y) + 0.5rem)',
+              boxSizing: 'border-box',
+              background: 'rgba(8, 15, 30, 0.92)',
+            }}
+          >
+            {CORES.map((c) => (
+              <GazeButton
+                key={c.valor}
+                onClick={() => {
+                  setCor(c.valor);
+                  setFerramentasAbertas(false);
+                }}
+                role="radio"
+                aria-checked={cor === c.valor}
+                aria-label={`Cor ${c.nome}`}
+                noWarn
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  borderRadius: '1.5rem',
+                  background: c.valor,
+                  border: cor === c.valor ? '6px solid #ffffff' : '3px solid rgba(255,255,255,0.55)',
+                  color: '#ffffff',
+                  fontSize: '1.6rem',
+                  fontWeight: 900,
+                  textShadow: '0 1px 4px rgba(0,0,0,0.45)',
+                }}
+              >
+                {c.nome}
+              </GazeButton>
+            ))}
+
+            <GazeButton
+              onClick={() => setEspessuraIdx((i) => (i + 1) % ESPESSURAS.length)}
+              noWarn
+              aria-label={`Espessura ${espessura.nome}. Acione para trocar.`}
+              style={{
+                width: '100%',
+                height: '100%',
+                borderRadius: '1.5rem',
+                border: '3px solid var(--color-card-border)',
+                background: 'var(--color-card-bg)',
+                color: 'var(--color-text-base)',
+              }}
+            >
+              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.9rem' }}>
+                <span
+                  aria-hidden="true"
+                  style={{ width: espessura.valor * 1.6, height: espessura.valor * 1.6, borderRadius: '50%', background: cor }}
+                />
+                <span style={{ fontSize: '1.4rem', fontWeight: 900 }}>Traço: {espessura.nome}</span>
+                <span style={{ fontSize: '1rem', fontWeight: 600, opacity: 0.8 }}>olhe para trocar</span>
+              </span>
+            </GazeButton>
+
+            <GazeButton
+              onClick={() => {
+                apagarTudo();
+                setFerramentasAbertas(false);
+              }}
+              noWarn
+              aria-label="Apagar todo o desenho"
+              style={{
+                width: '100%',
+                height: '100%',
+                borderRadius: '1.5rem',
+                border: '3px solid #fecaca',
+                background: '#fee2e2',
+                color: '#b91c1c',
+              }}
+            >
+              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.7rem', fontSize: '1.4rem', fontWeight: 900 }}>
+                <Eraser size={40} /> Apagar tudo
+              </span>
+            </GazeButton>
+          </div>
+        )}
+
+        {/* O aviso do pincel sai de cena com o painel aberto (aparecia através
+            das células). */}
+        {!ferramentasAbertas && (
         <div
           role="status"
           aria-live="polite"
@@ -468,6 +538,7 @@ export const DrawingGame: React.FC = () => {
             ? 'Pintando onde você olhar — desligue o pincel para parar'
             : 'Ligue o pincel na barra ao lado para desenhar com o olhar'}
         </div>
+        )}
       </div>
     </main>
   );

@@ -63,18 +63,23 @@ export const EstadoDaSessao: React.FC = () => {
       </span>
 
       {/* Disponível mesmo sem calibração — é justamente o caso em que mais
-          importa que o caminho de volta exista. */}
+          importa que o caminho de volta exista.
+
+          Só de mouse (FE-18): na faixa de ~60 px acima da grade da Home, o
+          botão não tem como chegar ao alvo mínimo de olhar (160×120 / 5°) sem
+          roubar espaço — ou o olhar — dos cartões do menu. O caminho do
+          PACIENTE para recalibrar é o "Calibrar o olhar" de Acessibilidade,
+          um alvo grande, e o aviso "Recalibre aqui", que aparece sozinho
+          quando o rastreamento degrada. */}
       <button
         type="button"
         onClick={() => navigate('/calibration-check')}
-        data-dwell-ms="2500"
+        data-no-dwell="true"
         style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: '0.4rem',
-          // 52 px, o piso de alvo de olhar do app. Era 36 px (2,25rem): o único
-          // caminho para recalibrar a partir da Home era um alvo que o
-          // tremor vertical do olhar tirava do lugar antes de o dwell fechar.
+          // 52 px: confortável para o mouse do cuidador.
           minHeight: 52,
           padding: '0.35rem 1.25rem',
           borderRadius: 'var(--radius-pill)',
