@@ -5,10 +5,21 @@ import { MemoryRouter } from 'react-router-dom';
 import { ConversationScreen } from './ConversationScreen';
 import { _limparOuvintes, ouvir, type EventoDoPaciente } from '../../cloud/eventos';
 import type { CloudState, CloudActions } from '../../cloud/CloudContext';
+import type { PlanoDasRespostas } from './planoDasRespostas';
 
 // A tela não conhece o Supabase: só lê o contexto e emite eventos.
 const estado: Partial<CloudState & CloudActions> = {};
 vi.mock('../../cloud/CloudContext', () => ({ useCloud: () => estado }));
+// O jsdom não tem layout (tudo mede 0): o plano de verdade mostra todos os
+// alvos. Para testar as páginas, um plano fixo entra no lugar.
+const planoFixo = vi.hoisted(() => ({ valor: null as PlanoDasRespostas | null }));
+vi.mock('./planoDasRespostas', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./planoDasRespostas')>();
+  return {
+    ...real,
+    planejarRespostas: (args: Parameters<typeof real.planejarRespostas>[0]) => planoFixo.valor ?? real.planejarRespostas(args),
+  };
+});
 vi.mock('../../components/ui/GazePageLayout', () => ({
   GazePageLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
@@ -34,6 +45,7 @@ const base = (): Partial<CloudState & CloudActions> => ({
 describe('ConversationScreen', () => {
   beforeEach(() => {
     _limparOuvintes();
+    planoFixo.valor = null;
     for (const k of Object.keys(estado)) delete (estado as Record<string, unknown>)[k];
     vi.stubGlobal('speechSynthesis', { cancel: vi.fn(), speak: vi.fn() });
     vi.stubGlobal('SpeechSynthesisUtterance', class { constructor(public text: string) {} });
@@ -84,5 +96,33 @@ describe('ConversationScreen', () => {
     render(<MemoryRouter><ConversationScreen /></MemoryRouter>);
     fireEvent.click(screen.getByLabelText(/Repetir a última mensagem/));
     expect(estado.repetirUltimaMensagem).toHaveBeenCalled();
+  });
+
+  it('sem espaço para tudo: Escrever fica, as frases viram páginas e "Mais" passa de página', () => {
+    Object.assign(estado, base());
+    // O caso da tela com a faixa do tutorial e a dica abertas: uma linha de 4.
+    planoFixo.valor = { alturaTopo: 218, colunas: 4, linhas: 1, porPagina: 2, fixos: 1 };
+    render(<MemoryRouter><ConversationScreen /></MemoryRouter>);
+
+    expect(screen.getByText('Sim')).toBeInTheDocument();
+    expect(screen.getByText('Não')).toBeInTheDocument();
+    expect(screen.getByText('Escrever')).toBeInTheDocument();
+    expect(screen.getByText('Estou bem')).toBeInTheDocument();
+    expect(screen.getByText('Preciso de ajuda')).toBeInTheDocument();
+    expect(screen.queryByText('Obrigado')).toBeNull();
+
+    // Seis frases + Repetir, duas por página: quatro páginas.
+    fireEvent.click(screen.getByLabelText('Mais respostas, página 1 de 4'));
+    expect(screen.getByText('Obrigado')).toBeInTheDocument();
+    expect(screen.queryByText('Estou bem')).toBeNull();
+    expect(screen.getByText('Escrever')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Mais respostas, página 2 de 4'));
+    fireEvent.click(screen.getByLabelText('Mais respostas, página 3 de 4'));
+    expect(screen.getByLabelText(/Repetir a última mensagem/)).toBeInTheDocument();
+
+    // Da última volta para a primeira.
+    fireEvent.click(screen.getByLabelText('Mais respostas, página 4 de 4'));
+    expect(screen.getByText('Estou bem')).toBeInTheDocument();
   });
 });
