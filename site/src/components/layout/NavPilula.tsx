@@ -3,7 +3,25 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import './nav-pilula.css'
 
-export type ItemDaNav = { to: string; label: string; selo?: ReactNode; destaque?: boolean }
+export type ItemDaNav = {
+  to: string
+  label: string
+  selo?: ReactNode
+  destaque?: boolean
+  /** Ação da conta ("Entrar"): fica no fim, um pouco afastada das abas, e a
+   *  pílula chega até ela do mesmo jeito. */
+  acao?: boolean
+}
+
+function classeDoLink(item: ItemDaNav) {
+  return [
+    'nav-pilula__link',
+    item.destaque ? 'nav-pilula__link--destaque' : '',
+    item.acao ? 'nav-pilula__link--acao' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
 
 /** Folga da pílula além da área do link (que já tem o próprio respiro), em px. */
 const FOLGA = 0
@@ -141,7 +159,7 @@ export function NavPilula({ itens, rotulo }: { itens: ItemDaNav[]; rotulo: strin
             ref={(el) => {
               links.current[i] = el
             }}
-            className={`nav-pilula__link${item.destaque ? ' nav-pilula__link--destaque' : ''}`}
+            className={classeDoLink(item)}
             onMouseEnter={() => setSobre(i)}
             onFocus={() => setSobre(i)}
           >
@@ -153,7 +171,7 @@ export function NavPilula({ itens, rotulo }: { itens: ItemDaNav[]; rotulo: strin
       {/* A mesma fileira, acesa, recortada pela pílula. Só visual. */}
       <div className="nav-pilula__links nav-pilula__links--aceso" aria-hidden="true">
         {itens.map((item) => (
-          <span key={item.to} className={`nav-pilula__link${item.destaque ? ' nav-pilula__link--destaque' : ''}`}>
+          <span key={item.to} className={classeDoLink(item)}>
             <span className="nav-pilula__texto">{item.label}</span>
             {item.selo}
           </span>

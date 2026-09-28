@@ -74,14 +74,26 @@ describe('<Header />', () => {
       '/cuidador',
       '/planos',
       '/beta',
+      '/entrar',
     ])
   })
 
-  it('sem sessão: "Entrar" e "Entrar na beta"', () => {
+  it('sem sessão: "Entrar" vai na pílula das abas e "Entrar na beta" fica ao lado', () => {
     montar()
-    expect(screen.getAllByRole('link', { name: 'Entrar' })[0]).toHaveAttribute('href', '/entrar')
-    expect(screen.getAllByRole('link', { name: 'Entrar na beta' })[0]).toHaveAttribute('href', '/beta')
+    const nav = screen.getByRole('navigation', { name: 'Navegação principal' })
+    expect(within(nav).getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', '/entrar')
+    const chamada = screen.getAllByRole('link', { name: 'Entrar na beta' })[0]
+    expect(chamada).toHaveAttribute('href', '/beta')
+    expect(nav.contains(chamada)).toBe(false)
     expect(screen.queryByRole('link', { name: 'Meu perfil' })).not.toBeInTheDocument()
+  })
+
+  it('o vidro da pílula aparece ao passar o mouse no "Entrar", como nas abas', () => {
+    montar()
+    const nav = screen.getByRole('navigation', { name: 'Navegação principal' })
+    expect(nav.style.getPropertyValue('--pilula-visivel')).toBe('0')
+    fireEvent.mouseEnter(within(nav).getByRole('link', { name: 'Entrar' }))
+    expect(nav.style.getPropertyValue('--pilula-visivel')).toBe('1')
   })
 
   it('com sessão, mesmo antes da pesquisa (sem conta): "Meu perfil" no lugar de "Entrar"', () => {
