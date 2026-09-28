@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { NavPilula } from './NavPilula'
+import { NavPilula, type ItemDaNav } from './NavPilula'
 import { Logo } from './Logo'
 import { Button } from '@/components/ui/Button'
 import { useScrollProgress } from '@/hooks/useScrollProgress'
@@ -64,6 +64,18 @@ export function Header() {
   ) : (
     <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
   )
+  // "Entrar" vai na mesma pílula das abas: o vidro chega até ele como chega
+  // em Produto ou Planos (fora dela, o link não respondia do mesmo jeito).
+  // Enquanto a sessão carrega, ele não aparece — nem "Meu perfil".
+  const itensDaNav: ItemDaNav[] = [
+    ...NAV.map((item) => ({
+      to: item.to,
+      label: item.label,
+      destaque: item.beta,
+      selo: item.beta ? seloDaBeta : undefined,
+    })),
+    ...(loading || authenticated ? [] : [{ to: '/entrar', label: 'Entrar', acao: true }]),
+  ]
   // A barra de progresso de leitura é movimento contínuo ao rolar: some
   // quando o sistema pede menos movimento.
   const reduced = useReducedMotion()
@@ -117,40 +129,25 @@ export function Header() {
         <Logo size="sm" tone="negativo" />
 
         <div className="header__nav">
-          <NavPilula
-            rotulo="Navegação principal"
-            itens={NAV.map((item) => ({
-              to: item.to,
-              label: item.label,
-              destaque: item.beta,
-              selo: item.beta ? seloDaBeta : undefined,
-            }))}
-          />
+          <NavPilula rotulo="Navegação principal" itens={itensDaNav} />
         </div>
 
         <div className="header__actions">
-          {/* Enquanto a sessão carrega não mostramos nem "Entrar" nem "Meu
+          {/* Enquanto a sessão carrega não mostramos nem a chamada nem "Meu
               perfil": exibir o par errado por um instante e trocar depois
               chama mais atenção do que o espaço vazio. */}
           {loading ? null : authenticated ? (
             <Button to="/perfil" variant="secondary">
               Meu perfil
             </Button>
+          ) : BETA.ativo ? (
+            lancou ? (
+              <Button to="/baixar">Baixar grátis</Button>
+            ) : (
+              <Button to={BETA_CTA.to}>{BETA_CTA.label}</Button>
+            )
           ) : (
-            <>
-              <Button to="/entrar" variant="ghost">
-                Entrar
-              </Button>
-              {BETA.ativo ? (
-                lancou ? (
-                  <Button to="/baixar">Baixar grátis</Button>
-                ) : (
-                  <Button to={BETA_CTA.to}>{BETA_CTA.label}</Button>
-                )
-              ) : (
-                <Button to="/cadastro">Testar grátis</Button>
-              )}
-            </>
+            <Button to="/cadastro">Testar grátis</Button>
           )}
         </div>
 

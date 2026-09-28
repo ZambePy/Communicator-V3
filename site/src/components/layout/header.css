@@ -85,6 +85,13 @@
   font-weight: 650;
 }
 
+/* "Entrar" na pílula: separado das abas e um pouco mais forte, por ser ação. */
+.nav-pilula__link--acao {
+  margin-left: 14px;
+  color: #dce6f6;
+  font-weight: 650;
+}
+
 .header__actions {
   display: flex;
   align-items: center;
@@ -97,15 +104,22 @@
   white-space: nowrap;
 }
 
-/* Enquanto o cabeçalho esta sobre o hero escuro, o botão secundario
-   precisa da variante clara. */
-.header:not(.is-scrolled) .btn--ghost {
-  color: #dce6f6;
+/* A chamada acende ao passar o mouse ou com o foco do teclado: anel claro,
+   como a borda do vidro da pílula, e halo mais forte (além de subir 2 px). */
+.header__actions .btn--primary {
+  transition:
+    transform var(--dur) var(--ease-spring),
+    box-shadow var(--dur) var(--ease-out),
+    filter var(--dur) var(--ease-out);
 }
 
-.header:not(.is-scrolled) .btn--ghost:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+.header__actions .btn--primary:hover:not(:disabled),
+.header__actions .btn--primary:focus-visible {
+  filter: brightness(1.1);
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 14px 34px rgba(27, 84, 168, 0.6);
 }
 
 /* --- hamburguer com morphing para X --- */
