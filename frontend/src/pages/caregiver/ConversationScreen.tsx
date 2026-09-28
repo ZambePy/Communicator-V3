@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Check, X, Volume2, Keyboard, MessageSquare, Cloud, CloudOff, LogIn, Sparkles } from 'lucide-react';
+import { Check, X, Volume2, Keyboard, MessageSquare, Cloud, CloudOff, LogIn, Sparkles, ChevronRight } from 'lucide-react';
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeGrid } from '../../components/ui/GazeGrid';
 import { GazeButton } from '../../components/ui/GazeButton';
@@ -18,6 +18,8 @@ import type { Message } from '../../cloud/types';
 import { DicaContextual } from '../../components/ui/DicaContextual';
 import { FaixaDeMissao } from '../../components/FaixaDeMissao';
 import { cumprirMissao } from '../tutorial/missao';
+import { alvoMinimoPx } from '../../design/gazeMetrics';
+import { planejarRespostas, VAO, VAO_TOPO } from './planoDasRespostas';
 
 /**
  * Conversa com o cuidador — o outro lado da aba "Conversa" do app mobile.
@@ -93,6 +95,33 @@ export const ConversationScreen: React.FC = () => {
     cumprirMissao('conversa');
   };
 
+  // A coluna de respostas é medida para decidir quantos alvos cabem sem rolar
+  // (planoDasRespostas.ts). Ref por callback: a coluna só existe com vínculo.
+  const [coluna, setColuna] = useState<HTMLDivElement | null>(null);
+  const [caixa, setCaixa] = useState({ largura: 0, altura: 0 });
+  useLayoutEffect(() => {
+    if (!coluna || typeof ResizeObserver === 'undefined') return;
+    const medir = () =>
+      setCaixa((c) =>
+        c.largura === coluna.clientWidth && c.altura === coluna.clientHeight
+          ? c
+          : { largura: coluna.clientWidth, altura: coluna.clientHeight },
+      );
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(coluna);
+    return () => ro.disconnect();
+  }, [coluna]);
+
+  // Escrever, as frases e Repetir, nessa ordem: nas páginas, as sugestões da
+  // pergunta no ar vêm logo depois de Escrever.
+  const quantidadeDeAlvos = respostas.itens.length + 2;
+  const plano = planejarRespostas({ ...caixa, piso: alvoMinimoPx(), quantidade: quantidadeDeAlvos });
+  const [pagina, setPagina] = useState(0);
+  const chaveDasFrases = respostas.itens.join('|');
+  // Frases novas (outra pergunta) ou outro tamanho de página: volta ao começo.
+  useEffect(() => setPagina(0), [chaveDasFrases, plano.porPagina]);
+
   const nomeDoCuidador = 'cuidador';
   const ultimas = cloud.mensagens.slice(-12);
 
@@ -122,6 +151,97 @@ export const ConversationScreen: React.FC = () => {
       </GazePageLayout>
     );
   }
+
+  const sim = (
+    <GazeButton key="sim" onClick={() => responder('Sim', 'simnao')} style={{ height: '100%', background: '#16a34a', color: '#fff', border: '3px solid #15803d', borderRadius: 'var(--radius-lg)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+        <Check size={56} /> <span style={{ fontSize: '2rem', fontWeight: 900 }}>Sim</span>
+      </div>
+    </GazeButton>
+  );
+  const nao = (
+    <GazeButton key="nao" onClick={() => responder('Não', 'simnao')} style={{ height: '100%', background: '#dc2626', color: '#fff', border: '3px solid #991b1b', borderRadius: 'var(--radius-lg)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+        <X size={56} /> <span style={{ fontSize: '2rem', fontWeight: 900 }}>Não</span>
+      </div>
+    </GazeButton>
+  );
+  const escrever = (
+    <GazeButton key="escrever" onClick={() => navigate('/keyboard')} style={{ height: '100%', borderRadius: '1.5rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+        <Keyboard size={48} color="var(--color-primary)" aria-hidden="true" /> <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Escrever</span>
+      </div>
+    </GazeButton>
+  );
+  const frases = respostas.itens.map((r) => {
+    const sugerida = respostas.sugeridas.has(r);
+    return (
+      <GazeButton
+        key={`frase:${r}`}
+        onClick={() => responder(r, 'frase')}
+        style={{
+          height: '100%',
+          borderRadius: '1.25rem',
+          // A sugestão do assistente se distingue por um contorno
+          // âmbar, não por cor de fundo: o paciente precisa saber
+          // de onde veio a frase sem que o alvo mude de peso visual.
+          ...(sugerida ? { border: '3px solid var(--color-accent)' } : {}),
+        }}
+      >
+        <span style={{ fontSize: '1.15rem', fontWeight: 700, padding: '0 0.5rem', textAlign: 'center' }}>
+          {sugerida ? (
+            <Sparkles size={18} color="var(--color-accent)" style={{ verticalAlign: '-3px', marginRight: 6 }} />
+          ) : (
+            <MessageSquare size={18} style={{ verticalAlign: '-3px', marginRight: 6 }} />
+          )}
+          {r}
+        </span>
+      </GazeButton>
+    );
+  });
+  const repetir = (
+    <GazeButton key="repetir" onClick={() => cloud.repetirUltimaMensagem()} style={{ height: '100%', borderRadius: '1.5rem' }} aria-label="Repetir a última mensagem em voz alta">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+        <Volume2 size={48} color="var(--color-primary)" aria-hidden="true" /> <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Repetir</span>
+      </div>
+    </GazeButton>
+  );
+
+  /**
+   * Os alvos da grade de baixo. Cabendo tudo, vão todos. Senão, os fixos
+   * (Escrever; ou Sim e Não, na tela baixa) ficam, uma página ocupa o meio e
+   * "Mais" fica sempre na última célula (a página curta é completada com
+   * vazios, para "Mais" não andar).
+   */
+  const alvosDeBaixo = () => {
+    const todos = plano.simNaoNaGrade ? [sim, nao, escrever, ...frases, repetir] : [escrever, ...frases, repetir];
+    if (plano.porPagina === null) return todos;
+    const fixos = todos.slice(0, plano.fixos);
+    const paginaveis = todos.slice(plano.fixos);
+    const totalDePaginas = Math.ceil(paginaveis.length / plano.porPagina);
+    const atual = Math.min(pagina, totalDePaginas - 1);
+    const daPagina = paginaveis.slice(atual * plano.porPagina, (atual + 1) * plano.porPagina);
+    const vazios = Array.from({ length: plano.porPagina - daPagina.length }, (_, i) => (
+      <div key={`vazio:${i}`} aria-hidden="true" />
+    ));
+    const mais = (
+      <GazeButton
+        key="mais"
+        onClick={() => setPagina((p) => (p + 1) % totalDePaginas)}
+        aria-label={`Mais respostas, página ${atual + 1} de ${totalDePaginas}`}
+        style={{ height: '100%', borderRadius: '1.25rem' }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
+          <ChevronRight size={44} color="var(--color-primary)" aria-hidden="true" />
+          <span style={{ fontSize: '1.3rem', fontWeight: 800 }}>Mais</span>
+          <span style={{ fontSize: '0.95rem', fontWeight: 600, opacity: 0.75 }}>
+            {atual + 1} de {totalDePaginas}
+          </span>
+        </div>
+      </GazeButton>
+    );
+    return [...fixos, ...daPagina, ...vazios, mais];
+  };
 
   return (
     <GazePageLayout
@@ -154,7 +274,9 @@ export const ConversationScreen: React.FC = () => {
           {cloud.filaPendente > 0 ? `${cloud.filaPendente} na fila` : cloud.online ? 'conectado' : 'offline'}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 1fr)', gap: '1.5rem', flex: 1, minHeight: 0 }}>
+        {/* `minmax(0, 1fr)` na linha: sem ele a linha crescia até caber as
+            grades inteiras e o excedente saía cortado embaixo da tela. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)', gap: '1.5rem', flex: 1, minHeight: 0 }}>
           {/* mensagens */}
           <div
             ref={listaRef}
@@ -200,59 +322,18 @@ export const ConversationScreen: React.FC = () => {
           </div>
 
           {/* respostas */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 0 }}>
+          <div ref={setColuna} style={{ display: 'flex', flexDirection: 'column', gap: `${VAO_TOPO}px`, minHeight: 0 }}>
+            {!plano.simNaoNaGrade && (
+              <div style={plano.alturaTopo === null ? { flex: 1, minHeight: 0 } : { height: plano.alturaTopo, flex: 'none' }}>
+                <GazeGrid columns={2} rows={1} gap={16} rolarSoSeNaoCouber>
+                  {sim}
+                  {nao}
+                </GazeGrid>
+              </div>
+            )}
             <div style={{ flex: 1, minHeight: 0 }}>
-              <GazeGrid columns={2} rows={2} gap={16}>
-                <GazeButton onClick={() => responder('Sim', 'simnao')} style={{ height: '100%', background: '#16a34a', color: '#fff', border: '3px solid #15803d', borderRadius: 'var(--radius-lg)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <Check size={56} /> <span style={{ fontSize: '2rem', fontWeight: 900 }}>Sim</span>
-                  </div>
-                </GazeButton>
-                <GazeButton onClick={() => responder('Não', 'simnao')} style={{ height: '100%', background: '#dc2626', color: '#fff', border: '3px solid #991b1b', borderRadius: 'var(--radius-lg)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <X size={56} /> <span style={{ fontSize: '2rem', fontWeight: 900 }}>Não</span>
-                  </div>
-                </GazeButton>
-                <GazeButton onClick={() => cloud.repetirUltimaMensagem()} style={{ height: '100%', borderRadius: '1.5rem' }} aria-label="Repetir a última mensagem em voz alta">
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <Volume2 size={48} color="var(--color-primary)" aria-hidden="true" /> <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Repetir</span>
-                  </div>
-                </GazeButton>
-                <GazeButton onClick={() => navigate('/keyboard')} style={{ height: '100%', borderRadius: '1.5rem' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                    <Keyboard size={48} color="var(--color-primary)" aria-hidden="true" /> <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>Escrever</span>
-                  </div>
-                </GazeButton>
-              </GazeGrid>
-            </div>
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <GazeGrid columns={3} rows={2} gap={12}>
-                {respostas.itens.map((r) => {
-                  const sugerida = respostas.sugeridas.has(r);
-                  return (
-                    <GazeButton
-                      key={r}
-                      onClick={() => responder(r, 'frase')}
-                      style={{
-                        height: '100%',
-                        borderRadius: '1.25rem',
-                        // A sugestão do assistente se distingue por um contorno
-                        // âmbar, não por cor de fundo: o paciente precisa saber
-                        // de onde veio a frase sem que o alvo mude de peso visual.
-                        ...(sugerida ? { border: '3px solid var(--color-accent)' } : {}),
-                      }}
-                    >
-                      <span style={{ fontSize: '1.15rem', fontWeight: 700, padding: '0 0.5rem', textAlign: 'center' }}>
-                        {sugerida ? (
-                          <Sparkles size={18} color="var(--color-accent)" style={{ verticalAlign: '-3px', marginRight: 6 }} />
-                        ) : (
-                          <MessageSquare size={18} style={{ verticalAlign: '-3px', marginRight: 6 }} />
-                        )}
-                        {r}
-                      </span>
-                    </GazeButton>
-                  );
-                })}
+              <GazeGrid columns={plano.colunas} rows={plano.linhas} gap={VAO} rolarSoSeNaoCouber>
+                {alvosDeBaixo()}
               </GazeGrid>
             </div>
           </div>
