@@ -223,6 +223,119 @@ export interface ExperimentConfig {
   scanningMode: boolean;
   /** Ao perder o gaze: segura 2 s, depois esconde o cursor e avisa. */
   gazeLostFallback: boolean;
+
+  // ── V3: matemática do rastreamento e adaptações para ELA ─────────────────
+  //
+  // Cada mudança tem a sua flag e o número M1…M21 da tabela de decisão de
+  // docs/PESQUISA.md §5. Desligada, o comportamento é o de antes, bit a bit.
+  // Ligadas por padrão, menos cinco que ficam desligadas e fora do
+  // interruptor: M2 e M10 (pioraram o replay da gravação real de 23/09), M7
+  // (troca erro de lugar quando a pálpebra satura as features embaixo) — ver
+  // cada uma —, M12 e M13. O interruptor `pipeline` desliga todas de uma vez.
+
+  /**
+   * Interruptor único do V3 (URL `?pipeline=v3` / `?pipeline=base`).
+   *
+   *  - `v3` (padrão): cada flag abaixo vale o seu próprio valor.
+   *  - `base`: todas as flags do V3 ficam desligadas, inclusive as que estão
+   *    fora do interruptor — é o pipeline anterior, para o A/B da medição.
+   */
+  pipeline: 'v3' | 'base';
+  /** M1 — ordem dos alvos calculada para não correlacionar com a deriva da cabeça. */
+  ordemDescorrelacionada: boolean;
+  /**
+   * M2 — referencial da cabeça montado em pixels isotrópicos (muda as features).
+   *
+   * DESLIGADA por padrão e fora do interruptor. Em simulação ela tira o
+   * vazamento do olhar vertical para o `offsetX` com a cabeça inclinada
+   * (docs/PESQUISA.md §1.8, F3). Na gravação real de 23/09 ela piorou tudo: o
+   * eixo vertical da base, montado em pixels, inclina 14° para a profundidade
+   * (8° na base antiga), o `offsetY` passa a carregar mais do z do MediaPipe,
+   * que é ruidoso, e perde 1,5–2,4× de sinal por ruído nos alvos da
+   * calibração; o replay foi de 67 para 176 px com 9 alvos e de 64 para 115 px
+   * com 13. Fica para a sessão com a cabeça inclinada decidir
+   * (docs/ROTEIRO_DE_MEDICAO.md).
+   */
+  referencialIsotropico: boolean;
+  /** M3 — contra-rotação do roll com o sinal de yaw do L2CS (direita da pessoa). */
+  desrolarComSinalDoL2cs: boolean;
+  /** M4 — ângulos do L2CS girados para o referencial da cabeça antes das features. */
+  l2csNaCabeca: boolean;
+  /** M5 — pose da matriz facial suavizada, com rampa contínua, na compensação e na rotação. */
+  poseSuavizada: boolean;
+  /** M6 — calibração robusta: peso por quadro, centro robusto por alvo, Huber entre alvos. */
+  calibracaoRobusta: boolean;
+  /**
+   * M7 — 14º alvo no meio da borda de baixo, no perfil padrão completo.
+   *
+   * DESLIGADA por padrão e fora do interruptor. O ganho de 9 para 14 pontos
+   * (Blignaut 2014) é de rastreador infravermelho. Com webcam, abaixo de
+   * y ≈ 810–900 px a pálpebra desce com o olhar e as features param de andar
+   * (`correcaoLocal.ts`): o alvo em 95 % da altura tem as features do alvo do
+   * meio da linha de baixo da grade (83,75 %) e um rótulo 11 % da tela mais
+   * baixo. No olho sintético que satura como o real
+   * (`calibration.correcaoLocal.test.ts`), ligar M7 levou o meio da faixa de
+   * baixo de 111 para 48 px e o meio da linha de baixo da grade de 23 para
+   * 71 px — troca erro de lugar, e para a região que mais tem botões. A
+   * gravação de 23/09 não tem o 14º alvo, então o replay não mede isso: fica
+   * para a sessão do roteiro (docs/ROTEIRO_DE_MEDICAO.md).
+   */
+  alvoInferiorCentral: boolean;
+  /** M8 — assentamento de cada alvo contado da chegada da bola. */
+  assentamentoPelaChegada: boolean;
+  /** M9 — estimador de fixação com portão de Mahalanobis no lugar de One Euro + estabilizador. */
+  estimadorDeFixacao: boolean;
+  /**
+   * M10 — fusão binocular por variância mínima com a covariância entre os olhos.
+   *
+   * DESLIGADA por padrão e fora do interruptor. No replay da gravação de
+   * 23/09 ela baixou o erro fora da amostra DA CALIBRAÇÃO (LOO 83 → 64 px com
+   * 9 alvos) e piorou o teste feito minutos depois (67 → 91 px; 64 → 68 px com
+   * 13 alvos): os pesos aprendidos na calibração não valeram para o teste,
+   * mesmo encolhidos pela incerteza (`fusaoBinocular.ts`) — e saem dos mesmos
+   * resíduos LOO que depois os avaliam, o que deixa o LOO otimista por
+   * construção. Fica para a sessão com um olho semicerrado decidir
+   * (docs/ROTEIRO_DE_MEDICAO.md).
+   */
+  fusaoPorCovariancia: boolean;
+  /**
+   * M12 — saída 6DoF: interseção do raio de olhar com o plano da tela.
+   * DESLIGADA por padrão e fora do interruptor: `pipeline=v3` não a liga.
+   */
+  saida6DoF: boolean;
+  /**
+   * M13 — passa ao recorte do L2CS o roll no sinal que o recorte espera.
+   *
+   * DESLIGADA por padrão e fora do interruptor. Hoje o recorte DOBRA a
+   * inclinação da cabeça em vez de cancelá-la (docs/PESQUISA.md §1.8, F1).
+   * Corrigir muda a imagem que a rede vê, e a regra do projeto é não mexer no
+   * L2CS sem decisão do responsável: a flag existe para essa decisão ser
+   * tomada com medição.
+   */
+  nivelarRecorteCorrigido: boolean;
+  /**
+   * M14 — suavização interna do FaceLandmarker.
+   *
+   *  - `mediapipe` (padrão, igual a antes): modo VIDEO, com o One Euro interno
+   *    do MediaPipe nos landmarks (min_cutoff 0,05, beta 80).
+   *  - `desligada`: modo IMAGE, sem o filtro interno e com o detector a cada
+   *    quadro. Serve para MEDIR quanto do ruído chega pré-filtrado.
+   */
+  suavizacaoDoLandmarker: 'mediapipe' | 'desligada';
+  /** M15 — correção por dwell como filtro de Kalman (Ornstein–Uhlenbeck) por eixo. */
+  correcaoPorDwellKalman: boolean;
+  /** M16 — ganho (afim) na correção por dwell, com prior e só com excitação. */
+  correcaoPorDwellAfim: boolean;
+  /** M17 — dwell em cascata no teclado, guiado pela previsão de letras. */
+  dwellEmCascata: boolean;
+  /** M18 — alvo mínimo dos botões calculado pela acurácia medida. */
+  alvoMinimoMedido: boolean;
+  /** M19 — memória de dwell de 400 ms e área de acerto maior depois que o dwell começa. */
+  toleranciaIntrusoes: boolean;
+  /** M20 — correção rápida afim com 5 pontos, sem retreinar o modelo. */
+  recalibracaoRapidaAfim: boolean;
+  /** M21 — perda curta de rosto pausa o dwell em vez de zerar. */
+  pausaNaPerdaCurta: boolean;
 }
 
 /** Os padrões do código. `DEFAULTS` (abaixo) é isto com os padrões de build aplicados. */
@@ -252,6 +365,27 @@ const DEFAULTS_DO_CODIGO: ExperimentConfig = {
   blinkClick: false,
   scanningMode: false,
   gazeLostFallback: true,
+  pipeline: 'v3',
+  ordemDescorrelacionada: true,
+  referencialIsotropico: false,
+  desrolarComSinalDoL2cs: true,
+  l2csNaCabeca: true,
+  poseSuavizada: true,
+  calibracaoRobusta: true,
+  alvoInferiorCentral: false,
+  assentamentoPelaChegada: true,
+  estimadorDeFixacao: true,
+  fusaoPorCovariancia: false,
+  saida6DoF: false,
+  nivelarRecorteCorrigido: false,
+  suavizacaoDoLandmarker: 'mediapipe',
+  correcaoPorDwellKalman: true,
+  correcaoPorDwellAfim: true,
+  dwellEmCascata: true,
+  alvoMinimoMedido: true,
+  toleranciaIntrusoes: true,
+  recalibracaoRapidaAfim: true,
+  pausaNaPerdaCurta: true,
 };
 
 export const VALORES_ACEITOS = {
@@ -260,7 +394,47 @@ export const VALORES_ACEITOS = {
   filterMode: ['oneEuro', 'kalman', 'kalmanEma'],
   formaDaExpansao: ['completa', 'parcial'],
   dimsDaIris: ['ambas', 'normalizadas', 'absolutas'],
+  pipeline: ['v3', 'base'],
+  suavizacaoDoLandmarker: ['mediapipe', 'desligada'],
 } as const;
+
+/**
+ * As flags do V3 e o valor que cada uma tem no pipeline anterior.
+ *
+ * `pipeline: 'base'` aplica estes valores por cima de tudo — inclusive das
+ * cinco flags fora do interruptor (`referencialIsotropico`,
+ * `alvoInferiorCentral`, `fusaoPorCovariancia`, `saida6DoF`,
+ * `nivelarRecorteCorrigido`) e de `suavizacaoDoLandmarker`, cujo padrão já é o
+ * de antes — que o `v3` deixa como estão.
+ */
+export const VALORES_DA_BASE = {
+  ordemDescorrelacionada: false,
+  referencialIsotropico: false,
+  desrolarComSinalDoL2cs: false,
+  l2csNaCabeca: false,
+  poseSuavizada: false,
+  calibracaoRobusta: false,
+  alvoInferiorCentral: false,
+  assentamentoPelaChegada: false,
+  estimadorDeFixacao: false,
+  fusaoPorCovariancia: false,
+  saida6DoF: false,
+  nivelarRecorteCorrigido: false,
+  suavizacaoDoLandmarker: 'mediapipe',
+  correcaoPorDwellKalman: false,
+  correcaoPorDwellAfim: false,
+  dwellEmCascata: false,
+  alvoMinimoMedido: false,
+  toleranciaIntrusoes: false,
+  recalibracaoRapidaAfim: false,
+  pausaNaPerdaCurta: false,
+} as const satisfies Partial<ExperimentConfig>;
+
+/** Aplica o interruptor único: com `base`, todas as flags do V3 voltam ao valor anterior. */
+export function resolverPipeline(cfg: ExperimentConfig): ExperimentConfig {
+  if (cfg.pipeline !== 'base') return { ...cfg };
+  return { ...cfg, ...VALORES_DA_BASE };
+}
 
 /**
  * Padrões decididos por quem EMPACOTA, não por quem usa.
@@ -441,10 +615,40 @@ function loadSemEnv(): ExperimentConfig {
   }
 }
 
-export const EXPERIMENT: ExperimentConfig = load();
+// O interruptor é aplicado DEPOIS de ler o disco e o ambiente: uma flag do V3
+// ligada à mão não sobrevive a `pipeline: 'base'`, senão a rodada "base" de
+// uma medição A/B carregaria, sem aviso, uma mudança da rodada nova.
+export const EXPERIMENT: ExperimentConfig = resolverPipeline(load());
 
 export function experimentSnapshot(): ExperimentConfig {
   return { ...EXPERIMENT };
+}
+
+/**
+ * Grava uma escolha de experimento para a PRÓXIMA carga da página — a mesma
+ * gravação do `__irisflowExp.set` do console e do `?ep=` da URL. Não muda o
+ * `EXPERIMENT` em vigor: quem chama recarrega.
+ *
+ * Devolve se gravou. Com o armazenamento cheio (ou bloqueado) o `setItem`
+ * lança, e quem chama precisa saber: recarregar sem a escolha gravada volta à
+ * mesma tela — o botão "Calibrar só com a íris" parecia não fazer nada.
+ */
+export function gravarExperimento(key: keyof ExperimentConfig, value: number | boolean | string): boolean {
+  const next = sanitizeExperiment({ ...loadSemEnv(), [key]: value });
+  // Grava só o que DIFERE do padrão. Gravar a configuração inteira congelava
+  // no disco os padrões daquele dia: quando um padrão muda numa versão nova
+  // (ex.: `referenciaLenta` em 23/09/2026), quem um dia usou o console
+  // continuaria rodando o antigo sem saber.
+  const diferencas = Object.fromEntries(
+    Object.entries(next).filter(([k, v]) => DEFAULTS[k as keyof ExperimentConfig] !== v),
+  );
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(diferencas));
+    return true;
+  } catch (e) {
+    console.warn('[exp] não foi possível gravar a escolha de experimento:', e);
+    return false;
+  }
 }
 
 if (typeof window !== 'undefined') {
@@ -452,16 +656,9 @@ if (typeof window !== 'undefined') {
     dump: () => ({ ...EXPERIMENT }),
     defaults: () => ({ ...DEFAULTS }),
     set(key: keyof ExperimentConfig, value: number | boolean | string) {
-      const next = sanitizeExperiment({ ...loadSemEnv(), [key]: value });
-      // Grava só o que DIFERE do padrão. Gravar a configuração inteira
-      // congelava no disco os padrões daquele dia: quando um padrão muda numa
-      // versão nova (ex.: `referenciaLenta` em 23/09/2026), quem um dia usou o
-      // console continuaria rodando o antigo sem saber.
-      const diferencas = Object.fromEntries(
-        Object.entries(next).filter(([k, v]) => DEFAULTS[k as keyof ExperimentConfig] !== v),
-      );
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(diferencas));
-      console.warn('[exp] gravado. RECARREGUE a página para aplicar.', diferencas);
+      if (gravarExperimento(key, value)) {
+        console.warn('[exp] gravado. RECARREGUE a página para aplicar.', localStorage.getItem(STORAGE_KEY));
+      }
     },
     reset() {
       localStorage.removeItem(STORAGE_KEY);

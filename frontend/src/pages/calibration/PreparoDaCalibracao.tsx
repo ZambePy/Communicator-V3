@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Crosshair, Eye, MoveVertical, LogOut } from 'lucide-react';
+import { alvosDeCalibracao, currentCalibrationGeometry } from '@tracker/calibration';
 
 /**
  * Preparação da calibração.
@@ -21,12 +22,23 @@ import { Crosshair, Eye, MoveVertical, LogOut } from 'lucide-react';
  * O texto pede o contrário: piscar normalmente, sem segurar.
  */
 
-/** Alvos da grade e duração aproximada, para a tela não prometer o que não cumpre. */
-const ALVOS = 9;
+/**
+ * Teto da duração, em minutos. Cada alvo leva no máximo o assentamento mais o
+ * teto da janela de coleta (2,8 s no canto), e os 14 alvos do perfil padrão
+ * cabem em 1 minuto mesmo com todos no teto — o ponto fecha antes quando o
+ * olhar estabiliza.
+ */
 const MINUTOS = 1;
 
+/**
+ * O que a calibração completa vai pedir. O número sai do mesmo plano que a
+ * calibração usa (`alvosDeCalibracao`): antes era um 9 fixo, e a tela seguia
+ * prometendo nove pontos depois que a calibração passou a ter os quatro cantos
+ * da tela (e o meio da borda de baixo, M7).
+ */
 export const PreparoDaCalibracao: React.FC = () => {
   const { t } = useTranslation();
+  const alvos = alvosDeCalibracao(currentCalibrationGeometry()).length;
 
   const instrucoes = [
     { chave: 'i1', Icone: Crosshair },
@@ -60,7 +72,7 @@ export const PreparoDaCalibracao: React.FC = () => {
             color: 'var(--color-text-base)',
           }}
         >
-          {t('calib.preparo.lead', { alvos: ALVOS, min: MINUTOS })}
+          {t('calib.preparo.lead', { alvos, min: MINUTOS })}
         </span>
       </div>
 

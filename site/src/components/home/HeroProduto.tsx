@@ -5,19 +5,29 @@ import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { diaPorExtenso } from '@/lib/lancamento'
 import { BETA, BETA_CTA, HERO, PLATFORMS } from '@/data/content'
 import { DEMO_COMMUNICATOR } from '@/data/home'
-import { MonitorDemo } from './Aparelhos'
+import { useInView } from '@/hooks/useInView'
+import { VideoEmMoldura } from './Aparelhos'
 import './hero-produto.css'
 
 /**
  * Abertura da home: a mensagem e as chamadas à esquerda (sempre na primeira
  * dobra, no computador e no celular) e, à direita, o produto funcionando —
- * a gravação real da tela num monitor, com o halo e os anéis que se
- * expandem por trás, sobre o fundo de partículas.
+ * a gravação real da tela num retângulo arredondado com o brilho da marca,
+ * com o halo e os anéis que se expandem por trás, sobre o fundo de
+ * partículas.
  */
 export function HeroProduto() {
   const program = useBetaProgram()
   const lancou = useJaLancou(program.launchAt)
   const [antes, destaque] = [HERO.title.replace(HERO.titleAccent, '').trim(), HERO.titleAccent]
+  // A aura, os anéis e a flutuação só se mexem com o vídeo na tela: a aura é
+  // um desfoque de 26 px animado, e rodá-la com a página rolada lá embaixo
+  // gasta GPU à toa.
+  const { ref: refDoAparelho, inView: aparelhoNaTela } = useInView<HTMLDivElement>({
+    once: false,
+    threshold: 0.05,
+    rootMargin: '0px',
+  })
 
   return (
     <section className="hero-produto on-dark" aria-labelledby="hero-titulo">
@@ -72,12 +82,12 @@ export function HeroProduto() {
           </ul>
         </div>
 
-        <div className="hero-produto__aparelho">
+        <div ref={refDoAparelho} className={`hero-produto__aparelho${aparelhoNaTela ? ' is-rodando' : ''}`}>
           <span className="hero-produto__halo" aria-hidden="true" />
           <span className="hero-produto__anel" aria-hidden="true" />
           <span className="hero-produto__anel hero-produto__anel--2" aria-hidden="true" />
-          <div className="hero-produto__monitor">
-            <MonitorDemo demo={DEMO_COMMUNICATOR} inclinar={false} />
+          <div className="hero-produto__video">
+            <VideoEmMoldura demo={DEMO_COMMUNICATOR} />
           </div>
         </div>
       </div>

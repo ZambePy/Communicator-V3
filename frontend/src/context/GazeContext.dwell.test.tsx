@@ -403,12 +403,68 @@ describe('GazeContext — rearme por saída (FE-7)', () => {
     document.elementFromPoint = vi.fn(() => el);
     t = olhar(6000, t + 33);
     expect(onClick).not.toHaveBeenCalled();
-    // o paciente olha de propósito: sai e volta
+    // o paciente olha de propósito: o olhar salta para fora e volta
     document.elementFromPoint = vi.fn(() => null);
-    t = olhar(400, t + 33);
+    t = olhar(400, t + 33, { x: 500 });
     document.elementFromPoint = vi.fn(() => el);
     olhar(DWELL_MS + 1200, t + 33);
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('tela nova que demora a desenhar: o botão que aparece depois sob o olhar parado também não é selecionado', () => {
+    // Computador lento: a janela de 400 ms passa com a tela antiga ainda na
+    // frente (ou nada sob o olhar), e o botão novo aparece depois no mesmo
+    // lugar. Sem o olhar saltar, ele continua sendo herança.
+    const { onClick, el } = montar(<button data-testid="alvo">Abrir as frases</button>);
+    document.elementFromPoint = vi.fn(() => null);
+    let t = olhar(100, 0);
+    window.location.hash = '#/tutorial';
+    t = olhar(1500, t + 33);
+    document.elementFromPoint = vi.fn(() => el);
+    t = olhar(DWELL_MS + 3000, t + 33);
+    expect(onClick).not.toHaveBeenCalled();
+    // saltou para fora e voltou: agora é escolha
+    document.elementFromPoint = vi.fn(() => null);
+    t = olhar(400, t + 33, { x: 500 });
+    document.elementFromPoint = vi.fn(() => el);
+    olhar(DWELL_MS + 1200, t + 33);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('o que aparece no lugar do alvo clicado, sem trocar de rota, também não é selecionado sozinho', () => {
+    // O teclado: o grupo clicado vira as letras dele (outros nós do DOM, na
+    // mesma rota), e a letra da mesma célula cai sob o olhar parado. Antes o
+    // bloqueio ficava no nó que sumiu: a letra era escrita, o teclado voltava
+    // aos grupos, o grupo abria de novo — uma letra repetida a cada ~4 s.
+    const cliques: string[] = [];
+    function GrupoQueViraLetra() {
+      const [nivel, setNivel] = React.useState<'grupo' | 'letra'>('grupo');
+      return nivel === 'grupo' ? (
+        <button key="grupo" data-testid="celula" onClick={() => { cliques.push('grupo'); setNivel('letra'); }}>M N O</button>
+      ) : (
+        <button key="letra" data-testid="celula" onClick={() => { cliques.push('letra'); setNivel('grupo'); }}>O</button>
+      );
+    }
+    render(<GazeProvider><GrupoQueViraLetra /></GazeProvider>);
+    const celula = () => document.querySelector('[data-testid="celula"]');
+    // Um `act` por quadro: o clique troca o nó no meio da sequência, e o
+    // React só o troca quando o `act` fecha.
+    const quadroAQuadro = (ms: number, inicio: number, over: Partial<GazeSample> = {}) => {
+      for (let t = inicio; t <= inicio + ms; t += 1000 / 30) act(() => emitir(amostra({ timestamp: t, ...over })));
+      return inicio + ms;
+    };
+
+    document.elementFromPoint = vi.fn(() => celula());
+    let t = quadroAQuadro(8000, 0);
+    expect(cliques).toEqual(['grupo']);
+    expect(celula()).toHaveTextContent('O');
+
+    // O paciente olha de propósito: o olhar salta para fora e volta à letra.
+    document.elementFromPoint = vi.fn(() => null);
+    t = quadroAQuadro(400, t + 33, { x: 500 });
+    document.elementFromPoint = vi.fn(() => celula());
+    quadroAQuadro(DWELL_MS + 1200, t + 33);
+    expect(cliques).toEqual(['grupo', 'letra']);
   });
 });
 

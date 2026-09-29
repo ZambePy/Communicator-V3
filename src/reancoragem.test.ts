@@ -1,7 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AcumuladorDeReancoragem, AMOSTRAS_MINIMAS } from './reancoragem';
 import * as calibration from './calibration';
-import { estadoDaCorrecao, reiniciarCorrecao } from './interaction/correcaoPorDwell';
+import { estadoDaCorrecao, reiniciarCorrecao, corrigirPorDwell } from './interaction/correcaoPorDwell';
+import { EXPERIMENT } from './config/experiment';
+
+// A substituição do deslocamento é o INTEGRADOR (pipeline base). O Kalman do
+// V3 (M15) trata o reajuste como medida, com R pela dispersão — ver o último
+// bloco deste arquivo.
+const kalmanAntes = EXPERIMENT.correcaoPorDwellKalman;
 
 describe('AcumuladorDeReancoragem', () => {
   it('mediana da distância, média de pose e centro; conta só o que entrou', () => {
@@ -50,6 +56,16 @@ describe('AcumuladorDeReancoragem — predição', () => {
     expect(r.suficiente).toBe(false);                    // 5 < AMOSTRAS_MINIMAS
   });
 
+  it('dispersão robusta da predição por eixo (1,4826·MAD)', () => {
+    const a = new AcumuladorDeReancoragem();
+    for (const x of [0.50, 0.52, 0.54, 0.9]) a.adicionarPredicao({ x, y: 0.5 });
+    const r = a.resultado();
+    // Mediana 0,53; desvios 0,03 0,01 0,01 0,37 → MAD 0,02.
+    expect(r.dispersao!.x).toBeCloseTo(1.4826 * 0.02, 10);
+    expect(r.dispersao!.y).toBe(0);
+    expect(new AcumuladorDeReancoragem().resultado().dispersao).toBeNull();
+  });
+
   it('`suficiente` exige quadros E predições', () => {
     const a = new AcumuladorDeReancoragem();
     for (let i = 0; i < AMOSTRAS_MINIMAS; i++) a.adicionar({ distanciaCm: 55, pose: null, centro: null });
@@ -77,12 +93,14 @@ describe('calibration.corrigirDerivaNoCentro — deriva, não referência', () =
   };
 
   beforeEach(() => {
+    EXPERIMENT.correcaoPorDwellKalman = false;
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, get: () => W });
     Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, get: () => H });
     calibration.clearCalibration();
     calibration.restoreReferenceStateFromProfile(REF);
     reiniciarCorrecao();
   });
+  afterEach(() => { EXPERIMENT.correcaoPorDwellKalman = kalmanAntes; });
 
   it('o viés no centro vira o deslocamento da correção de deriva', () => {
     const r = calibration.corrigirDerivaNoCentro({ x: 0.52, y: 0.47 });
@@ -128,9 +146,11 @@ describe('calibration.corrigirDerivaNoCentro — deriva, não referência', () =
  */
 describe('abandonar × concluir', () => {
   beforeEach(() => {
+    EXPERIMENT.correcaoPorDwellKalman = false;
     calibration.clearCalibration();
     reiniciarCorrecao();
   });
+  afterEach(() => { EXPERIMENT.correcaoPorDwellKalman = kalmanAntes; });
 
   it('concluir aplica o que foi colhido', () => {
     const a = new AcumuladorDeReancoragem();
@@ -149,5 +169,34 @@ describe('abandonar × concluir', () => {
     for (let i = 0; i < AMOSTRAS_MINIMAS; i++) a.adicionarPredicao({ x: 0.51, y: 0.49 });
     // O caminho de abandono simplesmente NÃO chama `corrigirDerivaNoCentro`.
     expect(estadoDaCorrecao().offset).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe('reajuste com o Kalman da correção por dwell (M15)', () => {
+  beforeEach(() => {
+    EXPERIMENT.correcaoPorDwellKalman = true;
+    calibration.clearCalibration();
+    reiniciarCorrecao();
+    corrigirPorDwell({ x: 0.5, y: 0.5 }, 0, { viewport: { largura: 1920, altura: 1080 } });
+  });
+  afterEach(() => {
+    EXPERIMENT.correcaoPorDwellKalman = kalmanAntes;
+    reiniciarCorrecao();
+  });
+
+  it('com a dispersão dos quadros, o reajuste entra quase inteiro', () => {
+    const a = new AcumuladorDeReancoragem();
+    for (let i = 0; i < 60; i++) {
+      a.adicionar({ distanciaCm: 55, pose: null, centro: null });
+      a.adicionarPredicao({ x: 0.51 + (i % 2 ? 0.004 : -0.004), y: 0.49 });
+    }
+    const r = a.resultado();
+    expect(calibration.corrigirDerivaNoCentro(r.predicao, { amostras: r.amostras, dispersao: r.dispersao! }).aplicado).toBe(true);
+    expect(estadoDaCorrecao().offset.x).toBeLessThan(-0.009);
+    expect(estadoDaCorrecao().offset.x).toBeGreaterThan(-0.0101);
+  });
+
+  it('sem a dispersão não há ruído de medida: não aplica', () => {
+    expect(calibration.corrigirDerivaNoCentro({ x: 0.51, y: 0.49 }).aplicado).toBe(false);
   });
 });

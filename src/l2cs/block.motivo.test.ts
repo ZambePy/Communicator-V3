@@ -34,6 +34,18 @@ describe('buildL2CSBlock — motivo do bloco zerado', () => {
     expect(Math.abs(d.pitchDeg)).toBeGreaterThan(50);
   });
 
+  it('no referencial da cabeça (M4), a plausibilidade conferida na câmera não é refeita', () => {
+    // 0,65 rad ≈ 37°: olhar para baixo com a cabeça reclinada, já conferido
+    // no ângulo que a rede devolveu. Entra no vetor em vez de virar zeros.
+    const b = buildL2CSBlock(0.1, -0.65, true, DIST, 0.9, undefined, true);
+    expect(zerado(b)).toBe(false);
+    expect(b[1]).toBeCloseTo(Math.tan(-0.65), 12);
+    expect(ultimoDiagnosticoDoBloco().motivo).toBeNull();
+    // Sem a marca, o mesmo ângulo continua implausível — o de sempre.
+    expect(zerado(buildL2CSBlock(0.1, -0.65, true, DIST, 0.9))).toBe(true);
+    expect(ultimoDiagnosticoDoBloco().motivo).toBe('implausivel');
+  });
+
   it('softmax difusa é "confianca", e carrega o valor medido', () => {
     const conf = L2CS_CONFIDENCE_MIN - 0.01;
     expect(zerado(buildL2CSBlock(0.05, 0.05, true, DIST, conf))).toBe(true);

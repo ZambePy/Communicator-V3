@@ -10,8 +10,11 @@ import type { FichaDoModelo } from './l2cs/proveniencia';
 import {
   mapGaze, getCalibrationTargets,
   getCalibrationFitDiagnostics, getDistanceRange, getCalibrationDistancesCm,
-  getCurrentCameraDistanceCm, getCalibrationTimestampMs,
+  getCurrentCameraDistanceCm, getCalibrationTimestampMs, getTermosDaUltimaPredicao,
 } from './calibration';
+import { autocorrelacaoLag1, lado95, atrasoDoDegrau, type AmostraDoDegrau } from './metricasDoSinal';
+import { amostrasEfetivas } from './ruidoDaCalibracao';
+import type { TermosDaPredicao } from './calibration';
 import { REGRESSOR_MODE } from './gazeRegressor';
 import { EXPERIMENT, experimentSnapshot } from './config/experiment';
 import { ACCLIMATION_MS, COLLECTION_MS, MIN_VALID_SAMPLE_RATIO, quadrosEsperados } from './accuracyProtocol';
@@ -20,6 +23,10 @@ import { ACTIVE_FEATURE_SET, l2csSlotsInSet } from './extractor';
 /** Amostras mínimas para um ponto contar como medido. Abaixo disto a média do
  *  ponto é ruído de um ou dois quadros, não uma fixação. */
 export const MIN_SAMPLES_PER_POINT = 8;
+
+/** Evento da janela disparado quando uma rodada de MEDIÇÃO grava o resultado:
+ *  o alvo mínimo medido (M18) se recalcula a partir dele. */
+export const EVENTO_DE_ACURACIA_MEDIDA = 'irisflow:acuracia-medida';
 
 export interface AccuracyResult {
   // `null` significa "não há pontos medidos para esta métrica" — nunca NaN,
@@ -115,6 +122,38 @@ export interface AccuracyResult {
   /** Distância olho→CÂMERA medida durante o teste (mediana e faixa), em cm.
    *  Não é a olho→tela de `meta.distanciaCm`, que é digitada. */
   distanciaMedidaCm: { mediana: number; min: number; max: number } | null;
+  /**
+   * Distribuição do erro angular POR AMOSTRA nos pontos interiores (relatório
+   * /3). A média esconde a cauda, e é a cauda que erra a tecla: mediana, p95 e
+   * a fração de amostras a até 1° e 2° do alvo.
+   */
+  medianErrorDeg?: number | null;
+  p95ErrorDeg?: number | null;
+  fracaoAte1Grau?: number | null;
+  fracaoAte2Graus?: number | null;
+  /** RMS-S2S/DP médio da predição crua: √2 é ruído branco; menor, correlacionado. */
+  razaoS2sDp?: number | null;
+  /** Autocorrelação de lag 1 média da predição crua, e as amostras
+   *  independentes equivalentes por ponto que ela implica. */
+  rho1?: number | null;
+  nEfetivoMedio?: number | null;
+  /**
+   * Lado do alvo quadrado que contém 95 % das amostras FILTRADAS (o cursor),
+   * mediana dos interiores e pior ponto medido, em px e graus. É o requisito
+   * de tamanho de botão que sai desta sessão.
+   */
+  lado95FiltradoPx?: number | null;
+  lado95FiltradoDeg?: number | null;
+  lado95FiltradoMaxPx?: number | null;
+  /** S₉₅ de um dwell de 1 s: janelas de 1 s inteiras dentro do alvo (mediana dos interiores). */
+  lado95Filtrado1sPx?: number | null;
+  /** Atraso do filtro nos degraus entre alvos (mediana dos pontos com degrau medível). */
+  atrasoDoFiltro?: { t50Ms: number; t90Ms: number; pontos: number } | null;
+  /**
+   * De onde vem o viés: média, nos interiores, do que cada estágio do
+   * `mapGaze` somou à predição, em px (positivo = para a direita/para baixo).
+   */
+  decomposicaoDoVies?: Record<'distancia' | 'pose' | 'translacao' | 'cantos' | 'dwell', { x: number; y: number }> | null;
   /**
    * Em que modo esta rodada correu. Presente em TODO resultado, inclusive nos
    * de medição, para que nenhum consumidor precise inferir pela ausência de
@@ -463,6 +502,35 @@ interface PointDiagnostic {
   name: string;
   samplesError: number[];
   meanPose?: { yaw: number; pitch: number; roll: number };
+  /** Autocorrelação de lag 1 da predição crua no ponto (relatório /3). */
+  rho1?: number;
+  /** RMS-S2S / DP no ponto. */
+  razaoS2sDp?: number;
+  /** Amostras independentes equivalentes na janela do ponto. */
+  nEfetivo?: number;
+  /** Lado do alvo que contém 95 % das amostras cruas e das filtradas, em px. */
+  lado95Px?: number;
+  lado95FiltradoPx?: number;
+  /** O mesmo para janelas de 1 s inteiras do cursor (S₉₅ de um dwell de 1 s). */
+  lado95Filtrado1sPx?: number;
+  /** Atraso do filtro no degrau de chegada a este ponto. */
+  atrasoDoFiltro?: { t50Ms: number; t90Ms: number };
+  /**
+   * Média, no ponto, do que cada estágio do `mapGaze` somou (px), da
+   * predição de cada olho e da geometria do rosto.
+   */
+  termos?: {
+    esquerdo: { x: number; y: number };
+    direito: { x: number; y: number };
+    distancia: { x: number; y: number };
+    pose: { x: number; y: number };
+    translacao: { x: number; y: number };
+    cantos: { x: number; y: number };
+    dwell: { x: number; y: number };
+    razaoDeDistancia: number;
+    centroFacial: { x: number; y: number } | null;
+    distanciaCantalPx: number | null;
+  };
   /**
    * Só na rodada de VERIFICAÇÃO (malha fechada). Campos de outra pergunta,
    * guardados ao lado dos do protocolo e nunca somados a eles.
@@ -529,7 +597,16 @@ let currentPose: { yaw: number; pitch: number; roll: number } | undefined;
  *  vídeo a 30, então sem isto o mesmo vetor seria amostrado várias vezes e o
  *  jitter sairia otimista. */
 let currentFrameSeq = 0;
-let currentFiltered: { x: number; y: number; seq: number } | null = null;
+/** Saída filtrada do quadro e a entrada que o filtro recebeu (para o atraso). */
+let currentFiltered: { x: number; y: number; seq: number; ex: number; ey: number } | null = null;
+
+/**
+ * Coordenadas cruas de cada ponto, para as métricas por amostra do /3. Fora
+ * do `PointDiagnostic` de propósito: ele vai inteiro para o JSON, e as séries
+ * dobrariam o tamanho do relatório sem acrescentar nada que as métricas não
+ * digam.
+ */
+const coordenadasDoPonto = new WeakMap<PointDiagnostic, { x: number[]; y: number[] }>();
 
 export let isAccuracyTesting = false;
 
@@ -589,9 +666,12 @@ export function feedAccuracyRaw(
   currentFrameSeq++;
 }
 
-/** Chamado pelo engine com a saída filtrada do mesmo quadro (o que o cursor mostra). */
-export function feedAccuracyFiltered(x: number, y: number) {
-  currentFiltered = { x, y, seq: currentFrameSeq };
+/**
+ * Chamado pelo engine com a saída filtrada do mesmo quadro (o que o cursor
+ * mostra) e a entrada do filtro — o par que mede o atraso do filtro.
+ */
+export function feedAccuracyFiltered(x: number, y: number, entrada?: { x: number; y: number }) {
+  currentFiltered = { x, y, seq: currentFrameSeq, ex: entrada?.x ?? x, ey: entrada?.y ?? y };
 }
 
 /**
@@ -782,6 +862,11 @@ function prepararRodada(
     let tempoAteAcertarMs: number | null = null;
     let quadrosNoAlvo = 0;
     let quadrosDeCursor = 0;
+    // Relatório /3: a série entrada/saída do filtro desde que o alvo apareceu
+    // (atraso do filtro no degrau) e os termos do `mapGaze` de cada amostra.
+    const serieDoDegrau: AmostraDoDegrau[] = [];
+    let ultimoSeqDaSerie = currentFrameSeq;
+    const termosDoPonto: TermosDaPredicao[] = [];
 
     const targetScreenX = fracaoDaTelaParaPx(vp.screenX, vw);
     const targetScreenY = fracaoDaTelaParaPx(vp.screenY, vh);
@@ -797,6 +882,13 @@ function prepararRodada(
       const frameNovo = currentFrameSeq !== lastSeenSeq;
 
       if (!poseBaseline && currentPose) poseBaseline = { ...currentPose };
+
+      if (currentFiltered && currentFiltered.seq === currentFrameSeq && currentFrameSeq !== ultimoSeqDaSerie) {
+        ultimoSeqDaSerie = currentFrameSeq;
+        serieDoDegrau.push({
+          t: elapsed, ex: currentFiltered.ex, ey: currentFiltered.ey, sx: currentFiltered.x, sy: currentFiltered.y,
+        });
+      }
 
       // Malha fechada, na rodada de verificação. Corre desde `elapsed = 0`, e
       // não a partir da acomodação: o que se mede aqui é justamente QUANTO
@@ -842,6 +934,8 @@ function prepararRodada(
           ultimaAmostraMs = agora;
           predictedX.push(gaze.x);
           predictedY.push(gaze.y);
+          const termos = getTermosDaUltimaPredicao();
+          if (termos) termosDoPonto.push(termos);
           const dist = getCurrentCameraDistanceCm();
           if (dist !== null && Number.isFinite(dist)) distanciasDoTeste.push(dist);
           if (currentFiltered && currentFiltered.seq === currentFrameSeq) {
@@ -915,9 +1009,32 @@ function prepararRodada(
           for (let i = 0; i < filteredX.length; i++) fs += (filteredX[i] - mfx) ** 2 + (filteredY[i] - mfy) ** 2;
           d.jitterFilteredRMS = Math.sqrt(fs / filteredX.length);
         }
+
+        // Relatório /3: cor do ruído, lado que segura 95 % e os termos.
+        const alvo = { x: targetScreenX, y: targetScreenY };
+        const rho = autocorrelacaoLag1(predictedX, predictedY);
+        if (rho !== null) {
+          d.rho1 = rho;
+          d.nEfetivo = amostrasEfetivas(n, rho);
+        }
+        if (d.jitterRMS > 0) d.razaoS2sDp = d.s2sRMS / d.jitterRMS;
+        d.lado95Px = lado95(predictedX, predictedY, alvo) ?? undefined;
+        if (filteredX.length >= MIN_SAMPLES_PER_POINT) {
+          d.lado95FiltradoPx = lado95(filteredX, filteredY, alvo) ?? undefined;
+          // Janela de 1 s em amostras, pela taxa que o próprio ponto mediu.
+          const janelaDoPontoMs = ultimaAmostraMs - primeiraAmostraMs;
+          if (janelaDoPontoMs > 0) {
+            const porSegundo = ((n - 1) * 1000) / janelaDoPontoMs;
+            d.lado95Filtrado1sPx = lado95(filteredX, filteredY, alvo, porSegundo) ?? undefined;
+          }
+        }
+        d.termos = mediaDosTermos(termosDoPonto, vw, vh) ?? undefined;
+        coordenadasDoPonto.set(d, { x: [...predictedX], y: [...predictedY] });
       } else if (n > 0) {
         console.warn(`[accuracy] ${vp.name}: só ${n} amostra(s) (mínimo ${MIN_SAMPLES_PER_POINT}) — ponto não medido.`);
       }
+
+      d.atrasoDoFiltro = atrasoDoDegrau(serieDoDegrau) ?? undefined;
 
       const janelaMs = n > 1 ? ultimaAmostraMs - primeiraAmostraMs : 0;
       (d as PointDiagnostic & { windowMs?: number }).windowMs = janelaMs;
@@ -952,6 +1069,36 @@ function prepararRodada(
   // 1,5 s de preparação: o usuário acabou de sair da calibração e precisa
   // estabilizar o olhar antes do primeiro alvo.
   setTimeout(runNextPoint, 1500);
+}
+
+/** Média dos termos do `mapGaze` nas amostras de um ponto, convertida para px. */
+function mediaDosTermos(
+  termos: readonly TermosDaPredicao[],
+  vw: number,
+  vh: number,
+): NonNullable<PointDiagnostic['termos']> | null {
+  const n = termos.length;
+  if (n === 0) return null;
+  const vetor = (pick: (t: TermosDaPredicao) => { x: number; y: number }) => ({
+    x: (termos.reduce((s, t) => s + pick(t).x, 0) / n) * vw,
+    y: (termos.reduce((s, t) => s + pick(t).y, 0) / n) * vh,
+  });
+  const centros = termos.map((t) => t.centroFacial).filter((c): c is { x: number; y: number } => c !== null);
+  const cantais = termos.map((t) => t.distanciaCantalPx).filter((v): v is number => v !== null && Number.isFinite(v));
+  return {
+    esquerdo: vetor((t) => t.esquerdo),
+    direito: vetor((t) => t.direito),
+    distancia: vetor((t) => t.distancia),
+    pose: vetor((t) => t.pose),
+    translacao: vetor((t) => t.translacao),
+    cantos: vetor((t) => t.cantos),
+    dwell: vetor((t) => t.dwell),
+    razaoDeDistancia: termos.reduce((s, t) => s + t.razaoDeDistancia, 0) / n,
+    centroFacial: centros.length > 0
+      ? { x: centros.reduce((s, c) => s + c.x, 0) / centros.length, y: centros.reduce((s, c) => s + c.y, 0) / centros.length }
+      : null,
+    distanciaCantalPx: cantais.length > 0 ? cantais.reduce((s, v) => s + v, 0) / cantais.length : null,
+  };
 }
 
 function createAccuracyOverlay(): HTMLDivElement {
@@ -1304,6 +1451,31 @@ function finishTest(
       }
     : null;
 
+  // ── Relatório /3 ─────────────────────────────────────────────────────────
+  // Erro angular POR AMOSTRA nos interiores (a população da acurácia).
+  const errosDeg: number[] = [];
+  for (const d of interiores) {
+    const c = coordenadasDoPonto.get(d);
+    if (!c) continue;
+    for (let i = 0; i < c.x.length; i++) {
+      errosDeg.push(erroAngularDeg({ x: d.groundX, y: d.groundY }, { x: c.x[i], y: c.y[i] }, centro, distPx));
+    }
+  }
+  errosDeg.sort((a, b) => a - b);
+  const temErros = errosDeg.length > 0;
+  const fracaoAte = (lim: number) => (temErros ? errosDeg.filter((e) => e <= lim).length / errosDeg.length : null);
+  const numeros = (v: (number | undefined)[]) => v.filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
+  const lados = numeros(interiores.map((d) => d.lado95FiltradoPx)).sort((a, b) => a - b);
+  const ladosTodos = numeros(medidos.map((d) => d.lado95FiltradoPx));
+  const lado95FiltradoPx = lados.length > 0 ? percentileLinear(lados, 0.5) : null;
+  const atrasos = diagnostics.map((d) => d.atrasoDoFiltro).filter((a): a is { t50Ms: number; t90Ms: number } => !!a);
+  const medianaDe = (v: number[]) => percentileLinear([...v].sort((a, b) => a - b), 0.5);
+  const comTermos = interiores.filter((d) => d.termos);
+  const mediaDoTermo = (pick: (t: NonNullable<PointDiagnostic['termos']>) => { x: number; y: number }) => ({
+    x: comTermos.reduce((acc, d) => acc + pick(d.termos!).x, 0) / comTermos.length,
+    y: comTermos.reduce((acc, d) => acc + pick(d.termos!).y, 0) / comTermos.length,
+  });
+
   const result: AccuracyResult = {
     meanError,
     medianError: agg.medianError,
@@ -1343,6 +1515,36 @@ function finishTest(
     alvoMinimoPx,
     alvoMinimoDeg,
     distanciaMedidaCm,
+    medianErrorDeg: temErros ? percentileLinear(errosDeg, 0.5) : null,
+    p95ErrorDeg: temErros ? percentileLinear(errosDeg, 0.95) : null,
+    fracaoAte1Grau: fracaoAte(1),
+    fracaoAte2Graus: fracaoAte(2),
+    razaoS2sDp: mediaDe(numeros(medidos.map((d) => d.razaoS2sDp))),
+    rho1: mediaDe(numeros(medidos.map((d) => d.rho1))),
+    nEfetivoMedio: mediaDe(numeros(medidos.map((d) => d.nEfetivo))),
+    lado95FiltradoPx,
+    lado95FiltradoDeg: lado95FiltradoPx !== null && pxPorGrau > 0 ? lado95FiltradoPx / pxPorGrau : null,
+    lado95FiltradoMaxPx: ladosTodos.length > 0 ? Math.max(...ladosTodos) : null,
+    lado95Filtrado1sPx: (() => {
+      const v = numeros(interiores.map((d) => d.lado95Filtrado1sPx)).sort((a, b) => a - b);
+      return v.length > 0 ? percentileLinear(v, 0.5) : null;
+    })(),
+    atrasoDoFiltro: atrasos.length > 0
+      ? {
+          t50Ms: medianaDe(atrasos.map((a) => a.t50Ms)),
+          t90Ms: medianaDe(atrasos.map((a) => a.t90Ms)),
+          pontos: atrasos.length,
+        }
+      : null,
+    decomposicaoDoVies: comTermos.length > 0
+      ? {
+          distancia: mediaDoTermo((t) => t.distancia),
+          pose: mediaDoTermo((t) => t.pose),
+          translacao: mediaDoTermo((t) => t.translacao),
+          cantos: mediaDoTermo((t) => t.cantos),
+          dwell: mediaDoTermo((t) => t.dwell),
+        }
+      : null,
     poseDrift,
     poseDeltaCalibToTestDeg,
     affine,
@@ -1363,7 +1565,11 @@ function finishTest(
       // Linha de base do vigia de recalibração (`vigiaDeRecalibracao.ts`):
       // BCEA e viés deste teste são o que o uso recente é comparado contra.
       bceaPx2, biasX: agg.biasX, biasY: agg.biasY,
+      // Lado que segura 95 % das janelas de 1 s do cursor: o requisito de
+      // tamanho de botão desta pessoa, agora (alvo mínimo medido, M18).
+      lado95Filtrado1sPx: result.lado95Filtrado1sPx ?? null,
     }));
+    window.dispatchEvent(new Event(EVENTO_DE_ACURACIA_MEDIDA));
   } catch { /* storage indisponível */ }
 
   const pipeline = {
@@ -1378,7 +1584,9 @@ function finishTest(
   };
 
   const jsonReport = JSON.stringify({
-    schema: 'irisflow.accuracy-report/2',
+    // /3 = /2 com as métricas de qualidade do sinal e a decomposição do viés
+    // (M11). Só acrescenta campos: quem lê /2 lê /3.
+    schema: 'irisflow.accuracy-report/3',
     // Quando presente, o teste não chegou ao fim: o relatório é parcial.
     abortado: motivoDeAborto ?? null,
     protocolo: {
@@ -1514,6 +1722,40 @@ export function fecharPainelDeDiagnostico(): void {
 /** Cleanup do painel aberto agora. `null` quando não há painel. */
 let limparPainelDeDiagnostico: (() => void) | null = null;
 
+/**
+ * Por que pontos ficaram sem medida, quando a causa é a taxa de quadros.
+ *
+ * A janela útil de cada alvo é `COLLECTION_MS − ACCLIMATION_MS` (1,4 s): abaixo
+ * de ~5,7 quadros por segundo ela rende, em média, menos que as
+ * `MIN_SAMPLES_PER_POINT` leituras — a 3–4 quadros por segundo nenhum ponto
+ * chega lá e o teste inteiro sai "Não medido". É o que acontece num computador
+ * sem placa de vídeo, com o detector de rosto no WebGL por software. Sem esta
+ * frase, nada no painel dizia por quê; ele mostrava até "amostras válidas
+ * 100%" (os quadros vieram todos, só que poucos). `null` quando todos os
+ * pontos foram medidos ou quando a taxa daria para medir — aí a causa foi
+ * outra (rosto perdido, olhos fechados) e o painel tem os próprios avisos.
+ *
+ * A conta é sem arredondar: `quadrosEsperados` arredonda (é a régua da perda
+ * de amostras), e com ela o aviso só aparecia abaixo de ~5,36 quadros por
+ * segundo — entre isso e 5,7 pontos ficavam sem medida sem explicação.
+ */
+export function avisoDeTaxaInsuficiente(
+  r: Pick<AccuracyResult, 'pontosMedidos' | 'pontosNaoMedidos' | 'sampleRateHz'>,
+): string | null {
+  if (r.pontosNaoMedidos === 0 || r.sampleRateHz === null) return null;
+  const leiturasNaJanela = ((COLLECTION_MS - ACCLIMATION_MS) * r.sampleRateHz) / 1000;
+  if (leiturasNaJanela >= MIN_SAMPLES_PER_POINT) return null;
+  const total = r.pontosMedidos + r.pontosNaoMedidos;
+  const hz = r.sampleRateHz.toFixed(1).replace('.', ',');
+  const janelaS = ((COLLECTION_MS - ACCLIMATION_MS) / 1000).toFixed(1).replace('.', ',');
+  return (
+    `${r.pontosNaoMedidos} de ${total} pontos ficaram sem medida: o rastreamento rodou a ${hz} quadros ` +
+    `por segundo, e cada ponto precisa de pelo menos ${MIN_SAMPLES_PER_POINT} leituras nos ${janelaS} s ` +
+    'em que é medido. Feche outros programas pesados; num computador sem placa de vídeo o teste pode ' +
+    'não conseguir medir.'
+  );
+}
+
 function showDiagnosticOverlay(
   diagnostics: PointDiagnostic[],
   result: AccuracyResult,
@@ -1616,6 +1858,8 @@ function showDiagnosticOverlay(
   const fit = getCalibrationFitDiagnostics();
   const gd = fit?.gridDiagnosis;
   const avisos: string[] = [];
+  const porTaxa = avisoDeTaxaInsuficiente(result);
+  if (porTaxa) avisos.push(porTaxa);
   if (gd?.mensagem) avisos.push(gd.mensagem);
   if (fit && fit.targetsSkipped.length > 0) {
     avisos.push(
@@ -1704,8 +1948,8 @@ function showDiagnosticOverlay(
       </div>
 
       <div class="diagnostic-actions">
-        <button type="button" class="diagnostic-btn" data-action="continue">Continuar <kbd>Espaço</kbd></button>
-        <button type="button" class="diagnostic-btn secondary" data-action="redo">Recalibrar <kbd>R</kbd></button>
+        <button type="button" class="diagnostic-btn" data-action="continue" data-recovery="true">Continuar <kbd>Espaço</kbd></button>
+        <button type="button" class="diagnostic-btn secondary" data-action="redo" data-recovery="true">Recalibrar <kbd>R</kbd></button>
       </div>
     </div>
   `;

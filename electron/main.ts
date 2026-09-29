@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import {
   permitirPermissao, permitirNavegacao, permitirAberturaExterna, hostDoSite, CSP, CSP_DEV, cspComNuvem,
   preferenciasWebSeguras, atalhoBloqueadoEmProducao, alternaTelaCheia, decidirRecarga, RECARGA_JANELA_MS,
-  argumentoDeDepuracao, SWITCHES_DE_DEPURACAO, papeisDoMenuEmpacotado,
+  argumentoDeDepuracao, SWITCHES_DE_DEPURACAO, SWITCH_DO_WEBGL_POR_SOFTWARE, papeisDoMenuEmpacotado,
 } from '../src/electronSecurity';
 import { registrarModoComputador } from './computador/sessao';
 import { registrarVoz } from './voz';
@@ -38,6 +38,10 @@ import { criarCofre, type Cofre } from './cofre';
 //    a abrir numa máquina fraca) abriria OUTRA janela disputando a mesma
 //    câmera — a segunda falha com "câmera em uso" e parece defeito. A
 //    segunda instância só acorda a primeira e sai.
+// 4. WebGL por software quando a placa de vídeo não serve (ver
+//    `SWITCH_DO_WEBGL_POR_SOFTWARE`): sem ele, numa máquina com a GPU na
+//    lista de bloqueio o rastreamento não sobe. Switch do Chromium: precisa
+//    estar na linha de comando antes do `ready`.
 // ---------------------------------------------------------------------
 const ARGUMENTO_DE_DEPURACAO = app.isPackaged
   ? argumentoDeDepuracao(process.argv) ?? SWITCHES_DE_DEPURACAO.find((s) => app.commandLine.hasSwitch(s)) ?? null
@@ -56,6 +60,8 @@ if (process.platform === 'win32') app.setAppUserModelId(ID_DO_APP);
 // não tenha derrubado o processo: sem trava de instância, sem janela.
 const PRIMEIRA_INSTANCIA = !ARGUMENTO_DE_DEPURACAO && app.requestSingleInstanceLock();
 if (!PRIMEIRA_INSTANCIA) app.quit();
+
+app.commandLine.appendSwitch(SWITCH_DO_WEBGL_POR_SOFTWARE);
 
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 const RAIZ_DO_PROJETO = path.join(__dirname, '..');

@@ -6,6 +6,7 @@ import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { useAuth } from '../../context/AuthContext';
 import { useSettings } from '../../context/SettingsContext';
 import { useGaze } from '../../context/GazeContext';
+import { EXPERIMENT } from '@tracker/config/experiment';
 import { evaluateReadiness, type ReadinessCheck } from '@tracker/setupReadiness';
 import { snapshotFromDiagnostics, lerViewport } from '@tracker/setupReadinessAdapter';
 import {
@@ -346,6 +347,10 @@ export const SetupWizard: React.FC = () => {
               }}
               aoRecarregar={() => void abrirStream(cameraSelecionada ?? undefined)}
               videoRef={videoRef}
+              posicaoDaCamera={settings.posicaoDaCamera}
+              aoEscolherPosicao={EXPERIMENT.saida6DoF
+                ? (posicaoDaCamera) => updateSettings({ posicaoDaCamera })
+                : undefined}
             />
           )}
           {passo === 'posicionamento' && (

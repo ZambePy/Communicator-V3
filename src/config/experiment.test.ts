@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { loadEnvOverrides, sanitizeExperiment, EXPERIMENT, DEFAULTS } from './experiment';
+import { loadEnvOverrides, sanitizeExperiment, EXPERIMENT, DEFAULTS, VALORES_DA_BASE, resolverPipeline } from './experiment';
 
 // A config de experimento em Node aceita override via env-var
 // `IRISFLOW_EXP_<key>=<value>`. Estes testes garantem que:
@@ -204,5 +204,50 @@ describe('defaults decididos', () => {
     expect(DEFAULTS.l2cs).toBe('auto');
     expect(DEFAULTS.l2csInputSize).toBe(448);
     expect(DEFAULTS.l2csCadenceMs).toBe(100);
+  });
+});
+
+describe('interruptor do V3', () => {
+  /** As 20 flags do V3 (M1–M21 menos M11, que é o relatório e não tem flag). */
+  const FLAGS_DO_V3 = [
+    'ordemDescorrelacionada', 'referencialIsotropico', 'desrolarComSinalDoL2cs', 'l2csNaCabeca',
+    'poseSuavizada', 'calibracaoRobusta', 'alvoInferiorCentral', 'assentamentoPelaChegada',
+    'estimadorDeFixacao', 'fusaoPorCovariancia', 'saida6DoF', 'nivelarRecorteCorrigido',
+    'suavizacaoDoLandmarker', 'correcaoPorDwellKalman', 'correcaoPorDwellAfim', 'dwellEmCascata',
+    'alvoMinimoMedido', 'toleranciaIntrusoes', 'recalibracaoRapidaAfim', 'pausaNaPerdaCurta',
+  ].sort();
+  const FORA_DO_INTERRUPTOR = [
+    'referencialIsotropico', 'alvoInferiorCentral', 'fusaoPorCovariancia', 'saida6DoF', 'nivelarRecorteCorrigido',
+  ];
+
+  it('VALORES_DA_BASE cobre exatamente as flags do V3, todas no valor anterior', () => {
+    expect(Object.keys(VALORES_DA_BASE).sort()).toEqual(FLAGS_DO_V3);
+    for (const [k, v] of Object.entries(VALORES_DA_BASE)) {
+      if (k === 'suavizacaoDoLandmarker') expect(v).toBe('mediapipe');
+      else expect(v).toBe(false);
+    }
+  });
+
+  it('padrão v3: ligadas, menos as cinco fora do interruptor; M14 no modo de antes', () => {
+    expect(DEFAULTS.pipeline).toBe('v3');
+    for (const k of FLAGS_DO_V3) {
+      const v = DEFAULTS[k as keyof typeof DEFAULTS];
+      if (k === 'suavizacaoDoLandmarker') expect(v).toBe('mediapipe');
+      else expect(v).toBe(!FORA_DO_INTERRUPTOR.includes(k));
+    }
+  });
+
+  it("'base' aplica os valores anteriores por cima de tudo, inclusive de uma flag ligada à mão", () => {
+    const cfg = resolverPipeline({ ...DEFAULTS, pipeline: 'base', saida6DoF: true, estimadorDeFixacao: true });
+    for (const [k, v] of Object.entries(VALORES_DA_BASE)) expect(cfg[k as keyof typeof cfg]).toBe(v);
+    // O que não é do V3 fica como estava.
+    expect(cfg.polynomialFeatures).toBe(DEFAULTS.polynomialFeatures);
+  });
+
+  it("'v3' deixa cada flag no valor que ela tem — inclusive uma fora do interruptor ligada à mão", () => {
+    const cfg = resolverPipeline({ ...DEFAULTS, pipeline: 'v3', saida6DoF: true, dwellEmCascata: false });
+    expect(cfg.saida6DoF).toBe(true);
+    expect(cfg.dwellEmCascata).toBe(false);
+    expect(cfg.referencialIsotropico).toBe(false);
   });
 });

@@ -13,6 +13,7 @@ import { describe, it, expect } from 'vitest';
 import { trainRidgeModel, predictRidge } from './ridge';
 import { StandardScaler } from './scaler';
 import { CALIBRATION_TARGETS_FULL, INSET_CANTOS_PADRAO, CALIBRATION_TARGETS_QUICK } from './calibration';
+import { EXPERIMENT } from './config/experiment';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -241,12 +242,15 @@ describe('Ridge precision — edges vs center', () => {
 // afirmam as invariantes da grade.
 describe('Calibration targets — grade 3×3 dentro do orçamento angular', () => {
   it('FULL = grade 3×3 (3 posições por eixo, simétricas em X e assimétricas em Y) + os 4 cantos da tela', () => {
-    expect(CALIBRATION_TARGETS_FULL).toHaveLength(13);
+    // 13 no pipeline base; o V3 soma o meio da borda de baixo (M7).
+    expect(CALIBRATION_TARGETS_FULL).toHaveLength(EXPERIMENT.alvoInferiorCentral ? 14 : 13);
     const lo = INSET_CANTOS_PADRAO;
     const hi = 1 - INSET_CANTOS_PADRAO;
     const ehCanto = (t: { x: number; y: number }) => (t.x === lo || t.x === hi) && (t.y === lo || t.y === hi);
+    const ehMeioDeBaixo = (t: { x: number; y: number }) => t.x === 0.5 && t.y === hi;
     expect(CALIBRATION_TARGETS_FULL.filter(ehCanto)).toHaveLength(4);
-    const grade = CALIBRATION_TARGETS_FULL.filter((t) => !ehCanto(t));
+    expect(CALIBRATION_TARGETS_FULL.filter(ehMeioDeBaixo)).toHaveLength(EXPERIMENT.alvoInferiorCentral ? 1 : 0);
+    const grade = CALIBRATION_TARGETS_FULL.filter((t) => !ehCanto(t) && !ehMeioDeBaixo(t));
     expect(grade).toHaveLength(9);
     const xs = [...new Set(grade.map(t => t.x))].sort((a, b) => a - b);
     const ys = [...new Set(grade.map(t => t.y))].sort((a, b) => a - b);

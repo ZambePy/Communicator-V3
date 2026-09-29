@@ -57,6 +57,21 @@ contra os JSON de `docs/medicoes/historico/`:
 3. **Resumo em linguagem simples** (§0, novo), para quem precisa do número sem
    o protocolo: plano de negócios, site e apresentações.
 
+**Revisão de 2026-09-29 — pipeline V3 (IrisFlow V2).** A única sessão ao vivo
+depois de 26/09 é a de 28/09 (§14.1), que a pesquisa do V2 analisa. O V2 trocou
+parte da matemática do rastreamento, da calibração e da interação (21 mudanças,
+M1–M21 — README → *Pipeline V3*; nesta página, "M6 do V3" e afins, para não
+confundir com as sessões M1–M4 da §4), com um interruptor para medir antes e depois (`?pipeline=v3` ·
+`?pipeline=base`) e um parâmetro por mudança (`?exp.<flag>=1|0`). O relatório
+de precisão passa ao esquema `/3` (§7), que só acrescenta campos: mediana, p95
+e frações até 1° e 2° por amostra, cor do ruído, o lado do alvo que um dwell de
+1 s pede, o atraso do filtro e a decomposição do viés por estágio (§8). O
+replay da gravação de 23/09 com o V3 empata com o pipeline anterior (§14.6). O
+roteiro das sessões que decidem cada mudança está em
+[`ROTEIRO_DE_MEDICAO.md`](ROTEIRO_DE_MEDICAO.md) (§4.7). O protocolo do teste
+não mudou; o painel passou a explicar a rodada "Não medido" quando a causa é a
+taxa de quadros (§2, *Tempo por ponto*).
+
 ---
 
 ## 0. Resumo em linguagem simples
@@ -85,9 +100,9 @@ o atual (§14.4): acertar o botão ficou mais fácil, segurar o olhar parado nel
 não.
 
 **O que falta medir, nesta ordem:** o pipeline sem o L2CS (M-ablação, §4.6);
-uma sessão ao vivo com a calibração de 13 pontos e uma réplica (§14.5); e,
-depois, mais participantes, postura reclinada, luz baixa, óculos e distância
-(§4.6).
+uma sessão ao vivo com a calibração de 13 pontos e uma réplica (§14.5); o
+pipeline novo do V2 contra o anterior, com réplica (§4.7); e, depois, mais
+participantes, postura reclinada, luz baixa, óculos e distância (§4.6).
 
 ---
 
@@ -173,7 +188,15 @@ descartados (`ACCLIMATION_MS`) — medido na nossa própria curva, o erro nesse
 trecho vale o dobro do regime estacionário (joelho em ~585 ms). Sobram
 **1400 ms úteis**, ~42 amostras a 30 Hz. Menos de 8 amostras
 (`MIN_SAMPLES_PER_POINT`) e o ponto não é medido, contando em
-`pontosNaoMedidos`.
+`pontosNaoMedidos`. A conta impõe um piso de taxa: abaixo de ~5,7 quadros por
+segundo (8 ÷ 1,4 s) a janela rende menos de 8 leituras em média e pontos saem
+sem medida; a 3–4 quadros por segundo nenhum chega lá e a rodada inteira sai
+"Não medido". É o que acontece num computador sem placa de vídeo, com o
+detector de rosto no WebGL por software (o percurso de 29/09); abaixo do piso,
+o painel do teste diz isso em "O que explica o resultado"
+(`avisoDeTaxaInsuficiente`).
+O protocolo não se adapta à taxa de propósito: uma janela mais longa só
+nessas máquinas tornaria as rodadas incomparáveis.
 
 **Fração mínima de amostras.** `MIN_VALID_SAMPLE_RATIO = 0.8`. Abaixo disso o
 ponto **não é descartado**: entra no relatório com o nome em
@@ -648,6 +671,29 @@ padrão, senão a sessão mede o erro do default de 69,7°, não o da compensaç
 | `estabilizar=` | `1` · `0` | `estabilizarFixacao` (S5) |
 | `dwellCorrige=` | `1` · `0` | `correcaoPorDwell` (S3) |
 | `olho=` | `off` · `onnx` | `eyeNet` — ramo ocular (exige `models/eyenet/eyenet.onnx`) |
+| `pipeline=` | `v3` · `base` | interruptor do V3 (§4.7): `base` desliga todas as mudanças do V3 |
+| `exp.<flag>=` | `1` · `0` | uma flag do V3 de cada vez (ex.: `exp.estimadorDeFixacao=0`); M14 aceita o nome do modo (`exp.suavizacaoDoLandmarker=desligada`) |
+
+### 4.7 V3 — o pipeline novo contra o anterior *(a medir)*
+
+O V2 fez 21 mudanças — matemática do rastreamento, calibração e interação;
+M11 é o relatório (README → *Pipeline V3*; a evidência de cada uma em
+`docs/PESQUISA.md` §5). Nesta seção M1–M21 numeram essas mudanças, e não as
+sessões M1–M4 da §4.1–4.3. Nenhuma foi medida com uma pessoa. As sessões, a ordem e a régua estão em
+[`ROTEIRO_DE_MEDICAO.md`](ROTEIRO_DE_MEDICAO.md); o resumo:
+
+| sessão | condições | decide |
+|---|---|---|
+| V3 × anterior | `?pipeline=base` · `?pipeline=v3`, ABBA, ≥ 3 calibrações por condição | se o V3 fica como padrão |
+| ablação | `?exp.<flag>=0`, uma de cada vez | quais mudanças pagam o que custam |
+| deslocamento | `?exp.saida6DoF=1` e `=0`, calibrar sentado, medir reclinado | a saída 6DoF (M12) |
+| condições de ELA | cabeça inclinada, olhar para baixo, um olho semicerrado, luz, óculos | M2, M3, M7, M10, M13 |
+| 30 min de uso | Kalman, Kalman sem ganho, integrador anterior | a correção por dwell (M15, M16) |
+| sessão longa | 2 h, teste a cada 30 min | deriva, fadiga, M17–M21 |
+
+A régua é a do projeto: ≥ 15 % na métrica da sessão, com a diferença maior que
+a variação entre réplicas da mesma condição. As condições se registram na §14
+como as outras, com o relatório em `docs/medicoes/historico/`.
 
 ## 5. Como rodar uma sessão
 
@@ -678,6 +724,8 @@ http://127.0.0.1:4173/?preflight=1&debug=1&ep=webgpu&l2cs=448&filtro=oneEuro&dia
 | `diagonal=` | polegadas | diagonal real do monitor (grava procedência `manual`) |
 | `cursorNoTeste=` | `1` · `0` | cursor visível durante o teste (diagnóstico) |
 | `compTranslacao=` | `1` · `0` | compensação de translação lateral da cabeça (M4) |
+| `pipeline=` | `v3` · `base` | pipeline do V2 ou o anterior (§4.7); a linha `exp` do HUD mostra qual está em vigor |
+| `exp.<flag>=` | `1` · `0` | uma mudança do V3 de cada vez (§4.7); M14 aceita `mediapipe` · `desligada` |
 
 Os valores são gravados no localStorage e a página recarrega uma vez. Também
 dá para usar `__irisflowExp.set({...})` + reload, ou `IRISFLOW_EXP_<chave>` no
@@ -843,7 +891,10 @@ versionado**. Para preservar um, mova para **`docs/medicoes/historico/`** — o
 padrão do `.gitignore` não alcança essa pasta, e é lá que ficam os relatórios
 citados na §14.
 
-Esquema `irisflow.accuracy-report/2`:
+Esquema `irisflow.accuracy-report/3`. O `/3` é o `/2` com campos a mais (as
+métricas de qualidade do sinal e a decomposição do viés, §8): quem lê `/2` lê
+`/3`, e um relatório `/2` antigo continua legível.
+
 
 | bloco | conteúdo |
 |---|---|
@@ -853,7 +904,7 @@ Esquema `irisflow.accuracy-report/2`:
 | `meta` | data, `blocoDeMedicao` (derivado), iluminação e movimento de cabeça (**medidos** da prontidão), óculos (do reflexo especular medido), minutos de sessão, distância, diagonal e procedência, escala do SO, `observacoes` |
 | `pipeline` | `variant`, features, dimensões do L2CS, regressor, **snapshot completo das flags** (`experiment`) e `runtime` (provider efetivo, fallback, latência e staleness do L2CS, recorte, filtro, fps, resolução do vídeo, e **`modelo`: a ficha de proveniência dos pesos** — bases de treino, licença, `usoComercial`, integridade do hash) |
 | `result` | as métricas da seção 8 |
-| `diagnostics` | um objeto por ponto: posição real, predição média, erro por eixo, viés, graus, tremor, `bceaPx2`, `nSamples`, `nEsperado`, `fracaoValida`, pose média |
+| `diagnostics` | um objeto por ponto: posição real, predição média, erro por eixo, viés, graus, tremor, `bceaPx2`, `nSamples`, `nEsperado`, `fracaoValida`, pose média; no `/3`, também `rho1`, `razaoS2sDp`, `nEfetivo`, `lado95Px`, `lado95FiltradoPx`, `lado95Filtrado1sPx`, `atrasoDoFiltro` e `termos` (o que cada estágio do `mapGaze` somou naquele ponto) |
 | `distanceRange` | distância de calibração e de teste, e se a compensação estava na faixa |
 | `calibrationFit` | diagnóstico do ajuste (seção 10) |
 | `geometry` | se a diagonal foi assumida, fonte, `distPx`, `pxPorCm`, escala, viewport e tela em px |
@@ -919,6 +970,15 @@ desenvolve, não por e-mail de suporte.
 | `poseDrift` | rad | | deriva de pose durante o teste, relativa ao primeiro ponto |
 | `poseDeltaCalibToTestDeg` | graus | | pose média do teste menos a da calibração; explica viés uniforme |
 | `validationOverlap` | | | coincidências entre as duas grades (deveria ser vazio) |
+| `medianErrorDeg`, `p95ErrorDeg` | graus | amostras dos interiores | a distribuição do erro por amostra. A média esconde a cauda, e é a cauda que erra a tecla (`/3`) |
+| `fracaoAte1Grau`, `fracaoAte2Graus` | 0–1 | amostras dos interiores | fração das amostras a até 1° e 2° do alvo (`/3`) |
+| `razaoS2sDp` | | todos | RMS-S2S ÷ DP da predição crua: √2 (~1,41) é ruído branco; bem abaixo, ruído correlacionado entre quadros, que média nenhuma apaga (`/3`) |
+| `rho1`, `nEfetivoMedio` | | todos | autocorrelação de lag 1 e as amostras independentes que ela deixa por ponto (`/3`) |
+| `lado95FiltradoPx`, `lado95FiltradoDeg` | px, graus | interiores | lado do alvo quadrado que contém 95 % das amostras do cursor, mediana dos pontos (`/3`) |
+| `lado95FiltradoMaxPx` | px | todos os medidos, bordas inclusive | o mesmo no pior ponto (`/3`) |
+| `lado95Filtrado1sPx` | px | interiores | o mesmo para janelas de 1 s inteiras: o botão que um dwell de 1 s pede. É o que o alvo mínimo medido (M18) usa (`/3`) |
+| `atrasoDoFiltro` | ms | pontos com degrau medível | `t50Ms` e `t90Ms`: quanto a saída do filtro (o cursor) demora, depois da entrada, para cruzar 50 % e 90 % do salto entre dois alvos. Salto menor que 5 desvios do ruído não conta (`/3`) |
+| `decomposicaoDoVies` | px, assinado | interiores | média do que cada estágio do `mapGaze` somou à predição (distância, pose, translação, cantos, dwell): de onde vem o viés que sobrou (`/3`) |
 
 ### 8.1 Distância: medida versus digitada
 
@@ -1124,6 +1184,7 @@ trás — **não são reanalisáveis**.
 | 2026-09-20 11:23 | **baseline, pipeline `irisAbs`** | **56 px** | **1,40°** | 38,1 px | 🏆 `accuracy-report-1789914216975.json` — menor erro medido; detalhe na §14.4 |
 | 2026-09-22 19:16 | calibração de 9 pontos, referência lenta | 62 px | 1,58° | 48,6 px | `accuracy-report-1790115416496.json` — cantos (B1–B4) em **215 px**; `loo` 91 px |
 | 2026-09-22 22:34 | calibração de 9 pontos, referência lenta, **sessão gravada** | 83 px | 2,09° | 30,0 px | `accuracy-report-1790127248014.json` — cantos em **208 px**; a gravação desta sessão é a base do replay da §14.5 |
+| 2026-09-28 19:52 | calibração de 13 pontos + correção local, com o L2CS (WebGPU) | 69 px | 1,73° | 56,6 px | `accuracy-report-1790635943285.json`, com o responsável (fora do histórico) — viés (−26; +51) px, cantos em 73 px (B3 79, B4 100), `loo` 75 px; é a sessão que a pesquisa do V2 analisa |
 
 ⚠️ As duas de 2026-09-05 são de um esquema anterior ao `/2` e de um protocolo
 anterior a este documento (janela útil ~800 ms, ordem fixa, sem BCEA, sem
@@ -1379,6 +1440,52 @@ números):
 IRISFLOW_GRAVACAO=/caminho/irisflow-recording-2026-09-23T01-34-11-376Z.jsonl \
   npx vitest run src/replayDeGravacao.test.ts
 ```
+
+### 14.6 V3 no replay — 2026-09-29 *(replay offline, não é medição ao vivo)*
+
+A mesma gravação e o mesmo método da §14.5, com o núcleo do V2 (aqui, M1–M21
+são as mudanças do V3, como na §4.7). O padrão é o V3; o pipeline anterior sai da mesma base de código com `?pipeline=base` (no
+Node, `IRISFLOW_EXP_PIPELINE=base`), e reproduz a §14.5 número por número,
+inclusive os 5,7 px de diferença para o app gravado.
+
+| cenário (erro de `mapGaze`, px) | anterior: interno | anterior: cantos | V3: interno | V3: cantos |
+|---|---|---|---|---|
+| 9 pontos, referência lenta (o app gravado) | 87,9 | 201,6 | 90,4 | 211,7 |
+| 9 pontos, referência fixa | 67,1 | 188,8 | 68,0 | 198,9 |
+| 13 pontos, referência lenta, sem correção local | 71,8 | 107,7 | 72,1 | 117,3 |
+| 13 pontos, referência fixa, sem correção local | 66,9 | 102,1 | 65,9 | 111,3 |
+| **13 pontos, referência fixa + correção local (padrão)** | **64,2** | **40,2** | **62,4** | **39,4** |
+
+**Leitura.** No padrão, empate: 1,8 px no miolo e 0,8 px nos cantos, dentro
+da variação de uma sessão (§14.5, ressalva 2). Sem a correção local, o V3
+perde ~9 px nos cantos. Desligando uma flag de cada vez, esse custo vem de duas
+(cantos, 13 pontos sem correção): o assentamento na chegada (M8) responde por
+7 px e a calibração robusta (M6), por 5 px; com a correção local os dois somem
+(39,3–40,3 px).
+
+**O que o replay enxerga do V3, e o que não enxerga:**
+
+1. **Enxerga o núcleo de calibração**, que recebe as features e a pose
+   gravadas: a calibração robusta (M6), a correção dos cantos e a fusão dos
+   olhos (M10).
+2. **Não enxerga o engine.** A rotação e o sinal do L2CS (M3, M4), a pose
+   suavizada (M5) e o estimador de fixação (M9) rodam antes do que a gravação
+   guarda, ou depois do `mapGaze`. Desligar M5 não muda nenhum número acima.
+3. **Penaliza M8.** A gravação só marca o alvo enquanto a coleta está aberta, e
+   no app gravado ela abria 1200 ms depois do alvo anterior. O replay não tem os
+   quadros entre a chegada da bola e essa abertura, então aplica só o descarte
+   maior (800 ms em vez de 600) e treina com menos amostras (397 contra 456 nos
+   13 pontos). Nem uma gravação feita com M8 resolve: o replay abre a coleta no
+   primeiro quadro marcado, e a espera de 1200 ms do base só existe na tela. M8
+   inteira contra o base só se mede ao vivo.
+
+As decisões de desligar M2 e M10 (Fase 5 do relatório de alterações) saíram da
+mesma gravação, mas de outra ferramenta, que recalcula as features a partir dos
+landmarks gravados (M2 muda o extractor) e não está no repositório. Nela o V3
+padrão deu 65,0 px no miolo e 41,5 px nos cantos — do outro lado do base, a
+menos de 2 px dele, como aqui. M7 foi desligada por outro caminho: a
+gravação não tem o 14º alvo, e o olho sintético que satura como o real mostrou
+a troca de erro (README, *Pipeline V3*).
 
 ---
 

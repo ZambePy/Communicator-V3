@@ -1,6 +1,12 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // O alias do frontend: `src/diagnostics/sessionUrl.test.ts` testa
+  // `frontend/src/sessionFromUrl.ts`, que importa o núcleo como `@tracker/...`.
+  resolve: {
+    alias: { '@tracker': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.ts'],

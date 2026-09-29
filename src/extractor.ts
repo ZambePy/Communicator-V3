@@ -11,7 +11,7 @@
 import { buildL2CSBlock } from './l2cs/block';
 import { buildBlocoOcular } from './olho/bloco';
 import type { SaidasDoRamoOcular } from './olho/ramoOcular';
-import { EXPERIMENT } from './config/experiment';
+import { EXPERIMENT, type ExperimentConfig } from './config/experiment';
 import {
   OLHO_ESQUERDO, OLHO_DIREITO, IRIS_ESQUERDA, IRIS_DIREITA,
   TESTA_TOPO, assertFaceMeshCompleto, meshAusenteOuParcial,
@@ -515,13 +515,52 @@ export function activeFeatureDims(set: FeatureSet = ACTIVE_FEATURE_SET): number 
   return set === 'compact' ? 'var' : FEATURE_SET_INDICES[set].length;
 }
 
-/** Identidade do vetor que este build produz; vai no cabeçalho das gravações
- *  e na chave dos perfis salvos. */
-export const FEATURE_VECTOR_ID = `${ACTIVE_FEATURE_SET}:${activeFeatureDims()}`;
+/**
+ * Mudanças do V3 que alteram o SIGNIFICADO das features sem mudar a dimensão.
+ *
+ * Um perfil treinado com o referencial antigo prevê deslocado no novo, e o
+ * número de colunas não denuncia isso. Cada mudança acrescenta uma marca à
+ * identidade do vetor, que vai na chave do perfil (invalida os antigos) e no
+ * cabeçalho das gravações (o replay sabe com que features a gravação foi feita):
+ *
+ *  - `iso`: referencial da cabeça em pixels isotrópicos (M2);
+ *  - `rl`:  contra-rotação do roll com o sinal do L2CS (M3);
+ *  - `rc`:  recorte do L2CS nivelado no sinal certo (M13);
+ *  - `cab`: ângulos do L2CS no referencial da cabeça (M4).
+ *
+ * Com `pipeline: 'base'` nenhuma marca aparece e a identidade é a de antes.
+ */
+export function sufixoSemantico(
+  set: FeatureSet = ACTIVE_FEATURE_SET,
+  cfg: Pick<ExperimentConfig,
+    'referencialIsotropico' | 'normalizarRollNoCrop' | 'desrolarComSinalDoL2cs' | 'nivelarRecorteCorrigido' | 'l2csNaCabeca'
+  > = EXPERIMENT,
+): string {
+  const marcas: string[] = [];
+  if (cfg.referencialIsotropico) marcas.push('iso');
+  if (l2csSlotsInSet(set).length > 0) {
+    if (cfg.normalizarRollNoCrop && cfg.desrolarComSinalDoL2cs) marcas.push('rl');
+    if (cfg.normalizarRollNoCrop && cfg.nivelarRecorteCorrigido) marcas.push('rc');
+    if (cfg.l2csNaCabeca) marcas.push('cab');
+  }
+  return marcas.length > 0 ? `+${marcas.join('+')}` : '';
+}
 
+/**
+ * Identidade ESTRUTURAL de um conjunto: quais colunas e quantas. É o que
+ * distingue um conjunto do outro, e é o contrato que os testes de cada
+ * conjunto afirmam. Não leva as marcas de significado do pipeline — quem vai
+ * no perfil e nas gravações é o `FEATURE_VECTOR_ID`, abaixo.
+ */
 export function featureVectorId(set: FeatureSet = ACTIVE_FEATURE_SET): string {
   return `${set}:${activeFeatureDims(set)}`;
 }
+
+/** Identidade do vetor que este build produz; vai no cabeçalho das gravações
+ *  e na chave dos perfis salvos. É a do conjunto ativo mais as marcas do
+ *  pipeline (`sufixoSemantico`): as mesmas colunas com outro significado não
+ *  carregam um perfil treinado com o significado anterior. */
+export const FEATURE_VECTOR_ID = `${featureVectorId()}${sufixoSemantico()}`;
 
 /**
  * Projeta o vetor completo no conjunto ativo.
@@ -701,6 +740,12 @@ export interface L2CSGazeInput {
   /** Instante do quadro, em ms. Habilita o reuso do último ângulo válido em
    *  `buildL2CSBlock` quando a leitura corrente é obsoleta. */
   nowMs?: number;
+  /**
+   * O ângulo está no referencial da cabeça (M4) e a plausibilidade já foi
+   * conferida no ângulo da câmera, o que a rede devolveu. Ver o parâmetro de
+   * mesmo sentido em `buildL2CSBlock`.
+   */
+  plausibilidadeConferida?: boolean;
 }
 
 /** Vetor completo por olho (37 dims + bloco L2CS quando `l2csGaze` é passado
@@ -717,9 +762,22 @@ export function extractCompactFeatures(
   const analysis = analyzeFace(landmarks, faceMatrix, videoWidth, videoHeight, blinkDetector);
   if (!analysis.present) return { featuresLeft: [], featuresRight: [], blinkDetected: false };
 
-  const leftCorner = landmarks[OLHO_ESQUERDO.externo];
-  const rightCorner = landmarks[OLHO_DIREITO.externo];
-  const topOfHead = landmarks[TESTA_TOPO];
+  // Referencial isotrópico (M2): os landmarks chegam como x/W e y/H, e numa
+  // imagem 16:9 um passo vertical vale 1,78× um horizontal do mesmo tamanho.
+  // Montar a base da cabeça nessas coordenadas não dá uma rotação rígida: com
+  // 5° de roll, 1,87° do olhar vertical vazava para o offsetX (simulação em
+  // docs/PESQUISA.md §1.8, F3). Em pixels (z na escala de x, como o MediaPipe
+  // define) a base volta a ser ortonormal. Os offsets saem em distâncias
+  // cantais do mesmo jeito, porque a unidade some na divisão.
+  const iso =
+    EXPERIMENT.referencialIsotropico && aspectoValido(videoWidth, videoHeight)
+      ? { w: videoWidth as number, h: videoHeight as number }
+      : null;
+  const emPx = (p: Point3D): Point3D => (iso ? { x: p.x * iso.w, y: p.y * iso.h, z: p.z * iso.w } : p);
+
+  const leftCorner = emPx(landmarks[OLHO_ESQUERDO.externo]);
+  const rightCorner = emPx(landmarks[OLHO_DIREITO.externo]);
+  const topOfHead = emPx(landmarks[TESTA_TOPO]);
 
   const eyeCenter = scale(add(leftCorner, rightCorner), 0.5);
   const xAxis = normalize(sub(rightCorner, leftCorner));
@@ -727,8 +785,9 @@ export function extractCompactFeatures(
   const yAxis = normalize(sub(yApprox, scale(xAxis, dot(yApprox, xAxis))));
   const zAxis = normalize(cross(xAxis, yAxis));
 
-  const rot = (p: Point3D) => mulRT(xAxis, yAxis, zAxis, sub(p, eyeCenter));
-  const interEyeDistRaw = norm(sub(rot(rightCorner), rot(leftCorner))) || 1;
+  const rot = (p: Point3D) => mulRT(xAxis, yAxis, zAxis, sub(emPx(p), eyeCenter));
+  const interEyeDistRaw =
+    norm(sub(rot(landmarks[OLHO_DIREITO.externo]), rot(landmarks[OLHO_ESQUERDO.externo]))) || 1;
   const rotS = (idx: number) => {
     const p = rot(landmarks[idx]);
     return { x: p.x / interEyeDistRaw, y: p.y / interEyeDistRaw };
@@ -809,6 +868,7 @@ export function extractCompactFeatures(
       face.cameraDistanceEstimate,
       l2csGaze.confidence,
       l2csGaze.nowMs,
+      l2csGaze.plausibilidadeConferida === true,
     );
     for (let i = 0; i < block.length; i++) {
       compLeft.push(block[i]);

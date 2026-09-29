@@ -84,9 +84,9 @@
   }
 }
 
-/* Flutuação lenta (o monitor da abertura e a linha "role"). Usa a
-   propriedade `translate`, e não `transform`, para somar com a inclinação
-   3D de quem flutua. */
+/* Flutuação lenta (o vídeo da abertura e a linha "role"). Usa a
+   propriedade `translate`, e não `transform`, para somar com qualquer
+   `transform` de quem flutua. */
 @keyframes float-slow {
   0%,
   100% {

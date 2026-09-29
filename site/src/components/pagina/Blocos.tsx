@@ -14,12 +14,20 @@ export function Recursos({
   itens,
   colunas = 3,
   numerar = false,
+  nivel = 3,
 }: {
   itens: Recurso[]
   colunas?: 2 | 3 | 4
   /** Mostra 01, 02… no lugar do ícone (passos em ordem). */
   numerar?: boolean
+  /**
+   * Nível do título de cada item. O normal é 3, porque a lista vem sob o h2 de
+   * um capítulo; direto sob o h1 da página, é 2 — pular um nível atrapalha
+   * quem navega pelos títulos no leitor de tela.
+   */
+  nivel?: 2 | 3
 }) {
+  const Titulo = nivel === 2 ? 'h2' : 'h3'
   return (
     <ul className={`recursos recursos--${colunas}`}>
       {itens.map((r, i) => (
@@ -35,7 +43,7 @@ export function Recursos({
               </span>
             )
           )}
-          <h3 className="recursos__titulo">{r.titulo}</h3>
+          <Titulo className="recursos__titulo">{r.titulo}</Titulo>
           <p className="recursos__texto">{r.texto}</p>
         </Reveal>
       ))}

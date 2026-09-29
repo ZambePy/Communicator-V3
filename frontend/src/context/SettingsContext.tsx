@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { FOV_PADRAO_DEG, sanitizarMapaDeFov, type MapaDeFov } from '@tracker/camera/fovPorCamera';
+import { posicaoDaCameraValida, type PosicaoDaCamera } from '@tracker/geometria6dof';
 import { computeDisplayGeometry, pickPanelForDisplay } from '@tracker/displayGeometry';
 import { aplicarGeometriaDoUsuario } from '../design/gazeMetrics';
 import { setSessionGeometry } from '@tracker/calibration';
+import { EVENTO_DE_ACURACIA_MEDIDA } from '@tracker/accuracy';
+import { EVENTO_DE_CALIBRACAO_EM_USO } from '@tracker/calibration';
 import { DWELL_PADRAO_MS, dwellMsDoLegado, limitarDwellMs } from '../dwellMs';
 
 /** Formato antigo. Sobrevive só para a migração em `lerSettingsDoDisco`. */
@@ -80,6 +83,9 @@ interface Settings {
   // não voltar a cada abertura — repetir orientação a quem já entendeu é
   // ruído exatamente para quem tem menos energia para ignorá-lo.
   dicasVistas: string[];
+  // De que lado da tela está a câmera. Só a saída 6DoF experimental
+  // (`EXPERIMENT.saida6DoF`) usa, e só ela pergunta. `null` = não informado.
+  posicaoDaCamera: PosicaoDaCamera | null;
 }
 
 const defaultSettings: Settings = {
@@ -116,6 +122,7 @@ const defaultSettings: Settings = {
   ultimaCameraChave: null,
   screenScaleFactor: null,
   dicasVistas: [],
+  posicaoDaCamera: null,
 };
 
 const SettingsContext = createContext<{
@@ -228,6 +235,7 @@ function lerSettingsDoDisco(): Partial<Settings> | null {
     // com entradas quebradas (um FOV NaN restaurado quebraria toda distância).
     obj.fovPorCamera = sanitizarMapaDeFov((obj as { fovPorCamera?: unknown }).fovPorCamera);
     if (typeof obj.ultimaCameraChave !== 'string') obj.ultimaCameraChave = null;
+    obj.posicaoDaCamera = posicaoDaCameraValida((obj as { posicaoDaCamera?: unknown }).posicaoDaCamera);
 
     return obj;
   } catch (e) {
@@ -421,8 +429,16 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
     };
     window.addEventListener('resize', aoRedimensionar);
+    // Alvo mínimo medido (M18): uma rodada de medição nova muda o requisito,
+    // e o modelo em uso também — a medição só vale para a calibração em que
+    // foi feita, e o perfil salvo só carrega depois do MediaPipe, bem depois
+    // deste efeito.
+    window.addEventListener(EVENTO_DE_ACURACIA_MEDIDA, aoRedimensionar);
+    window.addEventListener(EVENTO_DE_CALIBRACAO_EM_USO, aoRedimensionar);
     return () => {
       window.removeEventListener('resize', aoRedimensionar);
+      window.removeEventListener(EVENTO_DE_ACURACIA_MEDIDA, aoRedimensionar);
+      window.removeEventListener(EVENTO_DE_CALIBRACAO_EM_USO, aoRedimensionar);
       if (pendente) cancelAnimationFrame(pendente);
     };
   }, [settings.viewingDistanceCm, settings.screenDiagonalIn]);

@@ -216,7 +216,8 @@ export const ResultadoDaCalibracao: React.FC<{
             {leitura.looErrorPx !== null && (
               <NumeroAnimado
                 valor={leitura.looErrorPx}
-                formatar={(n) => t('calib.resultado.erro', { px: Math.round(n) })}
+                formatar={(n) =>
+                  t(leitura.semOsCantos ? 'calib.resultado.erroSemCantos' : 'calib.resultado.erro', { px: Math.round(n) })}
                 style={{ fontSize: '0.9rem', opacity: 0.7, color: 'var(--color-text-base)' }}
               />
             )}

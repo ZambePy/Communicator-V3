@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EXPERIMENT } from './config/experiment';
-import { loadProfile, haCalibracaoNoDisco, isCalibrated, PROFILES_STORAGE_KEY } from './calibration';
+import { loadProfile, haCalibracaoNoDisco, isCalibrated, PROFILES_STORAGE_KEY, chaveDoContextoAtual } from './calibration';
 
 /**
  * Desligar a persistência da calibração — modo de desenvolvimento.
@@ -18,11 +18,26 @@ import { loadProfile, haCalibracaoNoDisco, isCalibrated, PROFILES_STORAGE_KEY } 
 
 const CHAVE = PROFILES_STORAGE_KEY;
 
-/** Um perfil qualquer, só para o disco não estar vazio. */
+/**
+ * Um perfil que CARREGARIA nesta tela (contexto atual, estado de referência):
+ * com a persistência ligada a abertura e o carregamento dizem "sim" para ele.
+ */
+const MODELO = {
+  betaX: [0, 1], betaY: [0, 1], numFeatures: 1,
+  lambda: 1, lambdaX: 1, lambdaY: 1,
+  nearSingularCols: [] as number[], penalty: 'isotropic' as const,
+};
 const PERFIL_NO_DISCO = JSON.stringify([
   {
-    meta: { id: 'perfil-de-teste', createdAt: new Date().toISOString(), schemaVersion: 2 },
-    modelLeft: {}, modelRight: {}, scalerParamsLeft: {}, scalerParamsRight: {},
+    meta: { id: 'perfil-de-teste', label: 'teste', createdAt: new Date().toISOString(), opticalCondition: 'sem_oculos' },
+    contextKey: chaveDoContextoAtual(),
+    schemaVersion: 2,
+    modelLeft: MODELO, modelRight: { ...MODELO },
+    scalerParamsLeft: { means: [0], stds: [1] }, scalerParamsRight: { means: [0], stds: [1] },
+    reference: {
+      pose: null, center: null, cameraDistanceCm: null, screenDistanceCm: null,
+      refDistance: null, eyeReliability: null,
+    },
   },
 ]);
 

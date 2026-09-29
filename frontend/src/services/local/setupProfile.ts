@@ -35,7 +35,18 @@ export interface PreparoDoPerfil extends DadosDoPreparo {
 
 export const chaveDoPreparo = (profileId: string) => `irisflow_setup_${profileId}`;
 
+/**
+ * Preparos concluídos nesta sessão que o disco recusou (armazenamento cheio —
+ * fotos e calibrações moram nele — ou bloqueado). Sem isto o "vale só nesta
+ * sessão" prometido abaixo não existia: `preparoConcluido` lia só o disco, o
+ * portão da calibração mandava de volta ao preparo, que recomeça do passo 1, e
+ * o cuidador girava nesse laço sem fim.
+ */
+const preparosSoNaSessao = new Map<string, PreparoDoPerfil>();
+
 export function lerPreparo(profileId: string): PreparoDoPerfil | null {
+  const daSessao = preparosSoNaSessao.get(profileId);
+  if (daSessao) return daSessao;
   try {
     const raw = localStorage.getItem(chaveDoPreparo(profileId));
     if (!raw) return null;
@@ -65,8 +76,10 @@ export function gravarPreparo(profileId: string, dados: DadosDoPreparo): Preparo
   };
   try {
     localStorage.setItem(chaveDoPreparo(profileId), JSON.stringify(registro));
+    preparosSoNaSessao.delete(profileId);
   } catch {
     // Sem persistência o preparo vale só nesta sessão.
+    preparosSoNaSessao.set(profileId, registro);
   }
   return registro;
 }
@@ -76,6 +89,7 @@ export function preparoConcluido(profileId: string): boolean {
 }
 
 export function limparPreparo(profileId: string): void {
+  preparosSoNaSessao.delete(profileId);
   try {
     localStorage.removeItem(chaveDoPreparo(profileId));
   } catch {

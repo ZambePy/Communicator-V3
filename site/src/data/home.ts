@@ -20,6 +20,9 @@ export type Demo = {
 /** Gravação de tela do IrisFlow Communicator (18/09/2026): teclado, menu e tutorial,
  *  com o cursor do olhar. */
 export const DEMO_COMMUNICATOR: Demo = {
+  // VP9 primeiro, H.264 de reserva: o Chromium sem codecs proprietários (o de
+  // várias distribuições Linux) não toca MP4, e o pôster ficava parado.
+  webm: '/media/demo-communicator.webm',
   mp4: '/media/demo-communicator.mp4',
   poster: '/media/demo-communicator-poster.jpg',
   descricao:

@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import i18n from '../../i18n';
 import { ChecagemRapida } from './ChecagemRapida';
-import { MS_LIMITE_DE_ENQUADRAMENTO } from './tempos';
+import { MS_LIMITE_DE_ENQUADRAMENTO, MS_LIMITE_DO_MODELO } from './tempos';
 import { CHAVE_DA_REFERENCIA, lerReferencia } from '../../services/local/referenciaDaChecagem';
 import { FOV_DE_REFERENCIA_DEG, iodFractionParaDistancia } from '@tracker/setupReadiness';
 
@@ -45,7 +45,10 @@ vi.mock('../../context/SettingsContext', () => ({
 // O engine é substituído por um controle manual: a posição é ditada pelo teste
 // e as amostras são empurradas quando ele quiser.
 let posicionado = true;
+let calibrado = true;
+let l2csStatus: 'loading' | 'ready' | 'disabled' | 'error' = 'disabled';
 let emitir: (s: { x: number; y: number; hasFace: boolean }) => void = () => {};
+const calibracaoDoTeste = { isCalibrated: () => calibrado };
 
 const VIDEO = { width: 1920, height: 1080 };
 
@@ -65,6 +68,8 @@ const diagnosticos = () => ({
 
 vi.mock('../../context/GazeContext', () => ({
   useGaze: () => ({
+    calibration: calibracaoDoTeste,
+    l2csStatus,
     getDiagnostics: () => diagnosticos(),
     subscribe: (cb: (s: { x: number; y: number; hasFace: boolean }) => void) => {
       emitir = cb;
@@ -80,6 +85,8 @@ beforeEach(async () => {
   localStorage.clear();
   navegou.mockClear();
   posicionado = true;
+  calibrado = true;
+  l2csStatus = 'disabled';
   vi.useFakeTimers();
   // O erro angular é calculado a partir da geometria da tela; sem tamanho, a
   // conversão para graus não teria sentido.
@@ -308,5 +315,103 @@ describe('a checagem não é instrumento de medição', () => {
     checagemCompleta(300);
 
     expect(localStorage.getItem('irisflow_clinical_data')).toBeNull();
+  });
+});
+
+describe('sem modelo carregado', () => {
+  it('não mede os pontos, não grava referência e manda calibrar', () => {
+    // A calibração salva não carregou (outra tela, outra versão do vetor): a
+    // tela dizia "Tudo como antes. Pode usar." e o menu abria sem modelo.
+    calibrado = false;
+    render(<ChecagemRapida />);
+    umaVoltaDaVigia();
+    expect(screen.queryByText(/ponto 1 de 3/i)).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(MS_LIMITE_DE_ENQUADRAMENTO + 100);
+    });
+
+    expect(screen.getByText(/calibrar de novo\./i)).toBeTruthy();
+    expect(screen.getByText(/calibração salva não vale/i)).toBeTruthy();
+    expect(screen.queryByText(/tudo como antes/i)).toBeNull();
+    expect(lerReferencia(CALIB_TS)).toBeNull();
+  });
+
+  it('enquanto o L2CS carrega, espera o modelo em vez de encerrar', () => {
+    // Numa máquina sem WebGPU o perfil só carrega quando o worker do L2CS diz
+    // o lado do recorte — às vezes depois do limite do enquadramento.
+    calibrado = false;
+    l2csStatus = 'loading';
+    const { rerender } = render(<ChecagemRapida />);
+    act(() => {
+      vi.advanceTimersByTime(MS_LIMITE_DE_ENQUADRAMENTO * 2);
+    });
+    expect(screen.queryByText(/calibrar de novo\./i)).toBeNull();
+
+    // O worker subiu e o perfil carregou: os pontos começam.
+    calibrado = true;
+    l2csStatus = 'ready';
+    rerender(<ChecagemRapida />);
+    umaVoltaDaVigia();
+    expect(screen.getByText(/ponto 1 de 3/i)).toBeTruthy();
+  });
+
+  it('com o perfil já carregado, os pontos também esperam o L2CS subir', () => {
+    // Com WebGPU o perfil (gravado em 448²) carrega na escolha do paciente,
+    // segundos antes do worker: medir ali mediria o modelo sem o bloco
+    // angular, e a primeira checagem gravaria esse erro como referência.
+    l2csStatus = 'loading';
+    const { rerender } = render(<ChecagemRapida />);
+    umaVoltaDaVigia();
+    umaVoltaDaVigia();
+    expect(screen.queryByText(/ponto 1 de 3/i)).toBeNull();
+
+    l2csStatus = 'ready';
+    rerender(<ChecagemRapida />);
+    umaVoltaDaVigia();
+    expect(screen.getByText(/ponto 1 de 3/i)).toBeTruthy();
+  });
+
+  it('um L2CS que nunca sobe (a câmera que não abre) não prende a tela', () => {
+    // "Carregando" é também o estado de quem nunca vai subir: sem câmera o
+    // engine não começa. Antes a tela esperava sem veredito e sem "Calibrar
+    // de novo" — só o Pular, pelo mouse.
+    calibrado = false;
+    posicionado = false;
+    l2csStatus = 'loading';
+    render(<ChecagemRapida />);
+    act(() => {
+      vi.advanceTimersByTime(MS_LIMITE_DO_MODELO - 1000);
+    });
+    expect(screen.queryByText(/calibrar de novo\./i)).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
+    expect(screen.getByText(/calibrar de novo\./i)).toBeTruthy();
+    // O motivo diz o que houve — não que a calibração salva não vale.
+    expect(screen.getByText(/não terminou de carregar a tempo/i)).toBeTruthy();
+    expect(screen.queryByText(/calibração salva não vale/i)).toBeNull();
+    expect(lerReferencia(CALIB_TS)).toBeNull();
+  });
+
+  it('quando o L2CS sobe, o relógio do enquadramento recomeça do zero', () => {
+    posicionado = false;
+    l2csStatus = 'loading';
+    const { rerender } = render(<ChecagemRapida />);
+    act(() => {
+      vi.advanceTimersByTime(MS_LIMITE_DO_MODELO - 2000);
+    });
+    l2csStatus = 'ready';
+    rerender(<ChecagemRapida />);
+    act(() => {
+      vi.advanceTimersByTime(MS_LIMITE_DE_ENQUADRAMENTO - 500);
+    });
+    expect(screen.queryByText(/calibrar de novo\./i)).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(screen.getByText(/o rosto não ficou no enquadramento/i)).toBeTruthy();
   });
 });

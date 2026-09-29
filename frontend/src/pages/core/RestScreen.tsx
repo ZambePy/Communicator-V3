@@ -67,7 +67,10 @@ export const RestScreen: React.FC = () => {
           className="t-body-lg"
           style={{ opacity: 0.7, margin: 0, fontWeight: 500 }}
         >
-          O rastreamento ocular de ações foi pausado.
+          {/* O rastreamento continua (é ele que acorda a tela), e a Emergência
+              segue acionável em qualquer tela: dizer "rastreamento pausado"
+              faria o cuidador achar que o socorro também parou. */}
+          As ações pelo olhar estão pausadas — a Emergência continua valendo.
           <br />
           Olhe fixamente para o botão abaixo para acordar.
         </p>

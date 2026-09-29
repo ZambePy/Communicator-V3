@@ -9,6 +9,7 @@ import {
   type CameraDevice,
   type QualidadeDeFps,
 } from '../../../services/camera/devices';
+import { POSICOES_DA_CAMERA, type PosicaoDaCamera } from '@tracker/geometria6dof';
 
 /**
  * Escolha da câmera e medição do que ela entrega.
@@ -40,6 +41,14 @@ export interface EscolhaDaCameraProps {
   aoSelecionar: (deviceId: string) => void;
   aoRecarregar: () => void;
   videoRef: React.RefObject<HTMLVideoElement | null>;
+  /**
+   * Pergunta de que lado da tela fica a câmera. Só aparece com a saída 6DoF
+   * experimental ligada (o wizard só passa `aoEscolherPosicao` nesse caso):
+   * sem ela, a resposta não mudaria nada, e pergunta sem efeito é ruído para
+   * quem tem menos energia para ignorá-lo.
+   */
+  posicaoDaCamera?: PosicaoDaCamera | null;
+  aoEscolherPosicao?: (p: PosicaoDaCamera) => void;
 }
 
 export const EscolhaDaCamera: React.FC<EscolhaDaCameraProps> = ({
@@ -50,6 +59,8 @@ export const EscolhaDaCamera: React.FC<EscolhaDaCameraProps> = ({
   aoSelecionar,
   aoRecarregar,
   videoRef,
+  posicaoDaCamera = null,
+  aoEscolherPosicao,
 }) => {
   const { t } = useTranslation();
   const qualidade = capacidade ? classificarFps(capacidade.fpsMedido) : null;
@@ -129,6 +140,44 @@ export const EscolhaDaCamera: React.FC<EscolhaDaCameraProps> = ({
               );
             })}
           </div>
+
+          {aoEscolherPosicao && (
+            <div
+              role="radiogroup"
+              aria-label={t('setup.camera.posicao.title')}
+              style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
+            >
+              <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-text-base)' }}>
+                {t('setup.camera.posicao.title')}
+              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {POSICOES_DA_CAMERA.map((pos) => {
+                  const ativa = pos === posicaoDaCamera;
+                  return (
+                    <button
+                      key={pos}
+                      type="button"
+                      role="radio"
+                      aria-checked={ativa}
+                      onClick={() => aoEscolherPosicao(pos)}
+                      style={{
+                        padding: '0.7rem 1rem',
+                        borderRadius: '0.9rem',
+                        background: ativa ? 'var(--tint-info-bg)' : 'transparent',
+                        border: `1px solid ${ativa ? 'var(--tint-info-border)' : 'var(--color-card-border)'}`,
+                        color: 'var(--color-text-base)',
+                        fontSize: '0.95rem',
+                        fontWeight: ativa ? 700 : 500,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {t(`setup.camera.posicao.${pos}`)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {medindo || !capacidade ? (
             <Semaforo status="unknown" titulo={t('setup.camera.measuring')} />

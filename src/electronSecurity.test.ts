@@ -3,7 +3,7 @@ import {
   origemConfiavel, permitirPermissao, permitirNavegacao, CSP, CSP_DEV, cspComNuvem, origemDaNuvem,
   PREFERENCIAS_WEB_SEGURAS, preferenciasWebSeguras, permitirAberturaExterna, hostDoSite,
   atalhoBloqueadoEmProducao, alternaTelaCheia, decidirRecarga, RECARGA_JANELA_MS, RECARGA_MAXIMO, RECARGA_ESPERAS_LONGAS_MS,
-  HOSTS_EXTERNOS_PERMITIDOS, argumentoDeDepuracao, SWITCHES_DE_DEPURACAO, papeisDoMenuEmpacotado,
+  HOSTS_EXTERNOS_PERMITIDOS, argumentoDeDepuracao, SWITCHES_DE_DEPURACAO, SWITCH_DO_WEBGL_POR_SOFTWARE, papeisDoMenuEmpacotado,
 } from './electronSecurity';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
@@ -433,6 +433,16 @@ describe('porta de depuração na linha de comando', () => {
     // A checagem vem antes de tudo o que abre janela ou IPC.
     expect(main.indexOf('if (ARGUMENTO_DE_DEPURACAO)')).toBeLessThan(main.indexOf('iniciarDiagnostico('));
     expect(SWITCHES_DE_DEPURACAO).toEqual(expect.arrayContaining(['inspect', 'remote-debugging-port', 'remote-debugging-pipe']));
+  });
+});
+
+describe('WebGL por software', () => {
+  it('o main liga o SwiftShader antes do `ready`: sem WebGL o MediaPipe não sobe nem na CPU', () => {
+    const main = fonte('electron/main.ts');
+    expect(SWITCH_DO_WEBGL_POR_SOFTWARE).toBe('enable-unsafe-swiftshader');
+    expect(main).toMatch(/app\.commandLine\.appendSwitch\(SWITCH_DO_WEBGL_POR_SOFTWARE\)/);
+    // No nível do módulo, antes de qualquer janela.
+    expect(main.indexOf('appendSwitch(SWITCH_DO_WEBGL_POR_SOFTWARE)')).toBeLessThan(main.indexOf('new BrowserWindow('));
   });
 });
 

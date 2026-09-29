@@ -57,6 +57,7 @@ import { infoDoApp } from '../cloud/armazenamento';
 import { LanguageSwitcher } from '../components/ui/LanguageSwitcher';
 import { haEscolhaDeIdioma } from '../i18n';
 import { PortaoDoPin } from '../components/ui/PortaoDoPin';
+import { useSeguirDepoisDoPin } from '../components/ui/destinoDepoisDoPin';
 import { INTRO_SEEN_KEY } from './onboarding/bootDestination';
 import { limparTutorial } from '../services/local/tutorialProfile';
 import { useDevMode } from '../devMode';
@@ -83,6 +84,7 @@ import { gravarUltimoRelatorio } from '../services/local/ultimoRelatorio';
 import { getCalibrationTimestampMs } from '@tracker/calibration';
 import { ControleDeDwell } from '../components/ui/ControleDeDwell';
 import { AtalhoDeTutorial } from './tutorial/AtalhoDeTutorial';
+import { AtalhoDeCalibracao } from './calibration/AtalhoDeCalibracao';
 import { AtalhoDePerfilEConta } from './conta/AtalhoDePerfilEConta';
 import { SobreOIrisFlow } from './settings/SobreOIrisFlow';
 import { LeiturasSection } from './settings/LeiturasSection';
@@ -208,6 +210,7 @@ export const SettingsScreen: React.FC = () => {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
   const { isCaregiver, loginCaregiver, currentProfile } = useAuth();
+  useSeguirDepoisDoPin(isCaregiver);
   const devMode = useDevMode();
   const toast = useToast();
 
@@ -474,7 +477,7 @@ export const SettingsScreen: React.FC = () => {
 
     setAccuracyRunning(true);
     startAccuracyTest(
-      (r) => {
+      (r, action) => {
         setAccuracyRunning(false);
         setLastAccuracy(r);
         // Guarda para a tela de relatorio apresentar. O relatorio CANONICO ja
@@ -505,6 +508,10 @@ export const SettingsScreen: React.FC = () => {
             `Precisão: ${Math.round(r.meanError)}px médio (${r.meanErrorDeg.toFixed(2)}°) — ${r.score}`
           );
         }
+        // "Recalibrar" no painel do teste leva à calibração. Antes o callback
+        // ignorava a ação e o botão fazia o mesmo que "Continuar": o cuidador
+        // via um erro alto, pedia para recalibrar e continuava onde estava.
+        if (action === 'redo') navigate('/calibration-check');
         // Sem o terceiro argumento o relatório sai com `pipeline.runtime: null`
         // — sem provider efetivo, sem fallback, sem staleness e sem fps. Uma
         // sessão assim não diz em que condição foi medida.
@@ -621,6 +628,8 @@ export const SettingsScreen: React.FC = () => {
         <AtalhoDePerfilEConta />
 
         <AtalhoDePreparo />
+
+        <AtalhoDeCalibracao />
 
         <AtalhoDeTutorial />
 

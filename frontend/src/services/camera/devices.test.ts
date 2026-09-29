@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { listarCameras, classificarFps, contarFps, FPS_BOM, FPS_BAIXO } from './devices';
+import { listarCameras, classificarFps, contarFps, medirFps, FPS_BOM, FPS_BAIXO } from './devices';
 
 // -----------------------------------------------------------------------------
 // O pipeline assume 30 fps em vários pontos — as janelas de baseline da
@@ -110,5 +110,56 @@ describe('contarFps', () => {
 
   it('nenhum frame em três segundos é 0, não NaN', () => {
     expect(contarFps(0, 3000)).toBe(0);
+  });
+});
+
+describe('medirFps', () => {
+  type Cb = (agora: number, meta?: { presentedFrames?: number; mediaTime?: number }) => void;
+  let relogio = 0;
+  let proximo: Cb | null = null;
+  const video = () => ({
+    requestVideoFrameCallback: (cb: Cb) => { proximo = cb; return 1; },
+  }) as unknown as HTMLVideoElement;
+  /** Entrega um quadro ao callback pendente no instante `t`. */
+  const quadro = (t: number, meta?: { presentedFrames?: number; mediaTime?: number }) => {
+    relogio = t;
+    const cb = proximo;
+    proximo = null;
+    cb?.(t, meta);
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+    proximo = null;
+  });
+
+  const preparar = () => {
+    vi.useFakeTimers();
+    relogio = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => relogio);
+  };
+
+  it('com a página ocupada, mede a câmera pelos metadados, não pelas chamadas do callback', async () => {
+    preparar();
+    const p = medirFps(video(), 3000);
+    // O primeiro callback só chega depois da janela inteira (thread ocupado)…
+    quadro(3500, { presentedFrames: 100, mediaTime: 100 / 30 });
+    // …e o seguinte 200 ms depois, com seis quadros da câmera no meio.
+    quadro(3700, { presentedFrames: 106, mediaTime: 106 / 30 });
+    await expect(p).resolves.toBeCloseTo(30, 6);
+  });
+
+  it('sem metadados, conta os callbacks entre o primeiro e o último', async () => {
+    preparar();
+    const p = medirFps(video(), 3000);
+    for (let i = 0; i <= 91; i++) quadro(i * (1000 / 30));
+    await expect(p).resolves.toBeCloseTo(30, 6);
+  });
+
+  it('vídeo parado: 0 depois de duas janelas, em vez de "medindo…" para sempre', async () => {
+    preparar();
+    const p = medirFps(video(), 3000);
+    vi.advanceTimersByTime(6000);
+    await expect(p).resolves.toBe(0);
   });
 });

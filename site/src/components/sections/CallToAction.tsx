@@ -1,5 +1,6 @@
 import { Reveal } from '@/components/effects/Reveal'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
+import { OlharQueFala } from '@/components/effects/Ilustracoes'
 import { Button } from '@/components/ui/Button'
 import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
@@ -18,6 +19,9 @@ export function CallToAction() {
       <AmbientBackground />
 
       <div className="container cta__inner">
+        <Reveal anim="fade" className="cta__ilustracao">
+          <OlharQueFala />
+        </Reveal>
         <Reveal anim="up">
           <h2 className="cta__title">
             A pessoa continua lá. <span className="accent-text">Só falta a voz.</span>

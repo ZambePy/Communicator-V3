@@ -18,7 +18,15 @@ import {
   ArrowRight,
   X,
 } from 'lucide-react';
-import { createDwellState, stepDwell, DEFAULT_DWELL_CONFIG, type DwellState, type DwellTarget } from '@tracker/interaction/dwell';
+import {
+  createDwellState,
+  stepDwell,
+  configComTolerancia,
+  DEFAULT_DWELL_CONFIG,
+  type DwellState,
+  type DwellTarget,
+} from '@tracker/interaction/dwell';
+import { EXPERIMENT } from '@tracker/config/experiment';
 import { estiloDoCursor } from '@tracker/interaction/cursorStyle';
 import { geometriaDoAnel } from '@tracker/interaction/dwellRing';
 import { SeguidorDeCursor } from '@tracker/interaction/seguidorDeCursor';
@@ -282,7 +290,8 @@ export const Overlay: React.FC = () => {
         dwellRef.current,
         { x: a.x, y: a.y, timestamp: a.t, hasFace: a.hasFace, degraded: a.degraded, uncalibrated: a.uncalibrated, eyeState: a.eyeState },
         target,
-        { ...DEFAULT_DWELL_CONFIG, dwellMs: c.dwellMs },
+        // Memória de intrusão (M19) também na sobreposição.
+        configComTolerancia({ ...DEFAULT_DWELL_CONFIG, dwellMs: c.dwellMs }, EXPERIMENT.toleranciaIntrusoes),
       );
       dwellRef.current = saida.state;
 

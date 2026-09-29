@@ -9,6 +9,7 @@ import { LanguageSwitcher } from '../../components/ui/LanguageSwitcher';
 import { haEscolhaDeIdioma } from '../../i18n';
 import { INTRO_SEEN_KEY } from './bootDestination';
 import { AvisoDeTelaCheia } from '../../components/AvisoDeTelaCheia';
+import { useLicense } from '../../context/LicenseContext';
 
 /**
  * Boas-vindas — a primeira abertura.
@@ -25,6 +26,7 @@ import { AvisoDeTelaCheia } from '../../components/AvisoDeTelaCheia';
 export const IntroScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { status } = useLicense();
 
   const comecar = () => {
     try {
@@ -32,7 +34,11 @@ export const IntroScreen: React.FC = () => {
     } catch {
       // Sem persistência a apresentação reaparece. Chato, não impeditivo.
     }
-    navigate('/login');
+    // Com a licença valendo (é o "Refazer a apresentação" das Configurações),
+    // o passo da conta já está feito: a tela de conta mostra "Tudo pronto" e
+    // segue. Mandar para o login pedia e-mail e senha de novo — e sem internet,
+    // ou sem a senha à mão, o cuidador ficava preso numa tela sem "Voltar".
+    navigate(status === 'active' || status === 'grace' ? '/activated' : '/login');
   };
 
   return (

@@ -85,7 +85,8 @@ export const DebugHUD: React.FC = () => {
 
         <span className="hud__key">exp</span>
         <span>
-          expand {diag.experiment.expandFactor} &middot; cad {diag.experiment.cadenceMs} ms
+          {diag.experiment.pipeline} &middot; expand {diag.experiment.expandFactor} &middot; cad{' '}
+          {diag.experiment.cadenceMs} ms
         </span>
 
         {/* Latência por estágio: os quatro mais caros por p95. Estágios que

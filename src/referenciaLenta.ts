@@ -435,9 +435,3 @@ export class ReferenciaLenta {
     return false;
   }
 }
-
-/** Δ de pose entre o quadro e a referência lenta, em radianos por eixo. */
-export function deltaDePose(atual: Pose | null, referencia: Pose | null): { yaw: number; pitch: number } {
-  if (!poseFinita(atual) || !poseFinita(referencia)) return { yaw: 0, pitch: 0 };
-  return { yaw: atual.yaw - referencia.yaw, pitch: atual.pitch - referencia.pitch };
-}

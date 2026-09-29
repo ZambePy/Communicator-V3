@@ -15,7 +15,7 @@ import type { AccuracyResult, RunMeta } from '@tracker/accuracy';
  *
  * ## Isto NÃO é o relatório
  *
- * O relatório canônico (`schema: irisflow.accuracy-report/2`) é escrito pelo
+ * O relatório canônico (`schema: irisflow.accuracy-report/3`) é escrito pelo
  * próprio `startAccuracyTest`, na raiz do projeto ou no download do navegador.
  * O que fica aqui é o resumo que a tela mostra, e o que o botão de exportar
  * reenvia — marcado com schema próprio para ninguém confundir os dois numa

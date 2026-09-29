@@ -1,0 +1,220 @@
+/* Ilustrações animadas (Ilustracoes.tsx). Só `transform` e `opacity` animam
+   (o teste confere), e só com a ilustração na tela (`.is-rodando`). Com
+   movimento reduzido, a regra global de global.css encurta cada animação para
+   um quadro e o desenho fica no repouso. */
+
+.ilustracao {
+  display: inline-block;
+  line-height: 0;
+  color: var(--blue-300);
+}
+
+.ilustracao svg {
+  display: block;
+  overflow: visible;
+}
+
+/* Parada fora da tela: nada anima sem ninguém ver. */
+.ilustracao * {
+  animation-play-state: paused;
+}
+
+.ilustracao.is-rodando * {
+  animation-play-state: running;
+}
+
+/* ---------- o olho ---------- */
+.olho__branco {
+  fill: rgba(143, 180, 240, 0.08);
+}
+
+.olho__contorno {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+
+.olho__pupila {
+  fill: #061223;
+}
+
+.olho__brilho {
+  fill: #fff;
+  opacity: 0.85;
+}
+
+.olho__pisca,
+.olho__iris {
+  transform-box: view-box;
+}
+
+/* Pisca uma vez a cada ~5 s, rápido (≈ 250 ms, a duração de uma piscada). */
+.olho__pisca {
+  transform-origin: 48px 28px;
+  animation: olho-piscar 5.2s linear infinite;
+}
+
+/* Procura: esquerda, direita, baixo (a tela) e volta ao centro. */
+.olho__iris--procura {
+  animation: olho-procurar 7s var(--ease-in-out) infinite;
+}
+
+@keyframes olho-piscar {
+  0%,
+  91%,
+  100% {
+    transform: scaleY(1);
+  }
+  93.5% {
+    transform: scaleY(0.08);
+  }
+  96% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes olho-procurar {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  14%,
+  28% {
+    transform: translate(-11px, 2px);
+  }
+  42%,
+  56% {
+    transform: translate(10px, -2px);
+  }
+  70%,
+  84% {
+    transform: translate(0, 4px);
+  }
+}
+
+/* ---------- o computador que guarda os dados ---------- */
+.cofre__moldura {
+  fill: rgba(143, 180, 240, 0.06);
+  stroke: currentColor;
+  stroke-width: 2.2;
+}
+
+.cofre__pe {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cofre__camera,
+.cofre__dado,
+.cofre__corpo {
+  fill: var(--teal-300);
+}
+
+.cofre__rosto {
+  fill: none;
+  stroke: rgba(143, 180, 240, 0.38);
+  stroke-width: 2;
+}
+
+.cofre__leitura,
+.cofre__orbita,
+.cofre__alca {
+  transform-box: view-box;
+}
+
+/* A linha de leitura desce pela tela e some antes de chegar embaixo. */
+.cofre__leitura {
+  fill: var(--teal-300);
+  opacity: 0;
+  animation: cofre-ler 3.6s var(--ease-in-out) infinite;
+}
+
+/* Os dados giram por dentro da tela, sem sair dela. */
+.cofre__orbita {
+  transform-origin: 60px 38px;
+  animation: cofre-girar 9s linear infinite;
+}
+
+.cofre__selo-fundo {
+  fill: #0b1f3a;
+  stroke: var(--teal-300);
+  stroke-width: 2;
+}
+
+/* O cadeado fecha uma vez, quando a seção aparece. */
+.cofre__alca {
+  fill: none;
+  stroke: var(--teal-300);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  animation: cofre-fechar 900ms var(--ease-out) 300ms both;
+}
+
+@keyframes cofre-ler {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  12%,
+  78% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(58px);
+    opacity: 0;
+  }
+}
+
+@keyframes cofre-girar {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes cofre-fechar {
+  from {
+    transform: translateY(-4px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* ---------- o olhar que vira voz ---------- */
+.fala__onda {
+  fill: none;
+  stroke: var(--teal-300);
+  stroke-width: 3;
+  stroke-linecap: round;
+  opacity: 0.8;
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: fala-onda 2.4s var(--ease-out) infinite;
+}
+
+.fala__onda--2 {
+  animation-delay: 0.3s;
+}
+
+.fala__onda--3 {
+  animation-delay: 0.6s;
+}
+
+@keyframes fala-onda {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  30%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}

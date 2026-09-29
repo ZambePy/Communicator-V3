@@ -261,10 +261,9 @@
 .privacidade-curta__icone {
   display: grid;
   place-items: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 22px;
-  color: var(--teal-300);
+  width: 136px;
+  height: 120px;
+  border-radius: 28px;
   background: rgba(63, 214, 194, 0.08);
   border: 1px solid rgba(63, 214, 194, 0.3);
 }

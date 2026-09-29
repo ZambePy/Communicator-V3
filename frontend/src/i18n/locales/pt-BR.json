@@ -345,7 +345,13 @@
       "fpsBoa": "Taxa boa. O rastreamento roda como foi projetado.",
       "fpsBaixa": "Taxa baixa. Vai funcionar, com precisão um pouco pior — o sistema foi ajustado para 30 quadros por segundo.",
       "fpsRuim": "Taxa muito baixa. Dá para usar, mas o olhar vai responder devagar. Uma webcam melhor resolveria.",
-      "neverBlocks": "Isto é um aviso, não um impedimento: você pode continuar com qualquer câmera."
+      "neverBlocks": "Isto é um aviso, não um impedimento: você pode continuar com qualquer câmera.",
+      "posicao": {
+        "title": "Onde fica a câmera?",
+        "topo": "Em cima da tela",
+        "base": "Embaixo da tela",
+        "notebook": "Na tampa do notebook"
+      }
     },
     "posicionamento": {
       "title": "Posição do paciente",
@@ -354,6 +360,7 @@
       "distanceUnknown": "medindo…",
       "screenHeight": "Altura da tela",
       "screenHeightHint": "O topo da tela na altura dos olhos, ou pouco abaixo. Não dá para medir isto pela câmera — é conferência sua.",
+      "palpebraHint": "Se a pálpebra cobre parte do olho, suba um pouco a tela: com o olhar para cima, a pálpebra levanta e a câmera vê a íris.",
       "holdTitle": "Segure a posição",
       "holdBody": "O botão libera depois de {{segundos}} segundos seguidos com tudo em verde.",
       "holding": "Segurando… {{segundos}}s",
@@ -566,6 +573,7 @@
         "derivaPostural": "A cabeça mudou de posição entre os pontos. Recalibrar sem corrigir a posição repete o resultado."
       },
       "erro": "Erro médio da calibração: {{px}} px",
+      "erroSemCantos": "Erro médio da calibração, fora os cantos da tela: {{px}} px",
       "deriva": "Movimento da cabeça: {{g}}°",
       "seguir": "Seguir assim",
       "refazerBtn": "Refazer a calibração",
@@ -594,6 +602,13 @@
       "exportar": "Exportar relatório",
       "exportado": "Relatório salvo.",
       "rodar": "Rodar o teste de precisão"
+    },
+    "atalho": {
+      "title": "Calibração do olhar",
+      "emUso": "Em uso: calibração {{idade}}.",
+      "sem": "Nenhuma calibração em uso — o olhar não seleciona nada até calibrar.",
+      "why": "Calibre de novo quando o cursor deixar de acompanhar o olhar, ou depois de mudar a posição do paciente, da câmera ou do monitor.",
+      "button": "Calibrar o olhar"
     }
   },
   "sessao": {
@@ -655,7 +670,10 @@
       "posicaoRosto": "O rosto não ficou no enquadramento.",
       "posicaoDistancia": "A distância até a tela está fora da faixa.",
       "semMedicao": "Não deu para medir os pontos.",
-      "piorou": "A leitura ficou bem diferente da primeira conferência desta calibração."
+      "piorou": "A leitura ficou bem diferente da primeira conferência desta calibração.",
+      "semCalibracao": "A calibração salva não vale para esta tela ou para esta versão do IrisFlow.",
+      "l2csCarregando": "O modelo do olhar (L2CS) não terminou de carregar a tempo: nada foi medido.",
+      "deslocamentoAcumulado": "A correção automática já está perto do limite: o que mudou não é só deriva."
     },
     "primeira": "Esta foi a primeira conferência desta calibração — ela vira a referência das próximas.",
     "usar": "Usar assim",
@@ -697,6 +715,9 @@
     "rosto": "Rosto encontrado",
     "iluminacao": "Iluminação adequada",
     "enquadramento": "Distância e enquadramento",
+    "rostoPendente": "Procurando o rosto",
+    "iluminacaoPendente": "Luz do ambiente",
+    "enquadramentoPendente": "Distância e enquadramento",
     "ok": "(ok)",
     "pendente": "(aguardando)",
     "aviso": "Não conseguimos confirmar tudo ainda. Você pode continuar mesmo assim — se o cursor não seguir bem o olhar, vale ajustar a luz ou a distância e calibrar de novo."

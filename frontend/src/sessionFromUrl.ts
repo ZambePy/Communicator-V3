@@ -3,6 +3,8 @@
 // junto do relatório. `EXPERIMENT` é resolvido uma vez no import, então a
 // página recarrega — só quando algum valor mudou de fato.
 
+import { VALORES_DA_BASE } from '@tracker/config/experiment';
+
 const CHAVE_EXP = 'irisflow.experiment';
 const CHAVE_SETTINGS = 'irisflow_settings';
 
@@ -150,6 +152,31 @@ export function aplicarSessaoDaUrl(
       console.warn(
         `[sessão] ?dimsIris=${dimsIris} inválido — aceitos: ambas, normalizadas, absolutas.`,
       );
+    }
+  }
+
+  // Interruptor único do V3 e as flags dele, uma a uma (docs/ROTEIRO_DE_MEDICAO.md).
+  // `?pipeline=base` é o pipeline anterior inteiro; `?exp.<flag>=0|1` liga ou
+  // desliga uma mudança só, para a ablação.
+  const pipeline = p.get('pipeline');
+  if (pipeline !== null) {
+    if (pipeline === 'v3' || pipeline === 'base') exp.pipeline = pipeline;
+    else console.warn(`[sessão] ?pipeline=${pipeline} inválido — aceitos: v3, base.`);
+  }
+  for (const [param, valor] of p.entries()) {
+    if (!param.startsWith('exp.')) continue;
+    const chave = param.slice(4);
+    if (!Object.hasOwn(VALORES_DA_BASE, chave)) {
+      console.warn(`[sessão] ?${param} não é uma flag do V3 — ignorado.`);
+      continue;
+    }
+    const base = VALORES_DA_BASE[chave as keyof typeof VALORES_DA_BASE];
+    if (typeof base === 'boolean') {
+      if (valor === '1' || valor === '0') exp[chave] = valor === '1';
+      else console.warn(`[sessão] ?${param}=${valor} inválido — aceitos: 1, 0.`);
+    } else if (chave === 'suavizacaoDoLandmarker') {
+      if (valor === 'mediapipe' || valor === 'desligada') exp[chave] = valor;
+      else console.warn(`[sessão] ?${param}=${valor} inválido — aceitos: mediapipe, desligada.`);
     }
   }
 

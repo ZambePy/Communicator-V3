@@ -347,6 +347,82 @@ export function trainRidgeModel(
   };
 }
 
+/**
+ * Alavanca de cada ALVO no ajuste ridge (calibração robusta, M6).
+ *
+ * O ajuste por quadros com λ·m·Σ_W é idêntico a um ajuste em uma linha por
+ * alvo — a média ponderada das features do alvo, com peso n_g — somado à
+ * dispersão intra-alvo na penalidade (docs/PESQUISA.md §3.2). A alavanca da
+ * linha do alvo é então
+ *
+ *     h_g = n_g · φ̄_gᵀ · A⁻¹ · φ̄_g ,    A = ΦᵀWΦ + λ·m·diag(0, P)
+ *
+ * a mesma A do treino. Serve para estudentizar o resíduo do alvo: um canto
+ * tem alavanca alta e resíduo interno pequeno, e sem a divisão por √(1 − h)
+ * ele escaparia do Huber (MATLAB `robustfit` faz o mesmo).
+ */
+export function alavancaDosGrupos(
+  features: number[][],
+  groups: readonly string[],
+  sampleWeights: readonly number[] | null,
+  lambda: { x: number; y: number },
+  penaltyMatrix: number[][] | null,
+): Map<string, { x: number; y: number }> {
+  const out = new Map<string, { x: number; y: number }>();
+  const m = features.length;
+  if (m === 0) return out;
+  const nf = features[0].length + 1;
+  const ne = computeNormalEquations(
+    features,
+    features.map(() => ({ screenX: 0, screenY: 0 })),
+    sampleWeights ? [...sampleWeights] : null,
+  );
+  if (!ne) return out;
+  const w = sampleWeights;
+  const somaW = w ? w.reduce((a, b) => a + b, 0) : m;
+  const peso = (k: number) => (w ? (w[k] * m) / somaW : 1);
+
+  // Média ponderada de Φ = [1, z] e soma dos pesos, por alvo.
+  const porGrupo = new Map<string, { soma: number[]; n: number }>();
+  for (let k = 0; k < m; k++) {
+    const g = groups[k];
+    const e = porGrupo.get(g) ?? { soma: new Array<number>(nf).fill(0), n: 0 };
+    const pk = peso(k);
+    e.soma[0] += pk;
+    for (let j = 1; j < nf; j++) e.soma[j] += pk * features[k][j - 1];
+    e.n += pk;
+    porGrupo.set(g, e);
+  }
+
+  const matrizA = (lam: number) => Array.from({ length: nf }, (_, i) =>
+    Array.from({ length: nf }, (_, j) => {
+      const s = ne.S[i][j];
+      if (i === 0 || j === 0) return s;
+      if (penaltyMatrix) return s + lam * m * penaltyMatrix[i - 1][j - 1];
+      return s + (i === j ? lam * m : 0);
+    }));
+  const ax = matrizA(lambda.x);
+  const ay = lambda.x === lambda.y ? ax : matrizA(lambda.y);
+
+  for (const [g, e] of porGrupo) {
+    if (!(e.n > 0)) continue;
+    const media = e.soma.map((v) => v / e.n);
+    const h = (a: number[][]) => {
+      const x = solveLinear(a, media);
+      let q = 0;
+      for (let j = 0; j < nf; j++) q += media[j] * x[j];
+      return e.n * q;
+    };
+    try {
+      out.set(g, { x: h(ax), y: ay === ax ? h(ax) : h(ay) });
+    } catch {
+      // Matriz singular: sem alavanca confiável para este alvo; quem chama
+      // trata a ausência como alavanca zero.
+    }
+  }
+  return out;
+}
+
 export function predictRidge(
   model: RidgeModel,
   features: number[]
@@ -570,6 +646,15 @@ export class RidgeRegressor {
      * diferente do que acaba sendo resolvido.
      */
     pesosDeQualidade?: readonly number[],
+    /**
+     * Peso de cada ALVO no critério da validação cruzada (calibração robusta,
+     * M6). É o peso de Huber do alvo: um alvo que o ajuste robusto rebaixou
+     * pesa o mesmo tanto na escolha de λ — senão λ seria escolhido para
+     * agradar justamente o alvo que o ajuste decidiu não seguir. No ponto fixo
+     * do IRLS, ponderar o erro quadrático pelo peso de Huber é minimizar a
+     * perda de Huber. Ausente = todos os alvos pesam 1 (o critério de antes).
+     */
+    pesoDoAlvoNoCV?: ReadonlyMap<string, number>,
   ): void {
     const targets = targetsX.map((x, i) => ({ screenX: x, screenY: targetsY[i] }));
     const groups = gruposDeAlvo && gruposDeAlvo.length === targets.length
@@ -579,7 +664,7 @@ export class RidgeRegressor {
       ? lambdaFixo
       : RidgeRegressor.lambdaOverride != null
         ? { x: RidgeRegressor.lambdaOverride, y: RidgeRegressor.lambdaOverride }
-        : this.selectLambdaCV(features, targets, LAMBDA_GRID, groups, pesosDeQualidade);
+        : this.selectLambdaCV(features, targets, LAMBDA_GRID, groups, pesosDeQualidade, pesoDoAlvoNoCV);
     const pesos = RidgeRegressor.combinarPesos(
       RidgeRegressor.balanceTargets ? RidgeRegressor.pesosPorAlvo(groups) : null,
       pesosDeQualidade,
@@ -626,6 +711,7 @@ export class RidgeRegressor {
     lambdas: readonly number[],
     groupKeys?: string[],
     pesosDeQualidade?: readonly number[],
+    pesoDoAlvoNoCV?: ReadonlyMap<string, number>,
   ): { x: number; y: number } {
     const keys = groupKeys ?? targets.map(targetGroupKey);
     const targetsUnique: string[] = [];
@@ -724,16 +810,23 @@ export class RidgeRegressor {
             sqX += dx * dx;
             sqY += dy * dy;
           }
-          foldErrorSumX += zTest.length > 0 ? sqX / zTest.length : 0;
-          foldErrorSumY += zTest.length > 0 ? sqY / zTest.length : 0;
-          foldsCounted++;
+          if (pesoDoAlvoNoCV) {
+            const omega = pesoDoAlvoNoCV.get(key) ?? 1;
+            foldErrorSumX += zTest.length > 0 ? (omega * sqX) / zTest.length : 0;
+            foldErrorSumY += zTest.length > 0 ? (omega * sqY) / zTest.length : 0;
+            foldsCounted += omega;
+          } else {
+            foldErrorSumX += zTest.length > 0 ? sqX / zTest.length : 0;
+            foldErrorSumY += zTest.length > 0 ? sqY / zTest.length : 0;
+            foldsCounted++;
+          }
         } catch {
           failed = true;
           break;
         }
       }
 
-      if (failed || foldsCounted === 0) continue;
+      if (failed || !(foldsCounted > 0)) continue;
       errosPorLambdaX.set(lambda, foldErrorSumX / foldsCounted);
       errosPorLambdaY.set(lambda, foldErrorSumY / foldsCounted);
     }

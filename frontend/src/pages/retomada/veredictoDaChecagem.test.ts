@@ -17,6 +17,8 @@ import {
 // -----------------------------------------------------------------------------
 
 const bom: EntradaDaChecagem = {
+  l2csCarregando: false,
+  temModelo: true,
   erroDeg: 2.0,
   referenciaDeg: 2.0,
   rostoEnquadrado: true,
@@ -118,5 +120,28 @@ describe('referência degenerada', () => {
 describe('o caminho feliz não inventa motivo', () => {
   it('seguir com tudo bem não tem o que explicar', () => {
     expect(v().motivo).toBeNull();
+  });
+});
+
+describe('sem modelo carregado não há o que conferir', () => {
+  it('manda calibrar, antes das regras de posição e de medida', () => {
+    // A primeira checagem nunca reprova; sem esta regra, três pontos medidos
+    // sem calibração nenhuma virariam "Tudo como antes. Pode usar.".
+    expect(v({ temModelo: false, referenciaDeg: null })).toEqual({ veredicto: 'recalibrar', motivo: 'semCalibracao' });
+    expect(v({ temModelo: false, rostoEnquadrado: false })).toEqual({ veredicto: 'recalibrar', motivo: 'semCalibracao' });
+  });
+});
+
+describe('o modelo do olhar ainda carregando', () => {
+  it('diz isso, e não que a calibração não vale', () => {
+    // Numa máquina sem WebGPU o perfil salvo só carrega quando o worker do
+    // L2CS sobe: a checagem que acaba antes disso vê "sem modelo", mas a
+    // calibração pode estar ótima. A câmera que não abre deixa o L2CS em
+    // "carregando" para sempre — é o mesmo caso.
+    expect(v({ l2csCarregando: true, temModelo: false, erroDeg: null })).toEqual({
+      veredicto: 'recalibrar',
+      motivo: 'l2csCarregando',
+    });
+    expect(v({ l2csCarregando: true, rostoEnquadrado: false }).motivo).toBe('l2csCarregando');
   });
 });

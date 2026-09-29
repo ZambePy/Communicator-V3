@@ -4,6 +4,7 @@ import {
   completeCalibration, getCalibrationTargets, getCollectionMsForPoint,
   duracaoTotalDoPonto, getCalibrationFitDiagnostics,
 } from './calibration';
+import { EXPERIMENT } from './config/experiment';
 
 // Os alvos de treino são compensados pela pose de cada amostra, então cada
 // amostra fica com uma coordenada de alvo própria. Agrupar por essa coordenada
@@ -60,9 +61,9 @@ describe('treino com alvos compensados por pose', () => {
     const fit = getCalibrationFitDiagnostics();
     expect(fit).not.toBeNull();
     // Um grupo por ALVO, não por amostra (13 no perfil padrão: a grade 3×3 e
-    // os quatro cantos da tela).
+    // os quatro cantos da tela; 14 com o meio da borda de baixo, M7).
     const nAlvos = getCalibrationTargets().length;
-    expect(nAlvos).toBe(13);
+    expect(nAlvos).toBe(EXPERIMENT.alvoInferiorCentral ? 14 : 13);
     expect(fit!.samplesPerTarget).toHaveLength(nAlvos);
     expect(fit!.looByTarget).toHaveLength(nAlvos);
     for (const n of fit!.samplesPerTarget) expect(n).toBeGreaterThan(10);

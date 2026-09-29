@@ -1,7 +1,7 @@
 import { normalizarPorGrupo, pesoDaAmostra, resumoDePesos } from './calibration/pesoDaAmostra';
 import { EstabilidadeDoPonto, decidirFechamento } from './calibration/estabilidadeDoPonto';
 import { celulaDoAlvo, colher, type AmostraDePerseguicao, type ResultadoDaColheita } from './calibration/perseguicao';
-import { corrigirDerivaPeloCentro, corrigirPorDwell, reiniciarCorrecao } from './interaction/correcaoPorDwell';
+import { corrigirDerivaPeloCentro, corrigirPorDwell, corrigirPorPontos, reiniciarCorrecao } from './interaction/correcaoPorDwell';
 import type { GazeRegressor } from './gazeRegressor';
 import {
   createRegressor,
@@ -10,13 +10,29 @@ import {
 } from './gazeRegressor';
 import { StandardScaler } from './scaler';
 import type { RidgeModel } from './ridge';
-import { trainRidgeModel, predictRidge, targetGroupKey, RidgeRegressor } from './ridge';
+import { trainRidgeModel, predictRidge, targetGroupKey, RidgeRegressor, alavancaDosGrupos, withinTargetPenalty } from './ridge';
+import {
+  pesosRobustosPorQuadro,
+  pesoDeHuber,
+  escalaRobusta,
+  type DiagnosticoRobusto,
+} from './calibracaoRobusta';
+import {
+  estimarFusao,
+  fundirPorCovariancia,
+  fusaoValida,
+  pesoDoOlhoEsquerdo,
+  type CovarianciaDosOlhos,
+  type FusaoPorCovariancia,
+  type ResiduoBinocular,
+} from './fusaoBinocular';
+import { estimarRuido, ruidoValido, type AmostraDoRuido, type RuidoDaCalibracao } from './ruidoDaCalibracao';
 import { l2csSlotsInSet } from './extractor';
 import { ultimoDiagnosticoDoBloco, L2CS_CONFIDENCE_MIN } from './l2cs/block';
 
 /** Posições do bloco angular dentro do vetor projetado (vazio sem L2CS). */
 const L2CS_SLOTS: readonly number[] = l2csSlotsInSet();
-import { EXPERIMENT } from './config/experiment';
+import { EXPERIMENT, L2CS_INPUT_SIZES_ACEITOS } from './config/experiment';
 import { compensarPredicao, deslocamentoPorPose, poseDeReferencia } from './poseCompensation';
 import type { Pose } from './poseCompensation';
 import { compensarTranslacao, centroDeReferencia } from './translationCompensation';
@@ -27,7 +43,17 @@ import type { NivelDeContraluz } from './contraluz';
 import { diagnosticarGrade } from './calibrationGridDiagnosis';
 import type { DiagnosticoGrade } from './calibrationGridDiagnosis';
 import type { CentroFacial, EscalaFacial } from './translationCompensation';
-import { estimateDistanceCm } from './setupReadiness';
+import { estimateDistanceCm, CANTHAL_DISTANCE_CM } from './setupReadiness';
+import { FOV_PADRAO_DEG } from './camera/fovPorCamera';
+import { matrizDaPose } from './poseDaCabeca';
+import {
+  montarGeometria,
+  olhoNaCamera,
+  reprojetar,
+  type GeometriaTelaCamera,
+  type PosicaoDaCamera,
+  type Vetor3,
+} from './geometria6dof';
 import {
   evaluateDistanceRange,
   applyDistanceRatioToPrediction,
@@ -189,9 +215,49 @@ export function janelaUtilDoPonto(collectionMs: number): number {
   return collectionMs;
 }
 
+/**
+ * Acomodação contada da CHEGADA da bola (M8).
+ *
+ * Sem a flag, a coleta abre 1200 ms depois do alvo anterior e descarta 600 ms:
+ * como a bola chega em 620 ms, o primeiro dado útil vem 1180 ms depois de ela
+ * parar — o dobro dos 0,5–0,7 s da literatura (Tobii, Krafka et al. 2016,
+ * Harezlak et al. 2014). Com a flag, a tela abre a coleta quando a bola chega
+ * e o descarte é de 800 ms: cobre a latência de sacada acima dos 65 anos
+ * (312,5 ± 62,7 ms, Noiret et al. 2017), o prolongamento no locked-in
+ * incompleto e a volta de uma square-wave jerk (378 ms de média na ELA,
+ * Becker et al. 2019). O fechamento por estabilidade continua valendo por
+ * cima. Os ~380 ms por alvo pagam o 14º alvo (M7) dentro do mesmo tempo.
+ */
+export const ACOMODACAO_DESDE_A_CHEGADA_MS = 800;
+
+/** Acomodação em vigor para cada ponto. */
+export function acomodacaoDoPontoMs(): number {
+  return EXPERIMENT.assentamentoPelaChegada ? ACOMODACAO_DESDE_A_CHEGADA_MS : CALIBRATION_ACCLIMATION_MS;
+}
+
+/**
+ * Duração do deslocamento da bola entre dois alvos, em ms. A transição é da
+ * tela (CalibrationCheck.tsx), mas o número mora aqui porque, com M8, a
+ * acomodação é contada a partir da chegada. Mais rápido o olho perde a
+ * perseguição e volta a saltar; mais lento, a calibração inteira estica.
+ */
+export const DESLOCAMENTO_DA_BOLA_MS = 620;
+
+/** Pausa entre o fim de um alvo e a abertura da coleta do seguinte, sem M8. */
+export const PAUSA_ENTRE_ALVOS_BASE_MS = 1200;
+
+/**
+ * Espera entre o fim de um alvo e a abertura da coleta do seguinte, em ms:
+ * com M8 a coleta abre quando a bola chega; sem a flag, depois da pausa de
+ * confirmação de sempre, que a bola cruza com folga.
+ */
+export function aberturaDaColetaMs(): number {
+  return EXPERIMENT.assentamentoPelaChegada ? DESLOCAMENTO_DA_BOLA_MS : PAUSA_ENTRE_ALVOS_BASE_MS;
+}
+
 /** Duração TOTAL de um ponto: acomodação + janela útil. */
 export function duracaoTotalDoPonto(collectionMs: number): number {
-  return CALIBRATION_ACCLIMATION_MS + janelaUtilDoPonto(collectionMs);
+  return acomodacaoDoPontoMs() + janelaUtilDoPonto(collectionMs);
 }
 
 /**
@@ -468,6 +534,90 @@ let eyeReliability: { left: number; right: number } | null = null;
  * rápido, perfil antigo) ou nada a corrigir. Ver `correcaoLocal.ts`.
  */
 let correcaoLocal: CorrecaoLocal | null = null;
+/**
+ * Fusão binocular por variância mínima (M10), medida no leave-one-target-out
+ * do treino. `null` = a fusão de antes (confiabilidade × dominância).
+ */
+let fusaoDosOlhos: FusaoPorCovariancia | null = null;
+/** Ruído de fixação medido na calibração (M9 e M15). `null` sem as flags. */
+let ruidoDaCalibracao: RuidoDaCalibracao | null = null;
+/** Quem consome o ruído: o estimador de fixação (M9) e o Kalman do dwell (M15). */
+function usaRuidoDaCalibracao(): boolean {
+  return EXPERIMENT.estimadorDeFixacao || EXPERIMENT.correcaoPorDwellKalman;
+}
+
+/** Ruído de fixação da calibração em uso, ou `null`. Referência interna: não mutar. */
+export function getRuidoDaCalibracao(): RuidoDaCalibracao | null {
+  return ruidoDaCalibracao;
+}
+
+// ── Saída 6DoF (M12, `geometria6dof.ts`) ────────────────────────────────────
+/** De que lado da tela está a câmera, informado no preparo. `null` = sem 6DoF. */
+let posicaoDaCamera: PosicaoDaCamera | null = null;
+/** Meio dos olhos no treino, em cm nas coordenadas da câmera. Referência da reprojeção. */
+let olhoDeReferenciaCm: Vetor3 | null = null;
+/** Meio das íris no quadro corrente, em px do vídeo não espelhado. */
+let latestOlhosPx: { x: number; y: number } | null = null;
+
+export function setPosicaoDaCamera(p: PosicaoDaCamera | null): void {
+  posicaoDaCamera = p;
+}
+
+export function setCurrentFrameOlhos(px: { x: number; y: number } | null): void {
+  latestOlhosPx = px;
+}
+
+/** Geometria tela–câmera em uso, ou `null` sem a flag ou sem a pergunta respondida. */
+function geometria6DoF(larguraPx: number, alturaPx: number): GeometriaTelaCamera | null {
+  if (!EXPERIMENT.saida6DoF || !posicaoDaCamera) return null;
+  return montarGeometria(posicaoDaCamera, larguraPx, alturaPx, screenPxPerCm());
+}
+
+/** Olho em cm a partir do pixel, da escala facial e do yaw do quadro. */
+function olhoEmCm(pixel: { x: number; y: number } | null, escala: EscalaFacial | null, yaw: number | undefined): Vetor3 | null {
+  if (!pixel || !escala || typeof yaw !== 'number') return null;
+  return olhoNaCamera(
+    pixel,
+    { largura: escala.videoWidth, altura: escala.videoHeight },
+    cameraFovDeg ?? FOV_PADRAO_DEG,
+    { px: escala.iodPx, cm: escala.cantalCm ?? CANTHAL_DISTANCE_CM, yawRad: yaw },
+  );
+}
+
+/** Olho de uma amostra de calibração (o meio das íris viaja no `quality`). */
+function olhoDaAmostraCm(p: CalibrationPoint): Vetor3 | null {
+  const q = p.quality;
+  const e = p.escala ?? null;
+  if (!q || !e || typeof q.centroDosOlhosX !== 'number' || typeof q.centroDosOlhosY !== 'number') return null;
+  return olhoEmCm({ x: q.centroDosOlhosX * e.videoWidth, y: q.centroDosOlhosY * e.videoHeight }, e, q.yaw);
+}
+
+/**
+ * Reprojeta um ponto (fração da tela) da postura `de` para a postura `para`.
+ * `null` quando falta alguma peça — o chamador volta ao caminho clássico.
+ */
+function reprojetarEntrePosturas(
+  ponto: { x: number; y: number },
+  larguraPx: number,
+  alturaPx: number,
+  de: { olho: Vetor3 | null; pose: Pose | null },
+  para: { olho: Vetor3 | null; pose: Pose | null },
+): { x: number; y: number } | null {
+  const g = geometria6DoF(larguraPx, alturaPx);
+  if (!g || !de.olho || !de.pose || !para.olho || !para.pose) return null;
+  const r = reprojetar(
+    g, { x: ponto.x * larguraPx, y: ponto.y * alturaPx },
+    de.olho, matrizDaPose(de.pose), para.olho, matrizDaPose(para.pose),
+  );
+  return r ? { x: r.x / larguraPx, y: r.y / alturaPx } : null;
+}
+
+/** Validação do olho de referência vindo de um perfil salvo. */
+function olhoValido(v: unknown): Vetor3 | null {
+  return Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === 'number' && Number.isFinite(n)) && v[2] > 0
+    ? [v[0], v[1], v[2]]
+    : null;
+}
 /** Última predição de `mapGaze` ANTES da correção por dwell, em fração da
  *  tela. É o que o reajuste rápido mede para corrigir a deriva no centro. */
 let ultimaPredicaoSemCorrecao: { x: number; y: number } | null = null;
@@ -490,6 +640,20 @@ export let isCalibrating = false;
  * — então o relatório precisa dizer há quanto tempo o modelo estava de pé.
  */
 let treinadoEmMs: number | null = null;
+
+/**
+ * Evento da janela disparado quando o modelo em uso muda — treino novo, perfil
+ * carregado ou descartado. O alvo mínimo medido (M18) só vale para a
+ * calibração em que foi medido, e a interface o recalcula ao ouvir isto.
+ */
+export const EVENTO_DE_CALIBRACAO_EM_USO = 'irisflow:calibracao-em-uso';
+
+/** Troca o instante do treino em uso e avisa a interface quando ele muda. */
+function definirTreinadoEm(ms: number | null): void {
+  if (ms === treinadoEmMs) return;
+  treinadoEmMs = ms;
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(EVENTO_DE_CALIBRACAO_EM_USO));
+}
 
 /** Instante do último treino bem-sucedido, ou `null` se ainda não houve. */
 export function getCalibrationTimestampMs(): number | null {
@@ -553,6 +717,13 @@ let modeloAntesDoReforco: {
   right: RidgeModel | null;
   scalerL: { means: number[]; stds: number[] };
   scalerR: { means: number[]; stds: number[] };
+  /**
+   * Referências do modelo (pose, centro, distâncias, confiabilidade, cantos,
+   * fusão, ruído). O treino do reforço as sobrescreve logo no começo; sem
+   * elas no retrato, uma falha no meio devolvia o modelo antigo medindo
+   * contra as referências do reforço.
+   */
+  referencia: CalibrationReferenceState;
   meta: CalibrationProfileMeta | null;
 } | null = null;
 
@@ -602,6 +773,8 @@ export const PERFIS_NO_DISCO = 12;
 
 /** Resumo dos pesos do último treino, para o diagnóstico de ajuste. */
 let ultimoResumoDePesos: ReturnType<typeof resumoDePesos> = null;
+/** O que a calibração robusta (M6) fez no último treino; `null` com a flag desligada. */
+let ultimoDiagnosticoRobusto: DiagnosticoRobusto | null = null;
 
 let currentTargetX = 0;
 let currentTargetY = 0;
@@ -871,6 +1044,8 @@ function referenciasEmUso(): { pose: Pose | null; centro: CentroFacial | null } 
  */
 export function corrigirDerivaNoCentro(
   predicao: { x: number; y: number } | null,
+  /** Quadros e dispersão robusta da predição (fração da tela), para o Kalman (M15). */
+  medida?: { amostras: number; dispersao: { x: number; y: number } } | null,
 ): { aplicado: boolean; desvioPx: number | null } {
   if (!predicao || !Number.isFinite(predicao.x) || !Number.isFinite(predicao.y)) {
     return { aplicado: false, desvioPx: null };
@@ -879,9 +1054,41 @@ export function corrigirDerivaNoCentro(
   const vw = typeof document !== 'undefined' ? document.documentElement.clientWidth : 0;
   const vh = typeof document !== 'undefined' ? document.documentElement.clientHeight : 0;
   const desvioPx = vw > 0 && vh > 0 ? Math.hypot(residuo.x * vw, residuo.y * vh) : null;
-  const aplicado = corrigirDerivaPeloCentro(residuo, performance.now());
+  const aplicado = corrigirDerivaPeloCentro(residuo, performance.now(), medida);
   console.log(
     `[calib] reajuste rápido: viés no centro ${desvioPx === null ? '?' : `${desvioPx.toFixed(0)} px`} — ` +
+    (aplicado ? 'corrigido' : 'NÃO aplicado (acima do teto da correção: calibre de novo)'),
+  );
+  return { aplicado, desvioPx };
+}
+
+/**
+ * Recalibração rápida afim (M20): os pontos olhados, com a mediana e a
+ * dispersão da predição em cada um (fração da tela), viram medidas da correção
+ * por dwell. Mesmo contrato do reajuste pelo centro: não retreina nada, não
+ * troca referências, e acima do teto não aplica.
+ */
+export function corrigirDerivaNosPontos(
+  medidas: readonly {
+    alvo: { x: number; y: number };
+    predicao: { x: number; y: number };
+    dispersao: { x: number; y: number };
+    amostras: number;
+  }[],
+): { aplicado: boolean; desvioPx: number | null } {
+  const vw = typeof document !== 'undefined' ? document.documentElement.clientWidth : 0;
+  const vh = typeof document !== 'undefined' ? document.documentElement.clientHeight : 0;
+  if (!(vw > 0) || !(vh > 0) || medidas.length === 0) return { aplicado: false, desvioPx: null };
+  const emPx = medidas.map((m) => ({
+    alvo: { x: m.alvo.x * vw, y: m.alvo.y * vh },
+    mediana: { x: m.predicao.x * vw, y: m.predicao.y * vh },
+    dispersao: { x: m.dispersao.x * vw, y: m.dispersao.y * vh },
+    amostras: m.amostras,
+  }));
+  const desvioPx = emPx.reduce((s, m) => s + Math.hypot(m.alvo.x - m.mediana.x, m.alvo.y - m.mediana.y), 0) / emPx.length;
+  const aplicado = corrigirPorPontos(emPx, performance.now(), { largura: vw, altura: vh });
+  console.log(
+    `[calib] recalibração rápida (${medidas.length} pontos): erro médio ${desvioPx.toFixed(0)} px — ` +
     (aplicado ? 'corrigido' : 'NÃO aplicado (acima do teto da correção: calibre de novo)'),
   );
   return { aplicado, desvioPx };
@@ -1208,6 +1415,11 @@ export function captureReferenceStateForProfile(): CalibrationReferenceState {
     eyeReliability,
     viewport: viewportDaCalibracao,
     correcaoLocal,
+    // Só existem com as flags do V3 (M9/M10); ausentes, o perfil fica igual
+    // ao de antes.
+    ...(fusaoDosOlhos ? { fusao: fusaoDosOlhos } : {}),
+    ...(ruidoDaCalibracao ? { ruido: ruidoDaCalibracao } : {}),
+    ...(olhoDeReferenciaCm ? { olhoCm: olhoDeReferenciaCm } : {}),
   };
 }
 
@@ -1239,6 +1451,12 @@ export function restoreReferenceStateFromProfile(
   // (perfil de outra versão ou adulterado não chega ao `mapGaze`) e nunca
   // herdada de outro perfil. Perfis anteriores a ela não a têm: modelo global.
   correcaoLocal                = correcaoLocalValida(ref?.correcaoLocal ?? null);
+  // Fusão (M10) e ruído (M9/M15) pertencem ao modelo do perfil pelo mesmo
+  // motivo, e passam pela mesma validação. Com a flag desligada ficam de fora
+  // mesmo que o perfil os traga: a flag é quem decide o pipeline.
+  fusaoDosOlhos                = EXPERIMENT.fusaoPorCovariancia ? fusaoValida(ref?.fusao ?? null) : null;
+  ruidoDaCalibracao            = usaRuidoDaCalibracao() ? ruidoValido(ref?.ruido ?? null) : null;
+  olhoDeReferenciaCm           = EXPERIMENT.saida6DoF ? olhoValido(ref?.olhoCm ?? null) : null;
   // A referência lenta nasce na referência do perfil (ou some com ele).
   if (ref) referenciaLenta.iniciar({ pose: calibrationReferencePose, centro: calibrationReferenceCenter });
   else referenciaLenta.limpar();
@@ -1395,7 +1613,7 @@ function restaurarModeloAntesDaCalibracao(motivo: string, consumir: boolean): bo
   featureScalerLeft.setParams(b.scalerL.means, b.scalerL.stds);
   featureScalerRight.setParams(b.scalerR.means, b.scalerR.stds);
   restoreReferenceStateFromProfile(b.referencia);
-  treinadoEmMs = b.treinadoEmMs;
+  definirTreinadoEm(b.treinadoEmMs);
   ultimaMetaPersistida = b.meta;
   donoDoModeloEmUso = b.dono;
   // A meta pendente era da calibração que não terminou (rótulo, condição
@@ -1432,7 +1650,7 @@ export function clearCalibration() {
   // O instante do treino descreve o modelo; sem modelo ele não descreve nada.
   // Mantê-lo faria `minutosDesdeCalibracao` do relatório contar o tempo desde
   // uma calibração que já foi descartada.
-  treinadoEmMs = null;
+  definirTreinadoEm(null);
   // A referência do modelo descartado não pode sobreviver a ele.
   restoreReferenceStateFromProfile(null);
   // Diagnósticos do último quadro do modelo que acabou de ser jogado fora.
@@ -1442,6 +1660,7 @@ export function clearCalibration() {
   // mordeu este projeto antes.
   ultimaSaturacao = DENTRO_DA_TELA;
   lastDistanceRange = null;
+  ultimosTermos = null;
 }
 
 export function getSampleCount(): number {
@@ -1563,8 +1782,12 @@ export function chaveDoContextoAtual(): string {
 }
 
 function buildContextKey(): string {
+  return buildContextKeyFrom(contextoAtual());
+}
+
+function contextoAtual(): CalibrationContext {
   const doc = typeof document !== 'undefined' ? document.documentElement : null;
-  return buildContextKeyFrom({
+  return {
     viewportW: doc?.clientWidth ?? 0,
     viewportH: doc?.clientHeight ?? 0,
     featureVectorId: FEATURE_VECTOR_ID,
@@ -1575,7 +1798,7 @@ function buildContextKey(): string {
     expandFactor: EXPERIMENT.expandFactor,
     l2csInputSize: l2csInputSizeEfetivo,
     perfil: perfilAtivo,
-  });
+  };
 }
 
 /**
@@ -1645,14 +1868,54 @@ function tryParseStoredProfiles(): StoredCalibrationProfile[] {
  * de rota não pode ter efeito colateral no modelo.
  */
 export function haCalibracaoNoDisco(): boolean {
-  // Com a persistência desligada o disco é invisível, e a resposta tem que ser
-  // a mesma que `loadProfile` vai dar — senão a tela de abertura manda para o
-  // menu quem "tem calibração" e o engine sobe sem modelo nenhum.
+  // A resposta tem que ser a mesma que `loadProfile` vai dar, pela mesma regra.
+  // Antes bastava existir um perfil do paciente: um perfil de outra tela ou de
+  // outra versão do vetor de features (toda atualização que muda o vetor, como
+  // a do V3) mandava a abertura para a conferência, a conferência media o olhar
+  // sem modelo nenhum e dizia "Tudo como antes. Pode usar." — e o menu abria
+  // sem calibração, com o olhar sem clicar nada.
   if (!EXPERIMENT.persistirCalibracao) return false;
-  return tryParseStoredProfiles().some(
-    p => p !== null && typeof p === 'object' && p.meta !== null && typeof p.meta === 'object'
-      && perfilPodeSerDoPaciente(p),
-  );
+  // Com o L2CS em `auto`, o lado do recorte só é conhecido quando o worker
+  // sobe (`setL2csInputSizeEfetivo`, pela política por provider), em geral
+  // depois desta pergunta: vale qualquer lado aceito, e é o `loadProfile` da
+  // subida do worker que escolhe. Sem isto uma máquina sem WebGPU, que grava
+  // sob `…_l2cs224`, pularia a conferência em toda abertura. Com o provider
+  // forçado (`webgpu`/`wasm`) o lado é o configurado e não muda
+  // (`politicaPorProvider`): aceitar o outro mandava a abertura conferir um
+  // perfil que nunca carrega.
+  const ctx = contextoAtual();
+  const chaves = new Set([buildContextKeyFrom(ctx)]);
+  if (EXPERIMENT.l2cs === 'auto') {
+    for (const lado of L2CS_INPUT_SIZES_ACEITOS) chaves.add(buildContextKeyFrom({ ...ctx, l2csInputSize: lado }));
+  }
+  return tryParseStoredProfiles().some(p => motivoParaIgnorarPerfil(p, chaves) === null);
+}
+
+/**
+ * Por que um perfil gravado não serve agora, ou `null` se serve. É a regra
+ * única de `loadProfile` e de `haCalibracaoNoDisco`: a abertura decide a rota
+ * pelo mesmo critério que depois carrega (ou não) o modelo.
+ *
+ * - `malformado`: sem `meta` ou sem modelos (perfil antigo, JSON editado à mão)
+ *   — não pode derrubar o `init()` do engine;
+ * - `outroPaciente`: nunca (ver `definirPacienteDaCalibracao`);
+ * - `contexto`: treinado noutra tela ou noutro pipeline (a chave inclui o
+ *   tamanho da janela e a identidade do vetor de features);
+ * - `schema`: sem estado de referência — ver `profileTemReferencia`.
+ */
+function motivoParaIgnorarPerfil(
+  p: StoredCalibrationProfile,
+  chavesAceitas: ReadonlySet<string>,
+): 'malformado' | 'outroPaciente' | 'contexto' | 'schema' | null {
+  if (!p || typeof p !== 'object' || !p.meta || typeof p.meta.id !== 'string'
+    || !p.modelLeft || !p.modelRight || !p.scalerParamsLeft || !p.scalerParamsRight) {
+    return 'malformado';
+  }
+  if (!perfilPodeSerDoPaciente(p)) return 'outroPaciente';
+  const chave = p.contextKey ?? (p as unknown as Record<string, unknown>)._contextKey;
+  if (typeof chave !== 'string' || !chavesAceitas.has(chave)) return 'contexto';
+  if (!profileTemReferencia(p)) return 'schema';
+  return null;
 }
 
 /**
@@ -1763,39 +2026,26 @@ export function loadProfile(): boolean {
   const profiles = tryParseStoredProfiles();
   if (profiles.length === 0) return false;
 
-  const contextKey = buildContextKey();
+  const chavesAceitas = new Set([buildContextKey()]);
   const nowMs = Date.now();
 
   // Filtra e ordena por data (mais recente primeiro)
   const valid = profiles
     .filter(p => {
-      // Entrada malformada (sem `meta`, sem modelos): um perfil antigo ou um
-      // JSON editado à mão não pode derrubar o `init()` do engine.
-      if (!p || typeof p !== 'object' || !p.meta || typeof p.meta.id !== 'string'
-        || !p.modelLeft || !p.modelRight || !p.scalerParamsLeft || !p.scalerParamsRight) {
+      const motivo = motivoParaIgnorarPerfil(p, chavesAceitas);
+      if (motivo === 'malformado') {
         console.warn('[calib] perfil salvo malformado — ignorado');
-        return false;
-      }
-      // De outro paciente: nunca (ver `definirPacienteDaCalibracao`).
-      if (!perfilPodeSerDoPaciente(p)) return false;
-      // Validação de contexto: tela ou pipeline diferente → incompatível
-      const chave = p.contextKey ?? (p as unknown as Record<string, unknown>)._contextKey;
-      if (chave !== contextKey) {
+      } else if (motivo === 'contexto') {
         console.warn(`[calib] perfil ${p.meta.id} incompatível (contexto diferente) — ignorado`);
-        return false;
-      }
-      // Perfil de schema antigo (sem estado de referência) é INVALIDADO, não
-      // carregado com null — ver `profileTemReferencia`.
-      if (!profileTemReferencia(p)) {
+      } else if (motivo === 'schema') {
         console.warn(
           `[calib] perfil ${p.meta.id} é de schema anterior a v${PROFILE_SCHEMA_VERSION} ` +
           `(sem estado de referência de calibração) — descartado. ` +
           `Recalibre: sem a pose/centro/distância de referência a compensação ` +
           `geométrica não teria contra o que comparar e ficaria inativa sem aviso.`
         );
-        return false;
       }
-      return true;
+      return motivo === null;
     })
     .sort((a, b) => {
       // Os do próprio paciente antes dos sem dono (antigos): um perfil antigo
@@ -1838,7 +2088,7 @@ export function loadProfile(): boolean {
     restoreReferenceStateFromProfile(best.reference ?? null);
     // O modelo em uso é o deste perfil, treinado quando o perfil foi criado —
     // não agora. `minutosDesdeCalibracao` mede a deriva desde o TREINO.
-    treinadoEmMs = treinoDoPerfilMs(best.meta.createdAt);
+    definirTreinadoEm(treinoDoPerfilMs(best.meta.createdAt));
     donoDoModeloEmUso = best.meta.paciente ?? null;
     if (reivindicado) saveProfile();
     console.log(
@@ -1855,7 +2105,7 @@ export function loadProfile(): boolean {
     // Estado parcial é pior que nenhum: um modelo que falhou ao carregar não
     // pode deixar a referência do perfil anterior em pé.
     restoreReferenceStateFromProfile(null);
-    treinadoEmMs = null;
+    definirTreinadoEm(null);
     return false;
   }
 }
@@ -2122,11 +2372,20 @@ export function alvosDeCalibracao(
   if (opcoes.quick) return grade;
   const lo = INSET_CANTOS_PADRAO;
   const hi = 1 - INSET_CANTOS_PADRAO;
-  return [
+  const alvos = [
     ...grade,
     { x: lo, y: lo }, { x: hi, y: lo },
     { x: lo, y: hi }, { x: hi, y: hi },
   ];
+  // M7: o meio da borda de baixo. A linha de baixo da grade fica em 0,8375
+  // (acima dela a pálpebra cobre a íris com a câmera no topo) e a faixa entre
+  // ela e a borda era prevista só pelos dois cantos de baixo — no relatório de
+  // 28/09 eles erravam −77 e −100 px (a predição comprimida para cima). Em
+  // rastreador infravermelho, passar de 9 para 14 pontos levou o erro de
+  // 0,87° para 0,58°, e com 9 a faixa de baixo ficava ruim (Blignaut 2014).
+  // Fica fora da grade interna, como os cantos: entra na correção local.
+  if (EXPERIMENT.alvoInferiorCentral) alvos.push({ x: 0.5, y: hi });
+  return alvos;
 }
 
 /**
@@ -2472,7 +2731,7 @@ export function startCalibrationMode(
   definirSuspensao(null);
   // Os regressores acabaram de ser descartados: o instante do treino deles não
   // pode sobreviver a eles (`completeCalibration` grava o novo).
-  treinadoEmMs = null;
+  definirTreinadoEm(null);
   varianceFloorBreaches = 0;
   varianceCeilBreaches = 0;
   currentPointSpecularHits = 0;
@@ -2567,7 +2826,7 @@ export function startCollectingPoint(x: number, y: number, onDone: (success: boo
   const totalMs = duracaoTotalDoPonto(tetoDaJanela(currentCollectionMs));
   console.log(
     `[calib] ▶ Coletando ponto (${(x * 100).toFixed(0)}%, ${(y * 100).toFixed(0)}%) — ` +
-    `${CALIBRATION_ACCLIMATION_MS}ms de acomodação + ` +
+    `${acomodacaoDoPontoMs()}ms de acomodação + ` +
     `${COLLECTION_MIN_MS}..${tetoDaJanela(currentCollectionMs)}ms de coleta útil, ` +
     `fechando por estabilidade (${totalMs}ms no pior caso)`,
   );
@@ -2584,7 +2843,7 @@ export function startCollectingPoint(x: number, y: number, onDone: (success: boo
       // chamado. Sem estas duas linhas o diagnóstico contaria a mais.
       motivoDoFechamento = 'teto';
       pontosInstaveis++;
-      tempoUtilPorAlvoMs.push(Math.round(totalMs - CALIBRATION_ACCLIMATION_MS));
+      tempoUtilPorAlvoMs.push(Math.round(totalMs - acomodacaoDoPontoMs()));
       isCollecting = false;
       processStaticPoint();
     }
@@ -2763,7 +3022,7 @@ export function feedRawData(featuresLeft: number[], featuresRight: number[], qua
   const elapsed = performance.now() - collectionStartTime;
 
   // Descarta a fase de sacada / acomodação.
-  if (elapsed < CALIBRATION_ACCLIMATION_MS) {
+  if (elapsed < acomodacaoDoPontoMs()) {
     lastDecision = { accepted: false, elapsedMs: elapsed, reason: 'acclimation' };
     return;
   }
@@ -2876,7 +3135,7 @@ export function feedRawData(featuresLeft: number[], featuresRight: number[], qua
   }
   const veredicto = estabilidadeDoAlvo.avaliar();
   const decisao = decidirFechamento({
-    decorridoUtilMs: elapsed - CALIBRATION_ACCLIMATION_MS,
+    decorridoUtilMs: elapsed - acomodacaoDoPontoMs(),
     minUtilMs: COLLECTION_MIN_MS,
     maxUtilMs: tetoDaJanela(currentCollectionMs),
     amostrasAceitas: collectedFeaturesLeft.length,
@@ -2886,11 +3145,11 @@ export function feedRawData(featuresLeft: number[], featuresRight: number[], qua
 
   if (decisao.fechar) {
     motivoDoFechamento = decisao.motivo === 'estavel' ? 'estavel' : 'teto';
-    tempoUtilPorAlvoMs.push(Math.round(elapsed - CALIBRATION_ACCLIMATION_MS));
+    tempoUtilPorAlvoMs.push(Math.round(elapsed - acomodacaoDoPontoMs()));
     if (motivoDoFechamento === 'teto') pontosInstaveis++;
     console.log(
       `[calib] ponto fechado por ${motivoDoFechamento} em ` +
-      `${Math.round(elapsed - CALIBRATION_ACCLIMATION_MS)}ms úteis ` +
+      `${Math.round(elapsed - acomodacaoDoPontoMs())}ms úteis ` +
       `(teto ${tetoDaJanela(currentCollectionMs)}ms) — ` +
       `z=${veredicto.z === null ? '?' : veredicto.z.toFixed(2)} ` +
       `razão=${veredicto.razao === null ? '?' : veredicto.razao.toFixed(2)}`,
@@ -3074,6 +3333,14 @@ export interface CalibrationFitDiagnostics {
   trainErrorPx: number;
   /** Erro leave-one-target-out médio, em pixels. Mesma convenção. */
   looErrorPx: number;
+  /**
+   * O mesmo LOO só nos alvos da grade INTERNA (`naGradeInterna`), sem os
+   * cantos da tela. É o número comparável com as calibrações de 9 alvos: o
+   * LOO de um canto é extrapolação por construção e, na mesma sessão, leva a
+   * média de ~83 para ~150 px (replay de 23/09) sem nada ter piorado. `NaN`
+   * sem alvos internos suficientes.
+   */
+  looGradeInternaPx?: number;
   /** Erro LOO por alvo, na ordem dos alvos únicos. */
   looByTarget: { x: number; y: number; errorPx: number; samples: number }[];
   /** Média e desvio da pose durante TODA a calibração (rad). O desvio é o
@@ -3134,6 +3401,20 @@ export interface CalibrationFitDiagnostics {
   polynomialFeatures: boolean;
   /** Se os alvos de treino foram compensados pela pose de cada amostra. */
   poseCompensatedTargets: boolean;
+  /** Calibração robusta (M6): quadros descartados e peso de Huber de cada alvo. */
+  robusto?: DiagnosticoRobusto | null;
+  /** Peso de cada olho pela variância do resíduo de TREINO (a fusão de antes). */
+  confiabilidadePorOlho?: { left: number; right: number } | null;
+  /**
+   * Fusão por covariância (M10): variâncias e covariância dos erros fora da
+   * amostra de cada olho, por eixo, e o peso do olho esquerdo que sai delas
+   * com os dois olhos abertos.
+   */
+  fusao?: {
+    x: CovarianciaDosOlhos;
+    y: CovarianciaDosOlhos;
+    pesoEsquerdo: { x: number; y: number };
+  } | null;
 }
 
 let lastFitDiagnostics: CalibrationFitDiagnostics | null = null;
@@ -3359,6 +3640,7 @@ export function iniciarRodadaDeReforco(
     right: regressorRight ? ridgeModelFromRegressor(regressorRight) : null,
     scalerL: featureScalerLeft.getParams(),
     scalerR: featureScalerRight.getParams(),
+    referencia: captureReferenceStateForProfile(),
     meta: pendingProfileMeta,
   };
 
@@ -3395,6 +3677,16 @@ function alvosCompensadosPorPose(
     const pose = q && typeof q.yaw === 'number' && typeof q.pitch === 'number' && typeof q.roll === 'number'
       ? { yaw: q.yaw, pitch: q.pitch, roll: q.roll }
       : null;
+    // Saída 6DoF (M12): o alvo vai da postura da amostra para a de referência
+    // pela geometria exata. Sem as peças, a aproximação de sempre.
+    const exato = EXPERIMENT.saida6DoF
+      ? reprojetarEntrePosturas(
+          { x: p.screenX, y: p.screenY }, vw, vh,
+          { olho: olhoDaAmostraCm(p), pose },
+          { olho: olhoDeReferenciaCm, pose: referencia },
+        )
+      : null;
+    if (exato) return { screenX: exato.x, screenY: exato.y };
     if (!EXPERIMENT.geometricPoseCompensation || !pose || !referencia || !(vw > 0) || !(vh > 0)) {
       return { screenX: p.screenX, screenY: p.screenY };
     }
@@ -3411,12 +3703,43 @@ function poseDaAmostra(p: CalibrationPoint): Pose | null {
 }
 
 /**
+ * Fusão binocular, a mesma em todo lugar que funde os dois olhos.
+ *
+ * Com a fusão por covariância medida (M10), pesos de variância mínima: a
+ * abertura do olho infla a variância dele e a dominância a reduz
+ * (`fusaoBinocular.ts`). Sem ela, a de antes: abertura × confiabilidade ×
+ * dominância. `comDominancia: false` é o diagnóstico do ajuste, que sempre
+ * fundiu sem a preferência de olho do usuário.
+ */
+function fundirOlhos(
+  pl: { x: number; y: number },
+  pr: { x: number; y: number },
+  abertura: { left: number; right: number } | undefined,
+  comDominancia: boolean,
+): { x: number; y: number } {
+  const ganhoE = comDominancia && eyeDominance === 'left' ? DOMINANCE_GAIN : 1;
+  const ganhoD = comDominancia && eyeDominance === 'right' ? DOMINANCE_GAIN : 1;
+  if (fusaoDosOlhos) {
+    return fundirPorCovariancia(fusaoDosOlhos, pl, pr, abertura, { left: ganhoE, right: ganhoD });
+  }
+  let wL = abertura ? Math.max(MIN_EYE_WEIGHT, abertura.left) : 1;
+  let wR = abertura ? Math.max(MIN_EYE_WEIGHT, abertura.right) : 1;
+  if (eyeReliability) {
+    wL *= Math.max(MIN_EYE_WEIGHT, eyeReliability.left);
+    wR *= Math.max(MIN_EYE_WEIGHT, eyeReliability.right);
+  }
+  wL *= ganhoE;
+  wR *= ganhoD;
+  const wSum = wL + wR;
+  return { x: (pl.x * wL + pr.x * wR) / wSum, y: (pl.y * wL + pr.y * wR) / wSum };
+}
+
+/**
  * Predição de uma amostra de TREINO no mesmo ponto do pipeline em que o
  * `mapGaze` aplica a correção local: fusão binocular → compensação de pose →
- * compensação de translação. A fusão usa a confiabilidade por olho e a
- * dominância, sem o peso instantâneo de abertura do olho (a coleta não o
- * guarda); a distância não entra porque, na calibração, ela é a própria
- * referência (razão 1).
+ * compensação de translação. A fusão é a de `fundirOlhos`, sem o peso
+ * instantâneo de abertura do olho (a coleta não o guarda); a distância não
+ * entra porque, na calibração, ela é a própria referência (razão 1).
  */
 function predicaoCompensadaDaAmostra(
   p: CalibrationPoint,
@@ -3426,16 +3749,18 @@ function predicaoCompensadaDaAmostra(
   if (!regressorLeft || !regressorRight) return null;
   const pl = regressorLeft.predict(featureScalerLeft.transformSingle(maybeExpandSingle(p.featuresLeft)));
   const pr = regressorRight.predict(featureScalerRight.transformSingle(maybeExpandSingle(p.featuresRight)));
-  let wL = 1;
-  let wR = 1;
-  if (eyeReliability) {
-    wL *= Math.max(MIN_EYE_WEIGHT, eyeReliability.left);
-    wR *= Math.max(MIN_EYE_WEIGHT, eyeReliability.right);
-  }
-  if (eyeDominance === 'left') wL *= DOMINANCE_GAIN;
-  if (eyeDominance === 'right') wR *= DOMINANCE_GAIN;
-  let x = (pl.x * wL + pr.x * wR) / (wL + wR);
-  let y = (pl.y * wL + pr.y * wR) / (wL + wR);
+  const fundido = fundirOlhos(pl, pr, undefined, true);
+  // Saída 6DoF (M12): da postura de referência para a da amostra, exato.
+  const exato = EXPERIMENT.saida6DoF
+    ? reprojetarEntrePosturas(
+        fundido, vw, vh,
+        { olho: olhoDeReferenciaCm, pose: calibrationReferencePose },
+        { olho: olhoDaAmostraCm(p), pose: poseDaAmostra(p) },
+      )
+    : null;
+  if (exato) return exato;
+  let x = fundido.x;
+  let y = fundido.y;
   if (EXPERIMENT.geometricPoseCompensation) {
     const c = compensarPredicao(x, y, poseDaAmostra(p), calibrationReferencePose, screenDistancePx(), vw, vh);
     x = c.x;
@@ -3519,7 +3844,260 @@ export function getUltimaPredicaoSemCorrecao(): { x: number; y: number } | null 
   return ultimaPredicaoSemCorrecao ? { ...ultimaPredicaoSemCorrecao } : null;
 }
 
-function trainScalersAndRegressors(trainingProfile: CalibrationPoint[]): TrainingSummary {
+/**
+ * Pesos que o LOO do diagnóstico usa com a calibração robusta: o peso de
+ * quadro de cada olho vezes o peso de Huber do alvo. Assim o LOO mede a
+ * generalização do modelo que foi de fato treinado (antes ele treinava cada
+ * dobra sem peso nenhum, outro modelo).
+ */
+function pesosDoLooRobusto(
+  pesosL: readonly number[],
+  pesosR: readonly number[],
+  grupos: readonly string[],
+): { left: number[]; right: number[] } {
+  const omega = new Map<string, number>();
+  for (const a of ultimoDiagnosticoRobusto?.alvos ?? []) {
+    omega.set(targetGroupKey({ screenX: a.x, screenY: a.y }), a.peso);
+  }
+  const w = (p: readonly number[]) => p.map((v, i) => v * (omega.get(grupos[i]) ?? 1));
+  return { left: w(pesosL), right: w(pesosR) };
+}
+
+/**
+ * Calibração robusta (M6), camada do ALVO: Huber entre os alvos por mínimos
+ * quadrados reponderados, mantendo a penalidade λ·m·Σ_W e o λ por validação
+ * cruzada deixando um alvo de fora.
+ *
+ *  1. λ pela validação cruzada de sempre, com os pesos de quadro.
+ *  2. IRLS com λ fixo: resíduo de cada alvo (média ponderada dos quadros),
+ *     estudentizado pela alavanca do alvo, u = r / (s·√(1 − h)), média dos
+ *     dois olhos e norma nos dois eixos; peso w = min(1, 1,345/|u|). A escala
+ *     s fica fixa durante a rodada (1,4826·MAD dos resíduos, com piso de
+ *     0,5°): re-estimada a cada iteração, com 13 alvos, o IRLS deixa de
+ *     convergir em ~20 % dos casos (docs/PESQUISA.md §3.2).
+ *  3. λ de novo, com os pesos de Huber congelados, pesando o erro de cada
+ *     dobra pelo peso do alvo. Até duas rodadas.
+ *
+ * Com menos de 6 alvos (modo rápido) não há o que comparar: só a camada do
+ * quadro vale.
+ */
+function treinarComHuber(
+  zL: number[][],
+  zR: number[][],
+  targetsX: number[],
+  targetsY: number[],
+  grupos: string[],
+  pesosL: number[],
+  pesosR: number[],
+  perfil: readonly CalibrationPoint[],
+  vw: number,
+  vh: number,
+): { left: GazeRegressor; right: GazeRegressor; diagnostico: Partial<DiagnosticoRobusto> } {
+  const chaves: string[] = [];
+  for (const g of grupos) if (!chaves.includes(g)) chaves.push(g);
+  const coordenadas = new Map<string, { x: number; y: number }>();
+  perfil.forEach((p, i) => {
+    if (!coordenadas.has(grupos[i])) coordenadas.set(grupos[i], { x: p.screenX, y: p.screenY });
+  });
+
+  let omega = new Map<string, number>(chaves.map((k) => [k, 1]));
+  const comOmega = (p: readonly number[]) => p.map((w, i) => w * (omega.get(grupos[i]) ?? 1));
+  const treinar = (
+    z: number[][], p: number[], lambda?: { x: number; y: number }, cv?: ReadonlyMap<string, number>,
+  ): GazeRegressor => {
+    const r = createRegressor();
+    r.train(z, targetsX, targetsY, grupos, lambda, comOmega(p), cv);
+    return r;
+  };
+  const lambdaDe = (r: GazeRegressor) => {
+    const m = ridgeModelFromRegressor(r);
+    return m && typeof m.lambdaX === 'number' && typeof m.lambdaY === 'number'
+      ? { x: m.lambdaX, y: m.lambdaY }
+      : { x: 1, y: 1 };
+  };
+
+  let left = treinar(zL, pesosL);
+  let right = treinar(zR, pesosR);
+  if (chaves.length < 6) {
+    return { left, right, diagnostico: { alvos: [], iteracoes: 0, convergiu: true } };
+  }
+
+  const penalidadeL = withinTargetPenalty(zL, grupos);
+  const penalidadeR = withinTargetPenalty(zR, grupos);
+  // Piso da escala: 0,5° na tela, em fração de cada eixo.
+  const meioGrauPx = screenDistancePx() * Math.tan((0.5 * Math.PI) / 180);
+  const pisoX = vw > 0 ? meioGrauPx / vw : 0.01;
+  const pisoY = vh > 0 ? meioGrauPx / vh : 0.01;
+
+  /** Resíduo de cada alvo dividido por √(1 − h), média dos dois olhos, por eixo. */
+  const estudentizar = () => {
+    const porOlho = (r: GazeRegressor, z: number[][], p: number[], pen: number[][] | null) => {
+      const lam = lambdaDe(r);
+      const alav = alavancaDosGrupos(z, grupos, comOmega(p), lam, pen);
+      const soma = new Map<string, { rx: number; ry: number; w: number }>();
+      z.forEach((f, i) => {
+        const q = r.predict(f);
+        const e = soma.get(grupos[i]) ?? { rx: 0, ry: 0, w: 0 };
+        e.rx += p[i] * (q.x - targetsX[i]);
+        e.ry += p[i] * (q.y - targetsY[i]);
+        e.w += p[i];
+        soma.set(grupos[i], e);
+      });
+      const out = new Map<string, { x: number; y: number }>();
+      for (const [g, e] of soma) {
+        if (!(e.w > 0)) continue;
+        const h = alav.get(g) ?? { x: 0, y: 0 };
+        out.set(g, {
+          x: e.rx / e.w / Math.sqrt(Math.max(0.05, 1 - h.x)),
+          y: e.ry / e.w / Math.sqrt(Math.max(0.05, 1 - h.y)),
+        });
+      }
+      return out;
+    };
+    const a = porOlho(left, zL, pesosL, penalidadeL);
+    const b = porOlho(right, zR, pesosR, penalidadeR);
+    const out = new Map<string, { x: number; y: number }>();
+    for (const k of chaves) {
+      const ra = a.get(k);
+      const rb = b.get(k);
+      if (!ra || !rb) continue;
+      out.set(k, { x: (ra.x + rb.x) / 2, y: (ra.y + rb.y) / 2 });
+    }
+    return out;
+  };
+
+  const MAX_ITERACOES = 50;
+  const TOLERANCIA = 1e-4;
+  let iteracoes = 0;
+  let convergiu = false;
+  let residuos = estudentizar();
+  for (let rodada = 0; rodada < 2; rodada++) {
+    const lamL = lambdaDe(left);
+    const lamR = lambdaDe(right);
+    const sx = escalaRobusta([...residuos.values()].map((r) => r.x), pisoX);
+    const sy = escalaRobusta([...residuos.values()].map((r) => r.y), pisoY);
+    convergiu = false;
+    for (iteracoes = 1; iteracoes <= MAX_ITERACOES; iteracoes++) {
+      const novo = new Map<string, number>();
+      for (const k of chaves) {
+        const r = residuos.get(k);
+        const u = r ? Math.hypot(r.x / sx, r.y / sy) / Math.SQRT2 : 0;
+        novo.set(k, pesoDeHuber(u));
+      }
+      let delta = 0;
+      for (const k of chaves) delta = Math.max(delta, Math.abs((novo.get(k) ?? 1) - (omega.get(k) ?? 1)));
+      omega = novo;
+      left = treinar(zL, pesosL, lamL);
+      right = treinar(zR, pesosR, lamR);
+      residuos = estudentizar();
+      if (delta < TOLERANCIA) {
+        convergiu = true;
+        break;
+      }
+    }
+    // λ de novo com os pesos de Huber congelados.
+    const novoL = treinar(zL, pesosL, undefined, omega);
+    const novoR = treinar(zR, pesosR, undefined, omega);
+    const mudou = (a: { x: number; y: number }, b: { x: number; y: number }) => a.x !== b.x || a.y !== b.y;
+    const trocouL = mudou(lambdaDe(novoL), lamL);
+    const trocouR = mudou(lambdaDe(novoR), lamR);
+    left = novoL;
+    right = novoR;
+    residuos = estudentizar();
+    if (!trocouL && !trocouR) break;
+  }
+
+  const sxFinal = escalaRobusta([...residuos.values()].map((r) => r.x), pisoX);
+  const syFinal = escalaRobusta([...residuos.values()].map((r) => r.y), pisoY);
+  const alvos = chaves.map((k) => {
+    const c = coordenadas.get(k) ?? { x: Number.NaN, y: Number.NaN };
+    const r = residuos.get(k);
+    const u = r ? Math.hypot(r.x / sxFinal, r.y / syFinal) / Math.SQRT2 : 0;
+    return { x: c.x, y: c.y, peso: omega.get(k) ?? 1, u };
+  });
+  const rebaixados = alvos.filter((a) => a.peso < 1);
+  if (rebaixados.length > 0) {
+    console.log(
+      `[calib] Huber: ${rebaixados.length} alvo(s) com peso reduzido — ` +
+      rebaixados.map((a) => `(${(a.x * 100).toFixed(0)}%,${(a.y * 100).toFixed(0)}%) w=${a.peso.toFixed(2)}`).join('; '),
+    );
+  }
+  return { left, right, diagnostico: { alvos, iteracoes, convergiu } };
+}
+
+/** Chave do alvo nominal de uma amostra (a mesma do agrupamento do Ridge). */
+function grupoDaAmostra(p: CalibrationPoint): string {
+  return p.grupo ?? targetGroupKey({ screenX: p.screenX, screenY: p.screenY });
+}
+
+/** Média dos olhos das amostras, em cm. `null` se nenhuma amostra tem o dado. */
+function olhoMedioCm(perfil: readonly CalibrationPoint[]): Vetor3 | null {
+  let n = 0;
+  const soma: Vetor3 = [0, 0, 0];
+  for (const p of perfil) {
+    const o = olhoDaAmostraCm(p);
+    if (!o) continue;
+    soma[0] += o[0]; soma[1] += o[1]; soma[2] += o[2];
+    n++;
+  }
+  return n > 0 ? [soma[0] / n, soma[1] / n, soma[2] / n] : null;
+}
+
+/**
+ * Predições de treino para a medida do ruído, em px, na ordem de coleta.
+ *
+ * Só quadros de FIXAÇÃO entram: a perseguição tem alvo móvel (e `grupo`
+ * próprio), e ali a variação é o próprio alvo andando. Cada coleta contínua de
+ * um alvo é um grupo à parte — um alvo repetido no reforço volta minutos
+ * depois, e emendar as duas coletas criaria um par "consecutivo" falso na
+ * conta do ρ₁.
+ */
+function amostrasDoRuido(perfil: readonly CalibrationPoint[], vw: number, vh: number): AmostraDoRuido[] {
+  const out: AmostraDoRuido[] = [];
+  let coleta = 0;
+  let anterior: string | null = null;
+  for (const p of perfil) {
+    if (p.grupo) { anterior = null; continue; }
+    const chave = targetGroupKey({ screenX: p.screenX, screenY: p.screenY });
+    if (chave !== anterior) { coleta++; anterior = chave; }
+    const q = predicaoCompensadaDaAmostra(p, vw, vh);
+    if (!q) continue;
+    const c = EXPERIMENT.correcaoLocal ? aplicarCorrecaoLocal(correcaoLocal, q) : q;
+    out.push({ grupo: `${chave}#${coleta}`, alvoX: p.screenX * vw, alvoY: p.screenY * vh, x: c.x * vw, y: c.y * vh });
+  }
+  return out;
+}
+
+function trainScalersAndRegressors(perfilColetado: CalibrationPoint[]): TrainingSummary {
+  // Calibração robusta (M6), camada do QUADRO: dentro de cada alvo, quadro a
+  // mais de 4·1,4826·MAD da mediana em alguma feature sai do treino, e entre 3
+  // e 4 entra com peso menor, numa rampa. Sai de tudo o que vem depois —
+  // referência de pose, Σ_W, correção dos cantos, diagnósticos —, porque um
+  // quadro de piscada não é evidência de nada.
+  let trainingProfile = perfilColetado;
+  let pesoRobustoL: number[] | null = null;
+  let pesoRobustoR: number[] | null = null;
+  ultimoDiagnosticoRobusto = null;
+  // Fusão e ruído descrevem o modelo anterior até serem medidos de novo abaixo.
+  fusaoDosOlhos = null;
+  ruidoDaCalibracao = null;
+  if (EXPERIMENT.calibracaoRobusta && perfilColetado.length > 0) {
+    const grupos0 = perfilColetado.map(grupoDaAmostra);
+    const wL = pesosRobustosPorQuadro(perfilColetado.map((p) => p.featuresLeft), grupos0);
+    const wR = pesosRobustosPorQuadro(perfilColetado.map((p) => p.featuresRight), grupos0);
+    const manter = perfilColetado.map((_, i) => wL[i] > 0 && wR[i] > 0);
+    trainingProfile = perfilColetado.filter((_, i) => manter[i]);
+    pesoRobustoL = wL.filter((_, i) => manter[i]);
+    pesoRobustoR = wR.filter((_, i) => manter[i]);
+    const soma = pesoRobustoL.reduce((a, b, i) => a + Math.min(b, pesoRobustoR![i]), 0);
+    ultimoDiagnosticoRobusto = {
+      fracaoDescartada: 1 - trainingProfile.length / perfilColetado.length,
+      pesoMedioDosQuadros: trainingProfile.length > 0 ? soma / trainingProfile.length : 0,
+      alvos: [],
+      iteracoes: 0,
+      convergiu: true,
+    };
+  }
   const trainFeaturesLeft  = trainingProfile.map(p => p.featuresLeft);
   const trainFeaturesRight = trainingProfile.map(p => p.featuresRight);
 
@@ -3534,6 +4112,9 @@ function trainScalersAndRegressors(trainingProfile: CalibrationPoint[]): Trainin
   // Referência de pose = média das amostras que treinam. É contra ela que a
   // compensação mede o desvio, no treino e na inferência.
   calibrationReferencePose = poseDeReferencia(trainingProfile.map(poseDaAmostra));
+  // Saída 6DoF (M12): o olho de referência é a média dos olhos do treino, par
+  // da pose de referência.
+  olhoDeReferenciaCm = EXPERIMENT.saida6DoF ? olhoMedioCm(trainingProfile) : null;
   const trainTargets = alvosCompensadosPorPose(trainingProfile, calibrationReferencePose, vw, vh);
 
   const camDists = trainingProfile
@@ -3593,6 +4174,18 @@ function trainScalersAndRegressors(trainingProfile: CalibrationPoint[]): Trainin
     (p) => (typeof p.peso === 'number' && Number.isFinite(p.peso) ? p.peso : 1),
   );
   const pesosDeQualidade = normalizarPorGrupo(pesosBrutos, gruposDeAlvo);
+  // Com a calibração robusta, cada olho tem o seu peso de quadro (uma pálpebra
+  // que escorregou num olho só pesa menos naquele olho), multiplicado pelo de
+  // qualidade e normalizado dentro do alvo como antes. O quadro que um dos
+  // olhos rejeita por inteiro (peso zero) já saiu dos dois, lá em cima: os
+  // olhos treinam com os mesmos quadros, que é o que a fusão e o LOO por alvo
+  // pressupõem.
+  const pesosL = pesoRobustoL
+    ? normalizarPorGrupo(pesosBrutos.map((q, i) => q * pesoRobustoL![i]), gruposDeAlvo)
+    : pesosDeQualidade;
+  const pesosR = pesoRobustoR
+    ? normalizarPorGrupo(pesosBrutos.map((q, i) => q * pesoRobustoR![i]), gruposDeAlvo)
+    : pesosDeQualidade;
   // O resumo sai dos pesos BRUTOS, não dos normalizados. Os normalizados têm
   // média 1 por construção: numa sessão inteira no escuro, com todas as
   // amostras no piso, eles sairiam todos 1,0 e o relatório diria "peso mínimo
@@ -3600,10 +4193,22 @@ function trainScalersAndRegressors(trainingProfile: CalibrationPoint[]): Trainin
   // existe para denunciar.
   ultimoResumoDePesos = resumoDePesos(pesosBrutos);
 
-  regressorLeft = createRegressor();
-  regressorLeft.train(scaledFeaturesLeft, targetsX, targetsY, gruposDeAlvo, undefined, pesosDeQualidade);
-  regressorRight = createRegressor();
-  regressorRight.train(scaledFeaturesRight, targetsX, targetsY, gruposDeAlvo, undefined, pesosDeQualidade);
+  if (EXPERIMENT.calibracaoRobusta) {
+    const r = treinarComHuber(
+      scaledFeaturesLeft, scaledFeaturesRight, targetsX, targetsY, gruposDeAlvo, pesosL, pesosR,
+      trainingProfile, vw, vh,
+    );
+    regressorLeft = r.left;
+    regressorRight = r.right;
+    if (ultimoDiagnosticoRobusto) {
+      ultimoDiagnosticoRobusto = { ...ultimoDiagnosticoRobusto, ...r.diagnostico };
+    }
+  } else {
+    regressorLeft = createRegressor();
+    regressorLeft.train(scaledFeaturesLeft, targetsX, targetsY, gruposDeAlvo, undefined, pesosDeQualidade);
+    regressorRight = createRegressor();
+    regressorRight.train(scaledFeaturesRight, targetsX, targetsY, gruposDeAlvo, undefined, pesosDeQualidade);
+  }
 
   // Peso por olho pelo inverso da variância do resíduo de treino. Com olhos
   // igualmente bons dá ~0,5/0,5; um olho ruim deixa de arrastar a média.
@@ -3657,15 +4262,50 @@ function trainScalersAndRegressors(trainingProfile: CalibrationPoint[]): Trainin
   // O modelo novo recomeça os dois relógios na referência em que foi treinado.
   referenciaLenta.iniciar({ pose: calibrationReferencePose, centro: calibrationReferenceCenter });
 
-  // Correção local dos cantos: precisa do modelo E das referências prontas,
-  // porque mede a predição no mesmo ponto do pipeline em que o `mapGaze` a
-  // aplica (depois de pose e translação).
+  // Leave-one-target-out olho a olho. Serve ao diagnóstico e, com M10, à
+  // fusão: os pesos dos olhos saem dos erros FORA da amostra de cada um.
+  const pesosDoLoo = EXPERIMENT.calibracaoRobusta ? pesosDoLooRobusto(pesosL, pesosR, gruposDeAlvo) : undefined;
+  const loo = calcularLooPorOlho(trainFeaturesLeft, trainFeaturesRight, trainTargets, trainingProfile, pesosDoLoo);
+  if (EXPERIMENT.fusaoPorCovariancia) {
+    fusaoDosOlhos = estimarFusao(residuosBinocularesDoLoo(loo, trainTargets));
+    if (fusaoDosOlhos) {
+      const f = fusaoDosOlhos;
+      const correlacao = (c: CovarianciaDosOlhos) => c.ed / Math.sqrt(c.e * c.d);
+      console.log(
+        `[calib] fusão por covariância — peso do olho esquerdo x=${(pesoDoOlhoEsquerdo(f.x) * 100).toFixed(0)}% ` +
+        `y=${(pesoDoOlhoEsquerdo(f.y) * 100).toFixed(0)}% | correlação entre os olhos ` +
+        `x=${correlacao(f.x).toFixed(2)} y=${correlacao(f.y).toFixed(2)}`,
+      );
+    }
+  }
+
+  // Correção local dos cantos: precisa do modelo, da fusão E das referências
+  // prontas, porque mede a predição no mesmo ponto do pipeline em que o
+  // `mapGaze` a aplica (depois de pose e translação).
   ajustarCorrecaoDosCantos(trainingProfile, gruposDeAlvo, vw, vh);
 
   lastFitDiagnostics = computeFitDiagnostics(
     trainFeaturesLeft, trainFeaturesRight, trainTargets, trainingProfile,
     { w: vw, h: vh },
+    pesosDoLoo,
+    loo,
   );
+
+  // Ruído de fixação (M9/M15): a variação da predição em torno da média de
+  // cada alvo, com o modelo pronto e no ponto do pipeline em que o filtro a
+  // recebe (fusão, pose, translação e cantos).
+  if (usaRuidoDaCalibracao()) {
+    ruidoDaCalibracao = estimarRuido(amostrasDoRuido(trainingProfile, vw, vh), vw, vh);
+    if (ruidoDaCalibracao) {
+      const r = ruidoDaCalibracao;
+      const dp = (v: number) => Math.sqrt(v).toFixed(0);
+      const med = (v: number[]) => medianOf(v);
+      console.log(
+        `[calib] ruído de fixação — desvio mediano x=${dp(med(r.alvos.map((a) => a.sxx)))}px ` +
+        `y=${dp(med(r.alvos.map((a) => a.syy)))}px | ρ₁=${r.rho1.toFixed(2)} | ${r.alvos.length} alvo(s)`,
+      );
+    }
+  }
   const d = lastFitDiagnostics;
   console.log(
     `[calib] ajuste — treino=${d.trainErrorPx.toFixed(0)}px | LOO=${d.looErrorPx.toFixed(0)}px | ` +
@@ -3698,12 +4338,117 @@ function trainScalersAndRegressors(trainingProfile: CalibrationPoint[]): Trainin
 }
 
 /**
+ * Predições fora da amostra (leave-one-target-out) de cada olho, por quadro.
+ * A fusão por covariância (M10) é medida nos resíduos delas, e o diagnóstico
+ * do ajuste funde as duas para o erro LOO.
+ */
+export interface LooPorOlho {
+  /** Quadros de cada alvo, na ordem em que os alvos aparecem. */
+  porAlvo: Map<string, number[]>;
+  /** `null` no quadro cujo alvo não pôde ser deixado de fora (dobra que falhou). */
+  esquerdo: ({ x: number; y: number } | null)[];
+  direito: ({ x: number; y: number } | null)[];
+}
+
+/**
+ * Leave-one-target-out com o λ do modelo já treinado: cada dobra treina scaler
+ * e Ridge sem um alvo e prediz os quadros dele, olho a olho. O λ é o do modelo
+ * porque o que se mede é a generalização DELE — refazer a busca a cada dobra
+ * mediria outro modelo e custaria 9× o treino inteiro.
+ *
+ * O grupo de cada quadro é o do treino (`grupoDaAmostra`): o alvo nominal, ou a
+ * célula da perseguição. Antes o diagnóstico derivava o grupo da coordenada,
+ * e cada quadro de perseguição virava uma dobra.
+ */
+export function calcularLooPorOlho(
+  featuresLeft: number[][],
+  featuresRight: number[][],
+  targets: { screenX: number; screenY: number }[],
+  profile?: readonly CalibrationPoint[],
+  /** Pesos por amostra de cada olho com a calibração robusta (M6). */
+  pesosPorAmostra?: { left: readonly number[]; right: readonly number[] },
+): LooPorOlho {
+  const n = featuresLeft.length;
+  const chaveDoAlvo = (i: number) => (profile && profile[i]
+    ? grupoDaAmostra(profile[i])
+    : targetGroupKey(targets[i]));
+  const lambdaDe = (r: GazeRegressor | null) => {
+    const m = r ? ridgeModelFromRegressor(r) : null;
+    return m && typeof m.lambdaX === 'number' && typeof m.lambdaY === 'number'
+      ? { x: m.lambdaX, y: m.lambdaY }
+      : undefined;
+  };
+  const lambdaL = lambdaDe(regressorLeft);
+  const lambdaR = lambdaDe(regressorRight);
+
+  const porAlvo = new Map<string, number[]>();
+  for (let i = 0; i < n; i++) {
+    const k = chaveDoAlvo(i);
+    const arr = porAlvo.get(k);
+    if (arr) arr.push(i); else porAlvo.set(k, [i]);
+  }
+  const esquerdo: ({ x: number; y: number } | null)[] = new Array(n).fill(null);
+  const direito: ({ x: number; y: number } | null)[] = new Array(n).fill(null);
+  if (porAlvo.size < 3) return { porAlvo, esquerdo, direito };
+
+  for (const [k, teste] of porAlvo) {
+    const treino: number[] = [];
+    for (let i = 0; i < n; i++) if (chaveDoAlvo(i) !== k) treino.push(i);
+    try {
+      const fl = maybeExpand(treino.map((i) => featuresLeft[i]));
+      const fr = maybeExpand(treino.map((i) => featuresRight[i]));
+      const tg = treino.map((i) => targets[i]);
+      const sl = new StandardScaler(); sl.fit(fl);
+      const sr = new StandardScaler(); sr.fit(fr);
+      const grupos = treino.map(chaveDoAlvo);
+      const rl = new RidgeRegressor();
+      rl.train(sl.transform(fl), tg.map((t) => t.screenX), tg.map((t) => t.screenY), grupos, lambdaL,
+        pesosPorAmostra ? treino.map((i) => pesosPorAmostra.left[i]) : undefined);
+      const rr = new RidgeRegressor();
+      rr.train(sr.transform(fr), tg.map((t) => t.screenX), tg.map((t) => t.screenY), grupos, lambdaR,
+        pesosPorAmostra ? treino.map((i) => pesosPorAmostra.right[i]) : undefined);
+      const ml = rl.getModel() as RidgeModel;
+      const mr = rr.getModel() as RidgeModel;
+      for (const i of teste) {
+        esquerdo[i] = predictRidge(ml, sl.transformSingle(maybeExpandSingle(featuresLeft[i])));
+        direito[i] = predictRidge(mr, sr.transformSingle(maybeExpandSingle(featuresRight[i])));
+      }
+    } catch {
+      // Dobra que não treina (alvo que carregava sozinho uma dimensão, por
+      // exemplo): o alvo fica sem LOO, e o diagnóstico o marca como NaN.
+    }
+  }
+  return { porAlvo, esquerdo, direito };
+}
+
+/** Resíduos fora da amostra de cada olho, para a fusão por covariância (M10). */
+function residuosBinocularesDoLoo(
+  loo: LooPorOlho,
+  targets: readonly { screenX: number; screenY: number }[],
+): ResiduoBinocular[] {
+  const out: ResiduoBinocular[] = [];
+  for (const [grupo, indices] of loo.porAlvo) {
+    for (const i of indices) {
+      const e = loo.esquerdo[i];
+      const d = loo.direito[i];
+      if (!e || !d) continue;
+      out.push({
+        grupo,
+        e: { x: e.x - targets[i].screenX, y: e.y - targets[i].screenY },
+        d: { x: d.x - targets[i].screenX, y: d.y - targets[i].screenY },
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * Diagnóstico do ajuste: erro de treino, leave-one-target-out por alvo, pose,
  * validade do L2CS e a contagem de alvos. Pura em relação ao DOM (recebe o
  * viewport) para poder ser testada sem `completeCalibration`.
  *
- * A predição usa a mesma fusão binocular de `mapGaze` (pesos de confiabilidade
- * por olho) e os alvos já compensados por pose, para os números serem
+ * A predição usa a fusão binocular de `fundirOlhos` (sem a dominância, como
+ * sempre) e os alvos já compensados por pose, para os números serem
  * comparáveis com o teste de precisão.
  */
 export function computeFitDiagnostics(
@@ -3712,58 +4457,20 @@ export function computeFitDiagnostics(
   targets: { screenX: number; screenY: number }[],
   profile?: readonly CalibrationPoint[],
   viewport?: { w: number; h: number },
+  /**
+   * Pesos por amostra de cada olho com a calibração robusta (M6). Presentes,
+   * as dobras do LOO treinam com eles — a medida passa a ser a do modelo que
+   * foi de fato treinado. Os quadros de peso zero já saíram antes do treino.
+   */
+  pesosPorAmostra?: { left: readonly number[]; right: readonly number[] },
+  /** LOO já calculado pelo treino (é o mesmo cálculo; evita refazê-lo). */
+  looPronto?: LooPorOlho,
 ): CalibrationFitDiagnostics {
   const n = featuresLeft.length;
   const vw = viewport?.w ?? (typeof document !== 'undefined' ? document.documentElement.clientWidth : 1920);
   const vh = viewport?.h ?? (typeof document !== 'undefined' ? document.documentElement.clientHeight : 1080);
   const errPx = (dx: number, dy: number) => Math.hypot(dx * vw, dy * vh);
-  const wL = eyeReliability ? Math.max(MIN_EYE_WEIGHT, eyeReliability.left) : 1;
-  const wR = eyeReliability ? Math.max(MIN_EYE_WEIGHT, eyeReliability.right) : 1;
-  const fundir = (a: { x: number; y: number }, b: { x: number; y: number }) => ({
-    x: (a.x * wL + b.x * wR) / (wL + wR),
-    y: (a.y * wL + b.y * wR) / (wL + wR),
-  });
-
-  const binocular = (
-    sl: StandardScaler, sr: StandardScaler,
-    ml: RidgeModel, mr: RidgeModel,
-    fl: number[], fr: number[],
-  ) => fundir(
-    predictRidge(ml, sl.transformSingle(maybeExpandSingle(fl))),
-    predictRidge(mr, sr.transformSingle(maybeExpandSingle(fr))),
-  );
-
-  // O grupo de cada amostra é o alvo NOMINAL. Com alvos compensados por pose,
-  // `targets[i]` é único por amostra e tanto o LOO daqui quanto a validação
-  // cruzada de dentro do Ridge virariam leave-one-sample-out.
-  const chaveDoAlvo = (i: number) => (profile && profile[i]
-    ? targetGroupKey({ screenX: profile[i].screenX, screenY: profile[i].screenY })
-    : targetGroupKey(targets[i]));
-
-  const modeloL = regressorLeft ? ridgeModelFromRegressor(regressorLeft) : null;
-  const modeloR = regressorRight ? ridgeModelFromRegressor(regressorRight) : null;
-  const lambdaDe = (m: RidgeModel | null) =>
-    m && typeof m.lambdaX === 'number' && typeof m.lambdaY === 'number'
-      ? { x: m.lambdaX, y: m.lambdaY }
-      : undefined;
-  const lambdaL = lambdaDe(modeloL);
-  const lambdaR = lambdaDe(modeloR);
-
-  const fitPair = (idx: number[]) => {
-    const fl = maybeExpand(idx.map((i) => featuresLeft[i]));
-    const fr = maybeExpand(idx.map((i) => featuresRight[i]));
-    const tg = idx.map((i) => targets[i]);
-    const sl = new StandardScaler(); sl.fit(fl);
-    const sr = new StandardScaler(); sr.fit(fr);
-    const grupos = idx.map(chaveDoAlvo);
-    // λ do modelo já treinado: o LOO aqui mede a generalização DELE. Refazer a
-    // busca a cada dobra mediria outro modelo e custaria 9× o treino inteiro.
-    const rl = new RidgeRegressor();
-    rl.train(sl.transform(fl), tg.map(t => t.screenX), tg.map(t => t.screenY), grupos, lambdaL);
-    const rr = new RidgeRegressor();
-    rr.train(sr.transform(fr), tg.map(t => t.screenX), tg.map(t => t.screenY), grupos, lambdaR);
-    return { sl, sr, ml: rl.getModel() as RidgeModel, mr: rr.getModel() as RidgeModel };
-  };
+  const fundir = (a: { x: number; y: number }, b: { x: number; y: number }) => fundirOlhos(a, b, undefined, false);
 
   let trainErrorPx = 0;
   if (n > 0 && regressorLeft && regressorRight) {
@@ -3778,38 +4485,35 @@ export function computeFitDiagnostics(
     trainErrorPx = sum / n;
   }
 
-  const byTarget = new Map<string, number[]>();
-  for (let i = 0; i < n; i++) {
-    const k = chaveDoAlvo(i);
-    const arr = byTarget.get(k);
-    if (arr) arr.push(i); else byTarget.set(k, [i]);
-  }
-  const keys = [...byTarget.keys()];
-  const samplesPerTarget = keys.map((k) => byTarget.get(k)!.length);
+  const loo = looPronto ?? calcularLooPorOlho(featuresLeft, featuresRight, targets, profile, pesosPorAmostra);
+  const keys = [...loo.porAlvo.keys()];
+  const samplesPerTarget = keys.map((k) => loo.porAlvo.get(k)!.length);
 
   const looByTarget: CalibrationFitDiagnostics['looByTarget'] = [];
   let looSum = 0, looCount = 0;
   if (keys.length >= 3) {
     for (const k of keys) {
-      const test = byTarget.get(k)!;
-      const train: number[] = [];
-      for (let i = 0; i < n; i++) if (chaveDoAlvo(i) !== k) train.push(i);
-      try {
-        const f = fitPair(train);
-        let s = 0;
-        for (const i of test) {
-          const p = binocular(f.sl, f.sr, f.ml, f.mr, featuresLeft[i], featuresRight[i]);
-          s += errPx(p.x - targets[i].screenX, p.y - targets[i].screenY);
-        }
-        const e = s / test.length;
-        looByTarget.push({ x: targets[test[0]].screenX, y: targets[test[0]].screenY, errorPx: e, samples: test.length });
-        looSum += e; looCount++;
-      } catch {
-        looByTarget.push({ x: targets[test[0]].screenX, y: targets[test[0]].screenY, errorPx: NaN, samples: test.length });
+      const test = loo.porAlvo.get(k)!;
+      const alvo = { x: targets[test[0]].screenX, y: targets[test[0]].screenY };
+      if (test.some((i) => !loo.esquerdo[i] || !loo.direito[i])) {
+        looByTarget.push({ ...alvo, errorPx: NaN, samples: test.length });
+        continue;
       }
+      let s = 0;
+      for (const i of test) {
+        const p = fundir(loo.esquerdo[i]!, loo.direito[i]!);
+        s += errPx(p.x - targets[i].screenX, p.y - targets[i].screenY);
+      }
+      const e = s / test.length;
+      looByTarget.push({ ...alvo, errorPx: e, samples: test.length });
+      looSum += e; looCount++;
     }
   }
   const looErrorPx = looCount > 0 ? looSum / looCount : NaN;
+  const internos = looByTarget.filter((t) => Number.isFinite(t.errorPx) && naGradeInterna(t));
+  const looGradeInternaPx = internos.length >= 3
+    ? internos.reduce((soma, t) => soma + t.errorPx, 0) / internos.length
+    : NaN;
 
   let poseMean: CalibrationFitDiagnostics['poseMean'] = null;
   let poseStd: CalibrationFitDiagnostics['poseStd'] = null;
@@ -3855,6 +4559,7 @@ export function computeFitDiagnostics(
   return {
     trainErrorPx,
     looErrorPx,
+    looGradeInternaPx,
     looByTarget,
     poseMean,
     poseStd,
@@ -3874,6 +4579,15 @@ export function computeFitDiagnostics(
     dimsPerEye: n > 0 ? maybeExpandSingle(featuresLeft[0]).length : 0,
     polynomialFeatures: expansaoAtiva(),
     poseCompensatedTargets: EXPERIMENT.geometricPoseCompensation,
+    robusto: ultimoDiagnosticoRobusto,
+    confiabilidadePorOlho: eyeReliability ? { ...eyeReliability } : null,
+    fusao: fusaoDosOlhos
+      ? {
+          x: { ...fusaoDosOlhos.x },
+          y: { ...fusaoDosOlhos.y },
+          pesoEsquerdo: { x: pesoDoOlhoEsquerdo(fusaoDosOlhos.x), y: pesoDoOlhoEsquerdo(fusaoDosOlhos.y) },
+        }
+      : null,
   };
 }
 
@@ -3923,6 +4637,12 @@ export interface OutlierPointsReport {
   madThreshold: number;      // 3 × MAD × 1.4826 — o corte usado
   targetCount: number;
   reason?: 'insufficient_targets' | 'training_failed';
+  /**
+   * `huber` quando o relatório vem da calibração robusta (M6): `residualNorm`
+   * e `zScore` são o resíduo estudentizado do ajuste de Huber (u), o corte é
+   * em u e não há MAD. Ausente: LOO + MAD, como sempre.
+   */
+  metodo?: 'huber';
 }
 
 // Ridge mínimo local para o LOO — reutiliza `trainRidgeModel` e `predictRidge`
@@ -4092,6 +4812,65 @@ export function detectOutlierPoints(
   };
 }
 
+/**
+ * Alvos suspeitos segundo o ajuste robusto (M6), no formato do detector antigo.
+ *
+ * Com a calibração robusta, o detector por LOO deixa de ser a fonte: ele
+ * treinava OUTRO modelo (λ fixo 2e-3, penalidade isotrópica, sem pesos),
+ * comparava 1,4826·MAD de 9 resíduos e tinha piso de 15 % da tela (~4° na
+ * vertical). O ajuste robusto já tem, para cada alvo, o resíduo do MESMO
+ * modelo estudentizado pela alavanca — o que inclui os cantos sem marcá-los só
+ * por serem extrapolação. Suspeito é o alvo com |u| > 3 (peso de Huber < 0,45).
+ */
+export const LIMIAR_DE_SUSPEITA_ROBUSTO = 3;
+
+function outliersDoAjusteRobusto(
+  diag: DiagnosticoRobusto,
+  points: readonly CalibrationPoint[],
+): OutlierPointsReport {
+  const chaveDe = (x: number, y: number) => targetGroupKey({ screenX: x, screenY: y });
+  const indicesPorChave = new Map<string, number[]>();
+  points.forEach((p, i) => {
+    const k = chaveDe(p.screenX, p.screenY);
+    const l = indicesPorChave.get(k);
+    if (l) l.push(i);
+    else indicesPorChave.set(k, [i]);
+  });
+  const perTarget = diag.alvos.map((a) => ({
+    screenX: a.x,
+    screenY: a.y,
+    sampleCount: indicesPorChave.get(chaveDe(a.x, a.y))?.length ?? 0,
+    residualNorm: a.u,
+    zScore: a.u,
+    isOutlier: Math.abs(a.u) > LIMIAR_DE_SUSPEITA_ROBUSTO,
+  }));
+  const outlierIndices: number[] = [];
+  for (const t of perTarget) {
+    if (t.isOutlier) outlierIndices.push(...(indicesPorChave.get(chaveDe(t.screenX, t.screenY)) ?? []));
+  }
+  const us = perTarget.map((t) => Math.abs(t.residualNorm));
+  return {
+    outlierIndices,
+    perTarget,
+    medianResidual: us.length > 0 ? medianOf(us) : 0,
+    mad: 0,
+    madThreshold: LIMIAR_DE_SUSPEITA_ROBUSTO,
+    targetCount: perTarget.length,
+    metodo: 'huber',
+  };
+}
+
+/** O relatório de alvos suspeitos em vigor: o do ajuste robusto (M6) ou o detector por LOO. */
+function relatorioDeAlvosSuspeitos(points: readonly CalibrationPoint[]): OutlierPointsReport {
+  if (EXPERIMENT.calibracaoRobusta && ultimoDiagnosticoRobusto && ultimoDiagnosticoRobusto.alvos.length > 0) {
+    return outliersDoAjusteRobusto(ultimoDiagnosticoRobusto, points);
+  }
+  // Só a grade interna, pelo mesmo motivo do diagnóstico da grade: o LOO de
+  // um canto da tela é sempre alto, e cada calibração marcaria os quatro
+  // cantos como outliers.
+  return detectOutlierPoints(points.filter((p) => naGradeInterna({ x: p.screenX, y: p.screenY })));
+}
+
 function medianOf(values: readonly number[]): number {
   if (values.length === 0) return 0;
   const s = [...values].sort((a, b) => a - b);
@@ -4221,6 +5000,7 @@ export function completeCalibration(
         regressorRight = ridgeRegressorFromModel(b.right);
         featureScalerLeft.setParams(b.scalerL.means, b.scalerL.stds);
         featureScalerRight.setParams(b.scalerR.means, b.scalerR.stds);
+        restoreReferenceStateFromProfile(b.referencia);
         pendingProfileMeta = b.meta;
         outcome = { ok: true };
         console.warn(
@@ -4271,10 +5051,7 @@ function persistActiveProfileToRegistry(summary: TrainingSummary): void {
   // não silenciar, sem deixar o perfil sem quality.
   let outlierSummary: NonNullable<StoredCalibrationProfile['quality']>['outlierTargets'] | undefined;
   try {
-    // Só a grade interna, pelo mesmo motivo do diagnóstico da grade: o LOO de
-    // um canto da tela é sempre alto, e cada calibração marcaria os quatro
-    // cantos como outliers.
-    const rep = detectOutlierPoints(profile.filter((p) => naGradeInterna({ x: p.screenX, y: p.screenY })));
+    const rep = relatorioDeAlvosSuspeitos(profile);
     if (rep.reason) {
       console.log(`[calib] outlier detection SKIPPED (${rep.reason}, N=${rep.targetCount} alvos)`);
     } else {
@@ -4285,6 +5062,7 @@ function persistActiveProfileToRegistry(summary: TrainingSummary): void {
         indices: outlierIndicesInPerTarget,
         medianResidual: rep.medianResidual,
         madThreshold: rep.madThreshold,
+        ...(rep.metodo ? { metodo: rep.metodo } : {}),
         perTarget: rep.perTarget.map((t) => ({
           screenX: t.screenX,
           screenY: t.screenY,
@@ -4345,7 +5123,7 @@ function persistActiveProfileToRegistry(summary: TrainingSummary): void {
   // campo — senão os dois divergem por alguns milissegundos e a contagem de
   // blocos, que é indexada por este número, recomeça do 1 sem que nada tenha
   // sido recalibrado.
-  treinadoEmMs = treinoDoPerfilMs(meta.createdAt);
+  definirTreinadoEm(treinoDoPerfilMs(meta.createdAt));
   console.log(
     `[calib] Perfil salvo no registry: id=${meta.id} condição=${meta.opticalCondition} ` +
     `label='${meta.label}' amostras=${profile.length}`,
@@ -4387,7 +5165,7 @@ export function switchActiveProfile(id: string): CalibrationProfileMeta | null {
   // O instante do treino acompanha a troca pelo mesmo motivo: manter o da
   // calibração anterior faria o relatório dizer "2 min desde a calibração"
   // sobre um modelo treinado horas antes.
-  treinadoEmMs = treinoDoPerfilMs(stored.meta.createdAt);
+  definirTreinadoEm(treinoDoPerfilMs(stored.meta.createdAt));
   donoDoModeloEmUso = stored.meta.paciente ?? null;
   if (!stored.reference) {
     console.warn(
@@ -4422,7 +5200,7 @@ export function deleteCalibrationProfile(id: string): boolean {
     regressorLeft = null;
     regressorRight = null;
     restoreReferenceStateFromProfile(null);
-    treinadoEmMs = null;
+    definirTreinadoEm(null);
     donoDoModeloEmUso = null;
   }
   // `saveProfile` junta o disco com o registry: sem a remoção explícita, o
@@ -4514,7 +5292,7 @@ export function init() {
     // cima do `profile` atual.
     outlierTargets: () => {
       if (profile.length === 0) return null;
-      return detectOutlierPoints(profile);
+      return EXPERIMENT.calibracaoRobusta ? relatorioDeAlvosSuspeitos(profile) : detectOutlierPoints(profile);
     },
   };
 }
@@ -4530,6 +5308,34 @@ export function getCurrentTargetPx(): { xPx: number; yPx: number } | null {
   const vw = document.documentElement.clientWidth;
   const vh = document.documentElement.clientHeight;
   return { xPx: currentTargetX * vw, yPx: currentTargetY * vh };
+}
+
+/**
+ * O que cada estágio do `mapGaze` somou à última predição, em fração da tela
+ * (M11). É o que deixa o relatório dizer de onde vem um viés — da pose, da
+ * translação, da distância, dos cantos ou do dwell — em vez de só medi-lo.
+ */
+export interface TermosDaPredicao {
+  /** Predição de cada olho e a fundida, antes de qualquer correção. */
+  esquerdo: { x: number; y: number };
+  direito: { x: number; y: number };
+  fundido: { x: number; y: number };
+  /** Razão de distância aplicada (1 = mesma distância da calibração). */
+  razaoDeDistancia: number;
+  distancia: { x: number; y: number };
+  pose: { x: number; y: number };
+  translacao: { x: number; y: number };
+  cantos: { x: number; y: number };
+  dwell: { x: number; y: number };
+  /** Ponta do nariz no vídeo (normalizada) e distância cantal em px de vídeo. */
+  centroFacial: { x: number; y: number } | null;
+  distanciaCantalPx: number | null;
+}
+let ultimosTermos: TermosDaPredicao | null = null;
+
+/** Termos da última predição (referência interna: não mutar). */
+export function getTermosDaUltimaPredicao(): TermosDaPredicao | null {
+  return ultimosTermos;
 }
 
 // Erros de `mapGaze` são logados com rate-limit (1×/s) e contados em
@@ -4583,21 +5389,13 @@ export function mapGaze(
     return null;
   }
 
-  // Fusão binocular ponderada. Sem `perEyeWeight` é média simples. A
-  // confiabilidade medida na calibração compõe com o peso instantâneo: são
-  // coisas diferentes (`perEyeWeight` = o olho está aberto agora?;
-  // `eyeReliability` = quão bem o modelo daquele olho mapeia íris → tela).
-  let wL = perEyeWeight ? Math.max(MIN_EYE_WEIGHT, perEyeWeight.left) : 1;
-  let wR = perEyeWeight ? Math.max(MIN_EYE_WEIGHT, perEyeWeight.right) : 1;
-  if (eyeReliability) {
-    wL *= Math.max(MIN_EYE_WEIGHT, eyeReliability.left);
-    wR *= Math.max(MIN_EYE_WEIGHT, eyeReliability.right);
-  }
-  if (eyeDominance === 'left')  wL *= DOMINANCE_GAIN;
-  if (eyeDominance === 'right') wR *= DOMINANCE_GAIN;
-  const wSum = wL + wR;
-  let baseX = (predLeft.x * wL + predRight.x * wR) / wSum;
-  let baseY = (predLeft.y * wL + predRight.y * wR) / wSum;
+  // Fusão binocular (`fundirOlhos`). O peso instantâneo compõe com o que foi
+  // medido na calibração: são coisas diferentes (`perEyeWeight` = o olho está
+  // aberto agora?; confiabilidade ou covariância = quão bem o modelo daquele
+  // olho mapeia íris → tela).
+  const fundido = fundirOlhos(predLeft, predRight, perEyeWeight, true);
+  const baseX = fundido.x;
+  const baseY = fundido.y;
 
   // Clamp de borda: `suave` (Hermite de 2 %, o softClamp de sempre) no app,
   // `duro` no Modo Computador — ver `computador/geometria.ts` e
@@ -4622,7 +5420,17 @@ export function mapGaze(
     calibrationScreenDistanceCm,
   );
   lastDistanceRange = range;
-  const compensado = applyDistanceRatioToPrediction(baseX, baseY, 1, 1, range.ratio);
+  // Saída 6DoF (M12): a reprojeção exata faz, de uma vez, o que distância,
+  // pose e translação fazem por aproximação abaixo. Faltando alguma peça
+  // (pergunta da câmera, olho, pose), o caminho clássico segue valendo.
+  const reprojetado = EXPERIMENT.saida6DoF
+    ? reprojetarEntrePosturas(
+        fundido, document.documentElement.clientWidth, document.documentElement.clientHeight,
+        { olho: olhoDeReferenciaCm, pose: calibrationReferencePose },
+        { olho: olhoEmCm(latestOlhosPx, latestFaceScale, latestPose?.yaw), pose: latestPose },
+      )
+    : null;
+  const compensado = reprojetado ?? applyDistanceRatioToPrediction(baseX, baseY, 1, 1, range.ratio);
 
   // Compensação geométrica de pose, também antes do softClamp e pelo mesmo
   // motivo. A translação lateral vem depois da rotação: são efeitos
@@ -4632,7 +5440,7 @@ export function mapGaze(
   // Δ = pose/centro atuais − referência lenta (dois relógios, ver
   // `referenciaLenta.ts`); desligada, é a média congelada da calibração.
   const referencia = referenciasEmUso();
-  const comPose0 = EXPERIMENT.geometricPoseCompensation
+  const comPose0 = !reprojetado && EXPERIMENT.geometricPoseCompensation
     ? compensarPredicao(
         compensado.x, compensado.y,
         latestPose, referencia.pose,
@@ -4644,7 +5452,7 @@ export function mapGaze(
 
   // Só age com os marcos 33/263 válidos: `latestFaceScale` é `null` quando o
   // engine mediu `iodPx = 0`, e `compensarTranslacao` devolve a entrada intacta.
-  const comPose = EXPERIMENT.lateralTranslationCompensation
+  const comPose = !reprojetado && EXPERIMENT.lateralTranslationCompensation
     ? compensarTranslacao(
         comPose0.x, comPose0.y,
         latestFaceCenter, referencia.centro, latestFaceScale,
@@ -4668,11 +5476,31 @@ export function mapGaze(
   const comCantos = EXPERIMENT.correcaoLocal ? aplicarCorrecaoLocal(correcaoLocal, comPose) : comPose;
   ultimaPredicaoSemCorrecao = comCantos;
 
-  const comDwell = corrigirPorDwell({ x: comCantos.x, y: comCantos.y }, performance.now());
+  const comDwell = corrigirPorDwell({ x: comCantos.x, y: comCantos.y }, performance.now(), {
+    viewport: { largura: document.documentElement.clientWidth, altura: document.documentElement.clientHeight },
+    pose: latestPose ? { yaw: latestPose.yaw, pitch: latestPose.pitch } : null,
+    distanciaPx: screenDistancePx(),
+    rho1: ruidoDaCalibracao?.rho1 ?? null,
+  });
 
   // Registrado ANTES do clamp: depois dele a informação some, e é exatamente
   // essa informação que explica o cursor parado na borda.
   ultimaSaturacao = avaliarSaturacao(comDwell.x, comDwell.y);
+  ultimosTermos = {
+    esquerdo: { x: predLeft.x, y: predLeft.y },
+    direito: { x: predRight.x, y: predRight.y },
+    fundido: { x: baseX, y: baseY },
+    razaoDeDistancia: range.ratio,
+    // Com a reprojeção 6DoF, o deslocamento dela vai inteiro em `distancia`
+    // (e pose/translação ficam zero): é um termo só, não três.
+    distancia: { x: compensado.x - baseX, y: compensado.y - baseY },
+    pose: { x: comPose0.x - compensado.x, y: comPose0.y - compensado.y },
+    translacao: { x: comPose.x - comPose0.x, y: comPose.y - comPose0.y },
+    cantos: { x: comCantos.x - comPose.x, y: comCantos.y - comPose.y },
+    dwell: { x: comDwell.x - comCantos.x, y: comDwell.y - comCantos.y },
+    centroFacial: latestFaceCenter ? { x: latestFaceCenter.x, y: latestFaceCenter.y } : null,
+    distanciaCantalPx: latestFaceScale ? latestFaceScale.iodPx : null,
+  };
 
   const avgNormX = softClampX(comDwell.x);
   const avgNormY = softClampY(comDwell.y);

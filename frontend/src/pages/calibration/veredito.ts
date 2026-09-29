@@ -14,6 +14,12 @@ import type { CalibrationFitDiagnostics } from '@tracker/calibration';
  * O LOO **rebaixa** de bom para aceitável; não reprova sozinho. A deriva
  * postural escolhe o **motivo**; também não reprova sozinha.
  *
+ * O LOO usado é o da grade INTERNA (`looGradeInternaPx`): os limiares abaixo
+ * vieram de calibrações de 9 alvos, e o LOO dos cantos da tela é extrapolação
+ * por construção — com eles na média, a mesma sessão ia de ~83 para ~150 px
+ * (replay de 23/09) e toda calibração de 13 alvos saía "aceitável, erro alto".
+ * Sem o número interno (diagnóstico antigo), vale o LOO de todos os alvos.
+ *
  * ## De onde vêm os números
  *
  * Das seis sessões reais em `docs/medicoes/historico/`:
@@ -43,6 +49,12 @@ export interface LeituraDaCalibracao {
   /** Sufixo da chave i18n do motivo. `null` quando não há o que explicar. */
   motivo: string | null;
   looErrorPx: number | null;
+  /**
+   * O `looErrorPx` é o da grade interna (sem os cantos da tela)? A tela diz
+   * isso junto do número: "erro médio da calibração" sem ressalva leria como a
+   * média de todos os alvos.
+   */
+  semOsCantos: boolean;
   /** Maior deriva entre os eixos, em graus. */
   derivaGraus: number | null;
 }
@@ -54,7 +66,7 @@ export function lerCalibracao(
   // por ausência de medição faria o paciente repetir a calibração inteira sem
   // que nada estivesse errado.
   if (!diag) {
-    return { veredicto: 'aceitavel', motivo: null, looErrorPx: null, derivaGraus: null };
+    return { veredicto: 'aceitavel', motivo: null, looErrorPx: null, semOsCantos: false, derivaGraus: null };
   }
 
   const d = diag.poseDrift;
@@ -62,7 +74,10 @@ export function lerCalibracao(
     ? Math.max(Math.abs(d.yawDeg), Math.abs(d.pitchDeg), Math.abs(d.rollDeg))
     : null;
 
-  const looErrorPx = Number.isFinite(diag.looErrorPx) ? diag.looErrorPx : null;
+  const semOsCantos = diag.looGradeInternaPx !== undefined && Number.isFinite(diag.looGradeInternaPx);
+  const looErrorPx = semOsCantos
+    ? (diag.looGradeInternaPx as number)
+    : Number.isFinite(diag.looErrorPx) ? diag.looErrorPx : null;
   const grade = diag.gridDiagnosis?.veredicto;
 
   let veredicto: VeredictoDaCalibracao;
@@ -96,7 +111,7 @@ export function lerCalibracao(
     motivo = 'derivaPostural';
   }
 
-  return { veredicto, motivo, looErrorPx, derivaGraus };
+  return { veredicto, motivo, looErrorPx, semOsCantos, derivaGraus };
 }
 
 /**

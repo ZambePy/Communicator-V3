@@ -359,7 +359,9 @@ contra 88 px no miolo, na gravação de 22/09; com os cantos na calibração e a
 correção local deles, 40 px no replay (a expectativa realista ao vivo é de
 40–110 px — ver `docs/MEDICOES.md` §14.5). O modo rápido continua com 4 alvos
 (os cantos da grade), e o perfil `computador` tem 13 alvos próprios, indo a
-2 % da borda, porque ali o alvo é o canto do monitor. Cada alvo descarta os
+2 % da borda, porque ali o alvo é o canto do monitor (o perfil existe no
+núcleo e tem testes, mas nenhuma tela o usa ainda: o Modo Computador calibra
+com a grade padrão). Cada alvo descarta os
 primeiros 600 ms — sacada e acomodação — e abre em seguida uma janela útil
 cujo TETO cresce com a distância ao centro (normalizada: 0 no centro, 1 no
 canto geométrico): `1680 + d·1120` ms, o que dá 1680 ms no centro e ~2690 ms
@@ -763,6 +765,80 @@ inclinada ~15°, com e sem). `blocoL2csCompleto` continua desligada de
 propósito: leva as sete dimensões do bloco angular em vez de duas, e com treze
 alvos ainda é território de decorar.
 
+#### Pipeline V3 (M1–M21)
+
+As mudanças de matemática e de comportamento do V2 têm, cada uma, uma flag e o
+número da tabela de decisão de [`docs/PESQUISA.md`](docs/PESQUISA.md) §5 (M11,
+o relatório de precisão, não tem flag). Desligada, a flag devolve o
+comportamento anterior bit a bit — `src/golden.pipelineBase.test.ts` confere o
+extractor, a calibração e o `mapGaze` contra os números de e731357 (a beta de
+27/09, de onde o V2 partiu). Um interruptor só troca todas:
+
+- `?pipeline=v3` (padrão): cada flag vale o seu padrão da tabela abaixo;
+- `?pipeline=base`: todas as flags do V3 desligadas, inclusive as que estão
+  fora do interruptor — é o pipeline anterior, para o A/B das medições;
+- `?exp.<flag>=1` ou `=0`: liga ou desliga uma flag só (ex.:
+  `?exp.alvoInferiorCentral=1`), para a ablação; M14 recebe o nome do modo
+  (`?exp.suavizacaoDoLandmarker=desligada`).
+
+Como os outros parâmetros de URL, esses ficam gravados no `localStorage` até
+`__irisflowExp.reset()`. No modo desenvolvedor (ou com `?debug=1`), a linha
+`exp` do HUD mostra o pipeline em vigor: confira antes de medir.
+
+| M | flag | padrão | o que faz |
+|---|---|---|---|
+| M1 | `ordemDescorrelacionada` | `true` | ordem dos alvos que começa no centro e não correlaciona com a deriva da cabeça |
+| M2 | `referencialIsotropico` | `false` ¹ | referencial da cabeça em pixels isotrópicos; muda as features (`+iso`) |
+| M3 | `desrolarComSinalDoL2cs` | `true` | contra-rotação do roll com o sinal de yaw do L2CS; muda as features (`+rl`) |
+| M4 | `l2csNaCabeca` | `true` | ângulos do L2CS girados para o referencial da cabeça; muda as features (`+cab`) |
+| M5 | `poseSuavizada` | `true` | pose da matriz facial suavizada, com rampa contínua, na compensação e na rotação |
+| M6 | `calibracaoRobusta` | `true` | peso por quadro, centro robusto por alvo e Huber entre alvos |
+| M7 | `alvoInferiorCentral` | `false` ¹ | 14º alvo no meio da borda de baixo, no perfil padrão completo |
+| M8 | `assentamentoPelaChegada` | `true` | a coleta de cada alvo abre na chegada da bola e descarta 800 ms |
+| M9 | `estimadorDeFixacao` | `true` | estimador de fixação com portão de Mahalanobis no lugar de One Euro + estabilizador |
+| M10 | `fusaoPorCovariancia` | `false` ¹ | fusão dos dois olhos por variância mínima, com a covariância entre eles |
+| M11 | — | — | relatório de precisão /3 (métricas novas; sem flag) |
+| M12 | `saida6DoF` | `false` ¹ | interseção do raio de olhar com o plano da tela; pergunta onde fica a câmera |
+| M13 | `nivelarRecorteCorrigido` | `false` ¹ | roll no sinal certo para o recorte do L2CS; muda a imagem que a rede vê (`+rc`) |
+| M14 | `suavizacaoDoLandmarker` | `mediapipe` | `desligada` roda o FaceLandmarker sem o filtro interno, para medir o ruído |
+| M15 | `correcaoPorDwellKalman` | `true` | correção por dwell como filtro de Kalman por eixo |
+| M16 | `correcaoPorDwellAfim` | `true` | ganho na correção por dwell, com prior e só com excitação |
+| M17 | `dwellEmCascata` | `true` | dwell mais curto no teclado para as letras que continuam uma palavra sugerida, nunca abaixo de 400 ms |
+| M18 | `alvoMinimoMedido` | `true` | tamanho mínimo dos botões pela acurácia do último teste de precisão |
+| M19 | `toleranciaIntrusoes` | `true` | memória de dwell de 400 ms e área de acerto maior depois que o dwell começa |
+| M20 | `recalibracaoRapidaAfim` | `true` | reajuste rápido com 5 pontos (10 s), sem retreinar o modelo |
+| M21 | `pausaNaPerdaCurta` | `true` | perda curta de rosto pausa o dwell em vez de zerar |
+
+¹ Fora do interruptor: `?pipeline=v3` não liga. M12 e M13 nasceram assim; M2,
+M7 e M10 foram desligadas depois de implementadas — M2 e M10 porque pioraram o
+replay da gravação real de 23/09, M7 porque, na simulação de um olho que
+satura embaixo como o real, troca erro de lugar (melhora a borda de baixo e
+piora a linha de baixo da grade). Os números estão em
+`docs/RELATORIO_DE_ALTERACOES.md` (Fases 5 e 7) e no comentário de cada flag.
+M13 e M14 mudam o que chega à rede (o recorte e os landmarks que o
+posicionam); a rede, os pesos e o pré-processamento do L2CS não mudam, e as
+duas ficam no valor de antes até decisão do responsável.
+
+**Perfis salvos.** As flags que mudam o significado das features (`+iso`,
+`+rl`, `+rc`, `+cab`) entram no `FEATURE_VECTOR_ID`, que vai na chave do
+perfil: trocar uma delas pede uma recalibração, por construção. Com o
+padrão, o identificador é `irisAbs+l2cs:4+rl+cab`; com `?pipeline=base`, o de
+antes (`irisAbs+l2cs:4`), e os perfis antigos continuam valendo. Sem o L2CS
+(o instalador da beta), o vetor é só de íris: M3, M4 e M13 não agem, e o
+identificador é o mesmo nos dois pipelines.
+
+**O que está medido.** No replay da gravação de 23/09 pelo núcleo
+(`IRISFLOW_GRAVACAO=… npx vitest run src/replayDeGravacao.test.ts`), com os 13
+alvos e a correção dos cantos, o V3 erra 62,4 px no miolo (P1–P9) e 39,4 px nos
+cantos, contra 64,2 e 40,2 px do pipeline base — empate, com uma gravação (e
+os cantos do replay são um limite inferior: `docs/MEDICOES.md` §14.5). O
+replay passa as features e a pose gravadas pelo núcleo de calibração, então
+enxerga a calibração robusta (M6) e pouco mais: o que roda no engine (M3, M4,
+M5, M9) fica de fora, o assentamento na chegada (M8) sai penalizado (a gravação
+só marca o alvo a partir de quando a coleta abria no app antigo), e as mudanças
+de uso (M15–M21) pedem gente. O roteiro das sessões que decidem, com o
+critério de ≥ 15 %, está em `docs/ROTEIRO_DE_MEDICAO.md`.
+
 #### Arranjo do vetor: o que está medido e o que não está
 
 `formaDaExpansao: 'parcial'` e `dimsDaIris: 'absolutas'` são os defaults desde
@@ -800,11 +876,53 @@ pessoa não confirmar, o caminho de volta é uma flag.
 
 ## Fluxo de uso
 
-1. **Login** (`/login`) e **boas-vindas** (`/`): com a nuvem configurada, o
-   login é o e-mail e a senha da conta criada no site (ou a [conta de
-   teste](#conta-de-teste)); sem ela, em desenvolvimento, as contas do serviço
-   simulado. Depois, o paciente escolhe entre o tutorial e ir direto à
-   calibração; o cuidador acessa sua área por um botão discreto.
+O caminho abaixo foi percorrido tela a tela num Chromium com câmera simulada em
+29/09 (`docs/RELATORIO_DE_ALTERACOES.md`, Fase 8), como o paciente e o cuidador
+percorrem.
+
+```mermaid
+flowchart TD
+  A([Abertura]) --> L{Licença}
+  L -- nenhuma --> I[Apresentação] --> LG[Login]
+  L -- bloqueada --> LG
+  LG --> AT[Conta pronta] --> T[Privacidade] --> P[Paciente]
+  L -- ativa ou sem internet --> Q{Termo e paciente?}
+  Q -- sem o termo --> T
+  Q -- sem paciente --> P
+  Q -- "calibração salva que vale nesta tela" --> R[Conferência de 3 pontos] --> M[Menu]
+  Q -- "sem calibração que valha" --> M
+  P -- Iniciar sessão --> G{Preparo feito?}
+  G -- não --> S[Preparo: câmera, posição, luz, monitor] --> C
+  G -- sim --> C[Calibração de 13 pontos]
+  C --> TP[Teste de precisão] --> D{Painel do teste}
+  D -- Recalibrar --> C
+  D -- Continuar --> RE[Resultado]
+  RE -- Refazer --> C
+  RE -- Seguir assim --> F{Primeira vez?}
+  F -- sim --> TU[Tutorial] --> M
+  F -- não --> M
+  M --> K[Teclado, frases, conversa, lazer, descanso, computador]
+  M --> CF[Configurações: PIN do cuidador]
+  CF -- Calibrar o olhar --> C
+```
+
+1. **Abertura** (`/`): sem licença, a **apresentação** (`/intro`) e o **login**
+   (`/login`) — com a nuvem configurada, o e-mail e a senha da conta criada no
+   site (ou a [conta de teste](#conta-de-teste)); sem ela, em desenvolvimento,
+   as contas do serviço simulado —, a **conta pronta** (`/activated`), o termo
+   de **privacidade** (`/consent`) e a escolha do **paciente** (`/profiles`).
+   Com licença, termo e paciente, a abertura vai à **conferência de 3 pontos**
+   (`/retomada`) quando há uma calibração salva que **carrega nesta tela**
+   (mesma janela, mesmo vetor de features) e ao menu quando não há — uma
+   calibração de outra tela ou de outra versão do IrisFlow não passa pela
+   conferência, e a conferência só mede com o modelo carregado — a calibração
+   e o modelo do olhar (L2CS); se ele não sobe em 30 s (a câmera que não abre,
+   por exemplo), ela termina dizendo isso, sem prender a tela. No menu, sem
+   calibração, o cabeçalho diz "Sem calibração" e oferece calibrar.
+   "Iniciar sessão" no perfil leva ao **preparo** (`/setup`) quando o paciente
+   ainda não o fez, e dali à calibração. "Refazer a apresentação"
+   (Configurações) volta à apresentação sem pedir a senha de novo quando a
+   licença vale.
 2. **Tutorial** (`/tutorial`): dez passos, na ordem do aprendizado — o que é o
    dwell, prática com três alvos, ajuste do tempo à luz do que acabou de ser
    sentido, e então **o que se faz com isso**: falar uma frase pronta,
@@ -824,8 +942,16 @@ pessoa não confirmar, o caminho de volta é uma flag.
    calibração que ele acabou de fazer.
 3. **Calibração** (`/calibration-check`): preparação com verificação de
    prontidão, coleta dos alvos, revisão (deriva de pose, alvos ignorados) e
-   teste de precisão. O botão de emergência fica compacto e sai de cima dos
-   alvos. A calibração é **por paciente**: cada perfil gravado leva o paciente
+   teste de precisão. Os dois botões de começar — a calibração completa e a
+   recalibração rápida — esperam a verificação da câmera (ou 15 s). Com o
+   modelo do L2CS sem carregar, a tela oferece **calibrar só com a íris**, o
+   rastreamento do instalador; a escolha fica gravada neste computador, como a
+   do `?ep=off` (`?ep=auto` volta ao modelo, e aí é preciso calibrar de novo).
+   Se o modelo carregou e só a saída dele travou (imagem da câmera parada ou
+   escura), a tela diz isso e espera: ele volta sozinho. O painel do teste ("Continuar", "Recalibrar")
+   responde ao olhar, como os outros botões desta tela, e "Recalibrar" volta à
+   preparação sem apagar o modelo recém-treinado. O botão de emergência fica
+   compacto e sai de cima dos alvos. A calibração é **por paciente**: cada perfil gravado leva o paciente
    que calibrou (até 3 por paciente, 12 no disco), escolher o paciente carrega a
    dele, e "Usar a calibração salva" só aparece para a do próprio paciente —
    quem ainda não calibrou calibra, sem herdar o mapeamento de outra pessoa.
@@ -850,12 +976,14 @@ pessoa não confirmar, o caminho de volta é uma flag.
    ([`ParticulasDeFundo.tsx`](frontend/src/components/ui/ParticulasDeFundo.tsx)).
 5. **Área do cuidador** (`/settings`, `/settings/voice`, `/caregiver`,
    `/caregiver/guide`, `/conta`, `/historico`, `/relatorio`): pede o PIN
-   (teclado só com mouse, fora do alcance do olhar) e **tranca sozinha** ao
-   sair dela ou depois de 5 min sem uso; "Encerrar acesso" tranca só a área do
+   (teclado só com mouse, fora do alcance do olhar), leva depois dele à tela
+   que foi pedida e **tranca sozinha** ao sair da área ou depois de 5 min sem
+   uso; "Encerrar acesso" tranca só a área do
    cuidador, sem tirar o paciente da sessão. Configurações por seção (rastreamento, tela,
-   calibração, voz personalizada, sugestões de escrita, dados), painel com
+   calibração — com o botão "Calibrar o olhar" —, voz personalizada, sugestões de escrita, dados), painel com
    estado do rastreamento e alertas, guia de instalação e leitura do teste de
-   precisão (Configurações → "Relatório da última medição"). É também de onde
+   precisão (Configurações → "Relatório da última medição"; "Recalibrar" no
+   painel do teste rodado dali leva à calibração). É também de onde
    saem o **modo apresentação** e o **relatório de suporte**, descritos adiante. Lembretes (que abrem sobre a tela do paciente
    na hora marcada) e a rotina do painel começam **vazios**: só existem os que
    o cuidador cadastrar. O convite dos relatos automáticos aparece só aqui.
@@ -866,6 +994,13 @@ Ações que custam caro — Emergência, "Falar", "Voltar" e "Início" do teclad
 têm dwell próprio (`data-dwell-ms`) e um piso relativo ao do paciente
 (`data-dwell-mult`, 1,3× a 1,7×): quem usa dwell de 4 s não dispara a
 Emergência com 2 s, antes de uma letra. O CANCELAR da emergência continua curto.
+
+Depois de uma seleção pelo olhar, o alvo só volta a valer quando o olhar sai
+dele (o Apagar repete com o olhar parado). Numa tela nova — ou quando o que foi
+clicado some e outra coisa aparece no lugar, como o grupo do teclado que vira
+as letras dele e o painel do teste que fecha sobre a preparação — o que estiver
+sob o olhar parado não é selecionado até o olhar saltar para outro ponto (mais
+de 96 px por 200 ms, em três quadros seguidos).
 
 Regras da interface do paciente: alvos de no mínimo 160×120 px (ou, quando o
 botão é menor e não tem vizinho, zona de acerto `isolado` ampliada até os 5°

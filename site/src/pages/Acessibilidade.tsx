@@ -31,6 +31,7 @@ export default function Acessibilidade() {
             itens={A11Y_PRINCIPLES.map((p) => ({ titulo: p.title, texto: p.text }))}
             colunas={4}
             numerar
+            nivel={2}
           />
         </div>
       </section>

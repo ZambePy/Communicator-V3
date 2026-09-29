@@ -21,7 +21,7 @@ import { vi } from 'vitest';
 import * as calibration from '../calibration';
 import { EXPERIMENT, type ExperimentConfig } from '../config/experiment';
 import { MedidorDeEscalaFacial } from '../escalaMetrica';
-import { FEATURE_VECTOR_ID } from '../extractor';
+import { featureVectorId } from '../extractor';
 import { NARIZ_PONTA, OLHO_DIREITO, OLHO_ESQUERDO } from '../faceLandmarks';
 import { reiniciarCorrecao } from '../interaction/correcaoPorDwell';
 
@@ -125,15 +125,30 @@ function mediana(v: number[]): number | null {
 }
 
 /**
+ * Parte estrutural de um identificador de vetor — `conjunto:dimensões`, sem as
+ * marcas de significado que `sufixoSemantico` acrescenta (extractor.ts).
+ */
+export function estruturaDoVetor(id: string): string {
+  const i = id.indexOf(':');
+  if (i < 0) return id;
+  return `${id.slice(0, i)}:${id.slice(i + 1).split('+')[0]}`;
+}
+
+/**
  * Roda a gravação pelo núcleo de calibração e devolve o erro por alvo do teste
  * de precisão. Precisa de `vi.useFakeTimers({ toFake: [..., 'performance'] })`.
  */
 export function reproduzirGravacao(g: Gravacao, opcoes: OpcoesDoReplay = {}): ResultadoDoReplay {
   const { cabecalho, quadros } = g;
-  if (cabecalho.featureVectorId && cabecalho.featureVectorId !== FEATURE_VECTOR_ID) {
+  // O replay treina e testa com as MESMAS features gravadas: basta que as
+  // colunas batam (conjunto e dimensão). As marcas do V3 dizem como o
+  // extractor montou as features, e o replay não passa pelo extractor — as
+  // flags que produzem features (M2, M3, M4, M13) valem o que valiam na
+  // gravação; para medi-las é preciso gravar com elas ligadas.
+  if (cabecalho.featureVectorId && estruturaDoVetor(cabecalho.featureVectorId) !== featureVectorId()) {
     throw new Error(
-      `gravação com vetor ${cabecalho.featureVectorId}, núcleo em ${FEATURE_VECTOR_ID}: ` +
-      'as features gravadas não servem para este modelo',
+      `gravação com vetor ${cabecalho.featureVectorId}, núcleo em ${featureVectorId()}: ` +
+      'as colunas gravadas não servem para este modelo',
     );
   }
   const W = cabecalho.resolution.w;

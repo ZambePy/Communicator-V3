@@ -66,7 +66,7 @@ export function geometriaDoAnel(tamanhoCursorPx: number, pct: number): Geometria
     centro: lado / 2,
     espessura,
     circunferencia,
-    // Cheio (offset = circunferência) em 0%, vazio (offset = 0) em 100%.
+    // Vazio (offset = circunferência) em 0 %, cheio (offset = 0) em 100 %.
     offset: circunferencia * (1 - p),
     rotacaoDeg: -90,
   };

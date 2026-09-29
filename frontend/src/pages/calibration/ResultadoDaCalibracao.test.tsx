@@ -113,6 +113,11 @@ describe('os numeros ficam visiveis para quem mede', () => {
     expect(screen.getByText(/123 px/)).toBeInTheDocument();
   });
 
+  it('com o LOO da grade interna, diz que os cantos ficaram de fora', () => {
+    montar(diag('ok', { looErrorPx: 150, looGradeInternaPx: 83 }));
+    expect(screen.getByText(/fora os cantos da tela: 83 px/)).toBeInTheDocument();
+  });
+
   it('mostra a deriva em graus', () => {
     montar(diag('ok', { poseDrift: { targets: 8, yawDeg: 2.5, pitchDeg: 1, rollDeg: 1 } }));
     expect(screen.getByText(/2,5°/)).toBeInTheDocument();

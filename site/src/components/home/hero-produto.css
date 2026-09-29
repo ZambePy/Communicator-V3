@@ -1,7 +1,8 @@
-/* Abertura da home (HeroProduto.tsx): a mensagem à esquerda e o monitor com
-   a gravação real à direita, com o halo e os anéis por trás, sobre o fundo
-   de partículas. Nunca mais alta que a janela: as chamadas cabem na
-   primeira dobra também em 1280 × 720 e 1366 × 768. */
+/* Abertura da home (HeroProduto.tsx): a mensagem à esquerda e a gravação
+   real à direita, num retângulo arredondado com o brilho da marca
+   (`.video-moldura`, em aparelhos.css), com o halo e os anéis por trás,
+   sobre o fundo de partículas. Nunca mais alta que a janela: as chamadas
+   cabem na primeira dobra também em 1280 × 720 e 1366 × 768. */
 
 .hero-produto {
   position: relative;
@@ -93,7 +94,7 @@
   opacity: 0.8;
 }
 
-/* ---------- o monitor, com o halo e os anéis ---------- */
+/* ---------- o vídeo, com o halo e os anéis ---------- */
 .hero-produto__aparelho {
   position: relative;
   display: grid;
@@ -102,7 +103,7 @@
   animation: zoom-in 1100ms var(--ease-out) 260ms both;
 }
 
-/* A aura azul e teal por trás: sem ela o monitor escuro some no marinho. */
+/* A aura azul e teal por trás: sem ela o vídeo escuro some no marinho. */
 .hero-produto__halo {
   position: absolute;
   inset: 2% -4%;
@@ -115,11 +116,11 @@
     transparent 100%
   );
   filter: blur(26px);
-  animation: iris-pulse 6s var(--ease-in-out) infinite;
+  animation: iris-pulse 6s var(--ease-in-out) infinite paused;
   pointer-events: none;
 }
 
-/* Anéis concêntricos que se expandem a partir do centro do monitor. */
+/* Anéis concêntricos que se expandem a partir do centro do vídeo. */
 .hero-produto__anel {
   position: absolute;
   top: 50%;
@@ -129,7 +130,7 @@
   translate: -50% -50%;
   border-radius: 50%;
   border: 1px solid var(--accent-line);
-  animation: ring-expand 5s var(--ease-out) infinite;
+  animation: ring-expand 5s var(--ease-out) infinite paused;
   pointer-events: none;
 }
 
@@ -138,21 +139,18 @@
   border-color: var(--ok-line);
 }
 
-/* O monitor vira de leve para o texto e flutua; de frente ao passar o
-   mouse. A flutuação usa `translate` e a inclinação, `transform`. */
-.hero-produto__monitor {
+/* O vídeo flutua devagar, de frente para quem chega. */
+.hero-produto__video {
   position: relative;
   z-index: 1;
   width: 100%;
-  transform: perspective(1600px) rotateY(-9deg) rotateX(2deg);
-  transform-origin: 40% 50%;
-  transition: transform var(--dur-slow) var(--ease-out);
-  animation: float-slow 9s var(--ease-in-out) infinite;
+  animation: float-slow 9s var(--ease-in-out) infinite paused;
 }
 
-.hero-produto__aparelho:hover .hero-produto__monitor,
-.hero-produto__aparelho:focus-within .hero-produto__monitor {
-  transform: perspective(1600px) rotateY(0deg) rotateX(0deg);
+/* Aura, anéis e flutuação só com o aparelho na tela (IntersectionObserver,
+   em HeroProduto.tsx). */
+.hero-produto__aparelho.is-rodando :is(.hero-produto__halo, .hero-produto__anel, .hero-produto__video) {
+  animation-play-state: running;
 }
 
 /* ---------- convite para rolar ---------- */
@@ -181,7 +179,7 @@
   color: var(--text-dim);
 }
 
-/* ---------- tablet e celular: o texto primeiro, o monitor embaixo ---------- */
+/* ---------- tablet e celular: o texto primeiro, o vídeo embaixo ---------- */
 @media (max-width: 1023px) {
   .hero-produto {
     min-height: auto;
@@ -193,10 +191,6 @@
   }
   .hero-produto__texto {
     max-width: 640px;
-  }
-  .hero-produto__monitor,
-  .hero-produto__aparelho:hover .hero-produto__monitor {
-    transform: none;
   }
   .hero-produto__rolar {
     display: none;

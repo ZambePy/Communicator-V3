@@ -94,6 +94,19 @@ describe('o LOO rebaixa, mas não reprova sozinho', () => {
   it('exatamente no limiar ainda é bom', () => {
     expect(lerCalibracao(diag({ looErrorPx: LOO_BOM_PX })).veredicto).toBe('bom');
   });
+
+  it('julga pelo LOO da grade interna: os cantos da tela, extrapolação por construção, não rebaixam', () => {
+    // A mesma sessão do replay de 23/09: ~83 px na grade, ~150 px com os cantos.
+    const l = lerCalibracao(diag({ looErrorPx: 150, looGradeInternaPx: 83 }));
+    expect(l.veredicto).toBe('bom');
+    expect(l.looErrorPx).toBe(83);
+    // E a tela sabe que o número deixou os cantos de fora.
+    expect(l.semOsCantos).toBe(true);
+    expect(lerCalibracao(diag({ looErrorPx: 150 })).semOsCantos).toBe(false);
+    // Diagnóstico antigo, sem o número interno: vale o de todos os alvos.
+    expect(lerCalibracao(diag({ looErrorPx: 150 })).veredicto).toBe('aceitavel');
+    expect(lerCalibracao(diag({ looErrorPx: 150, looGradeInternaPx: Number.NaN })).veredicto).toBe('aceitavel');
+  });
 });
 
 describe('a deriva postural escolhe o motivo', () => {
@@ -155,6 +168,7 @@ describe('nivelDeQualidade — cinco degraus, sem unidade', () => {
     veredicto: 'bom',
     motivo: null,
     looErrorPx: 50,
+    semOsCantos: false,
     derivaGraus: null,
     ...over,
   });

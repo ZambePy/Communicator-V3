@@ -87,6 +87,46 @@ export const DEFAULT_DWELL_CONFIG: DwellConfig = {
   lostResetMs: 500,
 };
 
+/**
+ * Tolerância a intrusões (M19).
+ *
+ * Em ELA as intrusões sacádicas são a regra: square-wave jerks em 53 % dos
+ * pacientes (Guo et al. 2022), de mediana 0,64–0,70° e até ~2°, com o olhar
+ * voltando ao alvo em 305–378 ms (Becker et al. 2019). Com a memória de
+ * 300 ms de antes, uma SWJ que saía do botão custava o dwell inteiro. Duas
+ * folgas, as duas só com o dwell já começado:
+ *
+ *  - **memória de 400 ms**: sair e voltar ao mesmo alvo dentro dela preserva o
+ *    progresso (a "dwell memory time" do Mind Express, na mesma faixa);
+ *  - **área de acerto +1° por lado**: a amostra que cai perto do alvo, em
+ *    espaço vazio, continua valendo para ele. Um vizinho acionável nunca é
+ *    invadido — quem decide isso é o chamador, que só aplica a folga quando
+ *    não há outro alvo sob o olhar. O +1° é proposta da pesquisa E (cobre a
+ *    mediana das intrusões), a medir.
+ */
+export const MEMORIA_DE_INTRUSAO_MS = 400;
+export const FOLGA_DE_INTRUSAO_DEG = 1;
+
+/** A configuração com a memória de intrusão, quando a tolerância está ligada. */
+export function configComTolerancia(c: DwellConfig, tolerancia: boolean): DwellConfig {
+  return tolerancia ? { ...c, graceMs: Math.max(c.graceMs, MEMORIA_DE_INTRUSAO_MS) } : c;
+}
+
+/**
+ * O ponto está dentro do retângulo alargado pela folga? Usado para manter o
+ * alvo de um dwell em curso quando o olhar escorrega para o espaço vazio ao
+ * lado dele.
+ */
+export function dentroDaFolga(
+  ponto: { x: number; y: number },
+  rect: { left: number; top: number; right: number; bottom: number },
+  folgaPx: number,
+): boolean {
+  if (!(folgaPx >= 0)) return false;
+  return ponto.x >= rect.left - folgaPx && ponto.x <= rect.right + folgaPx
+    && ponto.y >= rect.top - folgaPx && ponto.y <= rect.bottom + folgaPx;
+}
+
 export interface DwellState {
   /** Alvo atualmente acumulando progresso. */
   targetKey: unknown | null;

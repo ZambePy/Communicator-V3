@@ -113,6 +113,14 @@ describe('teste de precisão — fluxo completo', () => {
     expect(document.querySelector('.diagnostic-overlay')).not.toBeNull();
     expect(resultado).toBeNull(); // só sai quando o operador decide
 
+    // O painel abre ainda na rota da calibração, onde o olhar só aciona alvos de
+    // recuperação: sem a marca, quem calibra sozinho não saía dele pelo olhar.
+    const botoes = [...document.querySelectorAll<HTMLButtonElement>('.diagnostic-btn')];
+    expect(botoes.map((b) => [b.dataset.action, b.dataset.recovery])).toEqual([
+      ['continue', 'true'],
+      ['redo', 'true'],
+    ]);
+
     const continuar = document.querySelector<HTMLButtonElement>('.diagnostic-btn');
     expect(continuar).not.toBeNull();
     continuar!.click();

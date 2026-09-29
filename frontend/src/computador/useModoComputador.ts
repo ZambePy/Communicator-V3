@@ -4,8 +4,9 @@ import { EXPERIMENT } from '@tracker/config/experiment';
 import { tamanhoDoCursorNoSistema } from '@tracker/computador/geometria';
 import type { CapacidadesDoSistema } from '@tracker/computador/protocolo';
 import { useGaze, suspenderDwell } from '../context/GazeContext';
-import { aprenderComSelecao, deveAprender } from '@tracker/interaction/correcaoPorDwell';
-import { getSaturacaoDoOlhar } from '@tracker/calibration';
+import { aprenderComSelecao, deveAprender, registrarAcaoDoUsuario } from '@tracker/interaction/correcaoPorDwell';
+import { HistoricoDoOlhar } from '@tracker/interaction/janelaDoDwell';
+import { getSaturacaoDoOlhar, getUltimaPredicaoSemCorrecao } from '@tracker/calibration';
 import { modoApresentacaoAtivo } from '../services/apresentacao';
 import { useSettings } from '../context/SettingsContext';
 import { limitarDwellMs } from '../dwellMs';
@@ -106,8 +107,9 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
     setErro(null);
     setAviso(null);
     setIniciando(true);
+    const dwellMs = limitarDwellMs(settings.dwellMs);
     const r = await ponte.iniciar({
-      dwellMs: limitarDwellMs(settings.dwellMs),
+      dwellMs,
       tamanhoCursorPx: tamanhoDoCursorNoSistema(EXPERIMENT.cursorSizePx),
       lupa: true,
     });
@@ -133,8 +135,15 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
     // nenhuma seleção "do app" acontece ali. O alvo é sempre desenhado por nós
     // (barra ou teclado flutuante), logo `alvoIsolado`; `degradado` já foi
     // filtrado na sobreposição, que não manda seleção de amostra degradada.
+    // Correção por dwell em malha aberta (M15): a predição antes da correção
+    // de cada quadro, para medir a janela estável do dwell da sobreposição.
+    const historico = new HistoricoDoOlhar();
     const cancelarSelecao = ponte.onSelecao?.((sel) => {
       if (!ativoRef.current) return;
+      const agora = performance.now();
+      // Toda seleção encerra a quarentena do rótulo anterior; a sobreposição
+      // não tem desfazer.
+      registrarAcaoDoUsuario({ desfazer: false, agoraMs: agora });
       const ok = deveAprender({
         alvoIsolado: true,
         origem: 'overlay',
@@ -149,16 +158,31 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
       aprenderComSelecao({
         centroDoAlvo: sel.centro,
         olhar: sel.olhar,
-        agoraMs: performance.now(),
+        agoraMs: agora,
         viewport: {
           largura: document.documentElement.clientWidth,
           altura: document.documentElement.clientHeight,
         },
         origem: 'overlay',
         tamanhoDoAlvoPx: sel.tamanhoPx,
+        // O relógio da sobreposição é de outro processo (`sel.t` só ordena):
+        // a janela é o dwell que terminou agora, pelo relógio daqui.
+        medida: EXPERIMENT.correcaoPorDwellKalman ? historico.medir(agora - dwellMs, agora) : null,
+        ladoDoAlvoPx: { largura: sel.tamanhoPx, altura: sel.tamanhoPx },
       });
     }) ?? null;
     const cancelarOlhar = subscribe((s) => {
+      if (EXPERIMENT.correcaoPorDwellKalman && s.hasFace && s.eyeState !== 'closed' && s.uncalibrated !== true) {
+        const pre = getUltimaPredicaoSemCorrecao();
+        if (pre) {
+          historico.registrar({
+            t: Number.isFinite(s.timestamp) ? s.timestamp : performance.now(),
+            x: pre.x * document.documentElement.clientWidth,
+            y: pre.y * document.documentElement.clientHeight,
+            saturada: getSaturacaoDoOlhar().fora,
+          });
+        }
+      }
       ponte.olhar({
         x: s.x,
         y: s.y,

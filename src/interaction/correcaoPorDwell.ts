@@ -41,9 +41,33 @@
  * Tudo em espaço NORMALIZADO (0..1), como o resto do `mapGaze` antes da
  * conversão final: assim o deslocamento sobrevive a uma mudança de tamanho de
  * janela sem virar outro número.
+ *
+ * ## Dois estimadores
+ *
+ * O integrador acima é o pipeline base. Com `EXPERIMENT.correcaoPorDwellKalman`
+ * (M15) a mesma instância passa a ser um filtro de Kalman OU em px, com medida
+ * em malha aberta na janela estável do dwell, ruído pelo tamanho do botão e
+ * pela dispersão, quarentena de desfazer e aplicação em rampa
+ * (`kalmanDoDwell.ts`); com `correcaoPorDwellAfim` (M16), também o ganho.
  */
 
 import { EXPERIMENT } from '../config/experiment';
+import { amostrasEfetivas } from '../ruidoDaCalibracao';
+import {
+  ROTULOS_DO_ESPALHAMENTO,
+  atualizarKalman,
+  correcaoNoPonto,
+  criarKalman,
+  excitacaoDoGanho,
+  injecaoPorPostura,
+  medirDeslocamento,
+  preverKalman,
+  ruidoDoRotulo,
+  FATOR_MEDIANA,
+  type EstadoDoKalman,
+  type MedidaDoRotulo,
+} from './kalmanDoDwell';
+import type { MedidaDaJanela } from './janelaDoDwell';
 
 export interface Ponto {
   x: number;
@@ -51,11 +75,14 @@ export interface Ponto {
 }
 
 /**
- * Fração do resíduo incorporada a cada seleção.
+ * Fração do resíduo incorporada a cada seleção (só no integrador do pipeline
+ * base).
  *
- * 0,05 é o valor do estudo com 43 participantes que mediu 3,15° → 0,91°. Baixo
- * de propósito: cada seleção é uma evidência fraca (o centro do botão não é
- * exatamente onde a pessoa olhava), e vinte delas é que fazem uma correção.
+ * É o valor que Krowicki et al. (2026) usaram — escolhido sem ajuste, com
+ * rastreador infravermelho, e medido no próprio cursor corrigido: o estudo não
+ * é evidência a favor de 0,05 (docs/PESQUISA.md §3.5). Como Kalman de regime,
+ * equivale a q/r = 0,0026 por rótulo, um deslocamento quase parado. Fica como
+ * está no pipeline base; o V3 troca o integrador pelo Kalman (M15).
  */
 export const K = 0.05;
 
@@ -174,6 +201,34 @@ export function deveAprender(ctx: ContextoDaSelecao): boolean {
   if (ctx.emergencia) return false;
   if (ctx.alvoEspecial) return false;
   if (ctx.saturado) return false;
+  return true;
+}
+
+/**
+ * Isolamento MEDIDO na tela (M15), além do `data-isolado` declarado.
+ *
+ * Um rótulo errado (o dwell concluiu no vizinho do que a pessoa olhava) puxa a
+ * correção para o vizinho, e o ponto fixo desse puxão é o próprio vizinho
+ * (docs/PESQUISA.md §3.5). A correção nunca passa do teto; então, se nenhum
+ * outro alvo acionável cai dentro da elipse do teto em torno do centro deste,
+ * nenhuma sequência de rótulos daqui consegue arrastar o cursor para dentro de
+ * outro alvo. Mede os retângulos do DOM no momento da seleção: o `isolado` da
+ * marcação envelhece com o layout; a medida, não.
+ */
+export function isoladoNaTela(
+  centro: Ponto,
+  vizinhos: readonly { left: number; top: number; right: number; bottom: number }[],
+  viewport: { largura: number; altura: number },
+): boolean {
+  const tx = TETO_NORMALIZADO * viewport.largura;
+  const ty = TETO_NORMALIZADO * viewport.altura;
+  if (!(tx > 0) || !(ty > 0)) return false;
+  for (const r of vizinhos) {
+    if (!(r.right > r.left) || !(r.bottom > r.top)) continue;
+    const dx = Math.max(r.left - centro.x, 0, centro.x - r.right);
+    const dy = Math.max(r.top - centro.y, 0, centro.y - r.bottom);
+    if ((dx / tx) ** 2 + (dy / ty) ** 2 <= 1) return false;
+  }
   return true;
 }
 
@@ -306,26 +361,144 @@ let estadoGlobal = criarEstado();
  *  troca a flag pela URL e recarrega — não em tempo de execução. */
 let ligado = EXPERIMENT.correcaoPorDwell;
 
+/** Kalman do V3 (M15/M16). Só anda com `EXPERIMENT.correcaoPorDwellKalman`. */
+function usaKalman(): boolean {
+  return EXPERIMENT.correcaoPorDwellKalman;
+}
+
+/** O que o `mapGaze` informa a cada quadro e o Kalman precisa. */
+export interface ContextoDoQuadro {
+  viewport: { largura: number; altura: number };
+  /** Pose da cabeça no quadro (rad), para a injeção por mudança de postura. */
+  pose?: { yaw: number; pitch: number } | null;
+  /** Distância olho–tela em px, idem. */
+  distanciaPx?: number;
+  /** ρ₁ do ruído medido na calibração, para o N efetivo da janela. */
+  rho1?: number | null;
+}
+
+/**
+ * Quarentena de desfazer: um rótulo espera até a próxima ação que não seja
+ * desfazer, ou até este prazo. Se a ação seguinte for desfazer (Voltar,
+ * Apagar), o rótulo é descartado — a seleção provavelmente estava errada, e
+ * aprender dela é o que trava a correção no vizinho (docs/PESQUISA.md §3.5).
+ * Custa quase nada: as constantes de tempo do filtro são de minutos.
+ */
+export const QUARENTENA_MS = 4000;
+/**
+ * Recusas χ² seguidas em alvos isolados que fazem a correção pedir o reajuste
+ * rápido: sob o modelo, três recusas falsas seguidas têm chance de 0,01³.
+ */
+export const RECUSAS_PARA_REAJUSTE = 3;
+/**
+ * Duração da rampa com que uma correção nova entra no cursor. É o resfriamento
+ * pós-seleção: o olhar já está saindo do botão e o deslocamento termina de
+ * entrar sem salto.
+ */
+export const RAMPA_MS = RESFRIAMENTO_MS;
+/** NIS guardados para a média de consistência (diagnóstico). */
+const NIS_GUARDADOS = 20;
+
+interface RotuloPendente {
+  tMs: number;
+  medida: MedidaDoRotulo;
+  viewport: { largura: number; altura: number };
+  pose: { yaw: number; pitch: number } | null;
+  distanciaPx: number;
+}
+
+let kalman: EstadoDoKalman = criarKalman();
+let contexto: ContextoDoQuadro | null = null;
+let pendente: RotuloPendente | null = null;
+let rampa: { inicioMs: number; anterior: EstadoDoKalman } | null = null;
+let posturaNoUltimoRotulo: { yaw: number; pitch: number } | null = null;
+let posicoesDosRotulos: { x: number; y: number }[] = [];
+let aceitasKalman = 0;
+let recusas = { chi2: 0, desfeitas: 0, invalidas: 0 };
+let recusasSeguidas = 0;
+let nisRecentes: number[] = [];
+
+function zerarKalman(): void {
+  kalman = criarKalman();
+  pendente = null;
+  rampa = null;
+  posturaNoUltimoRotulo = null;
+  posicoesDosRotulos = [];
+  aceitasKalman = 0;
+  recusas = { chi2: 0, desfeitas: 0, invalidas: 0 };
+  recusasSeguidas = 0;
+  nisRecentes = [];
+}
+
 export function reiniciarCorrecao(): void {
   estadoGlobal = criarEstado();
+  zerarKalman();
 }
 
 export function definirCorrecaoLigada(v: boolean): void {
   ligado = v;
-  if (!v) estadoGlobal = criarEstado();
+  if (!v) reiniciarCorrecao();
 }
 
 export function correcaoLigada(): boolean {
   return ligado;
 }
 
-/** Estado corrente, para diagnóstico e testes. Cópia rasa: não mute. */
-export function estadoDaCorrecao(): Readonly<EstadoDaCorrecao> {
-  return estadoGlobal;
+function centroDaTela(v: { largura: number; altura: number }) {
+  return { x: v.largura / 2, y: v.altura / 2 };
+}
+
+/** Deslocamento do Kalman em unidades normalizadas (para o teto e o vigia). */
+function deslocamentoNormalizado(): Ponto | null {
+  const v = contexto?.viewport;
+  if (!v || !(v.largura > 0) || !(v.altura > 0)) return null;
+  return { x: kalman.x.o / v.largura, y: kalman.y.o / v.altura };
 }
 
 /**
- * Quanto do teto o deslocamento já consumiu, de 0 a 1.
+ * O teto de sempre, agora sobre o deslocamento do Kalman: acima dele não é
+ * deriva, e a resposta certa continua sendo recalibrar.
+ */
+function aplicarTeto(v: { largura: number; altura: number }): void {
+  const n = Math.hypot(kalman.x.o / v.largura, kalman.y.o / v.altura);
+  if (n > TETO_NORMALIZADO) {
+    const f = TETO_NORMALIZADO / n;
+    kalman = { ...kalman, x: { ...kalman.x, o: kalman.x.o * f }, y: { ...kalman.y, o: kalman.y.o * f } };
+  }
+}
+
+/**
+ * Limita a correção APLICADA ao teto. `aplicarTeto` segura o deslocamento, mas
+ * com o ganho (M16) a correção num ponto é deslocamento + ganho × distância ao
+ * centro, e perto da borda passava do teto. É deste limite que o
+ * `isoladoNaTela` depende: nenhuma sequência de rótulos pode levar o cursor
+ * além da elipse do teto. A saturação é radial e contínua — encolhe o vetor,
+ * não liga nem desliga nada.
+ */
+function limitadaAoTeto(c: Ponto, v: { largura: number; altura: number }): Ponto {
+  const n = Math.hypot(c.x / v.largura, c.y / v.altura);
+  if (!(n > TETO_NORMALIZADO)) return c;
+  const f = TETO_NORMALIZADO / n;
+  return { x: c.x * f, y: c.y * f };
+}
+
+/** Estado corrente, para diagnóstico e testes. Cópia rasa: não mute. */
+export function estadoDaCorrecao(): Readonly<EstadoDaCorrecao> {
+  if (!usaKalman()) return estadoGlobal;
+  // A mesma forma do integrador, para o vigia de recalibração e a checagem
+  // rápida lerem os dois do mesmo jeito.
+  return {
+    offset: deslocamentoNormalizado() ?? { x: 0, y: 0 },
+    ultimaSelecaoMs: kalman.ultimoMs,
+    ultimoDecaimentoMs: kalman.ultimoMs,
+    selecoes: aceitasKalman,
+    recusasPorSalto: 0,
+  };
+}
+
+/**
+ * Quanto do teto o deslocamento já consumiu, de 0 a 1. Lê a translação, e não
+ * o ganho (M16): o ganho depende de onde o olhar está e é limitado à parte.
  *
  * É o termômetro da deriva (macete B2): enquanto a correção dá conta, ninguém
  * precisa recalibrar; quando ela encosta no teto, o que mudou não é deriva —
@@ -334,8 +507,57 @@ export function estadoDaCorrecao(): Readonly<EstadoDaCorrecao> {
  */
 export function fracaoDoTetoDaCorrecao(): number | null {
   if (!ligado) return null;
-  if (estadoGlobal.selecoes === 0) return null;
-  return Math.min(1, norma(estadoGlobal.offset) / TETO_NORMALIZADO);
+  const e = estadoDaCorrecao();
+  if (e.selecoes === 0) return null;
+  return Math.min(1, norma(e.offset) / TETO_NORMALIZADO);
+}
+
+/** Diagnóstico da correção, só para o cuidador (painel de diagnóstico). */
+export interface DiagnosticoDaCorrecao {
+  modo: 'integrador' | 'kalman';
+  /** Deslocamento em uso, em px, e o desvio dele (só no Kalman). */
+  deslocamentoPx: { x: number; y: number } | null;
+  desvioPx: { x: number; y: number } | null;
+  /** Desvio de ganho aprendido (M16), por eixo. */
+  ganho: { x: number; y: number } | null;
+  selecoes: number;
+  recusas: { chi2: number; desfeitas: number; invalidas: number };
+  /** Três recusas χ² seguidas: o desvio não é deriva lenta, peça o reajuste rápido. */
+  pedeReajuste: boolean;
+  /** Média de NIS/2 nos últimos rótulos (≈ 1 quando o modelo está certo). */
+  nisMedio: number | null;
+  /** Um rótulo esperando a quarentena de desfazer. */
+  rotuloEmQuarentena: boolean;
+}
+
+export function diagnosticoDaCorrecao(): DiagnosticoDaCorrecao {
+  if (!usaKalman()) {
+    const v = contexto?.viewport;
+    return {
+      modo: 'integrador',
+      deslocamentoPx: v ? { x: estadoGlobal.offset.x * v.largura, y: estadoGlobal.offset.y * v.altura } : null,
+      desvioPx: null,
+      ganho: null,
+      selecoes: estadoGlobal.selecoes,
+      recusas: { chi2: 0, desfeitas: 0, invalidas: estadoGlobal.recusasPorSalto },
+      pedeReajuste: false,
+      nisMedio: null,
+      rotuloEmQuarentena: false,
+    };
+  }
+  return {
+    modo: 'kalman',
+    deslocamentoPx: { x: kalman.x.o, y: kalman.y.o },
+    desvioPx: { x: Math.sqrt(kalman.x.poo), y: Math.sqrt(kalman.y.poo) },
+    ganho: EXPERIMENT.correcaoPorDwellAfim ? { x: kalman.x.g, y: kalman.y.g } : null,
+    selecoes: aceitasKalman,
+    recusas: { ...recusas },
+    pedeReajuste: recusasSeguidas >= RECUSAS_PARA_REAJUSTE,
+    nisMedio: nisRecentes.length > 0
+      ? nisRecentes.reduce((a, b) => a + b, 0) / nisRecentes.length / 2
+      : null,
+    rotuloEmQuarentena: pendente !== null,
+  };
 }
 
 /**
@@ -362,21 +584,45 @@ export function sessaoDoComputador(): boolean {
  * Com a pessoa olhando o centro da tela, a diferença entre o centro e a
  * mediana da predição (ANTES desta correção) é o viés corrente do sistema,
  * medido de uma vez e com ~60 quadros — muito mais evidência que uma seleção.
- * Por isso SUBSTITUI o deslocamento em vez de somar uma fração dele: é a
- * "drift correction" dos rastreadores de laboratório e o ponto único de
- * Krowicki et al. (2026, 3,15° → 0,91° com o ajuste contínuo por dwell
- * mantendo depois). As referências geométricas da calibração NÃO mudam: a
- * compensação de pose e distância continua medindo contra elas, que é o que
- * a física pede (ver `referenciaLenta` em `config/experiment.ts`).
+ * No integrador, SUBSTITUI o deslocamento em vez de somar uma fração dele: é a
+ * "drift correction" dos rastreadores de laboratório. No Kalman é uma medida
+ * direta do deslocamento com R = (π/2)·s²/N_eff, que dá ganho perto de 1 e
+ * deixa a variância coerente para os rótulos seguintes. As referências
+ * geométricas da calibração NÃO mudam: a compensação de pose e distância
+ * continua medindo contra elas, que é o que a física pede (ver
+ * `referenciaLenta` em `config/experiment.ts`).
  *
  * Acima do teto não aplica nada e devolve `false`: um viés desse tamanho não é
  * deriva — é calibração quebrada ou posição muito diferente, e a resposta
  * certa é calibrar de novo, não escorregar a tela inteira.
  */
-export function corrigirDerivaPeloCentro(residuo: Ponto, agoraMs: number): boolean {
+export function corrigirDerivaPeloCentro(
+  residuo: Ponto,
+  agoraMs: number,
+  /** Kalman: quadros válidos e dispersão robusta da predição, em fração da tela. */
+  medida?: { amostras: number; dispersao: Ponto } | null,
+): boolean {
   if (!ligado) return false;
   if (!Number.isFinite(residuo.x) || !Number.isFinite(residuo.y) || !Number.isFinite(agoraMs)) return false;
   if (norma(residuo) > TETO_NORMALIZADO) return false;
+  if (usaKalman()) {
+    const v = contexto?.viewport;
+    if (!v || !medida || !(medida.amostras > 0)) return false;
+    const nEff = Math.max(1, amostrasEfetivas(medida.amostras, contexto?.rho1 ?? 0.8));
+    const r = {
+      x: Math.max(1, FATOR_MEDIANA * (medida.dispersao.x * v.largura) ** 2 / nEff),
+      y: Math.max(1, FATOR_MEDIANA * (medida.dispersao.y * v.altura) ** 2 / nEff),
+    };
+    const anterior = preverKalman(kalman, agoraMs);
+    kalman = medirDeslocamento(anterior, { x: residuo.x * v.largura, y: residuo.y * v.altura }, r);
+    aplicarTeto(v);
+    rampa = { inicioMs: agoraMs, anterior };
+    aceitasKalman++;
+    recusasSeguidas = 0;
+    // O reajuste é a nova postura de referência para a injeção.
+    posturaNoUltimoRotulo = contexto?.pose ? { ...contexto.pose } : null;
+    return true;
+  }
   estadoGlobal = {
     ...estadoGlobal,
     offset: { x: residuo.x, y: residuo.y },
@@ -385,6 +631,120 @@ export function corrigirDerivaPeloCentro(residuo: Ponto, agoraMs: number): boole
     selecoes: estadoGlobal.selecoes + 1,
   };
   return true;
+}
+
+/** Um ponto da recalibração rápida (M20), em px. */
+export interface PontoDaRecalibracao {
+  alvo: Ponto;
+  /** Mediana da predição sem esta correção enquanto a pessoa olhava o alvo. */
+  mediana: Ponto;
+  /** Desvio robusto da predição, por eixo. */
+  dispersao: Ponto;
+  amostras: number;
+}
+
+/**
+ * Recalibração rápida afim (M20): poucos pontos olhados de propósito (Tobii
+ * Dynavox oferece 1, 2, 5 ou 9, e "melhorar ponto"), sem retreinar o Ridge.
+ * Cada ponto é uma medida do Kalman com H = [1, x − centro] — deslocamento e,
+ * com o afim (M16), ganho — e R pela dispersão da própria coleta. Os pontos
+ * cobrem a tela, então o ganho pode andar por inteiro. Só existe com o Kalman;
+ * acima do teto, calibrar de novo.
+ */
+export function corrigirPorPontos(
+  pontos: readonly PontoDaRecalibracao[],
+  agoraMs: number,
+  viewport: { largura: number; altura: number },
+): boolean {
+  if (!ligado || !usaKalman() || !Number.isFinite(agoraMs)) return false;
+  if (!(viewport.largura > 0) || !(viewport.altura > 0)) return false;
+  const validos = pontos.filter((p) =>
+    [p.alvo.x, p.alvo.y, p.mediana.x, p.mediana.y, p.dispersao.x, p.dispersao.y].every(Number.isFinite)
+    && p.amostras > 0);
+  if (validos.length === 0) return false;
+  const medio = {
+    x: validos.reduce((s, p) => s + (p.alvo.x - p.mediana.x), 0) / validos.length / viewport.largura,
+    y: validos.reduce((s, p) => s + (p.alvo.y - p.mediana.y), 0) / validos.length / viewport.altura,
+  };
+  if (norma(medio) > TETO_NORMALIZADO) return false;
+  const afim = EXPERIMENT.correcaoPorDwellAfim;
+  const anterior = preverKalman(kalman, agoraMs);
+  let e = anterior;
+  for (const p of validos) {
+    const nEff = Math.max(1, amostrasEfetivas(p.amostras, contexto?.rho1 ?? 0.8));
+    const r = {
+      x: Math.max(1, FATOR_MEDIANA * p.dispersao.x ** 2 / nEff),
+      y: Math.max(1, FATOR_MEDIANA * p.dispersao.y ** 2 / nEff),
+    };
+    e = atualizarKalman(e, { centro: p.alvo, mediana: p.mediana, r }, {
+      centroDaTela: centroDaTela(viewport), afim, excitacao: { x: 1, y: 1 }, deliberada: true,
+    }).estado;
+  }
+  kalman = e;
+  aplicarTeto(viewport);
+  rampa = { inicioMs: agoraMs, anterior };
+  aceitasKalman++;
+  recusasSeguidas = 0;
+  posturaNoUltimoRotulo = contexto?.pose ? { ...contexto.pose } : null;
+  posicoesDosRotulos = validos.map((p) => ({ ...p.mediana })).slice(-ROTULOS_DO_ESPALHAMENTO);
+  return true;
+}
+
+/** Incorpora o rótulo em quarentena ao Kalman. */
+function consolidarPendente(agoraMs: number): void {
+  const p = pendente;
+  pendente = null;
+  if (!p) return;
+  const anterior = preverKalman(kalman, Math.max(agoraMs, p.tMs));
+  const delta = posturaNoUltimoRotulo && p.pose
+    ? { yaw: p.pose.yaw - posturaNoUltimoRotulo.yaw, pitch: p.pose.pitch - posturaNoUltimoRotulo.pitch }
+    : { yaw: 0, pitch: 0 };
+  const posicoes = [...posicoesDosRotulos, { x: p.medida.mediana.x, y: p.medida.mediana.y }];
+  const afim = EXPERIMENT.correcaoPorDwellAfim;
+  const r = atualizarKalman(anterior, p.medida, {
+    centroDaTela: centroDaTela(p.viewport),
+    afim,
+    excitacao: afim
+      ? {
+          x: excitacaoDoGanho(posicoes.map((q) => q.x), p.viewport.largura),
+          y: excitacaoDoGanho(posicoes.map((q) => q.y), p.viewport.altura),
+        }
+      : undefined,
+    injecao: injecaoPorPostura(delta, p.distanciaPx),
+  });
+  kalman = r.estado;
+  if (r.nis !== null && r.aceita) {
+    nisRecentes = [...nisRecentes, r.nis].slice(-NIS_GUARDADOS);
+  }
+  if (!r.aceita) {
+    if (r.motivo === 'chi2') {
+      recusas.chi2++;
+      recusasSeguidas++;
+    } else {
+      recusas.invalidas++;
+    }
+    return;
+  }
+  aplicarTeto(p.viewport);
+  rampa = { inicioMs: agoraMs, anterior };
+  aceitasKalman++;
+  recusasSeguidas = 0;
+  posturaNoUltimoRotulo = p.pose ? { ...p.pose } : posturaNoUltimoRotulo;
+  posicoesDosRotulos = posicoes.slice(-ROTULOS_DO_ESPALHAMENTO);
+}
+
+/**
+ * Ação do usuário concluída (dwell ou piscada). Desfazer descarta o rótulo em
+ * quarentena; qualquer outra ação o consolida. No integrador não faz nada.
+ */
+export function registrarAcaoDoUsuario(acao: { desfazer: boolean; agoraMs: number }): void {
+  if (!ligado || !usaKalman() || !pendente) return;
+  if (acao.desfazer) {
+    pendente = null;
+    recusas.desfeitas++;
+    return;
+  }
+  consolidarPendente(acao.agoraMs);
 }
 
 /** Chamado pelo dispatcher quando um dwell elegível conclui. */
@@ -396,6 +756,13 @@ export function aprenderComSelecao(entrada: {
   /** Ausente = `app`. */
   origem?: OrigemDaSelecao;
   tamanhoDoAlvoPx?: number;
+  /**
+   * Kalman (M15): a janela estável do dwell em malha aberta, em px, e o lado
+   * do alvo. Sem elas, o Kalman não aprende — o `olhar` do cursor já carrega a
+   * correção, o filtro e o clamp.
+   */
+  medida?: MedidaDaJanela | null;
+  ladoDoAlvoPx?: { largura: number; altura: number };
 }): boolean {
   if (!ligado) return false;
   const origem = entrada.origem ?? 'app';
@@ -405,9 +772,31 @@ export function aprenderComSelecao(entrada: {
   // desde 22/09: `Overlay.tsx` manda `selecao` ao main, que a devolve à
   // janela do app em coordenadas dela, e `useModoComputador` chama aqui.
   if (sessaoDoComputadorAtiva && origem !== 'overlay') return false;
-  const r = registrarSelecao(estadoGlobal, entrada);
-  estadoGlobal = r.estado;
-  return r.aceita;
+  if (!usaKalman()) {
+    const r = registrarSelecao(estadoGlobal, entrada);
+    estadoGlobal = r.estado;
+    return r.aceita;
+  }
+  const { medida, ladoDoAlvoPx: lado } = entrada;
+  if (!medida || medida.saturada || !lado || !(lado.largura > 0) || !(lado.altura > 0)) {
+    recusas.invalidas++;
+    return false;
+  }
+  // A ação que trouxe este rótulo encerra a quarentena do anterior.
+  if (pendente) consolidarPendente(entrada.agoraMs);
+  const nEff = amostrasEfetivas(medida.n, contexto?.rho1 ?? 0.8);
+  pendente = {
+    tMs: entrada.agoraMs,
+    medida: {
+      centro: { ...entrada.centroDoAlvo },
+      mediana: { ...medida.mediana },
+      r: ruidoDoRotulo(lado, medida.dispersao, nEff),
+    },
+    viewport: { ...entrada.viewport },
+    pose: contexto?.pose ? { ...contexto.pose } : null,
+    distanciaPx: contexto?.distanciaPx ?? 0,
+  };
+  return true;
 }
 
 /**
@@ -416,10 +805,33 @@ export function aprenderComSelecao(entrada: {
  * Chamado uma vez por quadro no `mapGaze`, depois das compensações de
  * distância e pose e ANTES do `softClamp` — o clamp é quem garante que o
  * resultado final caiba na tela, e corrigir depois dele poderia empurrar o
- * ponto para fora de novo.
+ * ponto para fora de novo. No Kalman, também consolida o rótulo cuja
+ * quarentena venceu e mistura a correção nova com a anterior durante a rampa.
  */
-export function corrigirPorDwell(p: Ponto, agoraMs: number): Ponto {
+export function corrigirPorDwell(p: Ponto, agoraMs: number, ctx?: ContextoDoQuadro): Ponto {
   if (!ligado) return p;
-  estadoGlobal = decair(estadoGlobal, agoraMs);
-  return aplicar(estadoGlobal, p);
+  if (!usaKalman()) {
+    estadoGlobal = decair(estadoGlobal, agoraMs);
+    return aplicar(estadoGlobal, p);
+  }
+  if (ctx) contexto = ctx;
+  const v = contexto?.viewport;
+  if (!v || !(v.largura > 0) || !(v.altura > 0) || !Number.isFinite(agoraMs)) return p;
+  if (pendente && agoraMs - pendente.tMs >= QUARENTENA_MS) consolidarPendente(agoraMs);
+  kalman = preverKalman(kalman, agoraMs);
+  const centro = centroDaTela(v);
+  const ponto = { x: p.x * v.largura, y: p.y * v.altura };
+  let c = correcaoNoPonto(kalman, ponto, centro);
+  if (rampa) {
+    const t = (agoraMs - rampa.inicioMs) / RAMPA_MS;
+    if (t >= 1) {
+      rampa = null;
+    } else {
+      const a = correcaoNoPonto(rampa.anterior, ponto, centro);
+      const f = Math.max(0, t);
+      c = { x: a.x + (c.x - a.x) * f, y: a.y + (c.y - a.y) * f };
+    }
+  }
+  c = limitadaAoTeto(c, v);
+  return { x: p.x + c.x / v.largura, y: p.y + c.y / v.altura };
 }

@@ -25,11 +25,16 @@ vi.mock('../context/SettingsContext', () => ({ useSettings: () => ({ settings: {
 // a partir da seleção da sobreposição; a política dela tem teste próprio.
 const aprenderComSelecao = vi.fn();
 const deveAprender = vi.fn(() => true);
+const registrarAcaoDoUsuario = vi.fn();
 vi.mock('@tracker/interaction/correcaoPorDwell', () => ({
   aprenderComSelecao: (e: unknown) => aprenderComSelecao(e),
   deveAprender: (c: unknown) => deveAprender(c),
+  registrarAcaoDoUsuario: (a: unknown) => registrarAcaoDoUsuario(a),
 }));
-vi.mock('@tracker/calibration', () => ({ getSaturacaoDoOlhar: () => ({ fora: false }) }));
+vi.mock('@tracker/calibration', () => ({
+  getSaturacaoDoOlhar: () => ({ fora: false }),
+  getUltimaPredicaoSemCorrecao: () => null,
+}));
 vi.mock('../services/apresentacao', () => ({ modoApresentacaoAtivo: () => false }));
 
 function pontoFalsa() {
@@ -153,7 +158,12 @@ describe('useModoComputador', () => {
     await waitFor(() => expect(screen.getByTestId('ativo').textContent).toBe('true'));
 
     const sel: SelecaoDaSobreposicao = { centro: { x: 1800, y: 240 }, olhar: { x: 1790, y: 250 }, tamanhoPx: 72, t: 1 };
+    registrarAcaoDoUsuario.mockClear();
     act(() => ponte.simularSelecao(sel));
+
+    // A seleção encerra a quarentena do rótulo anterior (M15); a sobreposição
+    // não tem desfazer.
+    expect(registrarAcaoDoUsuario).toHaveBeenCalledWith(expect.objectContaining({ desfazer: false }));
 
     expect(deveAprender).toHaveBeenCalledWith(expect.objectContaining({ origem: 'overlay', tamanhoDoAlvoPx: 72, alvoIsolado: true }));
     expect(aprenderComSelecao).toHaveBeenCalledTimes(1);

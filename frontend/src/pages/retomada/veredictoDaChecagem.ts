@@ -48,6 +48,19 @@ export const FRACAO_DO_TETO_QUE_ALERTA = 0.75;
 export type VeredictoDaChecagem = 'seguir' | 'atencao' | 'recalibrar';
 
 export interface EntradaDaChecagem {
+  /**
+   * A checagem acabou com o modelo do olhar (L2CS) ainda carregando — a câmera
+   * não abriu, ou o worker não subiu no tempo de espera. Nada foi medido, e o
+   * "sem calibração" que viria a seguir seria falso: numa máquina sem WebGPU o
+   * perfil salvo só carrega quando o worker sobe.
+   */
+  l2csCarregando: boolean;
+  /**
+   * Havia modelo carregado quando os pontos foram medidos. Sem ele os três
+   * alvos mediriam o olhar sem calibração nenhuma — e a primeira checagem,
+   * que nunca reprova, aprovaria isso como "Tudo como antes".
+   */
+  temModelo: boolean;
   /** Erro medido nos três alvos, em graus. `null` = não deu para medir. */
   erroDeg: number | null;
   /** Erro da primeira checagem contra esta calibração. `null` = é a primeira. */
@@ -69,18 +82,27 @@ export interface ResultadoDoVeredicto {
 }
 
 export function veredictoDaChecagem(e: EntradaDaChecagem): ResultadoDoVeredicto {
-  // 1. A POSIÇÃO VEM ANTES DA MEDIDA. Não adianta medir o olhar de quem não
+  // 0. O RASTREAMENTO NÃO FICOU PRONTO. Vem antes do "sem calibração": com o
+  //    L2CS ainda subindo, o perfil de uma máquina sem WebGPU nem teve a chance
+  //    de carregar, e dizer que a calibração não vale seria falso.
+  if (e.l2csCarregando) return { veredicto: 'recalibrar', motivo: 'l2csCarregando' };
+
+  // 1. SEM MODELO NÃO HÁ O QUE CONFERIR. A calibração salva não carregou (é de
+  //    outra tela ou de outra versão do IrisFlow): o caminho é calibrar.
+  if (!e.temModelo) return { veredicto: 'recalibrar', motivo: 'semCalibracao' };
+
+  // 2. A POSIÇÃO VEM ANTES DA MEDIDA. Não adianta medir o olhar de quem não
   //    está no lugar: o erro mediria a posição, não a calibração — e um erro
   //    bom com a posição errada está certo por acaso.
   if (!e.rostoEnquadrado) return { veredicto: 'recalibrar', motivo: 'posicaoRosto' };
   if (!e.distanciaNaFaixa) return { veredicto: 'recalibrar', motivo: 'posicaoDistancia' };
 
-  // 2. Sem medição não há aprovação: seguir aqui seria aprovar no escuro.
+  // 3. Sem medição não há aprovação: seguir aqui seria aprovar no escuro.
   if (e.erroDeg === null || !Number.isFinite(e.erroDeg)) {
     return { veredicto: 'recalibrar', motivo: 'semMedicao' };
   }
 
-  // 3. A PRIMEIRA CHECAGEM NUNCA REPROVA — ela estabelece a referência. Não há
+  // 4. A PRIMEIRA CHECAGEM NUNCA REPROVA — ela estabelece a referência. Não há
   //    com o que comparar, e reprovar aqui reprovaria uma calibração
   //    recém-feita, jogando o cuidador num laço de recalibrar sem fim.
   //
@@ -90,7 +112,7 @@ export function veredictoDaChecagem(e: EntradaDaChecagem): ResultadoDoVeredicto 
     e.referenciaDeg !== null && Number.isFinite(e.referenciaDeg) && e.referenciaDeg > 0;
   if (!temReferencia) return { veredicto: 'seguir', motivo: null };
 
-  // 4. O deslocamento acumulado saturou? Vem ANTES da comparação de erro
+  // 5. O deslocamento acumulado saturou? Vem ANTES da comparação de erro
   //    porque é um sinal independente e mais específico: o erro de três alvos
   //    pode estar bom justamente PORQUE a correção está segurando a barra, e
   //    nesse caso o critério de baixo aprovaria uma situação que já está no
@@ -100,7 +122,7 @@ export function veredictoDaChecagem(e: EntradaDaChecagem): ResultadoDoVeredicto 
     return { veredicto: 'atencao', motivo: 'deslocamentoAcumulado' };
   }
 
-  // 5. Piorou o bastante para avisar. `atencao` e não `recalibrar`: reprovar
+  // 6. Piorou o bastante para avisar. `atencao` e não `recalibrar`: reprovar
   //    sozinho tiraria a decisão do cuidador, que sabe coisas que o software
   //    não sabe. O que muda com "muito pior" é a ênfase, não o poder.
   if (e.erroDeg > (e.referenciaDeg as number) * FATOR_DE_ALERTA) {

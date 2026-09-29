@@ -60,7 +60,7 @@ export function Footer() {
 
         {COLUMNS.map((col) => (
           <nav key={col.title} className="footer__col" aria-label={col.title}>
-            <h3>{col.title}</h3>
+            <h2>{col.title}</h2>
             <ul>
               {col.links.map((l) => (
                 <li key={l.to + l.label}>

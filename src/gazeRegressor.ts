@@ -15,6 +15,8 @@ export interface GazeRegressor {
     lambdaFixo?: { x: number; y: number },
     /** Peso de qualidade por amostra (sprint S1), normalizado por alvo. */
     pesosDeQualidade?: readonly number[],
+    /** Peso de cada alvo no critério da validação cruzada (calibração robusta, M6). */
+    pesoDoAlvoNoCV?: ReadonlyMap<string, number>,
   ): void;
   predict(features: number[]): { x: number; y: number };
 }

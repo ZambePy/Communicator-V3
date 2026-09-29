@@ -33,6 +33,12 @@ interface GazeButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> 
    */
   isolado?: boolean;
   /**
+   * Ação de DESFAZER (Voltar, Apagar, Limpar). Lido pelo dispatcher: desfazer
+   * logo depois de uma seleção descarta o rótulo que ela deixou em quarentena
+   * na correção por dwell — a seleção provavelmente estava errada (M15).
+   */
+  desfazer?: boolean;
+  /**
    * Variante visual. `secundaria` (padrão) é a superfície calma; `primaria` é
    * a ação principal da tela, preenchida; `perigo` é destrutiva reversível
    * (apagar, limpar). Emergência continua sendo `emergency`, o único vermelho
@@ -49,6 +55,7 @@ export const GazeButton: React.FC<GazeButtonProps> = ({
   recovery = false,
   noWarn = false,
   isolado = false,
+  desfazer = false,
   variante = 'secundaria',
   disabled,
   style,
@@ -93,6 +100,7 @@ export const GazeButton: React.FC<GazeButtonProps> = ({
       // vizinho acionável — vira rótulo para a correção por dwell. A classe
       // acima não serve para isso: `dataset` é o contrato com o dispatcher.
       data-isolado={isolado ? 'true' : undefined}
+      data-desfazer={desfazer ? 'true' : undefined}
       className={`gaze-button ${emergency ? 'emergency' : ''} ${isolado ? 'gaze-button--isolado' : ''} ${variante !== 'secundaria' ? `gaze-button--${variante}` : ''} ${className}`}
       style={{
         width: width ? `${width}px` : undefined,
