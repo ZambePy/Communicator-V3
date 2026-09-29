@@ -135,7 +135,7 @@ describe('a ordem de precedência', () => {
 });
 
 // -----------------------------------------------------------------------------
-// Reajuste rápido (alvo único de 2 s).
+// Reajuste rápido (alvo único de 2 s, ou cinco pontos com a M20).
 //
 // A saída para "a geometria saiu do lugar" é reancorar, não recalibrar. O botão
 // só pode aparecer nos avisos em que isso é verdade — nos erros de câmera e de
@@ -209,6 +209,19 @@ describe('o botão de reajuste rápido', () => {
     expect(onReancorar).not.toHaveBeenCalled();
   });
 
+  it('com a recalibração em cinco pontos (M20), o texto diz o tempo e o que fazer', () => {
+    const reajuste = { segundos: 10, seguirPonto: true };
+    const { rerender } = render(
+      <GazeStatusBanner {...semProblemas} avisoDePostura onReancorar={() => {}} reajuste={reajuste} />
+    );
+    expect(screen.getByRole('button', { name: 'Reajustar (10 s)' })).toBeInTheDocument();
+    expect(screen.getByText(/reajuste de 10 segundos/)).toBeInTheDocument();
+    rerender(
+      <GazeStatusBanner {...semProblemas} avisoDePostura onReancorar={() => {}} reajuste={reajuste} reancorando />
+    );
+    expect(screen.getByRole('button', { name: /siga o ponto/i })).toBeDisabled();
+  });
+
   it('sem callback não há botão — o aviso continua aparecendo', () => {
     render(<GazeStatusBanner {...semProblemas} distanceAdvice={mensagemPara('perto')} />);
     expect(screen.getByTestId('gaze-status-banner')).toBeInTheDocument();
@@ -219,7 +232,7 @@ describe('o botão de reajuste rápido', () => {
 // -----------------------------------------------------------------------------
 // O vigia de recalibração existia no engine e ninguém o mostrava. Aqui: o
 // veredicto chega à tela com os dois botões, cada um chama o que deve, e a
-// precedência põe distância e postura (2 s) antes dos nove pontos.
+// precedência põe distância e postura (reajuste rápido) antes da calibração.
 // -----------------------------------------------------------------------------
 describe('o aviso do vigia de recalibração', () => {
   it('aparece com "Calibrar de novo" e "Agora não", e cada botão chama o seu callback', () => {

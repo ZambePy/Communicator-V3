@@ -31,3 +31,18 @@ export const MS_DE_ACOMODACAO = 700;
  * ele consegue, e quem está do outro lado não tem como explicar.
  */
 export const MS_LIMITE_DE_ENQUADRAMENTO = 8000;
+
+/**
+ * Quanto a checagem espera o modelo do olhar (L2CS) sair de "carregando".
+ *
+ * Os pontos só valem medidos com ele: antes de o worker subir, o bloco angular
+ * entra zerado e, numa máquina sem WebGPU, o perfil salvo nem carregou. Mas
+ * "carregando" é também o estado de quem nunca vai subir — a câmera que não
+ * abre deixa o engine sem começar, e o status fica ali para sempre. Sem teto,
+ * a tela esperava sem veredito e sem "Calibrar de novo".
+ *
+ * Trinta segundos: o worker leva ~10–15 s na primeira vez (a própria tela de
+ * calibração avisa isso), mais a câmera, que tem até 10 s para mandar o
+ * primeiro quadro.
+ */
+export const MS_LIMITE_DO_MODELO = 30000;

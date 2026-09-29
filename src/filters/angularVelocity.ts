@@ -4,9 +4,9 @@
 // é 0,3°) porque o mesmo deslocamento em pixels é um ângulo completamente
 // diferente conforme a tela e a distância:
 //
-//     23,6" a 60 cm   →  ~111 px por grau
-//     40"   a 100 cm  →  ~130 px por grau
-//     13"   a 45 cm   →  ~86 px por grau
+//     23,6" a 60 cm, 1920 px   →  ~38 px por grau
+//     23,6" a 60 cm, 3840 px   →  ~77 px por grau
+//     13"   a 45 cm, 1920 px   →  ~52 px por grau
 //
 // Este módulo é só tão bom quanto a geometria que recebe, e por isso não tem
 // default para ela. Sem os números da tela, a resposta é `null` — nunca um

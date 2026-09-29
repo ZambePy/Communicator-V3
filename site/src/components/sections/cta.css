@@ -15,6 +15,11 @@
   max-width: 820px;
 }
 
+/* O olho e as ondas de som acima da frase "Só falta a voz." (Ilustracoes.tsx). */
+.cta__ilustracao {
+  margin-bottom: var(--sp-4);
+}
+
 .cta__title {
   font-size: clamp(2rem, 4.6vw, 3.6rem);
   line-height: 1.05;

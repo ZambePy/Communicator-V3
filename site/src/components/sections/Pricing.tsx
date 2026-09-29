@@ -57,6 +57,9 @@ function PlanList({ items }: { items: string[] }) {
 export function Pricing({ compact = false }: { compact?: boolean }) {
   const { plans, loading } = usePlans()
   const beta = BETA.ativo
+  // Os títulos seguem o h1 da página: na beta, o plano Beta e "Depois da beta"
+  // são h2 e os planos pagos ficam embaixo deste; fora dela, cada plano é h2.
+  const TituloDoPlano = beta ? 'h3' : 'h2'
 
   const price = (plan: Plan) =>
     loading ? (
@@ -73,9 +76,9 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
             <article className="plan plan--beta panel" aria-labelledby="plano-beta-titulo">
               <div className="plan-beta__main">
                 <span className="plan__status plan__status--now">Disponível agora</span>
-                <h3 className="plan__name" id="plano-beta-titulo">
+                <h2 className="plan__name" id="plano-beta-titulo">
                   {BETA_PLAN.name}
-                </h3>
+                </h2>
                 <p className="plan__price">
                   <span className="plan__currency">R$</span>
                   <span className="plan__amount">0</span>
@@ -94,7 +97,7 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
 
         {beta && (
           <Reveal anim="fade">
-            <h3 className="pricing__future-title">Depois da beta · preços previstos</h3>
+            <h2 className="pricing__future-title">Depois da beta · preços previstos</h2>
           </Reveal>
         )}
 
@@ -111,7 +114,7 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
                 )}
 
                 <header className="plan__head">
-                  <h3 className="plan__name">{plan.name}</h3>
+                  <TituloDoPlano className="plan__name">{plan.name}</TituloDoPlano>
                   <p className="plan__tagline">{plan.tagline}</p>
                   {beta && <p className="plan__forecast">Preço previsto</p>}
                   <p className="plan__price" aria-busy={loading}>

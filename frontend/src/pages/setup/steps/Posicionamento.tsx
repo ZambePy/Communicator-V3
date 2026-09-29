@@ -84,6 +84,20 @@ export const Posicionamento: React.FC<{
           >
             {t('setup.posicionamento.screenHeightHint')}
           </span>
+          {/* Pálpebra caída cobre a íris e piora a borda de baixo, que já é a
+              pior com a câmera em cima. Subir a tela faz a pessoa olhar para
+              cima, e a pálpebra sobe junto (conselho de posicionamento da
+              Tobii Dynavox; docs/PESQUISA.md §4.1). */}
+          <span
+            style={{
+              fontSize: '0.88rem',
+              lineHeight: 1.45,
+              opacity: 0.8,
+              color: 'var(--color-text-base)',
+            }}
+          >
+            {t('setup.posicionamento.palpebraHint')}
+          </span>
         </div>
       </div>
 

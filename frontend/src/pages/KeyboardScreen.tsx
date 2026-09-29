@@ -7,11 +7,16 @@ import { GazeButton } from '../components/ui/GazeButton';
 import { GazeGrid } from '../components/ui/GazeGrid';
 import { useGaze, useIsDwelling } from '../context/GazeContext';
 import {
+  palavraConhecida,
   registrarFalaDoPaciente,
   sugerirFrases,
   sugerirPalavras,
   type SugestaoDeFrase,
 } from '../services/assistente';
+import { calcularCascata, palavraEmComposicao } from '@tracker/interaction/dwellEmCascata';
+import { EXPERIMENT } from '@tracker/config/experiment';
+import { useSettings } from '../context/SettingsContext';
+import { DWELL_MIN_MS, limitarDwellMs } from '../dwellMs';
 import { logSentence } from '../utils/clinicalLogger';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -206,6 +211,9 @@ export const KeyboardScreen: React.FC = () => {
   const [falou, setFalou] = useState(false);
   const falouTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  /** A palavra em composição é conhecida: o espaço acelera no dwell em cascata (M17). */
+  const [palavraEhConhecida, setPalavraEhConhecida] = useState(false);
+  const { settings } = useSettings();
   /**
    * Frases inteiras. É a diferença entre economizar letras e economizar a frase:
    * "quero mudar de posição" custa ~40 fixações letra a letra e uma só aqui.
@@ -239,6 +247,7 @@ export const KeyboardScreen: React.FC = () => {
     if (textoCalculadoRef.current === text) return;
     textoCalculadoRef.current = text;
     setSuggestions(sugerirPalavras(text, MAX_SUGGESTIONS));
+    if (EXPERIMENT.dwellEmCascata) setPalavraEhConhecida(palavraConhecida(palavraEmComposicao(text)));
     setFrasesSugeridas(sugerirFrases({ textoAtual: text, maximo: 3 }));
   }, [text, isDwelling]);
 
@@ -372,6 +381,30 @@ export const KeyboardScreen: React.FC = () => {
       .map((texto) => ({ texto, frase: false })),
   ].slice(0, 6);
 
+  /**
+   * Dwell em cascata (M17): as letras que continuam alguma palavra sugerida
+   * aceleram até um piso que cai a cada letra da palavra; o espaço acelera
+   * depois de uma palavra conhecida. Só na camada de letras; Falar, Apagar e
+   * Limpar nunca aceleram. `undefined` = o dwell de sempre.
+   */
+  const baseDoDwell = limitarDwellMs(settings.dwellMs);
+  const cascata = EXPERIMENT.dwellEmCascata && camada === 'letras'
+    ? calcularCascata({
+        texto: text,
+        candidatas: suggestions,
+        palavraConhecida: palavraEhConhecida,
+        baseMs: baseDoDwell,
+        minimoMs: DWELL_MIN_MS,
+      })
+    : null;
+  const msDaCascata = (ms: number | undefined): number | undefined =>
+    ms !== undefined && ms < baseDoDwell ? Math.round(ms) : undefined;
+  const dwellDoItem = (item: string): number | undefined => {
+    if (!cascata) return undefined;
+    if (item === 'Espaço') return msDaCascata(cascata.espacoMs);
+    return /^\p{L}$/u.test(item) ? msDaCascata(cascata.dwellDaLetra(item)) : undefined;
+  };
+
   const keyClass = (variante: 'group' | 'letter' | 'words', pressed = false, extra = '') =>
     'kb-key kb-key--' + variante + (pressed ? ' kb-key--fired' : '') + (extra ? ' ' + extra : '');
 
@@ -432,6 +465,7 @@ export const KeyboardScreen: React.FC = () => {
             key={'group-' + idx}
             className={keyClass('group')}
             onClick={() => setActiveGroup(idx)}
+            data-dwell-ms={cascata ? msDaCascata(cascata.dwellDoGrupo(GROUPS[idx])) : undefined}
             noWarn
             style={cell}
           >
@@ -448,6 +482,9 @@ export const KeyboardScreen: React.FC = () => {
         <GazeButton
           key="group-4"
           className={keyClass('group')}
+          data-dwell-ms={cascata
+            ? msDaCascata(Math.min(cascata.dwellDoGrupo(['Y', 'Z']), cascata.espacoMs))
+            : undefined}
           onClick={() => setActiveGroup(4)}
           noWarn
           style={cell}
@@ -594,6 +631,10 @@ export const KeyboardScreen: React.FC = () => {
               // as outras teclas só voltam a valer depois que o olhar sai
               // (rearme por saída, ver GazeContext).
               data-repetir={activeGroup !== 5 && item === 'Apagar' ? 'true' : undefined}
+              data-dwell-ms={activeGroup !== 5 ? dwellDoItem(item) : undefined}
+              // Apagar e Limpar desfazem a seleção anterior: o rótulo dela na
+              // correção por dwell é descartado (M15).
+              desfazer={activeGroup !== 5 && (item === 'Apagar' || item === 'Limpar')}
               noWarn
               style={cell}
             >

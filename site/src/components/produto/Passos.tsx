@@ -27,7 +27,9 @@ export function PassosComTela({ passos }: { passos: PassoComTela[] }) {
           <span className="passos-tela__numero" aria-hidden="true">
             {i + 1}
           </span>
-          <h3 className="passos-tela__titulo">{p.titulo}</h3>
+          {/* h2: a lista vem logo abaixo do h1 da página; h3 pulava um nível
+              para quem navega pelos títulos no leitor de tela. */}
+          <h2 className="passos-tela__titulo">{p.titulo}</h2>
           <p className="passos-tela__texto">{p.texto}</p>
         </Reveal>
       ))}

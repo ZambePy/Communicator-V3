@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   aprenderFrase,
+  aprenderPalavra,
   aprenderResposta,
+  palavraConhecida,
+  PALAVRAS_COMUNS,
   ehPergunta,
   LIMITES,
   modeloVazio,
@@ -189,5 +192,16 @@ describe('estado do assistente', () => {
     expect(assistenteAtivo({ liberado: false, modo: 'local', desligadoPeloUsuario: false })).toBe(false);
     expect(assistenteAtivo({ liberado: true, modo: 'local', desligadoPeloUsuario: true })).toBe(false);
     expect(assistenteAtivo({ liberado: true, modo: 'nuvem', desligadoPeloUsuario: false })).toBe(false);
+  });
+});
+
+describe('palavra conhecida (dwell em cascata, M17)', () => {
+  it('dicionário e vocabulário do paciente contam; acento e pontuação não atrapalham', () => {
+    let m = modeloVazio();
+    expect(palavraConhecida('agua', m)).toBe(PALAVRAS_COMUNS.some((w) => normalizar(w) === 'agua'));
+    expect(palavraConhecida('xyzzq', m)).toBe(false);
+    m = aprenderPalavra(m, 'Zulmira');
+    expect(palavraConhecida('ZULMIRA,', m)).toBe(true);
+    expect(palavraConhecida('', m)).toBe(false);
   });
 });

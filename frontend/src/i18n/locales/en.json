@@ -345,7 +345,13 @@
       "fpsBoa": "Good rate. Tracking runs as designed.",
       "fpsBaixa": "Low rate. It will work, with slightly worse accuracy — the system is tuned for 30 frames per second.",
       "fpsRuim": "Very low rate. Usable, but gaze will respond slowly. A better webcam would fix this.",
-      "neverBlocks": "This is a warning, not a blocker: you can continue with any camera."
+      "neverBlocks": "This is a warning, not a blocker: you can continue with any camera.",
+      "posicao": {
+        "title": "Where is the camera?",
+        "topo": "Above the screen",
+        "base": "Below the screen",
+        "notebook": "In the laptop lid"
+      }
     },
     "posicionamento": {
       "title": "Patient position",
@@ -354,6 +360,7 @@
       "distanceUnknown": "measuring…",
       "screenHeight": "Screen height",
       "screenHeightHint": "Top of the screen at eye level, or slightly below. The camera can't measure this — it's yours to check.",
+      "palpebraHint": "If the eyelid covers part of the eye, raise the screen a little: looking up lifts the eyelid and the camera sees the iris.",
       "holdTitle": "Hold the position",
       "holdBody": "The button unlocks after {{segundos}} seconds with everything green.",
       "holding": "Holding… {{segundos}}s",
@@ -566,6 +573,7 @@
         "derivaPostural": "The head moved between points. Recalibrating without fixing the position repeats the result."
       },
       "erro": "Calibration mean error: {{px}} px",
+      "erroSemCantos": "Calibration mean error, screen corners excluded: {{px}} px",
       "deriva": "Head movement: {{g}}°",
       "seguir": "Carry on",
       "refazerBtn": "Redo calibration",
@@ -594,6 +602,13 @@
       "exportar": "Export report",
       "exportado": "Report saved.",
       "rodar": "Run the accuracy test"
+    },
+    "atalho": {
+      "title": "Gaze calibration",
+      "emUso": "In use: calibration {{idade}}.",
+      "sem": "No calibration in use — gaze selects nothing until you calibrate.",
+      "why": "Calibrate again when the cursor stops following the gaze, or after moving the patient, the camera or the monitor.",
+      "button": "Calibrate gaze"
     }
   },
   "sessao": {
@@ -655,7 +670,10 @@
       "posicaoRosto": "Your face was not in frame.",
       "posicaoDistancia": "The distance to the screen is outside the range.",
       "semMedicao": "We could not measure the dots.",
-      "piorou": "The reading came out well apart from this calibration's first check."
+      "piorou": "The reading came out well apart from this calibration's first check.",
+      "semCalibracao": "The saved calibration does not apply to this screen or to this version of IrisFlow.",
+      "l2csCarregando": "The gaze model (L2CS) did not finish loading in time: nothing was measured.",
+      "deslocamentoAcumulado": "The automatic correction is close to its limit: what changed is more than drift."
     },
     "primeira": "This was the first check for this calibration — it becomes the reference for the next ones.",
     "usar": "Use as is",
@@ -697,6 +715,9 @@
     "rosto": "Face found",
     "iluminacao": "Lighting is good",
     "enquadramento": "Distance and framing",
+    "rostoPendente": "Looking for the face",
+    "iluminacaoPendente": "Room lighting",
+    "enquadramentoPendente": "Distance and framing",
     "ok": "(ok)",
     "pendente": "(waiting)",
     "aviso": "We could not confirm everything yet. You can continue anyway — if the cursor does not follow your gaze well, adjust the light or distance and calibrate again."

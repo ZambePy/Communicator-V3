@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { GazeSample } from '@tracker/tracker/engine';
+import { EXPERIMENT } from '@tracker/config/experiment';
 
 // -----------------------------------------------------------------------------
 // Reajuste rápido × Emergência.
@@ -19,11 +20,15 @@ import type { GazeSample } from '@tracker/tracker/engine';
 //   2. o alvo do reajuste (centro) nunca fica sob o botão (canto);
 //   3. escolher a Emergência cancela o reajuste — as amostras são DESCARTADAS
 //      no engine — e segue o fluxo normal (a confirmação com contagem).
+// O mesmo vale para a recalibração rápida em cinco pontos (M20), que tem o
+// seu bloco no fim.
 // -----------------------------------------------------------------------------
 
 let emitir: (s: GazeSample) => void = () => {};
 /** Resolve a promessa do reajuste em curso (o engine resolveria ao fim dos 2 s). */
 let resolverReajuste: (r: { amostras: number; aplicado: boolean; desvioPx: number | null }) => void = () => {};
+/** Resolve a medida do ponto em curso da recalibração em cinco pontos (M20). */
+let resolverPonto: (m: unknown) => void = () => {};
 
 function novoEngine(opcoes: { comCancelamento: boolean }) {
   const engine: Record<string, unknown> = {
@@ -51,6 +56,13 @@ function novoEngine(opcoes: { comCancelamento: boolean }) {
           resolverReajuste = r;
         })
     ),
+    medirPontoDaRecalibracao: vi.fn(
+      () =>
+        new Promise((r) => {
+          resolverPonto = r;
+        })
+    ),
+    aplicarRecalibracaoRapida: vi.fn(() => ({ aplicado: true, desvioPx: 20 })),
     calibration: {
       isCalibrated: () => true,
       onInvalidated: () => () => {},
@@ -65,7 +77,10 @@ function novoEngine(opcoes: { comCancelamento: boolean }) {
   };
   if (opcoes.comCancelamento) {
     // Como o engine faz: abandona a coleta e resolve a promessa SEM aplicar nada.
-    engine.cancelarReancoragem = vi.fn(() => resolverReajuste({ amostras: 0, aplicado: false, desvioPx: null }));
+    engine.cancelarReancoragem = vi.fn(() => {
+      resolverReajuste({ amostras: 0, aplicado: false, desvioPx: null });
+      resolverPonto(null);
+    });
   }
   return engine;
 }
@@ -91,7 +106,7 @@ import {
   EMERGENCIA_LARGURA_PX,
   Z_EMERGENCIA_NO_REAJUSTE,
 } from '../context/EmergencyContext';
-import { LADO_DO_ALVO_PX, Z_DO_REAJUSTE } from './ReancoragemOverlay';
+import { LADO_DO_ALVO_PX, PONTOS_DA_RECALIBRACAO_RAPIDA, Z_DO_REAJUSTE } from './ReancoragemOverlay';
 
 const NOME_DA_EMERGENCIA = 'Disparar Emergência Médica';
 
@@ -141,8 +156,13 @@ function caixaDaEmergencia(): HTMLElement {
   return screen.getByRole('button', { name: NOME_DA_EMERGENCIA }).parentElement as HTMLElement;
 }
 
+const recalibracaoEmPontos = EXPERIMENT.recalibracaoRapidaAfim;
+
 describe('reajuste rápido: a Emergência continua por cima', () => {
   beforeEach(() => {
+    // O reajuste de sempre, pelo centro. A recalibração em cinco pontos tem o
+    // bloco dela no fim.
+    EXPERIMENT.recalibracaoRapidaAfim = false;
     engineAtual = novoEngine({ comCancelamento: true });
     emitir = () => {};
     resolverReajuste = () => {};
@@ -158,6 +178,7 @@ describe('reajuste rápido: a Emergência continua por cima', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
   });
   afterEach(() => {
+    EXPERIMENT.recalibracaoRapidaAfim = recalibracaoEmPontos;
     vi.restoreAllMocks();
   });
 
@@ -294,6 +315,83 @@ describe('reajuste rápido: a Emergência continua por cima', () => {
 });
 
 // -----------------------------------------------------------------------------
+// Recalibração rápida em cinco pontos (M20): o mesmo contrato com a Emergência,
+// e os pontos são medidos em ordem, um de cada vez, com o ponto da tela sendo
+// exatamente o que o engine mede.
+// -----------------------------------------------------------------------------
+
+const kalmanDaCorrecao = EXPERIMENT.correcaoPorDwellKalman;
+
+function medidaEm(p: { x: number; y: number }) {
+  return { alvo: p, predicao: { x: p.x + 0.01, y: p.y - 0.01 }, dispersao: { x: 0.01, y: 0.01 }, amostras: 30 };
+}
+
+describe('recalibração rápida em cinco pontos (M20)', () => {
+  beforeEach(() => {
+    EXPERIMENT.recalibracaoRapidaAfim = true;
+    EXPERIMENT.correcaoPorDwellKalman = true;
+    engineAtual = novoEngine({ comCancelamento: true });
+    emitir = () => {};
+    resolverPonto = () => {};
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(() => new Promise(() => {})),
+        enumerateDevices: vi.fn(async () => []),
+      },
+    });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    EXPERIMENT.recalibracaoRapidaAfim = recalibracaoEmPontos;
+    EXPERIMENT.correcaoPorDwellKalman = kalmanDaCorrecao;
+    vi.restoreAllMocks();
+  });
+
+  it('o aviso promete 10 s; os cinco pontos são medidos em ordem e aplicados juntos', async () => {
+    montar();
+    const reajustar = await screen.findByRole('button', { name: 'Reajustar (10 s)' }, { timeout: 2000 });
+    act(() => void fireEvent.click(reajustar));
+    const medir = engineAtual.medirPontoDaRecalibracao as ReturnType<typeof vi.fn>;
+
+    for (let i = 0; i < PONTOS_DA_RECALIBRACAO_RAPIDA.length; i++) {
+      await waitFor(() => expect(medir).toHaveBeenCalledTimes(i + 1));
+      const p = PONTOS_DA_RECALIBRACAO_RAPIDA[i];
+      expect(medir.mock.calls[i][0]).toEqual(p);
+      const alvo = screen.getByTestId('reancoragem-alvo');
+      expect(alvo.style.left).toBe(`${p.x * 100}%`);
+      expect(alvo.style.top).toBe(`${p.y * 100}%`);
+      await act(async () => resolverPonto(medidaEm(p)));
+    }
+
+    await waitFor(() => expect(screen.queryByTestId('reancoragem-overlay')).toBeNull());
+    const aplicar = engineAtual.aplicarRecalibracaoRapida as ReturnType<typeof vi.fn>;
+    expect(aplicar).toHaveBeenCalledTimes(1);
+    expect(aplicar.mock.calls[0][0]).toHaveLength(PONTOS_DA_RECALIBRACAO_RAPIDA.length);
+    expect(engineAtual.reancorarReferencias).not.toHaveBeenCalled();
+  });
+
+  it('a Emergência no meio cancela: nada é aplicado e a confirmação abre', async () => {
+    montar();
+    const reajustar = await screen.findByRole('button', { name: 'Reajustar (10 s)' }, { timeout: 2000 });
+    act(() => void fireEvent.click(reajustar));
+    const medir = engineAtual.medirPontoDaRecalibracao as ReturnType<typeof vi.fn>;
+    await waitFor(() => expect(medir).toHaveBeenCalledTimes(1));
+    await act(async () => resolverPonto(medidaEm(PONTOS_DA_RECALIBRACAO_RAPIDA[0])));
+    await waitFor(() => expect(medir).toHaveBeenCalledTimes(2));
+
+    act(() => void fireEvent.click(screen.getByRole('button', { name: NOME_DA_EMERGENCIA })));
+    await act(async () => {});
+
+    expect(engineAtual.cancelarReancoragem).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('reancoragem-overlay')).toBeNull();
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('EMERGÊNCIA ACIONADA');
+    expect(medir).toHaveBeenCalledTimes(2);
+    expect(engineAtual.aplicarRecalibracaoRapida).not.toHaveBeenCalled();
+  });
+});
+
+// -----------------------------------------------------------------------------
 // Geometria: o alvo do reajuste (centro exato — é o que o engine pressupõe)
 // contra a pegada do botão de Emergência, nas duas posições que ele assume.
 // jsdom não faz layout, então a conta sai das mesmas constantes que o CSS usa.
@@ -307,6 +405,9 @@ interface Retangulo { x0: number; y0: number; x1: number; y1: number }
 const intersectam = (a: Retangulo, b: Retangulo) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 const clamp = (min: number, v: number, max: number) => Math.min(max, Math.max(min, v));
 
+const larguras = [1024, 1280, 1366, 1440, 1600, 1920, 2560, 3840];
+const alturas = [640, 720, 768, 900, 1080, 1440, 2160];
+
 describe('o alvo do reajuste nunca fica sob a Emergência', () => {
   it('as constantes da conta são as do CSS e da janela mínima', () => {
     expect(css).toMatch(/--pagina-margem-x:\s*clamp\(1rem,\s*2\.5vw,\s*3rem\)/);
@@ -315,9 +416,6 @@ describe('o alvo do reajuste nunca fica sob a Emergência', () => {
     expect(mainDoElectron).toMatch(/minWidth:\s*1024/);
     expect(mainDoElectron).toMatch(/minHeight:\s*640/);
   });
-
-  const larguras = [1024, 1280, 1366, 1440, 1600, 1920, 2560, 3840];
-  const alturas = [640, 720, 768, 900, 1080, 1440, 2160];
 
   it.each(larguras.flatMap((w) => alturas.map((h) => [w, h] as const)))('%i × %i', (w, h) => {
     // Alvo: SVG de 120 px no centro exato (ver o teste abaixo); a frase fica
@@ -342,6 +440,38 @@ describe('o alvo do reajuste nunca fica sob a Emergência', () => {
 
     expect(intersectam(alvo, noTopo)).toBe(false);
     expect(intersectam(alvo, noCanto)).toBe(false);
+  });
+});
+
+/** Distância de um ponto à caixa, 0 se estiver dentro. */
+const distanciaAte = (p: { x: number; y: number }, r: Retangulo) =>
+  Math.hypot(Math.max(r.x0 - p.x, 0, p.x - r.x1), Math.max(r.y0 - p.y, 0, p.y - r.y1));
+
+/** As duas posições da Emergência numa janela w × h (as mesmas do teste acima). */
+function caixasDaEmergencia(w: number, h: number): Retangulo[] {
+  const direita = clamp(16, 0.025 * w, 48);
+  const topo = clamp(16, 0.025 * h, 32);
+  return [
+    { x0: w - direita - EMERGENCIA_LARGURA_PX, x1: w - direita, y0: topo, y1: topo + EMERGENCIA_ALTURA_PX },
+    { x0: w - 24 - 176, x1: w - 24, y0: h - 24 - 52, y1: h - 24 },
+  ];
+}
+
+describe('os pontos da recalibração em cinco pontos ficam longe da Emergência (M20)', () => {
+  // O olhar que colhe um ponto erra por dezenas de pixels (68,6 px de média
+  // em 28/09). Com o ponto a pelo menos um alvo inteiro (120 px) da caixa do
+  // botão, colher o ponto não vira dwell no socorro.
+  it.each(larguras.flatMap((w) => alturas.map((h) => [w, h] as const)))('%i × %i', (w, h) => {
+    for (const p of PONTOS_DA_RECALIBRACAO_RAPIDA) {
+      for (const caixa of caixasDaEmergencia(w, h)) {
+        expect(distanciaAte({ x: p.x * w, y: p.y * h }, caixa)).toBeGreaterThanOrEqual(LADO_DO_ALVO_PX);
+      }
+    }
+  });
+
+  it('nos quatro quadrantes, (75 %, 25 %) ficaria perto demais na menor janela', () => {
+    const [noTopo] = caixasDaEmergencia(1024, 640);
+    expect(distanciaAte({ x: 0.75 * 1024, y: 0.25 * 640 }, noTopo)).toBeLessThan(60);
   });
 });
 

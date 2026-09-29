@@ -35,6 +35,7 @@ export const BackButton: React.FC<BackButtonProps> = ({ to, recovery = false }) 
       width={BACK_BUTTON_SIZE_PX}
       height={BACK_BUTTON_SIZE_PX}
       isolado
+      desfazer
       recovery={recovery}
       style={{
         borderRadius: BACK_BUTTON_RADIUS_PX,

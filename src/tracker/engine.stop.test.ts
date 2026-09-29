@@ -30,6 +30,7 @@ vi.mock('@mediapipe/tasks-vision', () => ({
 }));
 
 import { createGazeEngine } from './engine';
+import { EXPERIMENT } from '../config/experiment';
 
 /** <video> falso: o engine só lê `currentTime`, `videoWidth/Height`, `paused`. */
 function videoFalso(): HTMLVideoElement {
@@ -216,5 +217,20 @@ describe('stop() libera recursos e zera estado de sessão', { timeout: 30_000 },
     expect(rafCallbacks).toHaveLength(1);
     engine.stop();
     expect(rafCancelled).toHaveLength(1);
+  });
+});
+
+describe('diagnóstico do pipeline', () => {
+  it('diz qual pipeline está em vigor, para o operador conferir a condição antes de medir', () => {
+    const antes = EXPERIMENT.pipeline;
+    try {
+      const engine = createGazeEngine('http://test/mediapipe');
+      for (const p of ['base', 'v3'] as const) {
+        EXPERIMENT.pipeline = p;
+        expect(engine.getDiagnostics().experiment.pipeline).toBe(p);
+      }
+    } finally {
+      EXPERIMENT.pipeline = antes;
+    }
   });
 });

@@ -78,7 +78,7 @@ describe('EstabilizadorDeFixacao', () => {
 
   it('olhar parado com tremor vira média — é aqui que o ruído cai', () => {
     const e = new EstabilizadorDeFixacao(geometria);
-    // Tremor de ±10 px, bem abaixo de 1° (~111 px).
+    // Tremor de ±10 px, bem abaixo de 1° (~38,5 px).
     const pontos: [number, number][] = [
       [500, 400], [508, 396], [494, 405], [503, 399], [497, 402], [505, 398],
     ];

@@ -320,6 +320,21 @@ export function alternaTelaCheia(t: TeclaPressionada): boolean {
  */
 const ARGUMENTO_DE_DEPURACAO = /^(?:--?|\/)(?:inspect(?:-[a-z-]+)?|remote-debugging-(?:port|pipe))(?:=.*)?$/i;
 
+/**
+ * WebGL por software quando a placa de vídeo não serve.
+ *
+ * O MediaPipe precisa de WebGL até no delegate de CPU: é por ele que o quadro
+ * do vídeo chega ao grafo. O Chromium deixou de cair sozinho para o
+ * SwiftShader quando a placa está na lista de bloqueio (driver antigo, máquina
+ * virtual, área de trabalho remota), e sem WebGL o rastreamento não sobe: o
+ * loop lança "activeTexture" a cada quadro e o rosto nunca aparece
+ * (reproduzido sob Xvfb; com esta chave, o mesmo boot rastreia). A chave só
+ * age quando a GPU não serve, e a janela só carrega o próprio app — a CSP e o
+ * bloqueio de navegação acima garantem —, que é o conteúdo confiável para o
+ * qual o Chromium a oferece.
+ */
+export const SWITCH_DO_WEBGL_POR_SOFTWARE = 'enable-unsafe-swiftshader';
+
 /** Nomes dos mesmos switches, para `app.commandLine.hasSwitch` no main. */
 export const SWITCHES_DE_DEPURACAO = [
   'inspect',

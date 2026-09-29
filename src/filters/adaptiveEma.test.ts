@@ -34,9 +34,9 @@ describe('conversão px ↔ grau', () => {
     // 1920 px / 52,25 cm = 36,75 px/cm. Um grau a 60 cm cobre
     // 60 · tan(1°) = 1,047 cm → 36,75 × 1,047 = 38,5 px/grau.
     //
-    // ⚠️ Não são os "111 px por grau" que aparecem no repositório: aquele
-    // número é de outra geometria (tela maior ou distância maior). O ponto do
-    // teste é justamente que o valor SAI da geometria, em vez de ser constante.
+    // O repositório já disse "111 px por grau" para esta mesma tela; o número
+    // não sai desta geometria. O ponto do teste é justamente que o valor SAI
+    // da geometria, em vez de ser constante.
     const ppg = pixelsPorGrau(TELA)!;
     expect(ppg).toBeCloseTo(38.5, 0);
   });

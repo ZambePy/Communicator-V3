@@ -100,6 +100,9 @@ describe('a lista viva', () => {
     expect(
       screen.getByTestId('checks-da-camera').querySelector('[data-check="rosto"]')
     ).toHaveAttribute('data-estado', 'pendente');
+    // O rótulo pendente não afirma o que ainda não aconteceu.
+    expect(screen.getByText('Procurando o rosto')).toBeInTheDocument();
+    expect(screen.queryByText('Rosto encontrado')).toBeNull();
     expect(onPronto).toHaveBeenLastCalledWith(false);
     expect(screen.queryByTestId('checks-aviso')).toBeNull();
   });

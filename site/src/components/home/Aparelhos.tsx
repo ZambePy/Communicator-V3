@@ -1,5 +1,6 @@
 import { useId, useRef } from 'react'
 import { useInclinacaoAoRolar, useVideoNaTela } from '@/hooks/useDemo'
+import { useInView } from '@/hooks/useInView'
 import type { Demo } from '@/data/home'
 import './aparelhos.css'
 
@@ -8,10 +9,15 @@ type PropsDoVideo = {
   className: string
   /** Ponto de foco quando o vídeo corta nas bordas (object-position). */
   foco?: string
+  /**
+   * `none`: nada é baixado antes de o vídeo entrar na tela — o pôster fica no
+   * lugar e o `play()` do observador é que carrega.
+   */
+  preload?: 'none' | 'metadata'
 }
 
 /** O vídeo com o botão de pausa; a descrição vai para quem usa leitor de tela. */
-function VideoDeDemonstracao({ demo, className, foco }: PropsDoVideo) {
+function VideoDeDemonstracao({ demo, className, foco, preload = 'metadata' }: PropsDoVideo) {
   const { videoRef, tocando, alternar } = useVideoNaTela()
   const idDescricao = useId()
   return (
@@ -23,7 +29,7 @@ function VideoDeDemonstracao({ demo, className, foco }: PropsDoVideo) {
         muted
         loop
         playsInline
-        preload="metadata"
+        preload={preload}
         poster={demo.poster}
         aria-describedby={idDescricao}
       >
@@ -55,23 +61,18 @@ function VideoDeDemonstracao({ demo, className, foco }: PropsDoVideo) {
 }
 
 /**
- * Um monitor genérico (moldura fina e pé simples) com a gravação real do
- * IrisFlow Communicator. Ele entra inclinado e se endireita ao rolar.
+ * A gravação real do IrisFlow Communicator sem aparelho em volta: um
+ * retângulo arredondado na proporção do vídeo (16:9), com o brilho da marca
+ * na borda. O vídeo é o produto; a moldura de monitor só disputava com ele.
+ * O brilho só gira com a moldura na tela, como as ilustrações da home.
  */
-export function MonitorDemo({ demo, inclinar = true }: { demo: Demo; inclinar?: boolean }) {
-  const cena = useRef<HTMLDivElement>(null)
-  useInclinacaoAoRolar(cena, inclinar ? {} : { graus: 0, escalaInicial: 1 })
+export function VideoEmMoldura({ demo }: { demo: Demo }) {
+  const { ref, inView } = useInView<HTMLDivElement>({ once: false, threshold: 0.1, rootMargin: '0px' })
   return (
-    <div className="monitor" ref={cena}>
-      <div className="monitor__corpo">
-        <div className="monitor__moldura">
-          <div className="monitor__tela">
-            <VideoDeDemonstracao demo={demo} className="monitor__video" />
-            <span className="monitor__reflexo" aria-hidden="true" />
-          </div>
-        </div>
-        <span className="monitor__pescoco" aria-hidden="true" />
-        <span className="monitor__base" aria-hidden="true" />
+    <div ref={ref} className={`video-moldura${inView ? ' is-rodando' : ''}`}>
+      <span className="video-moldura__brilho" aria-hidden="true" />
+      <div className="video-moldura__tela">
+        <VideoDeDemonstracao demo={demo} className="video-moldura__video" preload="none" />
       </div>
     </div>
   )

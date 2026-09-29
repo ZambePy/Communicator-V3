@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   PREPARO_VERSION,
   chaveDoPreparo,
@@ -105,5 +105,26 @@ describe('limparPreparo', () => {
     limparPreparo('p1');
 
     expect(preparoConcluido('p2')).toBe(true);
+  });
+});
+
+describe('com o armazenamento cheio', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('o preparo concluído vale nesta sessão, em vez de mandar de volta ao passo 1', () => {
+    // Fotos e calibrações moram no mesmo armazenamento. Cheio, a gravação
+    // falhava calada, o portão da calibração lia "sem preparo" e devolvia ao
+    // preparo — que recomeça do começo. Um laço sem saída.
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('cheio', 'QuotaExceededError');
+    });
+    gravarPreparo('cheio', preparoCompleto);
+    expect(preparoConcluido('cheio')).toBe(true);
+    expect(lerPreparo('cheio')?.cameraDeviceId).toBe('cam1');
+
+    limparPreparo('cheio');
+    expect(preparoConcluido('cheio')).toBe(false);
   });
 });

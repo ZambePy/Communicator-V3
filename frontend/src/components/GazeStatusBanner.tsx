@@ -74,8 +74,9 @@ interface Props {
   /**
    * O vigia de recalibração acusou (BCEA ou viés além da última medição, por
    * duas consultas seguidas). `null` = nada. Abaixo de distância e postura na
-   * precedência: aquelas se resolvem em 2 s; esta pede os nove pontos, e só
-   * faz sentido pedir quando as duas primeiras não são a causa.
+   * precedência: aquelas se resolvem com o reajuste rápido; esta pede a
+   * calibração inteira, e só faz sentido pedir quando as duas primeiras não
+   * são a causa.
    */
   avisoDeRecalibracao?: MotivoDeRecalibracao;
   onRecalibrar?: (() => void) | null;
@@ -96,8 +97,8 @@ interface Props {
    */
   distanceAdvice?: string | null;
   /**
-   * Ação de reajuste rápido (2 s olhando o centro), quando ela resolve o que o
-   * banner está dizendo. `null` some com o botão.
+   * Ação de reajuste rápido, quando ela resolve o que o banner está dizendo.
+   * `null` some com o botão.
    *
    * Só aparece nos avisos em que reancorar É a saída — distância diferente da
    * calibração, ou postura que a referência lenta se recusou (corretamente) a
@@ -108,6 +109,13 @@ interface Props {
   /** Reajuste em curso: o botão vira rótulo e para de aceitar clique. */
   reancorando?: boolean;
   /**
+   * Como é o reajuste: o alvo único no centro (2 s) ou a recalibração rápida
+   * afim, com um ponto que anda pela tela (M20). O texto precisa dizer o que
+   * vai acontecer e quanto tempo leva — "2 s" para dez segundos de alvo
+   * seria uma promessa quebrada para quem tem pouca energia para gastar.
+   */
+  reajuste?: { segundos: number; seguirPonto: boolean };
+  /**
    * A referência geométrica lenta está parada há tempo demais porque a pessoa
    * está numa postura que não é a da calibração (`sugereReancoragem`).
    * Precedência abaixo da distância: quando os dois valem, a distância explica
@@ -115,6 +123,9 @@ interface Props {
    */
   avisoDePostura?: boolean;
 }
+
+/** O reajuste de sempre: 2 s olhando o ponto no centro. */
+const REAJUSTE_NO_CENTRO = { segundos: 2, seguirPonto: false } as const;
 
 const WRAP: React.CSSProperties = {
   position: 'fixed',
@@ -155,6 +166,7 @@ export const GazeStatusBanner: React.FC<Props> = ({
   avisoDeCamera = null,
   onReancorar = null,
   reancorando = false,
+  reajuste = REAJUSTE_NO_CENTRO,
   avisoDePostura = false,
   avisoDeRecalibracao = null,
   onRecalibrar = null,
@@ -166,9 +178,9 @@ export const GazeStatusBanner: React.FC<Props> = ({
   let tom: 'erro' | 'aviso' | null = null;
   let titulo = '';
   let detalhe = '';
-  /** O reajuste de 2 s resolve ESTE aviso? */
+  /** O reajuste rápido resolve ESTE aviso? */
   let reajustavel = false;
-  /** ESTE aviso pede os nove pontos (vigia de recalibração)? */
+  /** ESTE aviso pede a calibração inteira (vigia de recalibração)? */
   let recalibravel = false;
 
   if (cameraError) {
@@ -233,8 +245,10 @@ export const GazeStatusBanner: React.FC<Props> = ({
     tom = 'aviso';
     titulo = 'Distância diferente da calibração';
     detalhe = distanceAdvice;
-    // Aqui — e só aqui — reancorar é a saída: 2 s olhando o centro refazem a
-    // base de distância e as referências geométricas sem retreinar o modelo.
+    // A compensação de distância continua corrigindo; o que sobra de erro é
+    // deriva, e o reajuste rápido a corrige sem retreinar o modelo (ver
+    // `distanceAdvisory.ts`). O aviso continua enquanto a distância for outra:
+    // ele informa a posição, não o erro.
     reajustavel = true;
   } else if (avisoDePostura) {
     // Abaixo da distância: os dois pedem o mesmo reajuste, e quando os dois
@@ -244,10 +258,10 @@ export const GazeStatusBanner: React.FC<Props> = ({
     titulo = 'Postura diferente da calibração';
     detalhe =
       'Você está há um tempo numa posição diferente da que calibrou. O cursor ' +
-      'continua funcionando; um reajuste de 2 segundos deixa a mira no lugar.';
+      `continua funcionando; um reajuste de ${reajuste.segundos} segundos deixa a mira no lugar.`;
     reajustavel = true;
   } else if (avisoDeRecalibracao) {
-    // Depois de distância e postura (que o reajuste de 2 s resolve) e antes
+    // Depois de distância e postura (que o reajuste rápido resolve) e antes
     // do aviso de câmera: é o vigia dizendo que o modelo deixou de descrever
     // a pessoa. 'aviso', não 'erro' — o cursor continua funcionando, só pior.
     tom = 'aviso';
@@ -353,7 +367,9 @@ export const GazeStatusBanner: React.FC<Props> = ({
               cursor: reancorando ? 'default' : 'pointer',
             }}
           >
-            {reancorando ? 'Olhe o centro…' : 'Reajustar (2 s)'}
+            {reancorando
+              ? (reajuste.seguirPonto ? 'Siga o ponto…' : 'Olhe o centro…')
+              : `Reajustar (${reajuste.segundos} s)`}
           </button>
         )}
       </div>

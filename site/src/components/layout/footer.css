@@ -44,7 +44,7 @@
   color: var(--teal-300);
 }
 
-.footer__col h3 {
+.footer__col h2 {
   font-family: var(--font-body);
   font-size: 0.8rem;
   font-weight: 700;

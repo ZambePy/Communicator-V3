@@ -8,6 +8,7 @@
 
 import {
   assistenteAtivo,
+  palavraConhecida as palavraConhecidaNoNucleo,
   sugerirFrases as sugerirFrasesNoNucleo,
   sugerirPalavras as sugerirPalavrasNoNucleo,
   type EstadoDoAssistente,
@@ -93,6 +94,11 @@ export function assistenteEstaAtivo(): boolean {
 export function sugerirPalavras(texto: string, maximo = 4): string[] {
   if (!assistenteEstaAtivo()) return [];
   return sugerirPalavrasNoNucleo({ texto, modelo: carregarModelo(), maximo });
+}
+
+/** A palavra é conhecida (dicionário ou vocabulário do paciente)? Para o dwell em cascata. */
+export function palavraConhecida(palavra: string): boolean {
+  return palavraConhecidaNoNucleo(palavra, carregarModelo());
 }
 
 /** Frases sugeridas. `mensagemDoCuidador` é a última mensagem recebida, se houver. */

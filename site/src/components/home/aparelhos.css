@@ -1,5 +1,65 @@
 /* Aparelhos das demonstrações: um monitor e um celular genéricos, desenhados
-   em CSS — nenhum modelo de fabricante. O conteúdo é o vídeo real. */
+   em CSS — nenhum modelo de fabricante —, e a moldura da abertura, sem
+   aparelho nenhum. O conteúdo é sempre o vídeo real. */
+
+/* ---------- vídeo em moldura (abertura da home) ----------
+   Um retângulo arredondado na proporção do vídeo. A borda de 2 px deixa ver,
+   por trás, um gradiente cônico da marca (azul e teal) que gira devagar: é o
+   brilho. Só `transform` anima, e com movimento reduzido a regra global o
+   deixa parado — a borda continua colorida, só não gira. */
+.video-moldura {
+  position: relative;
+  width: 100%;
+  padding: 2px;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  isolation: isolate;
+  background: rgba(143, 180, 240, 0.18);
+  box-shadow:
+    0 40px 90px -36px rgba(47, 102, 194, 0.7),
+    0 18px 50px -30px rgba(63, 214, 194, 0.45);
+}
+
+.video-moldura__brilho {
+  position: absolute;
+  inset: -60%;
+  z-index: -1;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 190deg,
+    rgba(63, 214, 194, 0.95) 250deg,
+    rgba(77, 134, 224, 0.95) 300deg,
+    transparent 350deg
+  );
+  animation: moldura-girar 10s linear infinite paused;
+  pointer-events: none;
+}
+
+/* Fora da tela o brilho fica parado (IntersectionObserver, em Aparelhos.tsx). */
+.video-moldura.is-rodando .video-moldura__brilho {
+  animation-play-state: running;
+}
+
+.video-moldura__tela {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: calc(var(--r-xl) - 2px);
+  overflow: hidden;
+  background: #05080f;
+}
+
+.video-moldura__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+@keyframes moldura-girar {
+  to {
+    transform: rotate(1turn);
+  }
+}
 
 /* ---------- monitor ---------- */
 .monitor {
@@ -34,12 +94,6 @@
   border-radius: clamp(4px, 0.5vw, 8px);
   overflow: hidden;
   background: #05080f;
-}
-
-.monitor__video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 /* Capturas paradas (MonitorTelas): empilhadas, só a ativa aparece. */

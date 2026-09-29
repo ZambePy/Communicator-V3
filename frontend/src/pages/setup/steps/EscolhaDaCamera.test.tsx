@@ -123,3 +123,21 @@ describe('nunca bloqueia', () => {
     expect(container.querySelectorAll('[disabled]')).toHaveLength(0);
   });
 });
+
+describe('onde fica a câmera (saída 6DoF, M12)', () => {
+  it('sem `aoEscolherPosicao` (a flag desligada), a pergunta não aparece', () => {
+    montar();
+    expect(screen.queryByRole('radiogroup', { name: 'Onde fica a câmera?' })).not.toBeInTheDocument();
+  });
+
+  it('com a flag, as três posições aparecem, a escolhida marcada, e a escolha chega ao wizard', () => {
+    const aoEscolherPosicao = vi.fn();
+    montar({ posicaoDaCamera: 'base', aoEscolherPosicao });
+    const grupo = screen.getByRole('radiogroup', { name: 'Onde fica a câmera?' });
+    expect(grupo).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Embaixo da tela' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: 'Em cima da tela' })).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(screen.getByRole('radio', { name: 'Na tampa do notebook' }));
+    expect(aoEscolherPosicao).toHaveBeenCalledWith('notebook');
+  });
+});

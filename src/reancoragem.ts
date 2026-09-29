@@ -39,6 +39,12 @@ export interface ResultadoDaReancoragem {
   centro: CentroFacial | null;
   /** Mediana, por eixo, da predição antes da correção por dwell (fração da tela). */
   predicao: { x: number; y: number } | null;
+  /**
+   * Desvio robusto da predição por eixo (1,4826·MAD, fração da tela): quanto a
+   * mediana acima é incerta. O Kalman da correção por dwell (M15) o usa como
+   * ruído da medida do reajuste.
+   */
+  dispersao: { x: number; y: number } | null;
   /** Quadros válidos que entraram. */
   amostras: number;
   /** `amostras >= AMOSTRAS_MINIMAS` e há predição: dá para corrigir a deriva. */
@@ -77,11 +83,14 @@ export class AcumuladorDeReancoragem {
     const px = mediana(this.predicoesX);
     const py = mediana(this.predicoesY);
     const predicao = px !== null && py !== null ? { x: px, y: py } : null;
+    const dmx = px !== null ? mediana(this.predicoesX.map((v) => Math.abs(v - px))) : null;
+    const dmy = py !== null ? mediana(this.predicoesY.map((v) => Math.abs(v - py))) : null;
     return {
       distanciaCm: mediana(this.distancias),
       pose: poseDeReferencia(this.poses),
       centro: centroDeReferencia(this.centros),
       predicao,
+      dispersao: dmx !== null && dmy !== null ? { x: 1.4826 * dmx, y: 1.4826 * dmy } : null,
       amostras: this.n,
       suficiente: this.n >= AMOSTRAS_MINIMAS && this.predicoesX.length >= AMOSTRAS_MINIMAS,
     };

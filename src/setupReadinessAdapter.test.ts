@@ -23,7 +23,7 @@ function diagnostics(over: Partial<EngineDiagnostics> = {}): EngineDiagnostics {
     features: { dims: 12, blink: false },
     prediction: { x: 960, y: 540 },
     calibration: { calibrated: true, lambda: 0.01, samples: 240 },
-    experiment: { expandFactor: 1.4, cadenceMs: 100 },
+    experiment: { expandFactor: 1.4, cadenceMs: 100, pipeline: 'v3' },
     framing: {
       hasFace: true,
       iod: 0.12,

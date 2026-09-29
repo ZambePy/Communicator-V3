@@ -71,10 +71,26 @@ export function classificarFps(fps: number): QualidadeDeFps {
   return 'ruim';
 }
 
+/** O que `requestVideoFrameCallback` informa de cada quadro (só o que é usado). */
+interface MetadadosDoQuadro {
+  /** Quadros entregues à composição desde o início do vídeo. */
+  presentedFrames?: number;
+  /** Instante do quadro na linha do tempo da mídia, em segundos. */
+  mediaTime?: number;
+}
+
 /**
  * Conta frames de um `<video>` já tocando.
  *
- * Usa `requestVideoFrameCallback`, que dispara uma vez por frame **de vídeo**.
+ * Com `requestVideoFrameCallback`, a taxa sai dos METADADOS do vídeo: quantos
+ * quadros foram entregues à composição (`presentedFrames`) no intervalo da
+ * linha do tempo da câmera (`mediaTime`). Contar as chamadas do callback, como
+ * antes, media o thread principal e não a câmera: com a página ocupada — o
+ * MediaPipe subindo, uma máquina fraca — o primeiro callback chegava depois da
+ * janela inteira e a tela dizia "0 quadros por segundo, taxa muito baixa"
+ * para uma webcam de 30. A medida só fecha com dois callbacks, e só desiste
+ * (0) se o vídeo não entregar quadro nenhum até `2 × janelaMs`.
+ *
  * O fallback é comparar `currentTime` dentro de um `requestAnimationFrame`:
  * contar `rAF` direto mediria o refresh do monitor, e uma webcam de 15 fps
  * apareceria como 60.
@@ -88,17 +104,37 @@ export function medirFps(
     let frames = 0;
 
     type ComRVFC = HTMLVideoElement & {
-      requestVideoFrameCallback?: (cb: () => void) => number;
+      requestVideoFrameCallback?: (cb: (agora: number, meta?: MetadadosDoQuadro) => void) => number;
     };
     const v = video as ComRVFC;
 
     if (typeof v.requestVideoFrameCallback === 'function') {
-      const passo = () => {
-        if (performance.now() - inicio >= janelaMs) {
-          resolve(contarFps(frames, performance.now() - inicio));
-          return;
+      let primeiro: { agora: number; quadros: number; tempoDaMidia: number } | null = null;
+      let encerrada = false;
+      const encerrar = (fps: number) => {
+        if (encerrada) return;
+        encerrada = true;
+        clearTimeout(desistir);
+        resolve(fps);
+      };
+      // Vídeo parado não chama o callback nunca: sem isto a tela ficaria
+      // "medindo…" para sempre.
+      const desistir = setTimeout(() => encerrar(0), 2 * janelaMs);
+      const passo = (agora: number, meta?: MetadadosDoQuadro) => {
+        if (encerrada) return;
+        const quadros = meta?.presentedFrames ?? Number.NaN;
+        const tempoDaMidia = meta?.mediaTime ?? Number.NaN;
+        if (primeiro === null) {
+          primeiro = { agora, quadros, tempoDaMidia };
+        } else {
+          frames++;
+          if (performance.now() - inicio >= janelaMs) {
+            const dq = quadros - primeiro.quadros;
+            const dt = tempoDaMidia - primeiro.tempoDaMidia;
+            encerrar(dq > 0 && dt > 0 ? dq / dt : contarFps(frames, agora - primeiro.agora));
+            return;
+          }
         }
-        frames++;
         v.requestVideoFrameCallback!(passo);
       };
       v.requestVideoFrameCallback(passo);

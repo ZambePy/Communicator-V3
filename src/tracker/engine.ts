@@ -6,6 +6,8 @@ import { FilesetResolver, FaceLandmarker } from '@mediapipe/tasks-vision';
 import * as calibration from '../calibration';
 import { OneEuroFilter2D, FILTER_PRESETS, FILTER_PRESETS_V2 } from '../oneEuroFilter';
 import { EstabilizadorDeFixacao } from '../filters/estabilizadorDeFixacao';
+import { EstimadorDeFixacao, janelaParaRho } from '../filters/estimadorDeFixacao';
+import { covarianciaNoPonto, type RuidoDaCalibracao } from '../ruidoDaCalibracao';
 import { FilterChain } from '../filters/filterChain';
 import { BlinkHold } from '../filters/blinkHold';
 import { MedidorDeContraluz, type MedidaDeContraluz } from '../contraluz';
@@ -22,7 +24,7 @@ import { suavizarRoll, type EstadoDoRoll } from '../l2cs/rollSuave';
 import { criarContextoDoOlho, recortarOlhoParaTensor } from '../olho/recorte';
 import { criarRamoOcularOnnx, ramoOcularNulo, type RamoOcular, type SaidasDoRamoOcular } from '../olho/ramoOcular';
 import { createCropContext, cropFaceToTensor, type CropContext } from '../l2cs/crop';
-import { L2CSHealthMonitor, reiniciarReusoDoBloco, ultimoDiagnosticoDoBloco } from '../l2cs/block';
+import { L2CSHealthMonitor, isGazePlausible, reiniciarReusoDoBloco, ultimoDiagnosticoDoBloco } from '../l2cs/block';
 import { SuavizadorDeAngulos } from '../l2cs/suavizacao';
 import { AcumuladorDeReancoragem, DURACAO_PADRAO_MS as REANCORAGEM_PADRAO_MS } from '../reancoragem';
 import {
@@ -31,9 +33,19 @@ import {
   lerReferenciaDePrecisao,
   type VeredictoDeRecalibracao,
 } from '../vigiaDeRecalibracao';
-import { definirSessaoDoComputador, estadoDaCorrecao, fracaoDoTetoDaCorrecao } from '../interaction/correcaoPorDwell';
+import {
+  definirSessaoDoComputador,
+  diagnosticoDaCorrecao,
+  estadoDaCorrecao,
+  fracaoDoTetoDaCorrecao,
+  type DiagnosticoDaCorrecao,
+} from '../interaction/correcaoPorDwell';
 import type { PerfilDeCalibracao, RecusaDeCalibracao } from '../calibration';
-import { NARIZ_PONTA, OLHO_ESQUERDO, OLHO_DIREITO } from '../faceLandmarks';
+import { NARIZ_PONTA, OLHO_ESQUERDO, OLHO_DIREITO, IRIS_ESQUERDA, IRIS_DIREITA } from '../faceLandmarks';
+import { eulerDaMatriz, matrizDaPose, type PoseDaCabeca } from '../poseDaCabeca';
+import { SuavizadorDePose } from '../filters/suavizadorDePose';
+import { olharNoReferencialDaCabeca } from '../referencialDaCabeca';
+import { FOV_PADRAO_DEG } from '../camera/fovPorCamera';
 import type { L2CSGazeInput } from '../extractor';
 import { getRecentBlinkRatePerMinute, resetEarHistory } from '../extractor';
 import * as recorder from '../telemetry/recorder';
@@ -202,6 +214,8 @@ export interface CalibrationApi {
   startCollectingPoint(x: number, y: number, onDone: (success: boolean) => void): void;
   /** Compensação de distância. Ver `distanceCompensation.ts`. */
   setCameraFovDeg(fov: number | null): void;
+  /** Lado da tela em que está a câmera, para a saída 6DoF (M12). */
+  setPosicaoDaCamera(p: import('../geometria6dof').PosicaoDaCamera | null): void;
   setCalibrationDistancesCm(cameraCm: number | null, screenCm: number | null): void;
   /** Distâncias registradas na calibração. O aviso de fora-de-faixa
    *  compara a distância ATUAL contra `screenCm`; sem ela não há referência e
@@ -328,14 +342,20 @@ export interface EngineDiagnostics {
   /** A cadeia de filtragem que está governando de fato. */
   filtro: {
     pedido: 'oneEuro' | 'kalman' | 'kalmanEma';
-    /** Pode diferir de `pedido`: `kalmanEma` sem geometria vira `kalman`. */
-    efetivo: 'oneEuro' | 'kalman' | 'kalmanEma';
+    /** Pode diferir de `pedido`: `kalmanEma` sem geometria vira `kalman`, e
+     *  o caminho do One Euro vira o estimador de fixação (M9) quando a
+     *  calibração mediu o ruído. */
+    efetivo: 'oneEuro' | 'kalman' | 'kalmanEma' | 'fixacao';
     degradado: boolean;
     geometriaConhecida: boolean;
-    /** Preset do One Euro, ou `null` quando a cadeia Kalman está ativa —
-     *  os presets não a parametrizam. */
+    /** Preset do One Euro, ou `null` quando a cadeia Kalman ou o estimador de
+     *  fixação estão ativos — os presets não os parametrizam. */
     preset: string | null;
+    /** Estimador de fixação (M9) em uso: janela e escala da Σ. */
+    fixacao: { janelaMs: number; escala: number } | null;
   };
+  /** Correção por dwell (integrador ou Kalman, M15/M16). Só para o cuidador. */
+  correcao: DiagnosticoDaCorrecao;
   /** Pose da cabeça no quadro corrente (radianos), da matriz facial do MediaPipe. */
   pose: {
     yaw: number;
@@ -358,6 +378,12 @@ export interface EngineDiagnostics {
   experiment: {
     expandFactor: number;
     cadenceMs: number;
+    /**
+     * Pipeline em vigor. O HUD do operador mostra, para conferir antes de
+     * medir que a rodada é a da condição anotada (`?pipeline=base` nas
+     * sessões de comparação do roteiro de medição).
+     */
+    pipeline: 'v3' | 'base';
   };
   framing: {
     hasFace: boolean;
@@ -439,6 +465,14 @@ export interface EngineDiagnostics {
   };
 }
 
+/** Um ponto medido da recalibração rápida afim (M20), em fração da tela. */
+export interface MedidaDoPontoDaRecalibracao {
+  alvo: { x: number; y: number };
+  predicao: { x: number; y: number };
+  dispersao: { x: number; y: number };
+  amostras: number;
+}
+
 /** Resultado do reajuste rápido (`reancorarReferencias`). */
 export interface ResultadoDoReajuste {
   /** Quadros válidos colhidos (0 quando cancelado ou abandonado). */
@@ -499,6 +533,19 @@ export interface GazeEngine {
    * para ela durante o reajuste não está olhando o centro.
    */
   cancelarReancoragem(): void;
+  /**
+   * Recalibração rápida afim (M20), um ponto: espera `assentamentoMs` com a
+   * pessoa olhando `alvo` (fração da tela) e colhe por `coletaMs` a predição
+   * antes da correção por dwell. Resolve com a mediana e a dispersão, ou
+   * `null` se a coleta foi abandonada (Emergência) ou não juntou o mínimo. Não
+   * aplica nada: quem aplica é `aplicarRecalibracaoRapida`, com os pontos todos.
+   */
+  medirPontoDaRecalibracao(
+    alvo: { x: number; y: number },
+    opts: { assentamentoMs: number; coletaMs: number },
+  ): Promise<MedidaDoPontoDaRecalibracao | null>;
+  /** Aplica os pontos medidos (`calibration.corrigirDerivaNosPontos`). */
+  aplicarRecalibracaoRapida(medidas: readonly MedidaDoPontoDaRecalibracao[]): { aplicado: boolean; desvioPx: number | null };
   /**
    * Os nove pontos são necessários? Compara BCEA e viés recentes com os do
    * último teste de precisão salvo. Sem teste salvo, `precisa: false`.
@@ -611,6 +658,14 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
    */
   let estabilizadorOneEuro: EstabilizadorDeFixacao | null = null;
   /**
+   * Estimador de fixação (M9). Com a flag ligada e o ruído medido pela
+   * calibração em uso, toma o lugar do One Euro + estabilizador no caminho do
+   * One Euro. Recriado quando o ruído muda (calibração nova, perfil trocado),
+   * porque a janela sai do ρ₁ dele. Os modos Kalman ficam como estão.
+   */
+  let estimadorDeFixacao: EstimadorDeFixacao | null = null;
+  let ruidoDoEstimador: RuidoDaCalibracao | null = null;
+  /**
    * Roll do último quadro com rosto, SUAVIZADO (`rollSuave.ts`), para o crop
    * do próximo (sprint S6). O mesmo valor vai para a contra-rotação da saída,
    * então o atraso do EMA não cria erro geométrico — só tira o tremor de
@@ -627,6 +682,16 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   const medidorDeEscala = new MedidorDeEscalaFacial();
   /** Roll passado ao recorte da última submissão ao L2CS; `null` sem normalização. */
   let rollDaSubmissao: number | null = null;
+  /**
+   * Pose da cabeça do V3 (M5), suavizada com rampa contínua. A MESMA pose vai
+   * para a compensação e para a rotação do L2CS para o referencial da cabeça
+   * (M4) — é o que faz o tremor da pose se cancelar entre as duas.
+   */
+  const suavizadorDePose = new SuavizadorDePose();
+  /** Campo de visão horizontal informado para a câmera em uso (graus). */
+  let fovDaCameraDeg: number | null = null;
+  /** Meio das íris no quadro corrente (normalizado), com a saída 6DoF (M12). */
+  let latestOlhosNorm: { x: number; y: number } | null = null;
   // Hold de piscada: roda NOS DOIS modos. Com Kalman, projeta a posição pelo
   // modelo de velocidade constante; sem Kalman (`'oneEuro'`, o padrão), só a
   // máquina de estados vale — congela a última posição e, passado o teto de
@@ -839,7 +904,12 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     ultimoRollRad = null;
     rollSuavizado = null;
     rollDaSubmissao = null;
+    suavizadorDePose.reiniciar();
     estabilizadorOneEuro?.reset();
+    // A escala de ruído do estimador de fixação (M9) é da sessão: a próxima
+    // começa sem ela, e o estimador renasce no primeiro quadro filtrado.
+    estimadorDeFixacao = null;
+    ruidoDoEstimador = null;
     // Encerra qualquer episódio de hold em curso. O `predict` nunca é chamado
     // no ramo `piscando: false`, então o stub abaixo só existe para satisfazer
     // a assinatura sem forçar a cadeia a existir durante um reset.
@@ -858,6 +928,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     latestContraluz = undefined;
     medidorDeContraluz.reiniciar();
     latestFaceCenter = { x: 0.5, y: 0.5 };
+    latestOlhosNorm = null;
     latestSpecularRatio = undefined;
     latestSpecularStability = undefined;
     latestQuality = {};
@@ -971,7 +1042,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           },
           outputFaceBlendshapes: false,
           outputFacialTransformationMatrixes: true,
-          runningMode: 'VIDEO',
+          // M14: em modo IMAGE o FaceLandmarker não aplica o One Euro interno
+          // aos landmarks (min_cutoff 0,05, beta 80 — só em VIDEO com um rosto)
+          // e roda o detector a cada quadro. Existe para MEDIR quanto do ruído
+          // chega pré-filtrado; o padrão é o modo VIDEO de antes.
+          runningMode: EXPERIMENT.suavizacaoDoLandmarker === 'desligada' ? 'IMAGE' : 'VIDEO',
           numFaces: 1,
         });
         if (!d) throw new Error(`FaceLandmarker (${delegate}) não foi criado.`);
@@ -1201,7 +1276,9 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       }
 
       stageTimer.begin(STAGE.mediapipe);
-      const results = faceLandmarker.detectForVideo(videoEl, startTimeMs);
+      const results = EXPERIMENT.suavizacaoDoLandmarker === 'desligada'
+        ? faceLandmarker.detect(videoEl)
+        : faceLandmarker.detectForVideo(videoEl, startTimeMs);
       stageTimer.end(STAGE.mediapipe);
       const hasFace = !!(results.faceLandmarks && results.faceLandmarks.length > 0);
       if (hasFace) framesWithFace++;
@@ -1210,6 +1287,9 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         latestHasFace = false;
         latestIod = 0;
         latestFaceCenter = { x: 0.5, y: 0.5 };
+        // O olho que sumiu não é origem de raio nenhum (M12).
+        latestOlhosNorm = null;
+        calibration.setCurrentFrameOlhos(null);
         latestSpecularRatio = undefined;
         latestSpecularStability = undefined;
         latestIodPx = 0;
@@ -1221,12 +1301,14 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         // rotacionaria o recorte pela inclinação de outro instante.
         ultimoRollRad = null;
         rollSuavizado = null;
+        suavizadorDePose.reiniciar();
         // Mesmo motivo do roll: a pose pertencia ao rosto que sumiu. Mantê-la
         // faria a régua da íris aceitar como "frontal" o rosto que voltar de
         // perfil, e a íris projetada de perfil mede menos do que é.
         ultimoYawDeg = null;
         ultimoPitchDeg = null;
         estabilizadorOneEuro?.reset();
+        estimadorDeFixacao?.reiniciar();
         // Sem rosto a referência lenta congela e o contraluz não é do quadro.
         calibration.alimentarReferenciaLenta(startTimeMs, false);
         calibration.setContraluzAtual(null);
@@ -1297,6 +1379,16 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           latestIodPx, videoEl?.videoWidth ?? 0, videoEl?.videoHeight ?? 0, latestFaceCenter,
           medidorDeEscala.cantalOuPadraoCm(),
         );
+        // Saída 6DoF (M12): o meio das íris, em px do vídeo, é a origem do raio.
+        latestOlhosNorm = EXPERIMENT.saida6DoF
+          ? {
+              x: (landmarks[IRIS_ESQUERDA.centro].x + landmarks[IRIS_DIREITA.centro].x) / 2,
+              y: (landmarks[IRIS_ESQUERDA.centro].y + landmarks[IRIS_DIREITA.centro].y) / 2,
+            }
+          : null;
+        calibration.setCurrentFrameOlhos(latestOlhosNorm && videoEl
+          ? { x: latestOlhosNorm.x * videoEl.videoWidth, y: latestOlhosNorm.y * videoEl.videoHeight }
+          : null);
 
         // ── Contraluz ────────────────────────────────────────────────────
         //
@@ -1351,6 +1443,19 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         const rawMatrix = results.facialTransformationMatrixes?.[0]?.data;
         const faceMatrix = rawMatrix ? new Float32Array(rawMatrix) : undefined;
 
+        // Pose da cabeça do V3 (M4, M5): tirada da matriz facial sem a escala
+        // do Procrustes e, com `poseSuavizada`, suavizada. Quando alguma das
+        // duas flags está ligada, é ESTA pose que a compensação usa e que gira
+        // o L2CS; com as duas desligadas, vale a pose do extractor, como antes.
+        // A saída 6DoF (M12) também precisa da pose da matriz: é a rotação que
+        // a reprojeção usa, na convenção de `poseDaCabeca.ts`.
+        const usarPoseDaMatriz = EXPERIMENT.poseSuavizada || EXPERIMENT.l2csNaCabeca || EXPERIMENT.saida6DoF;
+        const poseDaMatriz = usarPoseDaMatriz ? eulerDaMatriz(faceMatrix) : null;
+        const poseV3: PoseDaCabeca | null =
+          poseDaMatriz && EXPERIMENT.poseSuavizada
+            ? suavizadorDePose.processar(poseDaMatriz, startTimeMs)
+            : poseDaMatriz;
+
         // L2CS: submete tensor throttled e lê o último gaze válido do cache.
         // O loop rAF nunca aguarda; se stale ou worker off, o extractor recebe
         // {valid: false} e anexa 7 zeros.
@@ -1358,6 +1463,13 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         if (l2csClient && cropCtx && videoEl) {
           // O crop só é construído quando o worker aceitaria a submissão, para
           // não gastar ~5 ms de getImageData à toa.
+          // M13: o recorte nivela o rosto se receber o ângulo da linha dos olhos
+          // NA IMAGEM (y para baixo), que é −roll da matriz facial. Passar o roll
+          // da matriz dobra a inclinação em vez de cancelá-la. Corrigir muda a
+          // imagem que a rede vê, por isso a flag nasce desligada.
+          const rollDoRecorte = EXPERIMENT.normalizarRollNoCrop
+            ? (EXPERIMENT.nivelarRecorteCorrigido && ultimoRollRad !== null ? -ultimoRollRad : ultimoRollRad)
+            : null;
           if (l2csClient.canSubmit(startTimeMs)) {
             try {
               stageTimer.begin(STAGE.l2csCrop);
@@ -1371,7 +1483,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
                 // A 30 Hz a cabeça gira frações de grau entre quadros, e um
                 // atraso de 33 ms custa menos que não normalizar — mas está
                 // dito aqui para ninguém procurar um bug onde há uma escolha.
-                rollRad: EXPERIMENT.normalizarRollNoCrop ? ultimoRollRad : null,
+                rollRad: rollDoRecorte,
               });
               stageTimer.end(STAGE.l2csCrop);
               if (l2csClient.submitTensor(tensor)) {
@@ -1380,7 +1492,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
                 // voo por vez, é o roll do próximo resultado; entre a submissão
                 // e a chegada a cabeça gira frações de grau, e usar o roll do
                 // quadro corrente seria a mesma aproximação com um atraso a mais.
-                rollDaSubmissao = EXPERIMENT.normalizarRollNoCrop ? ultimoRollRad : null;
+                rollDaSubmissao = rollDoRecorte;
               }
             } catch (e) {
               // Ex.: getImageData tainted, vídeo ainda sem quadro. O extractor
@@ -1397,16 +1509,63 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           // a rotação, inclinar a cabeça mudaria o olhar lido para um ponto
           // fixo — o erro que a normalização existe para tirar, de volta.
           const gVideo0 = g.valid
-            ? desfazerRollNoOlhar({ yaw: g.yaw, pitch: g.pitch }, rollDaSubmissao, IS_VIDEO_MIRRORED)
+            ? desfazerRollNoOlhar(
+                { yaw: g.yaw, pitch: g.pitch },
+                rollDaSubmissao,
+                IS_VIDEO_MIRRORED,
+                EXPERIMENT.desrolarComSinalDoL2cs,
+              )
             : g;
           // EMA curta na fixação, solta na sacada (item 10a). Só sobre leitura
           // válida; o suavizador ignora releituras da mesma inferência.
           const gVideo = g.valid && suavizadorL2cs
             ? suavizadorL2cs.processar(gVideo0.yaw, gVideo0.pitch, g.timestamp)
             : gVideo0;
+          // M4: o Ridge recebe o L2CS no referencial da CABEÇA, como a íris. A
+          // rotação usa a pose deste quadro — a mesma que a compensação vai
+          // usar —, e o meio das íris define o raio câmera→olho do Gaze360.
+          // Sem pose o ângulo não tem referencial: o quadro conta como leitura
+          // velha e o bloco reaproveita o último valor válido. A plausibilidade
+          // é conferida ANTES de girar, no ângulo que a rede devolveu: um
+          // ângulo implausível segue como está e o bloco o zera, como sempre;
+          // um plausível é girado e o bloco não o confere de novo (no replay de
+          // 23/09, 27 quadros legítimos passavam de 35° no referencial da
+          // cabeça e viravam sete zeros).
+          let gFeature: { yaw: number; pitch: number } = gVideo;
+          let validoNoReferencial = true;
+          let plausibilidadeConferida = false;
+          if (EXPERIMENT.l2csNaCabeca && g.valid && isGazePlausible(gVideo.yaw, gVideo.pitch)) {
+            const vw = videoEl.videoWidth;
+            const vh = videoEl.videoHeight;
+            const irisE = landmarks[IRIS_ESQUERDA.centro];
+            const irisD = landmarks[IRIS_DIREITA.centro];
+            const naCabeca = poseV3
+              ? olharNoReferencialDaCabeca({
+                  olhar: gVideo,
+                  olhoPx: { x: ((irisE.x + irisD.x) / 2) * vw, y: ((irisE.y + irisD.y) / 2) * vh },
+                  larguraVideo: vw,
+                  alturaVideo: vh,
+                  fovHorizontalDeg: fovDaCameraDeg ?? FOV_PADRAO_DEG,
+                  rotacao: matrizDaPose(poseV3),
+                })
+              : null;
+            if (naCabeca) {
+              gFeature = naCabeca;
+              plausibilidadeConferida = true;
+            } else {
+              validoNoReferencial = false;
+            }
+          }
           // `nowMs` habilita o reuso do último ângulo válido no bloco (até
           // 600 ms) em vez de sete zeros — ver `l2cs/block.ts`.
-          l2csGaze = { yaw: gVideo.yaw, pitch: gVideo.pitch, valid: g.valid, confidence: g.confidence, nowMs: startTimeMs };
+          l2csGaze = {
+            yaw: gFeature.yaw,
+            pitch: gFeature.pitch,
+            valid: g.valid && validoNoReferencial,
+            confidence: g.confidence,
+            nowMs: startTimeMs,
+            ...(plausibilidadeConferida ? { plausibilidadeConferida } : {}),
+          };
 
           if (g.valid) l2csFramesValid++; else l2csFramesStale++;
           // Conta inferências, não leituras: o timestamp é a hora da captura e
@@ -1517,22 +1676,28 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           // medida ao fim da coleta e vira aviso, e a compensação geométrica
           // corrige o que sobra.
           const face = extractorResult.advancedFeatures?.face;
+          // Pose que a compensação usa: a do V3 (M4/M5) quando existe; a do
+          // extractor, crua, no pipeline anterior.
+          const poseDoQuadro: PoseDaCabeca | null =
+            poseV3 ?? (face ? { yaw: face.yaw, pitch: face.pitch, roll: face.roll } : null);
           const quality = {
             ...(extractorResult.advancedFeatures?.quality ?? {}),
             ...cropQuality,
-            yaw:   face?.yaw,
-            pitch: face?.pitch,
-            roll:  face?.roll,
+            yaw:   poseDoQuadro?.yaw,
+            pitch: poseDoQuadro?.pitch,
+            roll:  poseDoQuadro?.roll,
             // Proxy de distância, centro facial e escala viajam junto do
             // `quality` para entrar em `profile[].quality`, de onde a
             // referência de calibração é calculada.
             faceCenterX: latestFaceCenter.x,
             faceCenterY: latestFaceCenter.y,
             iodPx: latestIodPx,
+            // Meio das íris (normalizado), só com a saída 6DoF (M12).
+            ...(latestOlhosNorm ? { centroDosOlhosX: latestOlhosNorm.x, centroDosOlhosY: latestOlhosNorm.y } : {}),
           };
 
+          if (poseDoQuadro) diagPose = { ...poseDoQuadro };
           if (face) {
-            diagPose = { yaw: face.yaw, pitch: face.pitch, roll: face.roll };
             // Guardado para o recorte do PRÓXIMO quadro normalizar o roll.
             if (Number.isFinite(face.roll)) {
               rollSuavizado = suavizarRoll(rollSuavizado, face.roll, startTimeMs);
@@ -1545,9 +1710,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           // Pose do quadro para a compensação geométrica em `mapGaze`. Enviada
           // sempre, inclusive `null`: uma pose velha de um quadro sem rosto
           // compensaria pelo lugar errado.
-          calibration.setCurrentFramePose(
-            face ? { yaw: face.yaw, pitch: face.pitch, roll: face.roll } : null,
-          );
+          calibration.setCurrentFramePose(poseDoQuadro);
           // Quadro VÁLIDO para a referência lenta e para a reancoragem: rosto
           // presente, sem piscada (já garantido neste ramo), L2CS não
           // implausível e sem contraluz forte (idem).
@@ -1556,7 +1719,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           if (reancoragem && quadroValido) {
             reancoragem.acumulador.adicionar({
               distanciaCm: calibration.getCurrentCameraDistanceCm(),
-              pose: face ? { yaw: face.yaw, pitch: face.pitch, roll: face.roll } : null,
+              pose: poseDoQuadro,
               centro: { x: latestFaceCenter.x, y: latestFaceCenter.y },
             });
           }
@@ -1583,7 +1746,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             featuresLeft,
             featuresRight,
             perEyeWeight,
-            face ? { yaw: face.yaw, pitch: face.pitch, roll: face.roll } : undefined,
+            poseDoQuadro ?? undefined,
           );
 
           stageTimer.begin(STAGE.predict);
@@ -1654,6 +1817,16 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           blinkHold.update(false, performance.now(), cadeia?.kalmanInterno
             ?? { predict: () => ({ x: 0, y: 0 }), ready: false });
           stageTimer.begin(STAGE.filter);
+          // M9: o estimador acompanha o ruído da calibração em uso. Trocou o
+          // ruído (ou a calibração sumiu), troca o estimador e zera o caminho
+          // do One Euro, que ficou parado enquanto o outro governava.
+          const ruidoAtual = EXPERIMENT.estimadorDeFixacao && !cadeia ? calibration.getRuidoDaCalibracao() : null;
+          if (ruidoAtual !== ruidoDoEstimador) {
+            ruidoDoEstimador = ruidoAtual;
+            estimadorDeFixacao = ruidoAtual ? new EstimadorDeFixacao(janelaParaRho(ruidoAtual.rho1)) : null;
+            oneEuro.reset();
+            estabilizadorOneEuro?.reset();
+          }
           if (cadeia) {
             // Cadeia Kalman: trabalha em PIXELS. O `filterInNormalizedSpace`
             // dos presets v2 é uma propriedade do One Euro (mincutoff
@@ -1666,6 +1839,15 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             ultimoFiltroSec = now;
             const r = cadeia.filter(targetX, targetY, now, now * 1000, dtSec);
             smoothed = { x: r.x, y: r.y };
+          } else if (estimadorDeFixacao && ruidoDoEstimador) {
+            // Em px: a covariância da calibração está em px do viewport do
+            // treino, que é o de agora (fora dele a calibração fica suspensa).
+            const sigma = covarianciaNoPonto(
+              ruidoDoEstimador, targetX, targetY,
+              document.documentElement.clientWidth || 1,
+              document.documentElement.clientHeight || 1,
+            );
+            smoothed = estimadorDeFixacao.processar(targetX, targetY, now * 1000, sigma);
           } else if (activeConfig.filterInNormalizedSpace) {
             const vwN = document.documentElement.clientWidth || 1;
             const vhN = document.documentElement.clientHeight || 1;
@@ -1678,12 +1860,12 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           }
           // Estabilizador de fixação no caminho do One Euro: durante a fixação
           // a saída vira a média da janela; na sacada, volta a ser a amostra.
-          if (estabilizadorOneEuro) {
+          if (estabilizadorOneEuro && !estimadorDeFixacao) {
             const e = estabilizadorOneEuro.processar(smoothed.x, smoothed.y, now * 1000);
             smoothed = { x: e.x, y: e.y };
           }
           stageTimer.end(STAGE.filter);
-          feedAccuracyFiltered(smoothed.x, smoothed.y);
+          feedAccuracyFiltered(smoothed.x, smoothed.y, recordedPreFilter);
 
           // Decide entre 'calibrating' | 'degraded' | 'tracking' | 'uncalibrated'.
           // 'degraded' entra quando mapGaze devolveu null por >500ms seguidos
@@ -1932,9 +2114,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         mapGazeNullSinceMs = null;
         ultimoRollRad = null;
         rollSuavizado = null;
+        suavizadorDePose.reiniciar();
         ultimoYawDeg = null;
         ultimoPitchDeg = null;
         estabilizadorOneEuro?.reset();
+        estimadorDeFixacao?.reiniciar();
         blinkHold.update(false, startTimeMs, { predict: () => ({ x: 0, y: 0 }), ready: false });
         calibration.alimentarReferenciaLenta(startTimeMs, false);
         calibration.setContraluzAtual(null);
@@ -2183,7 +2367,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           let aplicado = false;
           let desvioPx: number | null = null;
           if (aplicar && r.suficiente) {
-            const c = calibration.corrigirDerivaNoCentro(r.predicao);
+            const c = calibration.corrigirDerivaNoCentro(
+              r.predicao,
+              r.dispersao ? { amostras: r.amostras, dispersao: r.dispersao } : null,
+            );
             aplicado = c.aplicado;
             desvioPx = c.desvioPx;
           }
@@ -2199,11 +2386,47 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       abandonarReancoragem();
     },
 
+    medirPontoDaRecalibracao(
+      alvo: { x: number; y: number },
+      opts: { assentamentoMs: number; coletaMs: number },
+    ): Promise<MedidaDoPontoDaRecalibracao | null> {
+      reancoragem?.concluir();
+      return new Promise((resolve) => {
+        let encerrada = false;
+        let coleta: ReturnType<typeof setTimeout> | null = null;
+        const acumulador = new AcumuladorDeReancoragem();
+        const encerrar = (aplicar: boolean) => {
+          if (encerrada) return;
+          encerrada = true;
+          clearTimeout(assentamento);
+          if (coleta !== null) clearTimeout(coleta);
+          if (reancoragem?.acumulador === acumulador) reancoragem = null;
+          const r = acumulador.resultado();
+          resolve(aplicar && r.suficiente && r.predicao && r.dispersao
+            ? { alvo: { ...alvo }, predicao: r.predicao, dispersao: r.dispersao, amostras: r.amostras }
+            : null);
+        };
+        // Durante o assentamento o olhar ainda está chegando: nada é colhido,
+        // mas a Emergência já pode abandonar a medida.
+        reancoragem = { acumulador: new AcumuladorDeReancoragem(), concluir: () => encerrar(false), abandonar: () => encerrar(false) };
+        const assentamento = setTimeout(() => {
+          if (encerrada) return;
+          reancoragem = { acumulador, concluir: () => encerrar(true), abandonar: () => encerrar(false) };
+          coleta = setTimeout(() => encerrar(true), Math.max(0, opts.coletaMs));
+        }, Math.max(0, opts.assentamentoMs));
+      });
+    },
+
+    aplicarRecalibracaoRapida(medidas: readonly MedidaDoPontoDaRecalibracao[]) {
+      return calibration.corrigirDerivaNosPontos(medidas);
+    },
+
     precisaDeRecalibracao(): VeredictoDeRecalibracao {
       // Viés recente = o deslocamento que a correção por dwell acumulou, em px.
       // É a medida mais honesta do viés em uso: cada dwell concluído num alvo
-      // isolado é um rótulo de graça; o deslocamento é um integrador (ganho
-      // 0,05, meia-vida de 10 min) sobre os resíduos deles, não uma média.
+      // isolado é um rótulo de graça; o deslocamento é filtrado sobre os
+      // resíduos deles (integrador de ganho 0,05 no pipeline base, Kalman no
+      // V3 — M15), não uma média.
       const e = estadoDaCorrecao();
       const vw = typeof document !== 'undefined' ? document.documentElement.clientWidth : 0;
       const vh = typeof document !== 'undefined' ? document.documentElement.clientHeight : 0;
@@ -2221,6 +2444,9 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     },
 
     sugereReancoragem(): boolean {
+      // Kalman da correção por dwell (M15): três rótulos seguidos recusados
+      // pelo χ² dizem que o desvio não é deriva lenta — é caso de reajuste.
+      if (diagnosticoDaCorrecao().pedeReajuste) return true;
       const r = calibration.getReferenciaLenta();
       if (!r.ativa) return false;
       const congelado = r.congeladoPorResiduo;
@@ -2263,11 +2489,15 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         // degrada para Kalman puro, e o relatório precisa saber.
         filtro: {
           pedido: EXPERIMENT.filterMode,
-          efetivo: cadeia ? cadeia.modoEfetivo : 'oneEuro',
+          efetivo: cadeia ? cadeia.modoEfetivo : estimadorDeFixacao ? 'fixacao' : 'oneEuro',
           degradado: cadeia?.degradado ?? false,
           geometriaConhecida: geometriaDeTela !== null,
-          preset: cadeia ? null : activePreset,
+          preset: cadeia || estimadorDeFixacao ? null : activePreset,
+          fixacao: estimadorDeFixacao
+            ? { janelaMs: estimadorDeFixacao.janela, escala: estimadorDeFixacao.escala }
+            : null,
         },
+        correcao: diagnosticoDaCorrecao(),
         pose: { ...diagPose },
         features: {
           dims: latestFeatureDims * 2,
@@ -2286,6 +2516,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           expandFactor: EXPERIMENT.expandFactor,
           // Cadência EM VIGOR, que a política por provider pode ter trocado.
           cadenceMs: l2csClient?.getPolitica().cadenceMs ?? EXPERIMENT.l2csCadenceMs,
+          pipeline: EXPERIMENT.pipeline,
         },
         framing: {
           hasFace: latestHasFace,
@@ -2388,7 +2619,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         return calibration.getCalibrationMode();
       },
       setCameraFovDeg(fov: number | null): void {
+        fovDaCameraDeg = fov;
         calibration.setCameraFovDeg(fov);
+      },
+      setPosicaoDaCamera(p: import('../geometria6dof').PosicaoDaCamera | null): void {
+        calibration.setPosicaoDaCamera(p);
       },
       getCalibrationDistancesCm() {
         return calibration.getCalibrationDistancesCm();

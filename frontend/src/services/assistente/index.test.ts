@@ -5,6 +5,7 @@ import {
   assistenteEstaAtivo,
   CHAVE_DESLIGADO,
   definirAssistenteDesligado,
+  palavraConhecida,
   registrarFalaDoPaciente,
   resumoDoModelo,
   sugerirFrases,
@@ -110,5 +111,14 @@ describe('pergunta no ar', () => {
 
   it('conversa vazia não tem pergunta', () => {
     expect(ultimaPerguntaDoCuidador([])).toBeUndefined();
+  });
+});
+
+describe('palavra conhecida (dwell em cascata, M17)', () => {
+  it('a palavra que o paciente já falou passa a ser conhecida; lixo não', () => {
+    expect(palavraConhecida('Zambelândia')).toBe(false);
+    registrarFalaDoPaciente('Zambelândia fica longe');
+    expect(palavraConhecida('zambelandia')).toBe(true);
+    expect(palavraConhecida('xyzzq')).toBe(false);
   });
 });

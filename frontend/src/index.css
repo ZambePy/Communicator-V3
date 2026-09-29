@@ -1051,6 +1051,17 @@ select:focus-visible,
   border-color: #ffffff;
   box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.15);
 }
+/* O painel aparece na calibração, onde não há cursor: sob o olhar, o botão
+   enche da esquerda para a direita conforme o dwell avança (o GazeContext
+   escreve `--gaze-dwell-progress`, de 0 a 1), para o paciente ver que a
+   escolha está acontecendo. */
+.diagnostic-btn.gaze-hover {
+  background-image: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.28) calc(var(--gaze-dwell-progress, 0) * 100%),
+    transparent calc(var(--gaze-dwell-progress, 0) * 100%)
+  );
+}
 
 /* Cores qualitativas do score (usadas no bloco de resumo persistido) */
 .accuracy-excellent {

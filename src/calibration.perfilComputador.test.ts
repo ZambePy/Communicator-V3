@@ -21,6 +21,7 @@ import {
   JOELHO_HIPOMETRIA_DEG,
   type CalibrationGeometry,
 } from './calibration';
+import { EXPERIMENT } from './config/experiment';
 
 // Geometria de referência: 1920×1080, 23,6" a 60 cm.
 const G: CalibrationGeometry = {
@@ -60,13 +61,15 @@ describe('alvosDeCalibracao — perfil computador', () => {
       ...computeCalibrationTargets(G, false),
       { x: lo, y: lo }, { x: hi, y: lo },
       { x: lo, y: hi }, { x: hi, y: hi },
+      // M7: o meio da borda de baixo, depois dos cantos.
+      ...(EXPERIMENT.alvoInferiorCentral ? [{ x: 0.5, y: hi }] : []),
     ]);
     // O modo rápido continua sendo só os 4 cantos DA GRADE.
     expect(alvosDeCalibracao(G, { perfil: 'padrao', quick: true })).toEqual(computeCalibrationTargets(G, true));
     // A grade interna continua dentro do orçamento: os alvos horizontais dela
     // ficam bem longe da borda (≈17 %/83 %); só os cantos vão a 5 %/95 %.
     expect(Math.min(...computeCalibrationTargets(G, false).map((a) => a.x))).toBeGreaterThan(0.1);
-    expect(alvosDeCalibracao(G)).toHaveLength(13);
+    expect(alvosDeCalibracao(G)).toHaveLength(EXPERIMENT.alvoInferiorCentral ? 14 : 13);
   });
 });
 
@@ -123,13 +126,15 @@ describe('sessão de calibração com perfil', () => {
     setPerfilDeCalibracao('padrao');
   });
 
-  it('startCalibrationMode({perfil}) define os 13 alvos e o perfil ativo', () => {
+  it('startCalibrationMode({perfil}) define os alvos e o perfil ativo', () => {
+    // O perfil computador já tem o meio da borda de baixo na grade 3×3 dele,
+    // então M7 não muda nada ali: são 13 com ou sem a flag.
     expect(startCalibrationMode({ perfil: 'computador' })).toBe(true);
     expect(getPerfilDeCalibracao()).toBe('computador');
     expect(getCalibrationTargets()).toHaveLength(13);
     abortCalibration();
     expect(startCalibrationMode({ perfil: 'padrao' })).toBe(true);
-    expect(getCalibrationTargets()).toHaveLength(13);
+    expect(getCalibrationTargets()).toHaveLength(EXPERIMENT.alvoInferiorCentral ? 14 : 13);
   });
 
   it('setPerfilDeCalibracao troca o perfil e procura o modelo daquele perfil', () => {

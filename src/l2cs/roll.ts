@@ -14,9 +14,15 @@
 // espelho, o recorte efetivo (depois de desespelhar) girou por +roll, e aqui
 // se gira por −roll. O sinal do determinante troca; o módulo do ângulo, não.
 //
-// Convenção dos ângulos (l2cs.meta.json): yaw > 0 = olhar para a DIREITA da
-// imagem não espelhada; pitch > 0 = olhar para CIMA. No plano da imagem o eixo
-// y cresce para BAIXO, e é nesse plano que a rotação acontece.
+// Convenção dos ângulos. O L2CS devolve yaw > 0 para olhar à direita DA
+// PESSOA — esquerda da imagem não espelhada — e pitch > 0 para cima (`vis.py`
+// e `utils.py` do L2CS-Net; a gravação de 23/09 mostrou o yaw crescendo com o
+// alvo à direita da tela). Esta função nasceu supondo yaw > 0 = direita da
+// IMAGEM: com esse sinal, a contra-rotação gira para o lado errado e a saída
+// fica girada pelo DOBRO do roll do recorte (com 8° de roll, (15°, 0°) volta
+// como (14,4°, −4,1°)). `sinalDoL2cs` escolhe a convenção certa; o padrão é o
+// comportamento anterior, que a flag `desrolarComSinalDoL2cs` troca. No plano
+// da imagem o eixo y cresce para BAIXO, e é nesse plano que a rotação acontece.
 
 export interface AnguloDeOlhar {
   yaw: number;
@@ -34,14 +40,17 @@ export function desfazerRollNoOlhar(
   olhar: AnguloDeOlhar,
   rollRad: number | null | undefined,
   isMirrored: boolean,
+  sinalDoL2cs = false,
 ): AnguloDeOlhar {
   if (typeof rollRad !== 'number' || !Number.isFinite(rollRad) || rollRad === 0) return olhar;
   if (!Number.isFinite(olhar.yaw) || !Number.isFinite(olhar.pitch)) return olhar;
 
   // Vetor unitário do olhar em coordenadas de imagem: x para a direita, y para
-  // BAIXO (por isso −sin(pitch)), z magnitude para a frente.
+  // BAIXO (por isso −sin(pitch)), z magnitude para a frente. Na convenção do
+  // L2CS, yaw > 0 aponta para a esquerda da imagem: x leva o sinal oposto.
+  const sx = sinalDoL2cs ? -1 : 1;
   const cp = Math.cos(olhar.pitch);
-  const gx = cp * Math.sin(olhar.yaw);
+  const gx = sx * cp * Math.sin(olhar.yaw);
   const gy = -Math.sin(olhar.pitch);
   const gz = cp * Math.cos(olhar.yaw);
 
@@ -53,7 +62,7 @@ export function desfazerRollNoOlhar(
   const ry = s * gx + c * gy;
 
   const pitch = Math.asin(Math.max(-1, Math.min(1, -ry)));
-  const yaw = Math.atan2(rx, gz);
+  const yaw = Math.atan2(sx * rx, gz);
   return { yaw, pitch };
 }
 
@@ -66,7 +75,8 @@ export function aplicarRollNoOlhar(
   olhar: AnguloDeOlhar,
   rollRad: number | null | undefined,
   isMirrored: boolean,
+  sinalDoL2cs = false,
 ): AnguloDeOlhar {
   if (typeof rollRad !== 'number' || !Number.isFinite(rollRad) || rollRad === 0) return olhar;
-  return desfazerRollNoOlhar(olhar, -rollRad, isMirrored);
+  return desfazerRollNoOlhar(olhar, -rollRad, isMirrored, sinalDoL2cs);
 }

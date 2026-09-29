@@ -9,6 +9,11 @@
   margin-bottom: clamp(32px, 6vh, 72px);
 }
 
+/* O olho que procura e pisca, acima do título (Ilustracoes.tsx). */
+.capitulos__olho {
+  margin-bottom: var(--sp-3);
+}
+
 .capitulos__grade {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);

@@ -48,6 +48,25 @@ describe('o instante do treino descreve o modelo em uso', () => {
     calib.clearCalibration();
   });
 
+  it('avisa a interface quando o modelo em uso muda — e só quando muda', () => {
+    // O alvo mínimo medido (M18) vale só para a calibração em que foi medido:
+    // a interface recalcula ao ouvir este evento.
+    let avisos = 0;
+    const ouvir = () => { avisos++; };
+    window.addEventListener(calib.EVENTO_DE_CALIBRACAO_EM_USO, ouvir);
+    try {
+      expect(ativarPerfilDe('a', '2026-09-20T10:00:00.000Z')).toBeTruthy();
+      expect(avisos).toBe(1);
+      // O mesmo instante de novo não é mudança.
+      expect(ativarPerfilDe('b', '2026-09-20T10:00:00.000Z')).toBeTruthy();
+      expect(avisos).toBe(1);
+      calib.clearCalibration();
+      expect(avisos).toBe(2);
+    } finally {
+      window.removeEventListener(calib.EVENTO_DE_CALIBRACAO_EM_USO, ouvir);
+    }
+  });
+
   it('sem nenhuma calibração, é null — não 0 nem "agora"', () => {
     expect(calib.getCalibrationTimestampMs()).toBeNull();
   });

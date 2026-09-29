@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { EXPERIMENT } from '../config/experiment';
 import {
   ALVO_MINIMO_OVERLAY_PX,
   aprenderComSelecao,
@@ -47,13 +48,20 @@ describe('deveAprender com origem', () => {
   });
 });
 
+// Com o integrador (pipeline base): a seleção vira rótulo na hora. O mesmo
+// portão por origem vale para o Kalman (`correcaoPorDwell.kalman.test.ts`).
 describe('aprenderComSelecao durante a sessão do Computador', () => {
+  const kalmanAntes = EXPERIMENT.correcaoPorDwellKalman;
   beforeEach(() => {
+    EXPERIMENT.correcaoPorDwellKalman = false;
     reiniciarCorrecao();
     definirCorrecaoLigada(true);
     definirSessaoDoComputador(true);
   });
-  afterEach(() => definirSessaoDoComputador(false));
+  afterEach(() => {
+    definirSessaoDoComputador(false);
+    EXPERIMENT.correcaoPorDwellKalman = kalmanAntes;
+  });
 
   it('a sessão fica registrada', () => {
     expect(sessaoDoComputador()).toBe(true);

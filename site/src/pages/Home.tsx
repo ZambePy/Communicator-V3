@@ -12,7 +12,7 @@ import '@/components/home/home.css'
 
 /* A home mostra o produto funcionando e fala pouco. Tudo escuro, com as
    partículas ao fundo; a ordem alterna a faixa de destaque (marinho) e a
-   elevada (um degrau acima): o produto (monitor) → o que ele faz
+   elevada (um degrau acima): o produto (vídeo) → o que ele faz
    (capítulos) → o preço do aparelho que ele substitui → quem cuida
    (celular) → privacidade → planos → perguntas → chamada para a beta. O
    texto longo fica nas páginas de dentro. */

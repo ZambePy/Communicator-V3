@@ -190,6 +190,15 @@ export function buildL2CSBlock(
   /** Instante do quadro, em ms. Sem ele não há reuso (gravações e chamadores
    *  antigos mantêm o comportamento determinístico de zerar). */
   nowMs?: number,
+  /**
+   * A plausibilidade já foi conferida no ângulo que a REDE devolveu, e o que
+   * chega aqui é esse ângulo levado ao referencial da cabeça (M4). O limite de
+   * `isGazePlausible` descreve a saída da rede no referencial da câmera: no da
+   * cabeça, olhar para baixo com a cabeça reclinada passa dos 35° sem nada de
+   * errado, e zerar o bloco ali seria um degrau no vetor. Ausente = confere
+   * aqui, como sempre.
+   */
+  plausibilidadeConferida = false,
 ): number[] {
   const conf = typeof confidence === 'number' ? confidence : null;
   const anotar = (motivo: DiagnosticoBloco['motivo'], reusoDeMs: number | null = null) => {
@@ -233,7 +242,7 @@ export function buildL2CSBlock(
   };
 
   // Ângulo implausível é tratado como inválido, não como extremo.
-  if (valid && !isGazePlausible(yaw, pitch)) {
+  if (valid && !plausibilidadeConferida && !isGazePlausible(yaw, pitch)) {
     anotar('implausivel');
     return [0, 0, 0, 0, 0, 0, 0];
   }

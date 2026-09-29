@@ -6,13 +6,13 @@
 // firme; numa sacada (> 15°/s) α = 0,35 e ele acompanha.
 //
 // Em graus, e não em pixels: o mesmo deslocamento em pixels é um ângulo
-// diferente em cada setup (111 px/grau numa 23,6" a 60 cm, 130 numa 40" a
-// 100 cm). Limiar em pixels deixaria o filtro mais ou menos responsivo
-// conforme o monitor.
+// diferente em cada setup (38 px/grau numa 23,6" de 1920 px a 60 cm, 77 na
+// mesma tela em 4K, 52 num notebook de 13" a 45 cm). Limiar em pixels deixaria
+// o filtro mais ou menos responsivo conforme o monitor.
 //
 // Sem geometria a velocidade é `null`: não há default razoável, porque assumir
-// 111 px/grau é assumir uma tela e uma distância específicas. Nesse caso o
-// chamador usa α fixo e sabe que está fazendo isso.
+// um valor de px/grau é assumir uma tela e uma distância específicas. Nesse
+// caso o chamador usa α fixo e sabe que está fazendo isso.
 
 import {
   velocidadeAngularDegPorSeg,

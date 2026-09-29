@@ -23,9 +23,9 @@ describe('RestScreen — Modo Descanso', () => {
     // Verifica título da página
     expect(screen.getByText('Modo Descanso')).toBeInTheDocument();
 
-    // Verifica texto explicativo do repouso
+    // O texto diz o que de fato pausa: as ações pelo olhar, não a Emergência.
     expect(
-      screen.getByText(/O rastreamento ocular de ações foi pausado/i)
+      screen.getByText(/ações pelo olhar estão pausadas — a Emergência continua valendo/i)
     ).toBeInTheDocument();
 
     // Verifica botão de acordar e atributo customizado de dwell de 3000ms

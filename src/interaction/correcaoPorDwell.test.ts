@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { EXPERIMENT } from '../config/experiment';
 import {
   K,
   MEIA_VIDA_MS,
@@ -186,11 +187,16 @@ describe('decaimento', () => {
   });
 });
 
-describe('instância do app', () => {
+// A instância com o INTEGRADOR, que é o pipeline base. O Kalman do V3 (M15)
+// tem os testes dele em `correcaoPorDwell.kalman.test.ts`.
+describe('instância do app (integrador, pipeline base)', () => {
+  const kalmanAntes = EXPERIMENT.correcaoPorDwellKalman;
   beforeEach(() => {
+    EXPERIMENT.correcaoPorDwellKalman = false;
     reiniciarCorrecao();
     definirCorrecaoLigada(true);
   });
+  afterEach(() => { EXPERIMENT.correcaoPorDwellKalman = kalmanAntes; });
 
   it('aprende, corrige e reinicia', () => {
     expect(aprenderComSelecao({

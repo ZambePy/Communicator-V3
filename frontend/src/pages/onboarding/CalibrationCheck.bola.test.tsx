@@ -3,6 +3,7 @@ import { render, screen, act, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
+import { EXPERIMENT } from '@tracker/config/experiment';
 
 /**
  * A tela de coleta é UMA bola azul que percorre a grade.
@@ -14,7 +15,8 @@ import { BrowserRouter } from 'react-router-dom';
  * ponto claro competindo pela fixação que se está tentando medir.
  *
  * Este arquivo trava as três propriedades que o desenho novo depende:
- * uma bola só, ordem de leitura, e pulso apenas durante a coleta.
+ * uma bola só, a ordem dos alvos (a de leitura no pipeline base, a
+ * descorrelacionada no V3) e pulso apenas durante a coleta.
  */
 
 const GRADE = [
@@ -149,20 +151,44 @@ describe('CalibrationCheck — a bola que percorre a grade', () => {
     expect(bola()).toBe(primeira);
   });
 
-  it('percorre a grade em ordem de leitura, mesmo com o motor devolvendo embaralhado', () => {
+  const percorrerTudo = () => {
     iniciar();
     for (let i = 0; i < GRADE.length - 1; i++) concluirPonto();
-
-    const percorridos = startCollectingPoint.mock.calls.map((c) => [
+    return startCollectingPoint.mock.calls.map((c) => [
       Math.round((c[0] as number) * 100) / 100,
       Math.round((c[1] as number) * 100) / 100,
     ]);
-    expect(percorridos).toEqual(GRADE.map((p) => [p.x, p.y]));
+  };
+
+  describe('pipeline base: ordem de leitura', () => {
+    const antes = EXPERIMENT.ordemDescorrelacionada;
+    beforeEach(() => { EXPERIMENT.ordemDescorrelacionada = false; });
+    afterEach(() => { EXPERIMENT.ordemDescorrelacionada = antes; });
+
+    it('percorre a grade em ordem de leitura, mesmo com o motor devolvendo embaralhado', () => {
+      expect(percorrerTudo()).toEqual(GRADE.map((p) => [p.x, p.y]));
+    });
+
+    it('começa no canto superior esquerdo', () => {
+      iniciar();
+      expect(startCollectingPoint.mock.calls[0].slice(0, 2)).toEqual([0.1, 0.1]);
+    });
   });
 
-  it('começa no canto superior esquerdo', () => {
-    iniciar();
-    expect(startCollectingPoint.mock.calls[0].slice(0, 2)).toEqual([0.1, 0.1]);
+  describe('V3: ordem descorrelacionada (M1)', () => {
+    const antes = EXPERIMENT.ordemDescorrelacionada;
+    beforeEach(() => { EXPERIMENT.ordemDescorrelacionada = true; });
+    afterEach(() => { EXPERIMENT.ordemDescorrelacionada = antes; });
+
+    it('começa no centro e passa por cada alvo uma vez, qualquer que seja a ordem do motor', () => {
+      const percorridos = percorrerTudo();
+      expect(percorridos[0]).toEqual([0.5, 0.5]);
+      const chave = (p: number[]) => p.join(',');
+      expect(new Set(percorridos.map(chave)).size).toBe(GRADE.length);
+      expect([...percorridos.map(chave)].sort()).toEqual(GRADE.map((p) => chave([p.x, p.y])).sort());
+      // Não é a ordem de leitura: a altura não pode crescer com o tempo.
+      expect(percorridos).not.toEqual(GRADE.map((p) => [p.x, p.y]));
+    });
   });
 
   it('pulsa SÓ enquanto a janela de coleta está aberta', () => {

@@ -73,9 +73,10 @@ function erroPx(x: number, y: number): number {
   return Math.hypot(p!.x - x * W, p!.y - y * H);
 }
 
-describe('calibração de 13 pontos com correção local dos cantos', () => {
+describe('calibração do perfil padrão (13 pontos; 14 com M7) com correção local dos cantos', () => {
   const persistirAntes = EXPERIMENT.persistirCalibracao;
   const correcaoAntes = EXPERIMENT.correcaoLocal;
+  const m7Antes = EXPERIMENT.alvoInferiorCentral;
 
   beforeAll(() => {
     Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, get: () => W });
@@ -85,19 +86,23 @@ describe('calibração de 13 pontos com correção local dos cantos', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     EXPERIMENT.persistirCalibracao = false;
   });
-  afterEach(() => { EXPERIMENT.correcaoLocal = correcaoAntes; });
+  afterEach(() => {
+    EXPERIMENT.correcaoLocal = correcaoAntes;
+    EXPERIMENT.alvoInferiorCentral = m7Antes;
+  });
   afterAll(() => {
     vi.restoreAllMocks();
     EXPERIMENT.persistirCalibracao = persistirAntes;
     clearCalibration();
   });
 
-  it('ajusta a correção com os 13 alvos e conserta os cantos sem mexer no miolo', () => {
+  it('ajusta a correção com todos os alvos e conserta os cantos sem mexer no miolo', () => {
     EXPERIMENT.correcaoLocal = true;
     calibrar();
     const c = getCorrecaoLocal();
     expect(c).not.toBeNull();
-    expect(c!.centros).toHaveLength(13);
+    // Um centro por alvo: o meio da borda de baixo (M7) entra como os cantos.
+    expect(c!.centros).toHaveLength(EXPERIMENT.alvoInferiorCentral ? 14 : 13);
 
     const cantos: [number, number][] = [[0.05, 0.05], [0.95, 0.05], [0.05, 0.95], [0.95, 0.95]];
     const miolo: [number, number][] = [[0.5, 0.5], [0.25, 0.25], [0.75, 0.5], [0.5, 0.75]];
@@ -126,6 +131,24 @@ describe('calibração de 13 pontos com correção local dos cantos', () => {
     expect(getCorrecaoLocal()).toBeNull();
     restoreReferenceStateFromProfile(JSON.parse(JSON.stringify(ref)));
     expect(getCorrecaoLocal()).toEqual(ref.correcaoLocal);
+  });
+
+  it('M7 com as features saturadas embaixo troca erro de lugar — por isso vem desligada', () => {
+    // O alvo em 95 % da altura tem as mesmas features do meio da linha de
+    // baixo da grade (o olho sintético para de andar em 0,84, como a íris
+    // real sob a pálpebra) e um rótulo mais baixo. O modelo e a correção
+    // local ficam no meio-termo: a faixa de baixo melhora (~111 → ~48 px) e
+    // a linha de baixo da grade piora (~23 → ~71 px).
+    EXPERIMENT.correcaoLocal = true;
+    const medir = () => ({ faixa: erroPx(0.5, 0.95), linha: erroPx(0.5, 0.8375) });
+    EXPERIMENT.alvoInferiorCentral = false;
+    calibrar();
+    const sem = medir();
+    EXPERIMENT.alvoInferiorCentral = true;
+    calibrar();
+    const com = medir();
+    expect(com.faixa).toBeLessThan(sem.faixa * 0.6);
+    expect(com.linha).toBeGreaterThan(sem.linha * 2);
   });
 
   it('com a flag desligada no treino, não há correção: vale o modelo global', () => {

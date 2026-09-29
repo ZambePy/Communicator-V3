@@ -1,5 +1,6 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
+import type { EstadoDoPortao } from './destinoDepoisDoPin';
 import { useAuth } from '../../context/AuthContext';
 import { useLicense } from '../../context/LicenseContext';
 import { temConsentimentoValido } from '../../services/local/consent';
@@ -24,6 +25,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 }) => {
   const { currentProfile, isCaregiver } = useAuth();
   const { status } = useLicense();
+  const location = useLocation();
 
   // 1. Modo Desenvolvedor: atalho deliberado, mantido a pedido para inspecionar
   //    o produto sem refazer o fluxo. §9 do spec o registra como pendência de
@@ -67,8 +69,12 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // Rotas da área do cuidador com a área fechada: vão para Configurações, que
   // mostra o portão do PIN (o paciente sai dele pelo "Cancelar", ao alcance do
   // olhar). Antes nenhuma rota usava esta guarda, e /conta, /historico,
-  // /relatorio, /settings/voice e /caregiver/guide abriam sem PIN.
-  if (requireCaregiver && !isCaregiver) return <Navigate to="/settings" replace />;
+  // /relatorio, /settings/voice e /caregiver/guide abriam sem PIN. O destino
+  // vai junto, para o PIN levar até ele (`useSeguirDepoisDoPin`).
+  if (requireCaregiver && !isCaregiver) {
+    const estado: EstadoDoPortao = { depoisDoPin: location.pathname + location.search };
+    return <Navigate to="/settings" replace state={estado} />;
+  }
 
   return <>{children}</>;
 };

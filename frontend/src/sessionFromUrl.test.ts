@@ -79,6 +79,45 @@ describe('aplicarSessaoDaUrl', () => {
     expect(aplicarSessaoDaUrl(url, '')).toBe(false);
   });
 
+  describe('pipeline e flags do V3 (docs/ROTEIRO_DE_MEDICAO.md)', () => {
+    it('?pipeline=base e ?pipeline=v3 gravam o interruptor', () => {
+      expect(aplicarSessaoDaUrl('?pipeline=base', '')).toBe(true);
+      expect(exp().pipeline).toBe('base');
+      expect(aplicarSessaoDaUrl('?pipeline=v3', '')).toBe(true);
+      expect(exp().pipeline).toBe('v3');
+    });
+
+    it('?pipeline com valor inválido não grava nada', () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      expect(aplicarSessaoDaUrl('?pipeline=v4', '')).toBe(false);
+      expect(exp().pipeline).toBeUndefined();
+    });
+
+    it('?exp.<flag>=1|0 liga ou desliga uma flag do V3 de cada vez', () => {
+      expect(aplicarSessaoDaUrl('?exp.alvoInferiorCentral=1&exp.estimadorDeFixacao=0', '')).toBe(true);
+      expect(exp().alvoInferiorCentral).toBe(true);
+      expect(exp().estimadorDeFixacao).toBe(false);
+    });
+
+    it('M14 aceita o nome do modo, não 1/0', () => {
+      const avisos: string[] = [];
+      vi.spyOn(console, 'warn').mockImplementation((m: unknown) => { avisos.push(String(m)); });
+      expect(aplicarSessaoDaUrl('?exp.suavizacaoDoLandmarker=desligada', '')).toBe(true);
+      expect(exp().suavizacaoDoLandmarker).toBe('desligada');
+      expect(aplicarSessaoDaUrl('?exp.suavizacaoDoLandmarker=1', '')).toBe(false);
+      expect(avisos.join(' ')).toContain('suavizacaoDoLandmarker=1');
+    });
+
+    it('só flags do V3 passam por ?exp. — nem outras flags, nem chaves herdadas do objeto', () => {
+      const avisos: string[] = [];
+      vi.spyOn(console, 'warn').mockImplementation((m: unknown) => { avisos.push(String(m)); });
+      expect(aplicarSessaoDaUrl('?exp.polynomialFeatures=0&exp.toString=1', '')).toBe(false);
+      expect(exp().polynomialFeatures).toBeUndefined();
+      expect(avisos.join(' ')).toContain('exp.polynomialFeatures');
+      expect(avisos.join(' ')).toContain('exp.toString');
+    });
+  });
+
   it('lê da query do hash também (o app usa HashRouter)', () => {
     expect(aplicarSessaoDaUrl('', '#/calibration-check?filtro=kalmanEma')).toBe(true);
     expect(exp().filterMode).toBe('kalmanEma');

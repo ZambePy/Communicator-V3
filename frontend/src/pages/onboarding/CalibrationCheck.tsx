@@ -9,7 +9,14 @@ import { hoverAndFocus, hoverAndFocusBackground } from '../../components/ui/hove
 import { startAccuracyTest } from '@tracker/accuracy';
 import { montarMetaDeMedicao } from '../../utils/autoTestMeta';
 import { emitirResultadoDeCalibracao } from '../../cloud/eventos';
-import { calibracaoEmUsoEhDoPaciente, getCalibrationTimestampMs } from '@tracker/calibration';
+import {
+  aberturaDaColetaMs,
+  alvosDeCalibracao,
+  calibracaoEmUsoEhDoPaciente,
+  currentCalibrationGeometry,
+  DESLOCAMENTO_DA_BOLA_MS,
+  getCalibrationTimestampMs,
+} from '@tracker/calibration';
 import { idadeEmTexto } from '../../idadeEmTexto';
 import type { OpticalCondition } from '@tracker/calibrationProfiles';
 import type { VeredictoDeriva } from '@tracker/calibration';
@@ -22,26 +29,16 @@ import { ProgressoDoOnboarding } from '../../components/ui/ProgressoDoOnboarding
 import { IlustracaoDoRosto } from '../../components/ui/IlustracaoDoRosto';
 import { isDevMode } from '../../devMode';
 import { PreparoDaCalibracao } from '../calibration/PreparoDaCalibracao';
-import { ordemDaGrade } from '../calibration/ordemDaGrade';
+import { ordemDaSequencia } from '../calibration/ordemDaGrade';
+import { EXPERIMENT, gravarExperimento } from '@tracker/config/experiment';
 import { tutorialConcluido } from '../../services/local/tutorialProfile';
 import { useAuth } from '../../context/AuthContext';
 
+/** Alvo na tela, em porcentagem da largura e da altura. */
 interface CalibrationPointUI {
   x: number;
   y: number;
-  name: string;
 }
-const POINT_NAME: Record<string, string> = {
-  '0.1,0.1': 'Superior Esquerdo',
-  '0.5,0.1': 'Superior Central',
-  '0.9,0.1': 'Superior Direito',
-  '0.1,0.5': 'Meio Esquerdo',
-  '0.5,0.5': 'Centro',
-  '0.9,0.5': 'Meio Direito',
-  '0.1,0.9': 'Inferior Esquerdo',
-  '0.5,0.9': 'Inferior Central',
-  '0.9,0.9': 'Inferior Direito',
-};
 
 const OPTICAL_LABELS: Record<OpticalCondition, string> = {
   sem_oculos: 'Sem óculos',
@@ -71,14 +68,6 @@ const DANGER = '#EF4444';
 
 /** Diâmetro da bola que percorre a grade. */
 const TAMANHO_DA_BOLA_PX = 36;
-/**
- * Duração do deslocamento entre dois alvos.
- *
- * Cabe com folga na pausa de confirmação de 1200 ms — a bola chega, para, e só
- * então a coleta do alvo seguinte abre. Mais rápido que isso o olho perde a
- * perseguição e volta a saltar; mais lento, a calibração inteira estica.
- */
-const DESLOCAMENTO_DA_BOLA_MS = 620;
 
 const humanMessage: Record<string, string> = {
   singular_matrix:
@@ -117,6 +106,14 @@ export const CalibrationCheck: React.FC = () => {
   const l2csReady = l2csStatus === 'ready' || l2csStatus === 'disabled';
   const podeComecar = l2csReady && checksProntos;
   const l2csFailed = l2csStatus === 'error';
+  // 'error' tem duas causas. Na carga (arquivo ausente, sessão do ONNX que não
+  // sobe) o worker nunca ficou pronto e não há provider em vigor: é o caso de
+  // calibrar só com a íris. Depois da carga, é a saída travada (a imagem da
+  // câmera parada ou preta por segundos), que volta sozinha — oferecer ali uma
+  // troca gravada no disco rebaixaria a máquina por causa de um soluço.
+  const l2csNaoCarregou =
+    l2csFailed && (getDiagnostics()?.l2cs?.executionProvider ?? null) === null;
+  const [falhaAoGravarEscolha, setFalhaAoGravarEscolha] = useState(false);
 
   const [stage, setStage] = useState<
     'tutorial' | 'calibrating' | 'testing' | 'transitioning' | 'drift-warning'
@@ -211,11 +208,7 @@ export const CalibrationCheck: React.FC = () => {
   const [sessionPoints, setSessionPoints] = useState<CalibrationPointUI[] | null>(null);
 
   const toUiPoints = (targets: readonly { x: number; y: number }[]): CalibrationPointUI[] =>
-    targets.map((t) => ({
-      x: t.x * 100,
-      y: t.y * 100,
-      name: POINT_NAME[`${t.x},${t.y}`] ?? '',
-    }));
+    targets.map((t) => ({ x: t.x * 100, y: t.y * 100 }));
 
   /** Congela os alvos desta sessão. Chamado UMA vez, após startCalibrationMode. */
   const commitSessionTargets = (targets: readonly { x: number; y: number }[]) => {
@@ -227,22 +220,11 @@ export const CalibrationCheck: React.FC = () => {
 
   // Lista NOMINAL — usada só para o preview do tutorial, antes de qualquer
   // sessão começar. Nunca alimenta a coleta.
+  // Sem a API do engine (ainda subindo), o plano nominal da própria
+  // calibração — antes era uma grade 3×3 a 10/50/90 % que não é a de ninguém.
   const nominalPoints: CalibrationPointUI[] = useMemo(() => {
     const targets = calibration.getCalibrationTargets?.() ?? [];
-    if (targets.length === 0) {
-      return [
-        { x: 0.1, y: 0.1 },
-        { x: 0.5, y: 0.1 },
-        { x: 0.9, y: 0.1 },
-        { x: 0.1, y: 0.5 },
-        { x: 0.5, y: 0.5 },
-        { x: 0.9, y: 0.5 },
-        { x: 0.1, y: 0.9 },
-        { x: 0.5, y: 0.9 },
-        { x: 0.9, y: 0.9 },
-      ].map((t) => ({ x: t.x * 100, y: t.y * 100, name: POINT_NAME[`${t.x},${t.y}`] ?? '' }));
-    }
-    return toUiPoints(targets);
+    return toUiPoints(targets.length > 0 ? targets : alvosDeCalibracao(currentCalibrationGeometry()));
   }, [calibrationMode, calibration]);
 
   // O que a tela desenha: os alvos da sessão quando existe uma, senão o preview.
@@ -437,9 +419,12 @@ export const CalibrationCheck: React.FC = () => {
           }
         }
         if (action === 'redo') {
-          // Attempt descartado — não exporta um JSONL parcial.
+          // Attempt descartado — não exporta um JSONL parcial. O modelo que
+          // acabou de ser treinado continua em uso até a calibração nova
+          // terminar, como ficou gravado no disco: apagá-lo aqui deixava o
+          // olhar sem modelo — nem o "Começar" nem a Emergência aceitam o olhar
+          // assim — e um "Voltar" levava ao app sem calibração nenhuma.
           finalizeAutoRecordingRef.current(false);
-          calibration.clear?.();
           setStage('tutorial');
           setCompletedList([]);
           return;
@@ -462,16 +447,18 @@ export const CalibrationCheck: React.FC = () => {
    */
   const iniciarSequencia = (targets: readonly { x: number; y: number }[]) => {
     const sessionTargets = commitSessionTargets(targets);
-    // ORDEM DE LEITURA, não sorteada.
-    //
-    // A ordem era embaralhada (Fisher-Yates) para evitar que o paciente
-    // antecipasse o próximo alvo. Com UMA bola percorrendo a grade, a ordem
-    // sorteada custa mais do que rende: cada alvo vira um salto atravessando a
-    // tela, o olho chega depois da bola, e os primeiros quadros da janela de
-    // coleta registram o olhar ainda em trânsito. O percurso contínuo é o que
-    // permite PERSEGUIR a bola em vez de caçá-la — e a perseguição chega no
-    // alvo junto com ela.
-    const order = ordemDaGrade(sessionTargets);
+    // Ordem calculada, não sorteada (M1). A ordem de leitura deixava a altura
+    // do alvo crescer junto com o tempo, e a deriva da cabeça — quase sempre
+    // num sentido só — virava ganho vertical no ajuste. A ordem
+    // descorrelacionada começa no centro, não tem correlação com x nem com y e
+    // tem caminho mais curto que a de leitura; sorteio puro faria a bola
+    // atravessar a tela a cada alvo. Com `ordemDescorrelacionada` desligada
+    // volta a ordem de leitura. Ver `ordemDaGrade.ts`.
+    const proporcao =
+      typeof window !== 'undefined' && window.innerHeight > 0
+        ? window.innerWidth / window.innerHeight
+        : 16 / 9;
+    const order = ordemDaSequencia(sessionTargets, EXPERIMENT.ordemDescorrelacionada, proporcao);
     ordemDaSequenciaRef.current = order;
     setCompletedList([]);
     setLastCompletedPoint(null);
@@ -610,9 +597,13 @@ export const CalibrationCheck: React.FC = () => {
         if (proximo !== undefined) setCurrentIndex(proximo);
         setLastCompletedPoint(pointIdx);
         setCompletedList((prev) => [...prev, pointIdx]);
+        // Com `assentamentoPelaChegada` (M8) a coleta abre quando a bola CHEGA
+        // e o motor descarta os 800 ms seguintes; sem a flag, abre 1200 ms
+        // depois e descarta 600 ms (o primeiro dado útil vinha 1180 ms depois
+        // de a bola parar). Ver `aberturaDaColetaMs` em calibration.ts.
         setTimeout(() => {
           if (isMounted.current) startNextPoint(step + 1);
-        }, 1200);
+        }, aberturaDaColetaMs());
       } else {
         retryCountRef.current++;
         if (retryCountRef.current >= MAX_RETRIES_PER_POINT) {
@@ -1183,9 +1174,9 @@ export const CalibrationCheck: React.FC = () => {
               </button>
 
               {/* Reaproveitar a calibração salva.
-                  Refazer nove pontos é um a dois minutos de fixação para quem
-                  tem ELA, e nem sempre há o que ganhar: se a posição não mudou,
-                  o modelo de ontem vale.
+                  Refazer a calibração inteira é perto de um minuto de fixação
+                  para quem tem ELA, e nem sempre há o que ganhar: se a posição
+                  não mudou, o modelo de ontem vale.
                   A IDADE vai junto de propósito. "Salva" sozinho não ajuda a
                   decidir; uma calibração de semanas atrás, feita com o paciente
                   noutra posição, é pior que refazer — e só a data denuncia
@@ -1221,24 +1212,61 @@ export const CalibrationCheck: React.FC = () => {
                   onClick={() => handleStart(true)}
                   /* idem ao botão da calibração completa: dwell longo em vez de
                      bloqueio, para a recalibração rápida ser alcançável só
-                     com o olhar. */
+                     com o olhar — e a mesma espera pela câmera. Sem ela, com o
+                     botão completo dizendo "Ajuste a câmera para começar", a
+                     rápida começava assim mesmo. */
+                  disabled={!podeComecar}
+                  aria-disabled={!podeComecar}
                   data-dwell-ms="2500"
                   data-testid="start-calibration-quick"
                   data-recovery="true"
                   style={{
                     background: 'transparent',
-                    color: TEXT_PRIMARY,
+                    color: podeComecar ? TEXT_PRIMARY : TEXT_DIM,
                     border: `1px solid rgba(255,255,255,0.35)`,
                     padding: '0.7rem 2.2rem',
                     borderRadius: '2rem',
                     fontSize: '0.95rem',
                     fontWeight: 700,
-                    cursor: 'pointer',
+                    cursor: podeComecar ? 'pointer' : 'not-allowed',
+                    opacity: podeComecar ? 1 : 0.6,
                     transition: 'all 0.15s',
                   }}
                   {...hoverAndFocusBackground('transparent', 'rgba(255,255,255,0.08)')}
                 >
                   Recalibração rápida (4 pontos)
+                </button>
+              )}
+
+              {/* O modelo do L2CS não carregou (arquivo ausente, sessão do ONNX
+                  que não sobe): nenhum dos dois botões de começar funciona, e
+                  "recarregar" não traz de volta um arquivo que não existe. O
+                  caminho que sobra é o do instalador — só as features de íris.
+                  A escolha fica gravada neste computador como a do `?ep=off`
+                  (`?ep=auto` volta ao modelo). Sem conseguir gravar, recarregar
+                  voltaria a esta mesma tela: fica o aviso. */}
+              {l2csNaoCarregou && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (gravarExperimento('l2cs', 'off')) window.location.reload();
+                    else setFalhaAoGravarEscolha(true);
+                  }}
+                  data-dwell-ms="2500"
+                  data-testid="calibrar-so-com-iris"
+                  data-recovery="true"
+                  style={{
+                    background: 'transparent',
+                    color: TEXT_PRIMARY,
+                    border: `1px solid ${ACCENT}`,
+                    padding: '0.85rem 2rem',
+                    borderRadius: '2rem',
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Calibrar só com a íris
                 </button>
               )}
 
@@ -1256,8 +1284,12 @@ export const CalibrationCheck: React.FC = () => {
               >
                 {l2csStatus === 'loading' &&
                   'Aguardando o modelo (~10-15s na 1ª vez). Não feche a página.'}
-                {l2csFailed &&
-                  'Não foi possível carregar o modelo. Recarregue a página e tente novamente.'}
+                {l2csNaoCarregou &&
+                  (falhaAoGravarEscolha
+                    ? 'Não deu para gravar a escolha neste computador (armazenamento cheio ou bloqueado).'
+                    : 'O modelo do olhar (L2CS) não carregou. Dá para calibrar só com a íris — o mesmo rastreamento do instalador.')}
+                {l2csFailed && !l2csNaoCarregou &&
+                  'O modelo do olhar (L2CS) parou de responder: a imagem da câmera ficou parada ou escura. Ele volta sozinho quando a imagem voltar.'}
               </div>
             </div>
           </div>
@@ -1368,9 +1400,9 @@ export const CalibrationCheck: React.FC = () => {
             {/* ── A bola ───────────────────────────────────────────────────
                 UMA bola percorre a grade inteira. Não é um elemento por alvo:
                 é o MESMO nó mudando de posição, e é essa continuidade que
-                deixa o olho PERSEGUIR a bola. Nove elementos que acendem e
-                apagam dariam nove saltos sacádicos, e o olho chega no alvo
-                novo depois que a janela de coleta já abriu.
+                deixa o olho PERSEGUIR a bola. Um elemento por alvo, acendendo
+                e apagando, daria um salto sacádico por alvo, e o olho chegaria
+                ao alvo novo depois que a janela de coleta já abriu.
 
                 O marcador cinza de "o alvo vai aparecer aqui" saiu de vez: ele
                 disputava a fixação com o único ponto que se quer fixar, e

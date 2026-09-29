@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import React from 'react';
 import { ProtectedRoute } from './ProtectedRoute';
+import { lerDestinoDepoisDoPin } from './destinoDepoisDoPin';
 import { LicenseProvider } from '../../context/LicenseContext';
 import { AuthProvider } from '../../context/AuthContext';
 import { LICENSE_KEY } from '../../context/LicenseContext';
@@ -29,6 +30,12 @@ import type { LicenseService } from '../../services/license';
 // -----------------------------------------------------------------------------
 
 let service: LicenseService;
+
+/** O portão do PIN, mostrando o destino que a guarda mandou junto. */
+function PortaoDeTeste() {
+  const { state } = useLocation();
+  return <div>portão do PIN{lerDestinoDepoisDoPin(state) ? ` → ${lerDestinoDepoisDoPin(state)}` : ''}</div>;
+}
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -71,7 +78,7 @@ const montar = (requireCaregiver = false) =>
             <Route path="/consent" element={<div>tela de consentimento</div>} />
             <Route path="/profiles" element={<div>tela de perfis</div>} />
             <Route path="/menu" element={<div>tela de menu</div>} />
-            <Route path="/settings" element={<div>portão do PIN</div>} />
+            <Route path="/settings" element={<PortaoDeTeste />} />
           </Routes>
         </MemoryRouter>
       </AuthProvider>
@@ -158,7 +165,8 @@ describe('área do cuidador', () => {
 
     montar(true);
 
-    await waitFor(() => expect(viu('portão do PIN')).toBeInTheDocument());
+    // O destino vai junto, para o PIN levar até ele.
+    await waitFor(() => expect(viu('portão do PIN → /protegida')).toBeInTheDocument());
     expect(screen.queryByText('conteudo protegido')).toBeNull();
   });
 });

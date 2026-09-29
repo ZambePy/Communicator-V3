@@ -14,6 +14,8 @@ import type { RidgeModel } from './ridge';
 import type { Pose } from './poseCompensation';
 import type { CentroFacial } from './translationCompensation';
 import type { CorrecaoLocal } from './correcaoLocal';
+import type { FusaoPorCovariancia } from './fusaoBinocular';
+import type { RuidoDaCalibracao } from './ruidoDaCalibracao';
 
 /**
  * Estado de referência da calibração.
@@ -51,6 +53,13 @@ export interface CalibrationReferenceState {
   /** Correção local dos cantos (`correcaoLocal.ts`), ajustada no treino junto
    *  com o modelo. Ausente em perfis anteriores a ela: vale o modelo global. */
   correcaoLocal?: CorrecaoLocal | null;
+  /** Fusão binocular por variância mínima (M10), medida no treino. Ausente
+   *  sem a flag e em perfis anteriores: vale a fusão por confiabilidade. */
+  fusao?: FusaoPorCovariancia | null;
+  /** Ruído de fixação medido na calibração (M9/M15). Ausente sem as flags. */
+  ruido?: RuidoDaCalibracao | null;
+  /** Meio dos olhos no treino, em cm nas coordenadas da câmera (M12). */
+  olhoCm?: [number, number, number] | null;
 }
 
 // Categorias observáveis pelo cuidador. `oculos_progressivo` é registrado
@@ -126,7 +135,12 @@ export interface StoredCalibrationProfile {
     // ver detectOutlierPoints em calibration.ts). Só SINALIZA: não é usado
     // para retreinar automaticamente sem o ponto. UI/log deve chamar este
     // número de "indicativo" — com N~9 alvos, MAD é frágil.
+    // Com `metodo: 'huber'` (calibração robusta, M6) os campos têm outro
+    // significado: `residualNorm` e `zScore` são o resíduo estudentizado do
+    // ajuste de Huber (u), `madThreshold` é o corte em u e `medianResidual` é
+    // a mediana de |u|.
     outlierTargets?: {
+      metodo?: 'huber';
       count: number;                 // quantos alvos únicos marcados como outlier
       indices: number[];             // índices em `perTarget` que passaram do threshold
       medianResidual: number;        // erro LOO mediano (referência)

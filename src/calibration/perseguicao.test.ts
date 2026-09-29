@@ -183,11 +183,12 @@ describe('trajetória', () => {
   });
 
   it('dez segundos na bancada de referência ficam bem abaixo do limite fisiológico', () => {
-    // 23,6" a 60 cm dão ~111 px/grau. Dez segundos é a duração do artigo, e o
-    // resultado (~4°/s) cai na ponta LENTA da faixa que ele varreu (3,9 a
-    // 23,3°/s) — que é onde ele mediu perseguição mais confiável.
-    const v = velocidadeDegPorSeg(10_000, 1920, 1080, 111)!;
-    expect(v).toBeGreaterThan(3);
+    // 23,6" de 1920 px a 60 cm dão ~38,5 px/grau. Dez segundos é a duração do
+    // artigo, e o resultado (~12°/s) cai dentro da faixa que ele varreu (3,9 a
+    // 23,3°/s), longe do limite fisiológico.
+    const v = velocidadeDegPorSeg(10_000, 1920, 1080, 38.5)!;
+    expect(v).toBeGreaterThan(3.9);
+    expect(v).toBeLessThan(23.3);
     expect(v).toBeLessThan(VELOCIDADE_MAX_DEG_POR_SEG);
   });
 

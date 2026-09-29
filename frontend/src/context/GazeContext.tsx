@@ -17,13 +17,18 @@ import type {
   L2CSStatus,
   RecordingApi,
   EngineDiagnostics,
+  MedidaDoPontoDaRecalibracao,
 } from '@tracker/tracker/engine';
 import {
   stepDwell,
   createDwellState,
+  configComTolerancia,
+  dentroDaFolga,
   DEFAULT_DWELL_CONFIG,
+  FOLGA_DE_INTRUSAO_DEG,
   type DwellTarget,
 } from '@tracker/interaction/dwell';
+import { degToPx, pxPerCmFromScreen } from '../design/gazeMetrics';
 import { velocidadeDaBorda, estadoInicialDeBorda } from '@tracker/interaction/edgeScroll';
 import { rolarSobOOlhar } from '../rolarSobOOlhar';
 import { estiloDoCursor, limitarTamanho } from '@tracker/interaction/cursorStyle';
@@ -42,10 +47,20 @@ import { cursorVisivelNoTeste } from '@tracker/accuracy';
 import { rotaMostraCursor } from '../rotasComCursor';
 import { stepBlinkClick, criarEstadoBlinkClick } from '@tracker/interaction/blinkClick';
 import { GazeStatusBanner } from '../components/GazeStatusBanner';
-import { ReancoragemOverlay, DURACAO_DO_REAJUSTE_MS } from '../components/ReancoragemOverlay';
+import {
+  ReancoragemOverlay,
+  DURACAO_DO_REAJUSTE_MS,
+  PONTOS_DA_RECALIBRACAO_RAPIDA,
+} from '../components/ReancoragemOverlay';
 import { ScanningMode } from '../components/ScanningMode';
 import type { FilterPreset, FilterPresetV2 } from '@tracker/oneEuroFilter';
-import { aprenderComSelecao, deveAprender } from '@tracker/interaction/correcaoPorDwell';
+import {
+  aprenderComSelecao,
+  deveAprender,
+  isoladoNaTela,
+  registrarAcaoDoUsuario,
+} from '@tracker/interaction/correcaoPorDwell';
+import { HistoricoDoOlhar } from '@tracker/interaction/janelaDoDwell';
 import { modoApresentacaoAtivo } from '../services/apresentacao';
 import { emergenciaAtiva } from '../services/estadoDeEmergencia';
 import { EXPERIMENT } from '@tracker/config/experiment';
@@ -56,7 +71,12 @@ import {
   type CameraState,
   type TuningStep,
 } from '@tracker/cameraTuner';
-import { getSaturacaoDoOlhar, type SuspensaoDaCalibracao } from '@tracker/calibration';
+import {
+  ACOMODACAO_DESDE_A_CHEGADA_MS,
+  getSaturacaoDoOlhar,
+  getUltimaPredicaoSemCorrecao,
+  type SuspensaoDaCalibracao,
+} from '@tracker/calibration';
 import { aoClicar, aoNavegar, criarRearme, filtrarAlvo } from '@tracker/interaction/rearmePorSaida';
 import { detectFlicker, inferPowerLineHz } from '@tracker/flickerDetector';
 import { AvisoDeDistancia } from '@tracker/distanceAdvisory';
@@ -86,6 +106,48 @@ export type {
 // conversão deixou de existir. Ver `dwellMs.ts`.
 // Data-no-dwell="true" on any element that should opt out.
 export const DWELL_SELECTOR = 'button, a, [role="button"], [role="link"]';
+
+const ASSENTAMENTO_DO_PONTO_MS = ACOMODACAO_DESDE_A_CHEGADA_MS;
+/** O reajuste vira a recalibração em cinco pontos? Só com o Kalman, que é quem sabe usá-los. */
+const usaRecalibracaoEmPontos = () => EXPERIMENT.recalibracaoRapidaAfim && EXPERIMENT.correcaoPorDwellKalman;
+/** O que o aviso promete para a recalibração em pontos: 10 s seguindo o ponto. */
+const REAJUSTE_EM_PONTOS = {
+  segundos: (PONTOS_DA_RECALIBRACAO_RAPIDA.length * DURACAO_DO_REAJUSTE_MS) / 1000,
+  seguirPonto: true,
+} as const;
+
+/**
+ * Com o Kalman da correção por dwell (M15), o `data-isolado` da marcação é
+ * conferido na tela: nenhum outro alvo acionável dentro da elipse do teto da
+ * correção (`isoladoNaTela`). Sem o Kalman, vale só a marcação, como antes.
+ */
+function isoladoMedido(alvo: HTMLElement): boolean {
+  if (!EXPERIMENT.correcaoPorDwellKalman) return true;
+  const r = alvo.getBoundingClientRect();
+  const vizinhos = Array.from(document.querySelectorAll<HTMLElement>(DWELL_SELECTOR))
+    .filter((el) => el !== alvo && !alvo.contains(el) && !el.contains(alvo))
+    .map((el) => el.getBoundingClientRect());
+  return isoladoNaTela(
+    { x: r.left + r.width / 2, y: r.top + r.height / 2 },
+    vizinhos,
+    { largura: document.documentElement.clientWidth, altura: document.documentElement.clientHeight },
+  );
+}
+
+/**
+ * Tolerância a intrusões (M19): o ponto está na folga EM VOLTA do alvo — fora
+ * do retângulo, a menos de `folgaPx` dele — e o alvo continua à vista (o
+ * elemento do topo, no centro do alvo, é ele ou está dentro dele)? Dentro do
+ * retângulo sem o alvo sob o olhar, ou com o centro coberto, alguma coisa
+ * está por cima dele, e o dwell não pode terminar ali.
+ */
+function naFolgaEAVista(p: { x: number; y: number }, alvo: HTMLElement, folgaPx: number): boolean {
+  const r = alvo.getBoundingClientRect();
+  const dentroDoRetangulo = p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
+  if (dentroDoRetangulo || !dentroDaFolga(p, r, folgaPx)) return false;
+  const topo = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return topo !== null && alvo.contains(topo);
+}
 
 /**
  * O que continua acionável pelo olhar durante a calibração: a Emergência e o
@@ -168,9 +230,9 @@ interface GazeContextValue {
    */
   gazeLostMessage: string | null;
   /**
-   * Reajuste rápido (alvo único de 2 s) em curso. O `EmergencyProvider` lê
-   * isto para pôr o botão de Emergência POR CIMA do alvo preto do reajuste —
-   * ele nunca pode sumir, nem por 2 segundos.
+   * Reajuste rápido em curso. O `EmergencyProvider` lê isto para pôr o botão
+   * de Emergência POR CIMA do alvo preto do reajuste — ele nunca pode sumir,
+   * nem por 2 segundos.
    */
   reancorando: boolean;
   /**
@@ -374,6 +436,16 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // o ref garante que vejam o valor atual, não o do primeiro render.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  /** 1° em px na geometria do usuário, para a folga de intrusão (M19). */
+  const folgaDeIntrusaoPx = () => degToPx(
+    FOLGA_DE_INTRUSAO_DEG,
+    settingsRef.current.viewingDistanceCm,
+    pxPerCmFromScreen(
+      document.documentElement.clientWidth,
+      document.documentElement.clientHeight,
+      settingsRef.current.screenDiagonalIn,
+    ),
+  );
   // Mesma razão do `settingsRef`: o boot roda fora do ciclo de render e não
   // pode entrar na lista de dependências por causa de uma função de contexto.
   const updateSettingsRef = useRef(updateSettings);
@@ -411,14 +483,15 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [avisoDePostura, setAvisoDePostura] = useState(false);
   /**
    * Vigia de recalibração: o motivo em exibição (`null` = nada). O vigia
-   * existia no engine e ninguém o consultava — "os nove pontos só são pedidos
-   * quando o modelo deixou de descrever a pessoa" era verdade só no papel.
+   * existia no engine e ninguém o consultava — "a calibração inteira só é
+   * pedida quando o modelo deixou de descrever a pessoa" era verdade só no
+   * papel.
    * A política de exibição (duas consultas seguidas, soneca de 10 min) é a de
    * `vigiaDeRecalibracao.aviso.ts`; aqui só há o relógio e o estado.
    */
   const [avisoDeRecalibracao, setAvisoDeRecalibracao] = useState<MotivoDeRecalibracao>(null);
   const vigiaRef = useRef<EstadoDoAviso>(estadoInicialDoAviso());
-  /** Reajuste rápido (alvo único de 2 s) em curso. */
+  /** Reajuste rápido em curso. */
   const [reancorando, setReancorando] = useState(false);
   const [calibrationInvalidated, setCalibrationInvalidated] = useState<string | null>(null);
   /** Calibração suspensa pela janela fora do tamanho em que foi feita (texto do banner). */
@@ -539,6 +612,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const blinkClickRef = useRef(criarEstadoBlinkClick());
   // Nó que está com o realce `gaze-hover` aplicado no DOM.
   const hoveredNodeRef = useRef<HTMLElement | null>(null);
+  // Correção por dwell em malha aberta (M15): a predição antes da correção,
+  // quadro a quadro, e quando o olhar entrou no alvo sob o dwell.
+  const historicoDoOlharRef = useRef(new HistoricoDoOlhar());
+  const entradaNoAlvoRef = useRef<{ alvo: HTMLElement | null; t: number }>({ alvo: null, t: 0 });
 
   /** Remove realce e barra de progresso do nó atualmente destacado. */
   const clearDwellVisuals = React.useCallback(() => {
@@ -576,6 +653,11 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     engineRef.current?.calibration.setCameraFovDeg?.(settings.cameraHorizontalFovDeg);
   }, [settings.cameraHorizontalFovDeg]);
+
+  // Saída 6DoF (M12): o lado da câmera só chega ao pipeline com a flag.
+  useEffect(() => {
+    engineRef.current?.calibration.setPosicaoDaCamera?.(EXPERIMENT.saida6DoF ? settings.posicaoDaCamera : null);
+  }, [settings.posicaoDaCamera]);
 
   const subscribe = useCallback((cb: (s: GazeSample) => void) => {
     subscribersRef.current.add(cb);
@@ -902,6 +984,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // e o aviso de distância ficam inativos em silêncio.
     engine.calibration.setEyeDominance(settingsRef.current.eyeDominance);
     engine.calibration.setCameraFovDeg(settingsRef.current.cameraHorizontalFovDeg);
+    engine.calibration.setPosicaoDaCamera?.(EXPERIMENT.saida6DoF ? settingsRef.current.posicaoDaCamera : null);
 
     // Cursor DOM node — direct writes via ref, no React state.
     // transform-origin: center lets scale() grow around the cursor's centre
@@ -1165,7 +1248,20 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else {
         const el = document.elementFromPoint(sample.x, sample.y);
         // `?? null`: sem elemento sob o olhar, `el?.closest` dá `undefined`.
-        const node = (el?.closest(DWELL_SELECTOR) as HTMLElement | null | undefined) ?? null;
+        const noSobOOlhar = (el?.closest(DWELL_SELECTOR) as HTMLElement | null | undefined) ?? null;
+        // Tolerância a intrusões (M19): com um dwell já começado, o olhar que
+        // escorrega para o espaço VAZIO a menos de 1° do alvo continua valendo
+        // para ele. Outro alvo sob o olhar sempre ganha: a folga não invade.
+        // Vazio quer dizer FORA do retângulo do alvo e com o alvo ainda à
+        // vista: dentro do retângulo sem o alvo sob o olhar, alguma coisa o
+        // cobre (o reajuste, um aviso, um modal), e um dwell não pode terminar
+        // num botão escondido.
+        const emDwell = dwellStateRef.current.targetKey as HTMLElement | null;
+        const node = noSobOOlhar === null && EXPERIMENT.toleranciaIntrusoes && emDwell?.isConnected
+            && dwellStateRef.current.elapsedMs > 0
+            && naFolgaEAVista({ x: sample.x, y: sample.y }, emDwell, folgaDeIntrusaoPx())
+          ? emDwell
+          : noSobOOlhar;
 
         // Rearme por saída (FE-7): o alvo recém-clicado — e, numa tela nova,
         // o que estiver sob o olhar "herdado" da anterior — só vale depois que
@@ -1173,15 +1269,43 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // router).
         // Mesmo relógio do dwell: o carimbo da amostra.
         const tDaAmostra = Number.isFinite(sample.timestamp) ? sample.timestamp : now;
+        // Correção por dwell em malha aberta (M15): guarda a predição deste
+        // quadro ANTES da correção e do clamp, em px. Olho fechado ou rosto
+        // ausente não trazem predição nova.
+        if (EXPERIMENT.correcaoPorDwellKalman && sample.hasFace && sample.eyeState !== 'closed'
+            && sample.uncalibrated !== true) {
+          const pre = getUltimaPredicaoSemCorrecao();
+          if (pre) {
+            historicoDoOlharRef.current.registrar({
+              t: tDaAmostra,
+              x: pre.x * document.documentElement.clientWidth,
+              y: pre.y * document.documentElement.clientHeight,
+              saturada: getSaturacaoDoOlhar().fora,
+            });
+          }
+        }
         const hashAgora = window.location.hash;
         if (ultimoHashRef.current === null) {
           // Primeira amostra: não é troca de tela.
           ultimoHashRef.current = hashAgora;
         } else if (hashAgora !== ultimoHashRef.current) {
           ultimoHashRef.current = hashAgora;
-          rearmeRef.current = aoNavegar(tDaAmostra);
+          rearmeRef.current = aoNavegar(tDaAmostra, { x: sample.x, y: sample.y });
+        } else if (
+          rearmeRef.current.herdarAteMs === null
+          && rearmeRef.current.bloqueado instanceof Element
+          && !rearmeRef.current.bloqueado.isConnected
+        ) {
+          // O alvo clicado saiu da tela sem a rota mudar: o grupo do teclado
+          // que vira letras (e as letras que voltam aos grupos), o painel do
+          // teste que fecha sobre a preparação. O que está agora sob o olhar
+          // parado é conteúdo novo, como numa tela nova — e o bloqueio do nó
+          // que sumiu não protegia nada: com o olhar parado numa célula, o
+          // teclado abria o grupo, escrevia a letra da mesma célula, voltava
+          // aos grupos e repetia (percurso da Fase 8).
+          rearmeRef.current = aoNavegar(tDaAmostra, { x: sample.x, y: sample.y });
         }
-        const rearme = filtrarAlvo(rearmeRef.current, node, tDaAmostra);
+        const rearme = filtrarAlvo(rearmeRef.current, node, tDaAmostra, { x: sample.x, y: sample.y });
         rearmeRef.current = rearme.estado;
 
         // `data-dwell-ms` inválido (NaN) não pode virar dwell instantâneo.
@@ -1247,12 +1371,20 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             eyeState: sample.eyeState ?? 'unknown',
           },
           target,
-          {
-            ...DEFAULT_DWELL_CONFIG,
-            dwellMs: dwellMsRef.current,
-          }
+          configComTolerancia(
+            { ...DEFAULT_DWELL_CONFIG, dwellMs: dwellMsRef.current },
+            EXPERIMENT.toleranciaIntrusoes,
+          )
         );
-        dwellStateRef.current = outcome.state;
+        // Perda longa de rosto com a pausa ligada (M21): passados os 500 ms, o
+        // dwell zera — e zera de vez. Sem isto, o `stepDwell` guardava o alvo
+        // como numa saída comum, e voltar a ele dentro da memória de saída
+        // (300–400 ms) devolvia o progresso: a perda de até ~900 ms valia como
+        // pausa, e com o rosto sumido o olhar pode ter ido para a porta.
+        dwellStateRef.current = EXPERIMENT.pausaNaPerdaCurta && outcome.blockedBy === 'no-face'
+            && outcome.state.targetKey === null
+          ? { ...outcome.state, lastTargetKey: null, lastTargetElapsedMs: 0, exitTs: null }
+          : outcome.state;
 
         // ── Piscada como clique ─────────────────────────────────────────
         //
@@ -1292,6 +1424,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             // duas.
             clearDwellVisuals();
             dwellStateRef.current = createDwellState();
+            // Toda ação conta para a quarentena de desfazer da correção (M15).
+            registrarAcaoDoUsuario({ desfazer: alvoDaPiscada?.dataset.desfazer === 'true', agoraMs: now });
             if (alvoDaPiscada?.isConnected) {
               rearmeRef.current = aoClicar(alvoDaPiscada, alvoDaPiscada.dataset.repetir === 'true');
               confirmarSelecao(alvoDaPiscada);
@@ -1305,6 +1439,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (hoverNode !== hoveredNodeRef.current) {
           clearDwellVisuals();
           hoveredNodeRef.current = hoverNode;
+          entradaNoAlvoRef.current = { alvo: hoverNode, t: tDaAmostra };
           if (hoverNode?.isConnected) hoverNode.classList.add('gaze-hover');
         }
 
@@ -1317,6 +1452,9 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } else if (outcome.effect.type === 'click') {
           const alvo = outcome.effect.targetKey as HTMLElement;
           clearDwellVisuals();
+          // A ação consolida — ou, se for desfazer, descarta — o rótulo que
+          // estava em quarentena na correção por dwell (M15).
+          registrarAcaoDoUsuario({ desfazer: alvo.dataset.desfazer === 'true', agoraMs: now });
 
           // ── Correção por dwell (sprint S3) ────────────────────────────
           //
@@ -1332,7 +1470,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (
             alvo.isConnected &&
             deveAprender({
-              alvoIsolado: alvo.dataset.isolado === 'true',
+              alvoIsolado: alvo.dataset.isolado === 'true' && isoladoMedido(alvo),
               degradado: isDegraded,
               apresentacao: modoApresentacaoAtivo(),
               emergencia: emergenciaAtiva(),
@@ -1343,6 +1481,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             })
           ) {
             const r = alvo.getBoundingClientRect();
+            // Janela estável do dwell desde que o olhar entrou NESTE alvo.
+            const entrada = entradaNoAlvoRef.current.alvo === alvo ? entradaNoAlvoRef.current.t : tDaAmostra;
             aprenderComSelecao({
               centroDoAlvo: { x: r.left + r.width / 2, y: r.top + r.height / 2 },
               olhar: { x: sample.x, y: sample.y },
@@ -1351,6 +1491,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 largura: document.documentElement.clientWidth,
                 altura: document.documentElement.clientHeight,
               },
+              medida: EXPERIMENT.correcaoPorDwellKalman
+                ? historicoDoOlharRef.current.medir(entrada, tDaAmostra)
+                : null,
+              ladoDoAlvoPx: { largura: r.width, altura: r.height },
             });
           }
 
@@ -1515,7 +1659,11 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // do `blinkHold`, e de propósito: numa piscada a pessoa continua
           // olhando para o alvo; com o rosto perdido, o olhar pode ter ido
           // para a porta.
-          if (fb.zerarDwell) {
+          // Com a pausa na perda curta (M21), quem decide é o próprio dwell:
+          // perda de rosto abaixo de `lostResetMs` (500 ms) PAUSA, acima ZERA —
+          // uma piscada que o detector classificou como rosto perdido não
+          // apaga mais o progresso de uma seleção.
+          if (fb.zerarDwell && !EXPERIMENT.pausaNaPerdaCurta) {
             clearDwellVisuals();
             // O período refratário SOBREVIVE ao descarte: ele existe para uma
             // seleção não repetir logo em seguida, e um quadro sem rosto logo
@@ -2218,6 +2366,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isCalibrated: () => engineRef.current?.calibration.isCalibrated() ?? false,
       setEyeDominance: (d) => engineRef.current?.calibration.setEyeDominance(d),
       setCameraFovDeg: (fov) => engineRef.current?.calibration.setCameraFovDeg(fov),
+      setPosicaoDaCamera: (p) => engineRef.current?.calibration.setPosicaoDaCamera(p),
       getCalibrationDistancesCm: () =>
         engineRef.current?.calibration.getCalibrationDistancesCm() ?? {
           cameraCm: null,
@@ -2306,9 +2455,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   /**
-   * Reajuste rápido: 2 s com a pessoa olhando o centro — o engine mede onde o
-   * modelo põe o olhar e corrige a deriva (as referências da calibração não
-   * mudam). Quem conta o tempo é o ENGINE — o overlay só desenha o anel
+   * Reajuste rápido: 2 s com a pessoa olhando o centro — ou, com a
+   * recalibração rápida afim (M20), 2 s em cada um de cinco pontos. O engine
+   * mede onde o modelo põe o olhar e corrige a deriva (as referências da
+   * calibração não mudam). Quem conta o tempo é o ENGINE — o overlay só desenha o anel
    * fechando, e some quando a promessa resolve. Assim o que aparece na tela não
    * pode divergir do que foi colhido.
    *
@@ -2322,6 +2472,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
    */
   const reancoragemAtivaRef = useRef<number | null>(null);
   const proximaReancoragemRef = useRef(0);
+  /** Ponto em que a recalibração rápida afim (M20) está agora; `null` fora dela. */
+  const [alvoDoReajuste, setAlvoDoReajuste] = useState<{ x: number; y: number; ordem: number } | null>(null);
   const reancorar = useCallback(() => {
     const eng = engineRef.current;
     if (!eng) return;
@@ -2335,6 +2487,37 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const id = ++proximaReancoragemRef.current;
     reancoragemAtivaRef.current = id;
     setReancorando(true);
+    // Recalibração rápida afim (M20): cinco pontos em vez do centro sozinho,
+    // cada um com o assentamento de 800 ms depois de aparecer (o mesmo da
+    // calibração, M8) e 1,2 s de coleta — 10 s no total, dentro dos ≤ 15 s de
+    // uma correção de poucos pontos. Só com o Kalman da correção por dwell,
+    // que é quem sabe transformar os pontos em deslocamento e ganho.
+    if (usaRecalibracaoEmPontos()) {
+      void (async () => {
+        const medidas: MedidaDoPontoDaRecalibracao[] = [];
+        for (let ordem = 0; ordem < PONTOS_DA_RECALIBRACAO_RAPIDA.length; ordem++) {
+          if (reancoragemAtivaRef.current !== id) return;
+          const p = PONTOS_DA_RECALIBRACAO_RAPIDA[ordem];
+          setAlvoDoReajuste({ ...p, ordem });
+          const m = await eng.medirPontoDaRecalibracao(p, {
+            assentamentoMs: ASSENTAMENTO_DO_PONTO_MS,
+            coletaMs: DURACAO_DO_REAJUSTE_MS - ASSENTAMENTO_DO_PONTO_MS,
+          });
+          if (reancoragemAtivaRef.current !== id) return;
+          if (m) medidas.push(m);
+        }
+        const r = eng.aplicarRecalibracaoRapida(medidas);
+        if (r.aplicado) setAvisoDePostura(false);
+      })()
+        .catch((e) => console.warn('[calib] recalibração rápida falhou:', e))
+        .finally(() => {
+          if (reancoragemAtivaRef.current !== id) return;
+          reancoragemAtivaRef.current = null;
+          setAlvoDoReajuste(null);
+          setReancorando(false);
+        });
+      return;
+    }
     void eng
       .reancorarReferencias({ duracaoMs: DURACAO_DO_REAJUSTE_MS })
       .then((r) => {
@@ -2377,6 +2560,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (reancoragemAtivaRef.current === null) return;
     reancoragemAtivaRef.current = null;
     setReancorando(false);
+    setAlvoDoReajuste(null);
     const eng = engineRef.current as (GazeEngine & { cancelarReancoragem?: () => void }) | null;
     if (typeof eng?.cancelarReancoragem === 'function') {
       eng.cancelarReancoragem();
@@ -2477,14 +2661,23 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         avisoDePostura={avisoDePostura}
         onReancorar={reancorar}
         reancorando={reancorando}
+        reajuste={usaRecalibracaoEmPontos() ? REAJUSTE_EM_PONTOS : undefined}
         avisoDeRecalibracao={avisoDeRecalibracao}
         onRecalibrar={irRecalibrar}
         onDispensarRecalibracao={dispensarRecalibracao}
       />
-      {/* Alvo único de 2 s: aparece só durante a coleta do reajuste rápido.
-          Cobre a tela inteira MENOS a Emergência, que o `EmergencyProvider`
-          sobe para cima dele enquanto `reancorando` (ver `Z_DO_REAJUSTE`). */}
-      {reancorando && <ReancoragemOverlay duracaoMs={DURACAO_DO_REAJUSTE_MS} />}
+      {/* O alvo do reajuste rápido: aparece só durante a coleta, no centro ou
+          no ponto da vez (M20). Cobre a tela inteira MENOS a Emergência, que o
+          `EmergencyProvider` sobe para cima dele enquanto `reancorando` (ver
+          `Z_DO_REAJUSTE`). */}
+      {reancorando && (
+        <ReancoragemOverlay
+          // Um anel novo por ponto da recalibração rápida (M20).
+          key={alvoDoReajuste?.ordem ?? 'centro'}
+          duracaoMs={DURACAO_DO_REAJUSTE_MS}
+          alvo={alvoDoReajuste ?? undefined}
+        />
+      )}
       {/* A varredura fica DENTRO do provider e FORA do `DwellContext`: ela não
           depende de dwell e não deve re-renderizar a cada alternância dele. */}
       <ScanningMode />

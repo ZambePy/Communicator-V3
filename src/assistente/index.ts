@@ -30,7 +30,7 @@ export {
   type FraseAprendida,
   type ModeloDoAssistente,
 } from './modelo';
-export { sugerirPalavras, type PedidoDePalavras } from './palavras';
+export { sugerirPalavras, palavraConhecida, type PedidoDePalavras } from './palavras';
 export {
   ehPergunta,
   regraPara,

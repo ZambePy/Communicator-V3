@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
+import { OlhoQuePisca } from '@/components/effects/Ilustracoes'
 import { CAPITULOS } from '@/data/home'
 import { prefersReducedMotion } from '@/hooks/useReducedMotion'
 import './capitulos.css'
@@ -35,6 +36,9 @@ export function Capitulos() {
       <AmbientBackground variante="particulas" />
       <div className="container">
         <header className="capitulos__cabeca">
+          <div className="capitulos__olho">
+            <OlhoQuePisca />
+          </div>
           <span className="eyebrow">IrisFlow Communicator</span>
           <h2 id="capitulos-titulo" className="titulo-capitulo">
             Feito para ser usado só com os olhos.

@@ -173,7 +173,10 @@ export const ChecksDaCamera: React.FC<{
                   color: 'var(--color-text-base)',
                 }}
               >
-                {t(`checksCamera.${item.id}`)}
+                {/* Pendente, o rótulo não afirma o que ainda não aconteceu:
+                    "Rosto encontrado" ao lado de "Rosto não detectado" se
+                    contradizia na mesma linha. */}
+                {t(ok ? `checksCamera.${item.id}` : `checksCamera.${item.id}Pendente`)}
                 <span className="sr-only">
                   {' '}
                   {t(ok ? 'checksCamera.ok' : 'checksCamera.pendente')}

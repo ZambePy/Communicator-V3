@@ -111,3 +111,15 @@ export function sugerirPalavras({ texto, modelo, maximo = 4 }: PedidoDePalavras)
     .slice(0, maximo)
     .map(([palavra]) => palavra);
 }
+
+/**
+ * A palavra está no dicionário de partida ou no vocabulário deste paciente?
+ * O dwell em cascata (M17) usa isto para o espaço: depois de uma palavra
+ * conhecida, o espaço é a continuação provável.
+ */
+export function palavraConhecida(palavra: string, modelo: ModeloDoAssistente): boolean {
+  const p = normalizar(limparPonta(palavra));
+  if (!p) return false;
+  if (Object.keys(modelo.palavras).some((w) => normalizar(w) === p)) return true;
+  return PALAVRAS_COMUNS.some((w) => normalizar(w) === p);
+}

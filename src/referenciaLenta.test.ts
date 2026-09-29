@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   ReferenciaLenta,
   constanteDeTempoValida,
-  deltaDePose,
   TAU_MIN_S,
   TAU_MAX_S,
   TAU_PADRAO_S,
@@ -14,6 +13,17 @@ import type { EscalaFacial } from './translationCompensation';
 
 const RAD = Math.PI / 180;
 const QUADRO_MS = 1000 / 30;
+
+/**
+ * Δ de pose entre o quadro e a referência lenta, em radianos por eixo. No
+ * produto quem faz esta conta é a compensação de pose, com a referência que
+ * `getReferenciaLenta()` entrega; aqui basta a subtração, para ler o
+ * contrato da referência.
+ */
+function deltaDePose(atual: Pose, referencia: Pose | null): { yaw: number; pitch: number } {
+  if (!referencia) return { yaw: 0, pitch: 0 };
+  return { yaw: atual.yaw - referencia.yaw, pitch: atual.pitch - referencia.pitch };
+}
 
 const REF: Pose = { yaw: 0, pitch: 0, roll: 0 };
 const CENTRO = { x: 0.5, y: 0.5 };

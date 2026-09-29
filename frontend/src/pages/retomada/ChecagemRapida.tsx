@@ -13,7 +13,7 @@ import { snapshotFromDiagnostics, lerViewport } from '@tracker/setupReadinessAda
 import { getCalibrationTimestampMs } from '@tracker/calibration';
 import { lerReferencia, gravarReferencia } from '../../services/local/referenciaDaChecagem';
 import { veredictoDaChecagem, type ResultadoDoVeredicto } from './veredictoDaChecagem';
-import { MS_POR_ALVO, MS_DE_ACOMODACAO, MS_LIMITE_DE_ENQUADRAMENTO } from './tempos';
+import { MS_POR_ALVO, MS_DE_ACOMODACAO, MS_LIMITE_DE_ENQUADRAMENTO, MS_LIMITE_DO_MODELO } from './tempos';
 
 /**
  * Checagem de retomada — a 2ª abertura em diante.
@@ -45,7 +45,7 @@ type Fase = 'enquadramento' | 'alvos' | 'fim';
 export const ChecagemRapida: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { subscribe, getDiagnostics } = useGaze();
+  const { subscribe, getDiagnostics, calibration, l2csStatus } = useGaze();
   const { settings } = useSettings();
 
   const [fase, setFase] = useState<Fase>('enquadramento');
@@ -67,6 +67,12 @@ export const ChecagemRapida: React.FC = () => {
   const amostrasDoAlvo = useRef<{ x: number; y: number }[]>([]);
 
   const pular = useCallback(() => navigate('/menu', { replace: true }), [navigate]);
+
+  // O modelo do olhar ainda sobe: o bloco angular entra zerado e, numa máquina
+  // sem WebGPU, o perfil salvo nem carregou (a chave depende do lado do
+  // recorte que o worker escolhe). Medir agora mediria um modelo aleijado — e
+  // a primeira checagem gravaria esse erro como referência de todas as outras.
+  const l2csCarregando = l2csStatus === 'loading';
 
   // ── Posição: vigiada no enquadramento E durante os alvos ─────────────────
   // Reaproveita `evaluateReadiness`, que já decide isto e já é testado.
@@ -92,21 +98,28 @@ export const ChecagemRapida: React.FC = () => {
       if (fase === 'alvos') {
         if (!agora.rosto) quebrou.current.rosto = true;
         if (!agora.distancia) quebrou.current.distancia = true;
-      } else if (agora.rosto && agora.distancia) {
+      } else if (agora.rosto && agora.distancia && calibration.isCalibrated() && !l2csCarregando) {
+        // Os pontos só valem medidos COM o modelo inteiro: sem calibração
+        // mediriam o olhar cru, e com o L2CS ainda subindo, um modelo sem o
+        // bloco angular — e a primeira checagem, que nunca reprova, gravaria
+        // isso como referência.
         setFase('alvos');
       }
     }, 300);
 
     return () => clearInterval(id);
-  }, [fase, getDiagnostics, settings.cameraHorizontalFovDeg]);
+  }, [fase, getDiagnostics, settings.cameraHorizontalFovDeg, calibration, l2csCarregando]);
 
   // Limite do enquadramento: sem isto a tela espera para sempre por uma posição
-  // que talvez o paciente não consiga fazer hoje.
+  // que talvez o paciente não consiga fazer hoje. Enquanto o L2CS carrega, o
+  // limite é o de esperar o modelo; quando ele sobe, o relógio do enquadramento
+  // recomeça do zero.
   useEffect(() => {
     if (fase !== 'enquadramento') return;
-    const id = window.setTimeout(() => setFase('fim'), MS_LIMITE_DE_ENQUADRAMENTO);
+    const limite = l2csCarregando ? MS_LIMITE_DO_MODELO : MS_LIMITE_DE_ENQUADRAMENTO;
+    const id = window.setTimeout(() => setFase('fim'), limite);
     return () => window.clearTimeout(id);
-  }, [fase]);
+  }, [fase, l2csCarregando]);
 
   // ── Fase 2: os três alvos ────────────────────────────────────────────────
   useEffect(() => {
@@ -152,12 +165,15 @@ export const ChecagemRapida: React.FC = () => {
     const erros = errosPorAlvo.current;
     const erroDeg = erros.length > 0 ? erros.reduce((a, b) => a + b, 0) / erros.length : null;
 
+    const temModelo = calibration.isCalibrated();
     const calibTs = getCalibrationTimestampMs();
-    const ref = lerReferencia(calibTs);
-    setEraPrimeira(ref === null);
+    const ref = temModelo ? lerReferencia(calibTs) : null;
+    setEraPrimeira(temModelo && ref === null);
 
     setResultado(
       veredictoDaChecagem({
+        l2csCarregando,
+        temModelo,
         erroDeg,
         referenciaDeg: ref?.erroDeg ?? null,
         rostoEnquadrado: posicaoOk.current.rosto && !quebrou.current.rosto,
@@ -172,8 +188,8 @@ export const ChecagemRapida: React.FC = () => {
     // A primeira checagem ESTABELECE a referência. Gravar depois disso
     // sobrescreveria a base de comparação com um valor pior e mascararia a
     // deriva justamente quando ela apareceu.
-    if (ref === null && erroDeg !== null) gravarReferencia(calibTs, erroDeg);
-  }, [fase, resultado]);
+    if (temModelo && ref === null && erroDeg !== null) gravarReferencia(calibTs, erroDeg);
+  }, [fase, resultado, calibration, l2csCarregando]);
 
   const alvo = ALVOS[Math.min(indice, ALVOS.length - 1)];
 
