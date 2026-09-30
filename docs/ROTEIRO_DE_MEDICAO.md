@@ -40,10 +40,11 @@ os de [`MEDICOES.md`](MEDICOES.md); aqui entra só o que o V3 acrescenta.
   muda o `FEATURE_VECTOR_ID`, e o perfil salvo não carrega na outra condição.
   Sem o L2CS o identificador não muda, mas a calibração tem de ser nova do
   mesmo jeito: é ela que a réplica repete.
-- **Com e sem o L2CS.** O instalador da beta roda sem o L2CS (`&ep=off`), e é
-  esse o número que a família recebe. M3, M4 e M13 só agem com o L2CS; as
-  outras valem nos dois. Quando der tempo, meça as duas; quando não, `&ep=off`
-  primeiro.
+- **Com e sem o L2CS.** O instalador da beta roda com o L2CS desde a
+  1.0.0-beta.10 (até a beta.9 rodava sem, `&ep=off`), e é esse o número que a
+  família recebe; sem o L2CS fica o caminho de quem escolhe "calibrar só com a
+  íris". M3, M4 e M13 só agem com o L2CS; as outras valem nos dois. Quando der
+  tempo, meça as duas; quando não, com o L2CS primeiro.
 - **Grave uma réplica de cada condição** (Configurações → Gravador de sessão).
   A gravação permite repetir a calibração e o teste offline, com outras flags,
   sem a pessoa (§8).
