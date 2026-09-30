@@ -441,10 +441,11 @@ export function resolverPipeline(cfg: ExperimentConfig): ExperimentConfig {
  *
  * O `vite build` do frontend troca `__IRISFLOW_PADROES_DE_BUILD__` por um
  * objeto (frontend/vite.config.ts, `define`) montado de variáveis de ambiente
- * do build. Hoje há uma só, `IRISFLOW_BUILD_L2CS`: o release.yml passa `off`
- * enquanto os pesos do L2CS (Gaze360) não têm licença comercial — o instalador
- * público sai sem eles e com o rastreamento pelas features de íris. O caminho
- * `l2cs: 'off'` já existe inteiro: o engine marca o status `disabled`, a
+ * do build. Hoje há uma só, `IRISFLOW_BUILD_L2CS`: o release.yml passa `auto`
+ * desde a 1.0.0-beta.10 — a beta, acadêmica e não comercial, leva os pesos do
+ * L2CS (Gaze360, research-only) — e `off` quando a variável de repositório
+ * pede um instalador sem eles, com o rastreamento pelas features de íris. O
+ * caminho `l2cs: 'off'` existe inteiro: o engine marca o status `disabled`, a
  * pré-calibração libera o início, e o modelo treina sem o bloco angular (é a
  * condição B da M-ablação em docs/MEDICOES.md).
  *

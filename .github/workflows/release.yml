@@ -87,17 +87,19 @@ name: Release
 #   Outro repositório (releases ou modelos): RELEASES_TOKEN (ver acima)
 #
 # L2CS NO INSTALADOR — variável de repositório IRISFLOW_BUILD_L2CS (Settings →
-# Secrets and variables → Actions → Variables); sem ela, `off`:
-#   - `off` (padrão desde 24/09/2026): o instalador sai SEM os pesos do L2CS e
-#     com o rastreamento só pelas features de íris. O `vite build` recebe a
-#     variável e o app nasce com `l2cs: 'off'` (src/config/experiment.ts,
-#     `aplicarPadroesDeBuild`) — status `disabled`, pré-calibração liberada,
-#     modelo sem o bloco angular. É a decisão enquanto os pesos atuais forem
-#     research-only (docs/MEDICOES.md: pesos com uso comercial proibido nunca
-#     saem num release).
-#   - `auto`: o de sempre — baixa os pesos (abaixo) e liga o L2CS. Use quando
-#     houver pesos com licença comercial. Troque só a variável; este arquivo
-#     não muda.
+# Secrets and variables → Actions → Variables); sem ela, `auto`:
+#   - `auto` (padrão desde 29/09/2026, a partir da 1.0.0-beta.10): baixa os
+#     pesos (abaixo), empacota-os e o app nasce com o L2CS ligado — o mesmo
+#     modelo das medições de docs/MEDICOES.md. A beta pode levá-los porque o
+#     IrisFlow é, por enquanto, um projeto acadêmico e a beta é gratuita e não
+#     comercial (README, "Pendências e riscos", item 1).
+#   - `off` (o padrão de 24/09 até a 1.0.0-beta.9): o instalador sai SEM os
+#     pesos e com o rastreamento só pelas features de íris. O `vite build`
+#     recebe a variável e o app nasce com `l2cs: 'off'`
+#     (src/config/experiment.ts, `aplicarPadroesDeBuild`) — status `disabled`,
+#     pré-calibração liberada, modelo sem o bloco angular. É o caminho de um
+#     release comercial enquanto os pesos forem research-only. Troque só a
+#     variável; este arquivo não muda.
 #
 # MODELO DO L2CS (só com IRISFLOW_BUILD_L2CS diferente de `off`):
 # `l2cs_gaze360.onnx` (92 MB) é gitignored. O workflow o baixa
@@ -105,12 +107,17 @@ name: Release
 # IRISFLOW_MODELOS_REPO; sem ela, o repositório de releases — e o empacota
 # DENTRO de todo instalador. Numa tag, sem modelo o release FALHA: um
 # instalador que espera o L2CS e não o traz sairia com rastreamento degradado.
+# Para criar esse release (uma vez só; ele não é versão do app):
+#   gh release create 0.0.0-modelos frontend/public/models/l2cs/l2cs_gaze360.onnx \
+#     --prerelease --title "Modelos (não é versão do app)" --notes "Pesos usados pelo release.yml"
+# ou, na página de Releases, com a tag nova `0.0.0-modelos`, o arquivo anexado e
+# "Set as a pre-release" marcado.
 #   - LICENÇA: os pesos atuais foram treinados no Gaze360, licença
-#     research-only (README, "Modelos" e "Pendências e riscos"). Num
-#     repositório PÚBLICO, o release de modelos deixa o arquivo para download
-#     de qualquer pessoa; até a decisão de licenciamento, guarde-o num
-#     repositório PRIVADO (IRISFLOW_MODELOS_REPO + RELEASES_TOKEN com leitura
-#     nele). Mesmo assim, todo instalador publicado leva os pesos no app.asar.
+#     research-only (README, "Modelos" e "Pendências e riscos"). Todo
+#     instalador publicado leva os pesos no app.asar; num repositório PÚBLICO,
+#     o release de modelos também deixa o arquivo para download de qualquer
+#     pessoa. Para guardá-lo à parte, use um repositório PRIVADO
+#     (IRISFLOW_MODELOS_REPO + RELEASES_TOKEN com leitura nele).
 #   - POR QUE A TAG `0.0.0-modelos` (antes, `modelos`): quando fica no MESMO
 #     repositório dos instaladores, esse release aparece no feed que o
 #     electron-updater lê. Um app instalado em versão beta (X.Y.Z-beta.N)
@@ -157,10 +164,11 @@ env:
   IRISFLOW_RELEASES_REPO: ${{ vars.IRISFLOW_RELEASES_REPO || github.repository }}
   # Repositório do release de modelos (ver cabeçalho); pode ser privado.
   IRISFLOW_MODELOS_REPO: ${{ vars.IRISFLOW_MODELOS_REPO || vars.IRISFLOW_RELEASES_REPO || github.repository }}
-  # L2CS no instalador (ver cabeçalho): `off` = sem os pesos, rastreamento só
-  # pelas features de íris; `auto` = com os pesos. O `vite build` do passo
-  # "Build do app e instaladores" lê esta mesma variável.
-  IRISFLOW_BUILD_L2CS: ${{ vars.IRISFLOW_BUILD_L2CS || 'off' }}
+  # L2CS no instalador (ver cabeçalho): `auto` = com os pesos (a beta
+  # acadêmica); `off` = sem os pesos, rastreamento só pelas features de íris.
+  # O `vite build` do passo "Build do app e instaladores" lê esta mesma
+  # variável.
+  IRISFLOW_BUILD_L2CS: ${{ vars.IRISFLOW_BUILD_L2CS || 'auto' }}
 
 jobs:
   # -------------------------------------------------------------------------
@@ -326,7 +334,7 @@ jobs:
         run: |
           if [ "$IRISFLOW_BUILD_L2CS" = "off" ]; then
             unset RELEASES_TOKEN
-            echo "::notice::Instalador SEM o L2CS (IRISFLOW_BUILD_L2CS=off): os pesos não são baixados nem empacotados, e o app nasce com l2cs: 'off' — rastreamento pelas features de íris. Para ligar, defina a variável de repositório IRISFLOW_BUILD_L2CS=auto (release.yml, cabeçalho)."
+            echo "::notice::Instalador SEM o L2CS (IRISFLOW_BUILD_L2CS=off): os pesos não são baixados nem empacotados, e o app nasce com l2cs: 'off' — rastreamento pelas features de íris. Para ligar, apague a variável de repositório IRISFLOW_BUILD_L2CS ou troque-a para auto (release.yml, cabeçalho)."
             exit 0
           fi
           token_de_releases="${RELEASES_TOKEN:-}"
@@ -360,11 +368,13 @@ jobs:
                 exit 1
               fi
             fi
+            # Aviso, não erro: a beta acadêmica leva os pesos no instalador
+            # público de qualquer jeito (cabeçalho, "LICENÇA").
             if [ "$(gh api "repos/$IRISFLOW_MODELOS_REPO" --jq .visibility 2>/dev/null || true)" = "public" ]; then
-              echo "::warning::Os pesos do L2CS estão num release PÚBLICO ($IRISFLOW_MODELOS_REPO): qualquer pessoa baixa o arquivo, e a licença do Gaze360 é research-only. Até a decisão de licenciamento, use um repositório privado de modelos (variável IRISFLOW_MODELOS_REPO + segredo RELEASES_TOKEN)."
+              echo "::notice::Os pesos do L2CS estão num release PÚBLICO ($IRISFLOW_MODELOS_REPO), além de irem dentro do instalador. A licença do Gaze360 é research-only: vale para a beta acadêmica e não comercial (README, 'Pendências e riscos', item 1)."
             fi
           elif [ "$PUBLICAR" = "true" ]; then
-            echo "::error::Modelo L2CS não encontrado no release '$MODELOS_TAG' de $IRISFLOW_MODELOS_REPO. Antes de subir, veja a licença (README, 'Pendências e riscos'). Para criá-lo: gh release create $MODELOS_TAG frontend/public/models/l2cs/l2cs_gaze360.onnx --repo $IRISFLOW_MODELOS_REPO --prerelease --title 'Modelos (não é versão do app)' --notes 'Pesos usados pelo release.yml'"
+            echo "::error::Modelo L2CS não encontrado no release '$MODELOS_TAG' de $IRISFLOW_MODELOS_REPO. Crie-o uma vez (licença: README, 'Pendências e riscos', item 1): gh release create $MODELOS_TAG frontend/public/models/l2cs/l2cs_gaze360.onnx --repo $IRISFLOW_MODELOS_REPO --prerelease --title 'Modelos (não é versão do app)' --notes 'Pesos usados pelo release.yml' — e rode o workflow de novo nesta tag. Para um instalador sem o L2CS: variável IRISFLOW_BUILD_L2CS=off."
             exit 1
           else
             echo "::warning::Modelo L2CS ausente: este instalador de TESTE terá rastreamento degradado."

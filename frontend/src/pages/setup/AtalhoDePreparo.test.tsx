@@ -61,7 +61,10 @@ describe('com preparo feito', () => {
     // Se a webcam foi trocada, é por aqui que o cuidador percebe.
     gravarPreparo(perfilId, { ...preparo, fpsMedido: 30 });
     montar();
-    expect(screen.getByText(/30/)).toBeInTheDocument();
+    // A taxa com a unidade: um /30/ solto também casava com a data da linha
+    // "Concluído em 30 de ...", e o teste quebrava todo dia 30 (e no CI, que
+    // roda em UTC, desde as 21 h do dia 29 no horário de Brasília).
+    expect(screen.getByText(/30 quadros por segundo/)).toBeInTheDocument();
   });
 
   it('leva ao wizard', () => {

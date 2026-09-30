@@ -112,10 +112,12 @@ console.log(
 // O arquivo e gitignored (92 MB); no CI o release.yml o baixa do release de tag
 // `0.0.0-modelos` (IRISFLOW_MODELOS_REPO) — ver o cabecalho do release.yml.
 // Atencao: o que estiver aqui vai para DENTRO do app.asar de todo instalador, e
-// os pesos atuais (Gaze360) tem licenca research-only (README, "Modelos").
-// Com IRISFLOW_BUILD_L2CS=off (o padrao do release.yml desde 24/09/2026) o app
-// nasce com `l2cs: 'off'` e nao procura os pesos: a ausencia e a decisao, nao
-// um defeito.
+// os pesos atuais (Gaze360) tem licenca research-only (README, "Modelos"). O
+// release.yml os leva desde a 1.0.0-beta.10 (padrao `auto`): a beta e academica
+// e nao comercial (README, "Pendencias e riscos", item 1).
+// Com IRISFLOW_BUILD_L2CS=off (o padrao do release.yml de 24/09 ate a beta.9)
+// o app nasce com `l2cs: 'off'` e nao procura os pesos: a ausencia e a decisao,
+// nao um defeito.
 const modeloL2cs = path.join(RAIZ, 'frontend', 'dist', 'models', 'l2cs', 'l2cs_gaze360.onnx');
 if (env('IRISFLOW_BUILD_L2CS') === 'off') {
   console.log(

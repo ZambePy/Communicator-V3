@@ -3,9 +3,9 @@ import { aplicarPadroesDeBuild, DEFAULTS } from './experiment';
 
 /**
  * Padrões de EMPACOTAMENTO (release.yml → IRISFLOW_BUILD_L2CS → `define` do
- * Vite → `aplicarPadroesDeBuild`). O instalador público sai com `l2cs: 'off'`
- * enquanto os pesos do L2CS não têm licença comercial; fora de um build do
- * Vite nada muda.
+ * Vite → `aplicarPadroesDeBuild`). O release da beta passa `auto` (com os
+ * pesos, desde a 1.0.0-beta.10); `off` sai sem o L2CS. Fora de um build do
+ * Vite nada muda. O padrão do release.yml tem teste em src/empacotamento.test.ts.
  */
 describe('padrões de build', () => {
   it('fora de um build do Vite (testes, Node) os padrões são os do código', () => {

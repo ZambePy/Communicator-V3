@@ -72,6 +72,14 @@ roteiro das sessões que decidem cada mudança está em
 não mudou; o painel passou a explicar a rodada "Não medido" quando a causa é a
 taxa de quadros (§2, *Tempo por ponto*).
 
+**Revisão de 2026-09-29 — a beta volta a levar o L2CS.** Nenhuma medição nova.
+A partir da 1.0.0-beta.10 o instalador sai com os pesos do L2CS (o projeto é
+acadêmico e a beta, gratuita e não comercial; README, *Pendências e riscos*,
+item 1). O item 1 da revisão de 26/09 vale para as versões de 24/09 até a
+beta.9 e, hoje, só para quem escolhe "calibrar só com a íris". O que a família
+instala volta a ter o bloco angular das sessões desta página, mas roda o
+pipeline V3, que só foi medido em replay (§14.6).
+
 ---
 
 ## 0. Resumo em linguagem simples
@@ -94,8 +102,10 @@ O 1,40° está abaixo da faixa típica de webcam e ainda acima do infravermelho.
 
 **O que o número não diz.** É uma pessoa, num posto conhecido, sem réplica
 (N = 1), e foi medido **com** o L2CS, cujos pesos têm licença só para
-pesquisa. O instalador da beta roda sem ele, e a acurácia dessa versão ainda
-não foi medida. A precisão (o tremor) também piorou entre o pipeline antigo e
+pesquisa — o instalador da beta os leva desde a 1.0.0-beta.10, e por isso a
+beta é acadêmica e não comercial. O pipeline padrão de hoje (V3) ainda não foi
+medido ao vivo, e sem o L2CS ("calibrar só com a íris") a acurácia nunca foi
+medida. A precisão (o tremor) também piorou entre o pipeline antigo e
 o atual (§14.4): acertar o botão ficou mais fácil, segurar o olhar parado nele,
 não.
 
@@ -598,20 +608,22 @@ Regras comuns: N ≥ 3 por condição (três calibrações independentes, não t
 testes sobre a mesma calibração); `pipeline.runtime.modelo` conferido em todos
 os relatórios — **a ficha de proveniência diz com que pesos a rodada foi
 feita**, e uma rodada com `usoComercial: 'proibido'` pode ser medida e
-comparada, mas nunca sair num release; `l2csValidFraction` ≥ 0,98, senão a
+comparada, e só sai no release da beta acadêmica, nunca num comercial (README,
+*Pendências e riscos*, item 1); `l2csValidFraction` ≥ 0,98, senão a
 sessão é de iluminação, não da condição.
 
 #### M-ablação — quanto vale o bloco L2CS
 
 A pergunta que dimensiona todo o resto: se o bloco angular vale 0,3°, o
 retreino é urgente; se vale 0,05°, o V2 pode sair sem L2CS enquanto a licença
-não vem. **É também o número da beta**: desde 24/09 o instalador roda a
-condição B.
+não vem. De 24/09 até a 1.0.0-beta.9 era também o número da beta (o instalador
+rodava a condição B); desde a beta.10 a beta roda a condição A, e a B é o
+caminho de quem escolhe "calibrar só com a íris".
 
 | | condição A | condição B |
 |---|---|---|
 | URL | `?ep=auto&l2cs=448&filtro=oneEuro&diagonal=…` | `?ep=off&filtro=oneEuro&diagonal=…` |
-| conjunto de features | `irisAbs+l2cs` (4 dims por olho) | `irisAbs` (2 dims por olho — o que o instalador da beta roda) |
+| conjunto de features | `irisAbs+l2cs` (4 dims por olho — o que o instalador da beta roda) | `irisAbs` (2 dims por olho — "calibrar só com a íris") |
 | pessoa, distância, hora | iguais | iguais |
 
 Registrar `meanErrorDeg`, `looErrorPx`, centro/periferia, e o `featureSet` do

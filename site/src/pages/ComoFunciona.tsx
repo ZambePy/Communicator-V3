@@ -40,15 +40,16 @@ export default function ComoFunciona() {
           <div className="como__tecnico">
             <Detalhe resumo="Para quem quer o detalhe técnico">
               <p>
-                O rosto e a íris são localizados com o MediaPipe. Um modelo por olho, ajustado na
-                calibração, estima o ponto da tela; depois vêm as compensações de postura, a
-                correção dos cantos e um filtro que segura o cursor sem atrasá-lo.
+                O rosto e a íris são localizados com o MediaPipe, e uma rede neural de pesquisa, a
+                L2CS-Net, calcula o ângulo do olhar. Um modelo por olho, ajustado na calibração,
+                estima o ponto da tela; depois vêm as compensações de postura, a correção dos
+                cantos e um filtro que segura o cursor sem atrasá-lo.
               </p>
               <p>
-                Na medição de referência da equipe, com o modelo de pesquisa, o erro médio ficou em
-                1,40° — cerca de 1,5 cm na tela, a 60 cm. Trabalhos publicados com webcam ficam,
-                em geral, entre 2,4° e 4,2°. Foi uma medição com um só operador, em ambiente
-                controlado; a versão da beta, que roda sem o modelo de pesquisa, ainda vai ser
+                Na medição de referência da equipe, com essa rede, o erro médio ficou em 1,40° —
+                cerca de 1,5 cm na tela, a 60 cm. Trabalhos publicados com webcam ficam, em geral,
+                entre 2,4° e 4,2°. Foi uma medição com um só operador, em ambiente controlado; a
+                versão atual da beta, com os ajustes mais recentes do rastreamento, ainda vai ser
                 medida.
               </p>
               <p>

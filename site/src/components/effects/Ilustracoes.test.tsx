@@ -3,21 +3,23 @@ import { act, render } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CofreDoComputador, OlharQueFala, OlhoQuePisca } from './Ilustracoes'
+import * as ilustracoes from './Ilustracoes'
+import { CofreDoComputador } from './Ilustracoes'
 
 /* As ilustrações animadas são decoração: o texto ao lado já diz o que elas
    mostram. E o movimento segue as regras do site: só transform e opacity,
-   e só com a ilustração na tela. */
+   e só com a ilustração na tela. O olho desenhado saiu (não é da identidade
+   visual): nenhuma ilustração o exporta mais. */
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 
 describe('ilustrações animadas', () => {
-  it.each([
-    ['o olho', OlhoQuePisca],
-    ['o computador', CofreDoComputador],
-    ['o olhar que fala', OlharQueFala],
-  ])('%s: fora do leitor de tela e do foco; sem IntersectionObserver, roda', (_nome, Ilustracao) => {
-    const { container } = render(<Ilustracao />)
+  it('o olho desenhado não existe mais', () => {
+    expect(Object.keys(ilustracoes)).toEqual(['CofreDoComputador'])
+  })
+
+  it('o computador: fora do leitor de tela e do foco; sem IntersectionObserver, roda', () => {
+    const { container } = render(<CofreDoComputador />)
     const palco = container.firstElementChild as HTMLElement
     expect(palco).toHaveAttribute('aria-hidden', 'true')
     expect(palco.querySelector('svg')).toHaveAttribute('focusable', 'false')
@@ -54,8 +56,8 @@ describe('ilustrações animadas', () => {
   it('duas no mesmo documento não dividem ids de recorte nem de gradiente', () => {
     const { container } = render(
       <>
-        <OlhoQuePisca />
-        <OlharQueFala />
+        <CofreDoComputador />
+        <CofreDoComputador />
       </>,
     )
     const ids = Array.from(container.querySelectorAll('[id]')).map((e) => e.id)

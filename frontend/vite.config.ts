@@ -145,8 +145,9 @@ export default defineConfig(({ mode }) => ({
     ),
     // Padrões de EMPACOTAMENTO do núcleo (src/config/experiment.ts,
     // `aplicarPadroesDeBuild`). Hoje só o L2CS: o release.yml passa
-    // IRISFLOW_BUILD_L2CS=off enquanto os pesos não têm licença comercial, e o
-    // instalador sai com `l2cs: 'off'`. Sem a variável, nada muda.
+    // IRISFLOW_BUILD_L2CS=auto (a beta acadêmica leva os pesos) ou, com a
+    // variável de repositório em `off`, o instalador sai com `l2cs: 'off'`.
+    // Sem a variável, nada muda.
     __IRISFLOW_PADROES_DE_BUILD__: JSON.stringify(
       process.env.IRISFLOW_BUILD_L2CS ? { l2cs: process.env.IRISFLOW_BUILD_L2CS } : {},
     ),
