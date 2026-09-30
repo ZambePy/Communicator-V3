@@ -34,14 +34,18 @@ describe('<HeroProduto />', () => {
     apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: '2099-11-10T03:00:00Z' }
     montar()
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(HERO.title)
-    expect(screen.getByRole('link', { name: BETA_CTA.label })).toHaveAttribute('href', BETA_CTA.to)
+    // A data do banco chega depois da reserva (que já é depois do lançamento).
     expect(await screen.findByText(/Download a partir de 10 de novembro/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: BETA_CTA.label })).toHaveAttribute('href', BETA_CTA.to)
   })
 
-  it('depois do lançamento: "Baixar grátis" leva a /baixar', async () => {
+  it('depois do lançamento: a etiqueta vermelha diz "Beta liberada" e "Baixar grátis" leva a /baixar', async () => {
     apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: '2020-11-10T03:00:00Z' }
-    montar()
+    const { container } = montar()
     expect(await screen.findByRole('link', { name: 'Baixar grátis' })).toHaveAttribute('href', '/baixar')
+    const pilula = container.querySelector('.aviso-pilula')!
+    expect(pilula.querySelector('.etiqueta-lancamento--liberada')).toHaveTextContent('Beta liberada')
+    expect(pilula).toHaveTextContent('Download gratuito para Windows.')
   })
 
   it('texto à esquerda e o vídeo à direita, sem monitor, sobre o fundo de partículas', () => {

@@ -59,23 +59,6 @@
   margin-left: auto;
 }
 
-/* Selo "novo" do item Beta depois do lançamento. */
-.header__badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 2px 8px;
-  border-radius: var(--r-pill);
-  /* Teal claro com texto marinho: 11:1. */
-  background: var(--teal-300);
-  color: #04231f;
-  font-size: var(--fs-min);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  vertical-align: middle;
-  line-height: 1.4;
-}
-
 .drawer__link--beta {
   color: var(--ok);
 }

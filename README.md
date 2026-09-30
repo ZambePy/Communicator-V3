@@ -78,8 +78,8 @@ release que, sem cadastro, deixa o envio desligado.
 
 ## Estado e resultados
 
-**Fase:** beta gratuita. O site já recebe inscrições; o download abre em
-**10/11/2026**, primeiro para Windows 10 e 11 (macOS e Linux em preparação —
+**Fase:** beta gratuita, com o download aberto desde **29/09/2026** (antes
+marcado para 10/11), primeiro para Windows 10 e 11 (macOS e Linux em preparação —
 [Pendências e riscos](#pendências-e-riscos), item 7).
 
 **Acurácia medida.** Protocolo, métricas e todas as ressalvas em
@@ -1631,10 +1631,14 @@ do código, que estava em 8 e passou a 6. O advisor de segurança do Supabase ap
 única cobrem o risco. Se o projeto for recriado, a ordem é migração, depois modelo,
 assunto e tamanho do código, e só então o site.
 
-**Lançamento.** O download abre em `beta_program.launch_at` (10/11/2026 00:00 de
-Brasília, migração `20260924230017_beta_lancamento.sql`); até lá a inscrição
-funciona, os botões mostram "Disponível em 10/11" sem nenhum link de arquivo, e a
-aba Beta do menu leva a etiqueta vermelha com o dia (depois, o selo "novo"). Na
+**Lançamento.** O download abre em `beta_program.launch_at` (migração
+`20260924230017_beta_lancamento.sql`). A beta foi liberada em **29/09/2026, às 21h50
+de Brasília** — antes marcada para 10/11 —, e `BETA.lancamentoReserva`
+(`site/src/data/content.ts`) tem a mesma data, para uma falha de leitura do banco
+não voltar o site ao estado de antes. Antes da data, a inscrição funciona, os botões
+mostram "Disponível em <dia>" sem nenhum link de arquivo e a etiqueta vermelha leva o
+dia; depois, a mesma etiqueta diz "Liberada" (no menu, ao lado de "Beta") ou "Beta
+liberada" (abertura, `/baixar`, `/beta` e chamada final), com um ponto que pulsa. Na
 virada, tudo libera sozinho, sem novo deploy; adiantar ou adiar é
 `update public.beta_program set launch_at = '…' where id = 1`. A página Solução
 mostra os sistemas como vitrine, sem link de arquivo: o download fica para quem

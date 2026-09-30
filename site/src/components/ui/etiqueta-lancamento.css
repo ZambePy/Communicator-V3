@@ -1,4 +1,4 @@
-/* Etiqueta vermelha do lançamento da beta ("10/11").
+/* Etiqueta vermelha da beta: "10/11" até o lançamento, "Liberada" depois.
    Vermelho #d6293a com texto branco: 4,96:1 (AA para texto pequeno), e
    3,8:1 contra o azul-marinho do fundo (limite de 3:1 para componente). */
 .etiqueta-lancamento {
@@ -33,4 +33,29 @@
 
 .etiqueta-lancamento--longa {
   font-size: 0.8rem;
+}
+
+/* Depois do lançamento: "Liberada", com um ponto que pulsa devagar — o sinal
+   de "no ar". Só transform e opacity animam; com movimento reduzido, a regra
+   global de global.css deixa o ponto parado. */
+.etiqueta-lancamento--liberada::before {
+  content: '';
+  flex: none;
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: currentColor;
+  animation: etiqueta-no-ar 2.4s var(--ease-in-out) infinite;
+}
+
+@keyframes etiqueta-no-ar {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
 }

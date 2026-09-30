@@ -69,10 +69,19 @@ export default function Baixar() {
       <section className="baixar-hero on-dark" aria-labelledby="baixar-titulo">
         <AmbientBackground />
         <div className="container baixar-hero__inner">
-          {BETA.ativo && !lancou && (
+          {BETA.ativo && (
             <p className="aviso-pilula anim-entrada">
-              <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
-              <span>Download a partir de {diaPorExtenso(program.launchAt)}</span>
+              {lancou ? (
+                <>
+                  <EtiquetaLancamento lancamento={program.launchAt} />
+                  <span>Download gratuito para {BETA.sistemaDoLancamento}</span>
+                </>
+              ) : (
+                <>
+                  <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
+                  <span>Download a partir de {diaPorExtenso(program.launchAt)}</span>
+                </>
+              )}
             </p>
           )}
           <h1 id="baixar-titulo" className="baixar-hero__titulo anim-entrada anim-entrada--2">

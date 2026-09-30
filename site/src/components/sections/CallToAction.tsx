@@ -49,11 +49,20 @@ export function CallToAction() {
           </div>
         </Reveal>
 
-        {BETA.ativo && !lancou && (
+        {BETA.ativo && (
           <Reveal anim="fade" delay={300}>
             <p className="cta__data">
-              <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
-              Download a partir de {diaPorExtenso(program.launchAt)}
+              {lancou ? (
+                <>
+                  <EtiquetaLancamento lancamento={program.launchAt} />
+                  Download aberto para {BETA.sistemaDoLancamento}
+                </>
+              ) : (
+                <>
+                  <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
+                  Download a partir de {diaPorExtenso(program.launchAt)}
+                </>
+              )}
             </p>
           </Reveal>
         )}
