@@ -11,6 +11,12 @@
  * aconteceu. O contrato a afirmar continua o mesmo; o que muda é o instante em
  * que ele é observável.
  *
+ * Com o cursor pelo compositor (o padrão desde 30/09) a POSIÇÃO volta a ser
+ * escrita na amostra, com a duração da travessia; o laço de rAF só vigia a
+ * fonte seca (> 300 ms sem amostra → translúcido). Os testes que medem isso,
+ * e os da volta segura (`cursorPeloCompositor: false`), continuam precisando
+ * do relógio de quadros.
+ *
  * Este helper troca `requestAnimationFrame`, `cancelAnimationFrame` e
  * `performance.now` por uma fila e um relógio controlados pelo teste. Os três
  * juntos, e não só o rAF: o seguidor compara o carimbo da amostra (que vem de

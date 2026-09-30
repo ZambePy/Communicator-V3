@@ -1823,7 +1823,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           const ruidoAtual = EXPERIMENT.estimadorDeFixacao && !cadeia ? calibration.getRuidoDaCalibracao() : null;
           if (ruidoAtual !== ruidoDoEstimador) {
             ruidoDoEstimador = ruidoAtual;
-            estimadorDeFixacao = ruidoAtual ? new EstimadorDeFixacao(janelaParaRho(ruidoAtual.rho1)) : null;
+            estimadorDeFixacao = ruidoAtual ? new EstimadorDeFixacao(janelaParaRho(ruidoAtual.rho1), ruidoAtual.rho1) : null;
             oneEuro.reset();
             estabilizadorOneEuro?.reset();
           }

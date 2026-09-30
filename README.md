@@ -256,19 +256,22 @@ Webcam (getUserMedia, até 1920×1080)
   │     extremos são o comportamento de sempre; o que sumiu foi o degrau entre
   │     eles. Teto rígido de 0,5°: a média limpa ruído, não inventa posição
   │
-  ├─ Seguidor de cursor ─ SEPARA A TAXA DE RENDER DA TAXA DE INFERÊNCIA. A
-  │     posição era escrita no DOM uma vez por quadro de câmera, o que é
-  │     zero-order hold puro: ~65 % dos quadros de display sem movimento
-  │     nenhum e os outros recebendo o passo inteiro. Agora um laço de rAF
-  │     distribui o mesmo passo pelos quadros de tela — mesmo caminho, mesmo
-  │     tempo, passos menores. Custo de meio intervalo de amostra de latência
-  │     (~16 ms a 30 Hz, ~24 ms nos 21 Hz medidos), deliberado e abaixo do
-  │     limiar em que a latência começa a custar acerto. Vale na janela do app
-  │     E na sobreposição do Modo Computador (que até 22/09 ainda escrevia a
-  │     posição uma vez por amostra). NÃO
-  │     extrapola (errar no fim da sacada custa uma seleção errada) e NÃO
-  │     segura predição velha: passados 300 ms sem amostra ele congela e
-  │     avisa, e o cursor fica translúcido
+  ├─ Cursor pelo compositor ─ SEPARA A TAXA DE RENDER DA TAXA DE INFERÊNCIA.
+  │     A posição era escrita no DOM uma vez por quadro de câmera (zero-order
+  │     hold: ~65 % dos quadros de display parados, os outros com o passo
+  │     inteiro). Um laço de rAF passou a distribuir o passo pelos quadros de
+  │     tela — mas o rAF roda na thread do MediaPipe, ocupada 70–100 % do
+  │     tempo, e na gravação de 30/09 o cursor ainda andava aos degraus a
+  │     ~15 Hz. Agora cada amostra escreve UMA vez o destino e a duração da
+  │     travessia (`transform` com `transition`), e a thread do COMPOSITOR
+  │     desenha os quadros intermediários a 60 Hz, com a thread principal
+  │     ocupada ou não (`interaction/cursorNoCompositor.ts`). Mesmo custo de
+  │     meio intervalo de amostra de latência (~16 ms a 30 Hz); a sacada
+  │     atravessa em ~1 quadro. Vale na janela do app E na sobreposição do
+  │     Modo Computador. NÃO extrapola (errar no fim da sacada custa uma
+  │     seleção errada) e NÃO segura predição velha: passados 300 ms sem
+  │     amostra o cursor para e fica translúcido. O laço de rAF de antes
+  │     continua como volta segura (`cursorPeloCompositor: false`)
   │
   └─ Interação ─ dwell, cursor, emergência, varredura opcional, fallback
         quando o olhar se perde. É na conclusão do dwell que a correção por
@@ -513,8 +516,9 @@ src/                        núcleo do pipeline (TypeScript puro, testado com Vi
   filters/                  One Euro, Kalman 2D, EMA adaptativa, hold na piscada,
                             estabilizador de fixação (peso contínuo da média)
   interaction/              dwell, cursor, varredura, clique por piscada, fallback,
-                            correção por dwell; seguidorDeCursor.ts desenha o cursor
-                            na taxa do DISPLAY, não na da câmera
+                            correção por dwell; cursorNoCompositor.ts entrega a
+                            posição ao compositor (60 Hz, fora da thread do
+                            MediaPipe); seguidorDeCursor.ts é a volta segura por rAF
   poseCompensation.ts       compensação geométrica de pose
   distanceCompensation.ts   compensação de distância (fator 0,6–1,6)
   translationCompensation.ts compensação de translação lateral do tronco
@@ -797,7 +801,7 @@ Como os outros parâmetros de URL, esses ficam gravados no `localStorage` até
 | M6 | `calibracaoRobusta` | `true` | peso por quadro, centro robusto por alvo e Huber entre alvos |
 | M7 | `alvoInferiorCentral` | `false` ¹ | 14º alvo no meio da borda de baixo, no perfil padrão completo |
 | M8 | `assentamentoPelaChegada` | `true` | a coleta de cada alvo abre na chegada da bola e descarta 800 ms |
-| M9 | `estimadorDeFixacao` | `true` | estimador de fixação com portão de Mahalanobis no lugar de One Euro + estabilizador |
+| M9 | `estimadorDeFixacao` | `true` | estimador de fixação com portão de Mahalanobis no lugar de One Euro + estabilizador; o portão usa a variância da inovação com o ruído correlacionado (ρ₁ da calibração) e um detector de deslocamento reinicia a fixação em passos médios (revisão de 30/09) |
 | M10 | `fusaoPorCovariancia` | `false` ¹ | fusão dos dois olhos por variância mínima, com a covariância entre eles |
 | M11 | — | — | relatório de precisão /3 (métricas novas; sem flag) |
 | M12 | `saida6DoF` | `false` ¹ | interseção do raio de olhar com o plano da tela; pergunta onde fica a câmera |
@@ -1003,7 +1007,11 @@ dele (o Apagar repete com o olhar parado). Numa tela nova — ou quando o que fo
 clicado some e outra coisa aparece no lugar, como o grupo do teclado que vira
 as letras dele e o painel do teste que fecha sobre a preparação — o que estiver
 sob o olhar parado não é selecionado até o olhar saltar para outro ponto (mais
-de 96 px por 200 ms, em três quadros seguidos).
+de 96 px por 200 ms, em três quadros seguidos). A exceção são os **grupos do
+teclado** (`data-rearme-permanencia`): abrir um grupo não escreve nada, então
+ele também volta a valer com o olhar parado nele por 500 ms — escrito o "H", o
+"G H I / J K L" que volta sob o olhar abre de novo sem sair dele. As letras
+continuam exigindo a saída: o olhar parado nunca escreve sozinho.
 
 Regras da interface do paciente: alvos de no mínimo 160×120 px (ou, quando o
 botão é menor e não tem vizinho, zona de acerto `isolado` ampliada até os 5°
@@ -1058,7 +1066,13 @@ O que acontece ao ligar:
 - uma janela de **sobreposição** transparente, sempre no topo e atravessável
   pelo mouse cobre o monitor: nela ficam o cursor (encolhido para ~60 % do
   tamanho do app, sem descer de 24 px), o anel de progresso, uma **barra
-  lateral** de ações e, quando abertos, a lupa e o teclado;
+  lateral** de ações e, quando abertos, a lupa e o teclado. A barra fica a
+  48 px da borda direita, com o centro dos botões na faixa dos alvos
+  externos da calibração (a borda é onde o olhar erra mais); os botões
+  crescem com a altura do monitor (81 px num Full HD, de 52 a 96 px, ícone
+  de 45 % do botão) e deixam os cantos livres — os botões de
+  minimizar/maximizar das janelas e o relógio da barra de tarefas continuam
+  alcançáveis pelo olhar (`frontend/src/overlay/geometriaDaBarra.ts`);
 - cada amostra de olhar vai da janela do app ao processo principal, que a
   converte para o monitor (px CSS da janela → DIP da tela → px físicos, com
   `screen.dipToScreenPoint` no Windows, para a escala de 125/150 % e

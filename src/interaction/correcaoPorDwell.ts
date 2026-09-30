@@ -148,8 +148,9 @@ export type OrigemDaSelecao = 'app' | 'overlay' | 'externo';
 /**
  * Menor alvo da sobreposição que vale como rótulo, em px (lado menor).
  *
- * 52 é o menor lado que a barra do Modo Computador desenha (`Overlay.tsx`:
- * `ladoDoBotao` vai de 52 a 72 conforme a altura do monitor). Era 96 — e com
+ * 52 é o menor lado que a barra do Modo Computador desenha
+ * (`geometriaDaBarra.ts`: o botão vai de 52 a 96 px conforme a altura do
+ * monitor — 81 px num Full HD). Era 96 — e com
  * 96 NENHUM alvo da sobreposição passava, o que deixava a correção sem
  * aprender nada no Modo Computador, exatamente onde o cursor mais importa.
  * Um botão de 52 px com um dwell de 1 s é ~30 amostras cuja média está a no

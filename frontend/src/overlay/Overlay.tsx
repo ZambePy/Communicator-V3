@@ -29,7 +29,8 @@ import {
 import { EXPERIMENT } from '@tracker/config/experiment';
 import { estiloDoCursor } from '@tracker/interaction/cursorStyle';
 import { geometriaDoAnel } from '@tracker/interaction/dwellRing';
-import { SeguidorDeCursor } from '@tracker/interaction/seguidorDeCursor';
+import { SeguidorDeCursor, IDADE_MAXIMA_MS } from '@tracker/interaction/seguidorDeCursor';
+import { PlanejadorDoCursor, transicaoDoPasso } from '@tracker/interaction/cursorNoCompositor';
 import { ALVO_MINIMO_OVERLAY_PX } from '@tracker/interaction/correcaoPorDwell';
 import type { AmostraDeOlhar, ConfiguracaoDoModo, AcaoDoSistema } from '@tracker/computador/protocolo';
 import type { Ponto } from '@tracker/computador/geometria';
@@ -46,6 +47,7 @@ import {
   type Efeito,
 } from './maquina';
 import { pontePara } from './ponte';
+import { geometriaDaBarra, ESPACO_ENTRE_BOTOES_PX } from './geometriaDaBarra';
 
 /**
  * A sobreposição: o que o paciente vê por cima do Windows.
@@ -75,25 +77,30 @@ const CORES = {
   voltar: '#22c55e',
 };
 
+type Icone = React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
+
 interface BotaoDaBarra {
   id: IdDeBotao;
   rotulo: string;
-  icone: React.ReactNode;
+  /** O componente, não o elemento: o tamanho do ícone acompanha o do botão. */
+  Icone: Icone;
+  /** Espelhado na horizontal (o "Direito" é o ponteiro do "Duplo" virado). */
+  espelhado?: boolean;
   cor?: string;
 }
 
 const BOTOES: BotaoDaBarra[] = [
-  { id: 'clique', rotulo: 'Clicar', icone: <MousePointerClick size={26} /> },
-  { id: 'duplo', rotulo: 'Duplo', icone: <MousePointer2 size={26} /> },
-  { id: 'direito', rotulo: 'Direito', icone: <MousePointer2 size={26} style={{ transform: 'scaleX(-1)' }} /> },
-  { id: 'arrastar', rotulo: 'Arrastar', icone: <Move size={26} /> },
-  { id: 'rolar', rotulo: 'Rolar', icone: <MoveVertical size={26} /> },
-  { id: 'teclado', rotulo: 'Teclado', icone: <Keyboard size={26} /> },
-  { id: 'lupa', rotulo: 'Lupa', icone: <ZoomIn size={26} /> },
-  { id: 'fixar', rotulo: 'Fixar', icone: <Pin size={26} /> },
-  { id: 'pausar', rotulo: 'Pausar', icone: <Pause size={26} /> },
-  { id: 'emergencia', rotulo: 'Socorro', icone: <TriangleAlert size={26} />, cor: CORES.emergencia },
-  { id: 'voltar', rotulo: 'IrisFlow', icone: <Home size={26} />, cor: CORES.voltar },
+  { id: 'clique', rotulo: 'Clicar', Icone: MousePointerClick },
+  { id: 'duplo', rotulo: 'Duplo', Icone: MousePointer2 },
+  { id: 'direito', rotulo: 'Direito', Icone: MousePointer2, espelhado: true },
+  { id: 'arrastar', rotulo: 'Arrastar', Icone: Move },
+  { id: 'rolar', rotulo: 'Rolar', Icone: MoveVertical },
+  { id: 'teclado', rotulo: 'Teclado', Icone: Keyboard },
+  { id: 'lupa', rotulo: 'Lupa', Icone: ZoomIn },
+  { id: 'fixar', rotulo: 'Fixar', Icone: Pin },
+  { id: 'pausar', rotulo: 'Pausar', Icone: Pause },
+  { id: 'emergencia', rotulo: 'Socorro', Icone: TriangleAlert, cor: CORES.emergencia },
+  { id: 'voltar', rotulo: 'IrisFlow', Icone: Home, cor: CORES.voltar },
 ];
 
 const LINHAS_DO_TECLADO: string[][] = [
@@ -137,6 +144,13 @@ export const Overlay: React.FC = () => {
   const cursorRef = useRef<HTMLDivElement>(null);
   /** Ver o laço de pintura no efeito do olhar: separa render de inferência. */
   const seguidorRef = useRef(new SeguidorDeCursor());
+  /**
+   * Cursor pelo compositor (`EXPERIMENT.cursorPeloCompositor`, o padrão): o
+   * mesmo da janela do app — destino e travessia escritos uma vez por
+   * amostra, quadros intermediários desenhados pelo compositor. Ver
+   * `interaction/cursorNoCompositor.ts`.
+   */
+  const planejadorRef = useRef(new PlanejadorDoCursor());
   const pinturaRef = useRef<{
     offsetPx: number; escala: number; opacidade: string; fundo: string; sombra: string; borda: string;
     anel: { tamanhoPx: number; pct: number } | null;
@@ -280,6 +294,53 @@ export const Overlay: React.FC = () => {
   };
 
   useEffect(() => {
+    const cursorPeloCompositor = EXPERIMENT.cursorPeloCompositor;
+    /** Último valor escrito em cada propriedade: escreve só o que mudou. */
+    const escrito = new Map<string, string>();
+    const escrever = (el: HTMLElement | SVGElement, prop: 'transform' | 'transition' | 'opacity' | 'background' | 'boxShadow' | 'border', valor: string) => {
+      const chave = (el === cursorRef.current ? 'c:' : 'a:') + prop;
+      if (escrito.get(chave) === valor) return;
+      escrito.set(chave, valor);
+      el.style[prop] = valor;
+    };
+    /**
+     * Cursor pelo compositor: uma escrita de destino + travessia por amostra;
+     * os quadros entre as amostras o compositor desenha sozinho.
+     */
+    const pintarPeloCompositor = (x: number, y: number, tMs: number): void => {
+      const cursor = cursorRef.current;
+      const p = pinturaRef.current;
+      if (!cursor || !p) return;
+      const passo = planejadorRef.current.passo({ x, y, tMs });
+      if (passo) {
+        // A duração vai antes do destino: vale a que estiver em vigor quando
+        // o `transform` muda.
+        escrever(cursor, 'transition', transicaoDoPasso(passo.duracaoMs));
+        escrever(cursor, 'transform', `translate3d(${passo.x - p.offsetPx}px, ${passo.y - p.offsetPx}px, 0) scale(${p.escala})`);
+      }
+      escrever(cursor, 'opacity', p.opacidade);
+      escrever(cursor, 'background', p.fundo);
+      escrever(cursor, 'boxShadow', p.sombra);
+      escrever(cursor, 'border', p.borda);
+      const anel = anelRef.current;
+      if (!anel) return;
+      const svg = anel.ownerSVGElement!;
+      if (!p.anel) {
+        escrever(svg, 'opacity', '0');
+        return;
+      }
+      const g = geometriaDoAnel(p.anel.tamanhoPx, p.anel.pct);
+      anel.setAttribute('stroke-dashoffset', String(g.offset));
+      if (passo) {
+        // O anel que estava escondido aparece no lugar, sem atravessar a tela
+        // — e só aparece com a posição desta amostra escrita.
+        const visivel = escrito.get('a:opacity') === '1';
+        escrever(svg, 'transition', transicaoDoPasso(visivel ? passo.duracaoMs : 0));
+        escrever(svg, 'transform', `translate3d(${passo.x - g.centro}px, ${passo.y - g.centro}px, 0)`);
+        escrever(svg, 'opacity', '1');
+      }
+    };
+
     const off = ponte.onOlhar((a) => {
       const c = configRef.current;
       if (!c) return;
@@ -341,15 +402,17 @@ export const Overlay: React.FC = () => {
         foraDaLupaDesdeRef.current = null;
       }
 
-      // A POSIÇÃO vai para o seguidor; o ESTILO fica num buffer. Quem escreve
-      // no DOM é o laço de pintura abaixo, na taxa do display — o mesmo
-      // desacoplamento da janela do app. Antes a sobreposição escrevia aqui,
-      // uma vez por amostra: era o "para-e-teleporta" que o app já não tinha.
+      // O ESTILO fica num buffer; a POSIÇÃO vai para o compositor (o padrão:
+      // destino + travessia, uma escrita por amostra) ou, na volta segura,
+      // para o seguidor do laço de pintura abaixo — o mesmo desacoplamento da
+      // janela do app. Antes a sobreposição escrevia aqui a posição crua, uma
+      // vez por amostra: era o "para-e-teleporta" que o app já não tinha.
       //
       // O carimbo de tempo é o DESTA janela, não o `a.t` do emissor: cada
-      // janela tem o próprio `performance.timeOrigin`, e o seguidor compara
-      // a idade da amostra com o relógio do rAF daqui.
-      seguidorRef.current.aoReceberAmostra({ x: a.x, y: a.y, tMs: performance.now() });
+      // janela tem o próprio `performance.timeOrigin`, e a idade da amostra é
+      // comparada com o relógio do rAF daqui.
+      const tAqui = performance.now();
+      if (!cursorPeloCompositor) seguidorRef.current.aoReceberAmostra({ x: a.x, y: a.y, tMs: tAqui });
       const est = estiloDoCursor({
         tamanhoPx: c.tamanhoCursorPx,
         estado: target ? 'sobreAlvo' : a.degraded ? 'degradado' : 'normal',
@@ -364,18 +427,27 @@ export const Overlay: React.FC = () => {
         borda: est.tracejado ? '2px dashed rgba(234,179,8,0.9)' : '',
         anel: target && pct > 0 ? { tamanhoPx: est.tamanhoPx, pct } : null,
       };
+      if (cursorPeloCompositor) pintarPeloCompositor(a.x, a.y, tAqui);
     });
 
     // LAÇO DE PINTURA — taxa do display, não da câmera. Lê o seguidor e o
     // buffer de estilo; nenhuma leitura de layout, nenhum hit-test (esse
     // continua no callback, por amostra). Fonte seca (> 300 ms sem amostra):
     // o cursor congela E fica translúcido, em vez de parecer saudável.
+    //
+    // Com o cursor pelo compositor, este laço só vigia a fonte: a posição já
+    // foi entregue ao compositor por `pintarPeloCompositor`.
     let raf = 0;
     const pintar = (agoraMs: number): void => {
       raf = requestAnimationFrame(pintar);
       const cursor = cursorRef.current;
       const p = pinturaRef.current;
       if (!cursor || !p) return;
+      if (cursorPeloCompositor) {
+        const idade = planejadorRef.current.idadeMs(agoraMs);
+        if (idade !== null && idade > IDADE_MAXIMA_MS) escrever(cursor, 'opacity', '0.35');
+        return;
+      }
       const pos = seguidorRef.current.render(agoraMs);
       if (!pos) return;
       cursor.style.transform = `translate3d(${pos.x - p.offsetPx}px, ${pos.y - p.offsetPx}px, 0) scale(${p.escala})`;
@@ -401,6 +473,7 @@ export const Overlay: React.FC = () => {
       off();
       cancelAnimationFrame(raf);
       seguidorRef.current.reiniciar();
+      planejadorRef.current.reiniciar();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ponte, despachar]);
@@ -408,9 +481,9 @@ export const Overlay: React.FC = () => {
   if (!config) return null;
 
   const g = geometriaDoAnel(config.tamanhoCursorPx, 0);
-  const larguraDaBarra = 96;
-  const alturaUtil = config.monitor.height - 24;
-  const ladoDoBotao = Math.max(52, Math.min(72, Math.floor((alturaUtil - (BOTOES.length - 1) * 8) / BOTOES.length)));
+  // Botões maiores e afastados da borda direita (ver `geometriaDaBarra.ts`).
+  const barra = geometriaDaBarra(config.monitor.height, BOTOES.length);
+  const larguraDaBarra = barra.larguraOcupadaPx;
 
   // Painel da lupa: centrado no ponto, mas inteiro na tela e fora da barra.
   const ladoDaLupa = Math.round(LUPA_RAIO_PX * 2 * LUPA_ZOOM);
@@ -459,8 +532,8 @@ export const Overlay: React.FC = () => {
         onMouseEnter={() => void ponte.acao({ tipo: 'capturarMouse', ligado: true })}
         onMouseLeave={() => void ponte.acao({ tipo: 'capturarMouse', ligado: false })}
         style={{
-          position: 'absolute', top: 12, right: 8, bottom: 12, width: larguraDaBarra - 16,
-          display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', justifyContent: 'center',
+          position: 'absolute', top: barra.topoPx, right: barra.direitaPx, bottom: barra.basePx, width: barra.ladoPx,
+          display: 'flex', flexDirection: 'column', gap: ESPACO_ENTRE_BOTOES_PX, alignItems: 'center', justifyContent: 'center',
         }}
       >
         {BOTOES.map((b) => {
@@ -481,15 +554,17 @@ export const Overlay: React.FC = () => {
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') despachar({ tipo: 'botao', id: b.id }); }}
               tabIndex={0}
               style={{
-                width: ladoDoBotao, height: ladoDoBotao, borderRadius: 14, boxSizing: 'border-box',
+                width: barra.ladoPx, height: barra.ladoPx, borderRadius: barra.raioPx, boxSizing: 'border-box',
                 background: ligado ? 'rgba(56,189,248,0.22)' : CORES.painel,
                 border: `2px solid ${cor}`,
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
-                color: b.cor ?? CORES.texto, fontSize: 11, fontWeight: 700, letterSpacing: '0.01em',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+                color: b.cor ?? CORES.texto, fontSize: barra.fontePx, fontWeight: 700, letterSpacing: '0.01em',
                 cursor: 'pointer',
               }}
             >
-              {b.id === 'pausar' && estado.pausado ? <Play size={26} /> : b.icone}
+              {b.id === 'pausar' && estado.pausado
+                ? <Play size={barra.iconePx} />
+                : <b.Icone size={barra.iconePx} style={b.espelhado ? { transform: 'scaleX(-1)' } : undefined} />}
               <span>{b.id === 'pausar' && estado.pausado ? 'Retomar' : b.rotulo}</span>
             </div>
           );

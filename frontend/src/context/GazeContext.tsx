@@ -34,7 +34,8 @@ import { rolarSobOOlhar } from '../rolarSobOOlhar';
 import { estiloDoCursor, limitarTamanho } from '@tracker/interaction/cursorStyle';
 import { geometriaDoAnel } from '@tracker/interaction/dwellRing';
 import { GazeFallback } from '@tracker/interaction/gazeFallback';
-import { SeguidorDeCursor } from '@tracker/interaction/seguidorDeCursor';
+import { SeguidorDeCursor, IDADE_MAXIMA_MS } from '@tracker/interaction/seguidorDeCursor';
+import { PlanejadorDoCursor, transicaoDoPasso } from '@tracker/interaction/cursorNoCompositor';
 import {
   consultar as consultarVigia, dispensar as dispensarVigia, resolvido as vigiaResolvido,
   estadoInicialDoAviso, INTERVALO_DE_CONSULTA_MS, type EstadoDoAviso,
@@ -254,6 +255,8 @@ const GazeContext = createContext<GazeContextValue | null>(null);
  */
 interface EstiloDeCursorEmCache {
   transform: string;
+  /** Duração da travessia do `transform` (cursor pelo compositor) + a da opacidade. */
+  transition: string;
   background: string;
   boxShadow: string;
   border: string;
@@ -263,6 +266,7 @@ interface EstiloDeCursorEmCache {
 
 const NOME_CSS: Record<keyof Omit<EstiloDeCursorEmCache, 'anelVisivel'>, string> = {
   transform: 'transform',
+  transition: 'transition',
   background: 'background',
   boxShadow: 'box-shadow',
   border: 'border',
@@ -288,11 +292,26 @@ function escreverNoCursor(
   // `setProperty` com string vazia REMOVE a propriedade, que é exatamente o
   // que `el.style.border = ''` fazia antes.
   if (valor === '') el.style.removeProperty(NOME_CSS[prop]);
-  else el.style.setProperty(NOME_CSS[prop], valor);
+  // A travessia do cursor não é enfeite: é o que o tira dos degraus. A regra
+  // de `prefers-reduced-motion` do index.css zera toda transição com
+  // `!important`, e o Windows liga essa preferência quando os "efeitos de
+  // animação" estão desligados — comum em PC lento, justamente onde a thread
+  // principal mais trava. Sem a prioridade, o cursor voltaria a saltar a cada
+  // amostra, pior que o laço de rAF de antes (que ignora CSS).
+  else el.style.setProperty(NOME_CSS[prop], valor, prop === 'transition' ? 'important' : '');
 }
+
+/**
+ * A transição de opacidade do cursor (aparecer/sumir devagar). Vai junto com a
+ * do `transform` na mesma propriedade `transition`.
+ */
+const TRANSICAO_DA_OPACIDADE = 'opacity 600ms ease 300ms';
 
 /** Esconde o cursor sem tocar em nada que já esteja no valor certo. */
 function esconderCursor(el: HTMLElement, cache: EstiloDeCursorEmCache): void {
+  // Travessia zerada ANTES de mandar o cursor para fora da tela: com a
+  // transição do compositor ainda valendo, ele atravessaria a tela até lá.
+  escreverNoCursor(el, cache, 'transition', transicaoDoPasso(0, TRANSICAO_DA_OPACIDADE));
   escreverNoCursor(el, cache, 'transform', 'translate3d(-9999px,-9999px,0)');
   escreverNoCursor(el, cache, 'opacity', '0');
 }
@@ -559,6 +578,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
    */
   const ultimoEstiloDoCursorRef = useRef<EstiloDeCursorEmCache>({
     transform: '',
+    transition: '',
     background: '',
     boxShadow: '',
     border: '',
@@ -582,6 +602,14 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
    * ele é aceitável numa interface de dwell.
    */
   const seguidorRef = useRef(new SeguidorDeCursor());
+  /**
+   * O mesmo desacoplamento, feito pelo compositor (`EXPERIMENT.cursorPeloCompositor`,
+   * o padrão): a cada amostra o callback escreve o destino e a duração da
+   * travessia, e a thread do compositor desenha os quadros intermediários sem
+   * depender da thread principal — que é a do MediaPipe. Ver
+   * `interaction/cursorNoCompositor.ts`.
+   */
+  const planejadorRef = useRef(new PlanejadorDoCursor());
   /**
    * O que pintar no próximo quadro de display. Escrito pelo callback do engine
    * (taxa de amostra), lido pelo laço de render (taxa de display).
@@ -1152,6 +1180,12 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // `escreverNoCursor`). Nenhuma leitura de layout, nenhum `elementFromPoint`
     // — o hit-test do dwell continua no callback do engine, na taxa da amostra,
     // exatamente como antes.
+    //
+    // Com o cursor pelo compositor (o padrão), a posição NÃO passa mais por
+    // aqui: o callback entrega destino e travessia ao compositor (ver
+    // `pintarPeloCompositor`, abaixo), e este laço só vigia a fonte. O laço
+    // completo continua para a volta segura (`cursorPeloCompositor: false`).
+    const cursorPeloCompositor = EXPERIMENT.cursorPeloCompositor;
     let rafPintura = 0;
     const pintar = (agoraMs: number): void => {
       rafPintura = requestAnimationFrame(pintar);
@@ -1159,6 +1193,16 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!cur) return;
       const p = pinturaRef.current;
       if (p.escondido) return; // quem escondeu já escreveu; não repintar por cima
+
+      if (cursorPeloCompositor) {
+        // Fonte seca: a última travessia termina e o cursor fica onde está,
+        // mas translúcido — congelar sem avisar pareceria funcionando.
+        const idade = planejadorRef.current.idadeMs(agoraMs);
+        if (idade !== null && idade > IDADE_MAXIMA_MS) {
+          escreverNoCursor(cur, ultimoEstiloDoCursorRef.current, 'opacity', '0.35');
+        }
+        return;
+      }
 
       const pos = seguidorRef.current.render(agoraMs);
       if (!pos) return;
@@ -1197,6 +1241,60 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     rafPintura = requestAnimationFrame(pintar);
 
+    /** Última `transition` escrita no `<svg>` do anel (a mesma travessia do cursor). */
+    let transicaoDoAnel = '';
+    /**
+     * Cursor pelo compositor: chamada UMA vez por amostra, no callback do
+     * engine. Escreve o destino com a duração da travessia; os quadros entre
+     * uma amostra e a outra o compositor desenha sozinho, a 60 Hz, com a thread
+     * principal ocupada ou não.
+     */
+    const pintarPeloCompositor = (x: number, y: number, tMs: number, p: typeof pinturaRef.current): void => {
+      const cur = cursorRef.current;
+      if (!cur) return;
+      const cache = ultimoEstiloDoCursorRef.current;
+      const passo = planejadorRef.current.passo({ x, y, tMs });
+      if (passo) {
+        // A duração vai ANTES do destino: a transição nova usa a duração em
+        // vigor no instante em que o `transform` muda.
+        escreverNoCursor(cur, cache, 'transition', transicaoDoPasso(passo.duracaoMs, TRANSICAO_DA_OPACIDADE));
+        escreverNoCursor(
+          cur,
+          cache,
+          'transform',
+          `translate3d(${passo.x - p.offsetPx}px, ${passo.y - p.offsetPx}px, 0) scale(${p.escala})`
+        );
+      }
+      escreverNoCursor(cur, cache, 'opacity', p.opacity);
+      escreverNoCursor(cur, cache, 'background', p.background);
+      escreverNoCursor(cur, cache, 'boxShadow', p.boxShadow);
+      escreverNoCursor(cur, cache, 'border', p.border);
+
+      const anel = anelRef.current;
+      if (!anel) return;
+      if (!p.anel) {
+        esconderAnel();
+        return;
+      }
+      const g = geometriaDoAnel(p.tamanhoPx, p.anel.dwellPct);
+      anel.setAttribute('stroke-dashoffset', String(g.offset));
+      const svg = anel.ownerSVGElement;
+      if (svg && passo) {
+        // Anel que estava escondido aparece no lugar: atravessar a tela desde
+        // onde sumiu seria um risco verde cruzando a tela.
+        const t = transicaoDoPasso(cache.anelVisivel === '1' ? passo.duracaoMs : 0);
+        if (t !== transicaoDoAnel) {
+          // Mesma prioridade do cursor (ver `escreverNoCursor`).
+          svg.style.setProperty('transition', t, 'important');
+          transicaoDoAnel = t;
+        }
+        svg.style.transform = `translate3d(${passo.x - g.centro}px, ${passo.y - g.centro}px, 0)`;
+        // Só aparece com a posição desta amostra escrita: sem ela, a próxima
+        // amostra o trataria como visível e o faria deslizar de onde ficou.
+        mostrarAnel();
+      }
+    };
+
     let avisouCursorAusente = false;
     const unsubGaze = engine.subscribe((sample) => {
       if (devMode) {
@@ -1205,6 +1303,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // quadro seguinte e o modo desenvolvedor volta a mostrá-lo.
         pinturaRef.current.escondido = true;
         seguidorRef.current.reiniciar();
+        planejadorRef.current.reiniciar();
         return;
       }
 
@@ -1305,7 +1404,11 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // aos grupos e repetia (percurso da Fase 8).
           rearmeRef.current = aoNavegar(tDaAmostra, { x: sample.x, y: sample.y });
         }
-        const rearme = filtrarAlvo(rearmeRef.current, node, tDaAmostra, { x: sample.x, y: sample.y });
+        // `data-rearme-permanencia`: alvo que só navega (os grupos do teclado)
+        // rearma também com o olhar parado nele — ver `rearmePorSaida.ts`.
+        const rearme = filtrarAlvo(rearmeRef.current, node, tDaAmostra, { x: sample.x, y: sample.y }, {
+          permanencia: node?.dataset.rearmePermanencia === 'true',
+        });
         rearmeRef.current = rearme.estado;
 
         // `data-dwell-ms` inválido (NaN) não pode virar dwell instantâneo.
@@ -1624,6 +1727,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // parou antes de sumir. Reaparecer é descontinuidade legítima.
           pinturaRef.current.escondido = true;
           seguidorRef.current.reiniciar();
+          planejadorRef.current.reiniciar();
 
           // O fallback de gaze perdido não roda aqui (não há cursor para
           // segurar), mas a mensagem dele precisa ser limpa: um "Posicione o
@@ -1709,6 +1813,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             esconderAnel();
             pinturaRef.current.escondido = true;
             seguidorRef.current.reiniciar();
+            planejadorRef.current.reiniciar();
           } else {
             // Geometria e cores vêm do módulo puro — em especial o `offsetPx`:
             // um meio-tamanho escrito à mão aqui viraria viés constante assim
@@ -1726,18 +1831,13 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               dwellPct,
             });
 
-            // A POSIÇÃO vai para o seguidor; o ESTILO vai para o buffer de
-            // pintura. Quem escreve no DOM é o laço de render, a 60 Hz.
+            // O ESTILO vai para o buffer de pintura; a POSIÇÃO vai para o
+            // compositor (o padrão: destino + travessia, uma escrita por
+            // amostra) ou, na volta segura, para o seguidor do laço de rAF.
             //
-            // A separação é o ponto: a posição precisa ser interpolada entre
-            // amostras (senão o cursor teleporta), enquanto cor, anel e escala
-            // podem ser atualizados na taxa da amostra sem nenhum prejuízo
-            // visual — eles não descrevem movimento.
-            seguidorRef.current.aoReceberAmostra({
-              x: fb.posicao.x,
-              y: fb.posicao.y,
-              tMs: now,
-            });
+            // Nos dois casos a posição é interpolada entre amostras (senão o
+            // cursor teleporta), enquanto cor, anel e escala podem mudar na
+            // taxa da amostra sem prejuízo visual — não descrevem movimento.
             pinturaRef.current = {
               escondido: false,
               background: est.preenchimento,
@@ -1753,6 +1853,11 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               tamanhoPx: est.tamanhoPx,
               anel: hitTarget ? { dwellPct } : null,
             };
+            if (cursorPeloCompositor) {
+              pintarPeloCompositor(fb.posicao.x, fb.posicao.y, now, pinturaRef.current);
+            } else {
+              seguidorRef.current.aoReceberAmostra({ x: fb.posicao.x, y: fb.posicao.y, tMs: now });
+            }
           }
         }
       } else if (!avisouCursorAusente) {
@@ -2287,6 +2392,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // sobreviveria ao desmonte e continuaria escrevendo num nó removido.
       cancelAnimationFrame(rafPintura);
       seguidorRef.current.reiniciar();
+      planejadorRef.current.reiniciar();
       cursorRef.current?.remove();
       cursorRef.current = null;
       limparEstadoDoOlhar();

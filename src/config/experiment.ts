@@ -181,6 +181,18 @@ export interface ExperimentConfig {
   /** Anel de progresso do dwell desenhado ao redor do cursor. */
   dwellRingOnCursor: boolean;
   /**
+   * O cursor anda por transição CSS, animada pelo compositor (ver
+   * `interaction/cursorNoCompositor.ts`), em vez de ser reescrito a cada
+   * quadro pelo laço de rAF.
+   *
+   * Ligada por padrão: o laço de rAF roda na mesma thread do MediaPipe, e com
+   * ela ocupada 70–100 % do tempo o cursor andava aos degraus (gravação de
+   * 30/09). A flag existe como volta segura se alguma placa de vídeo animar
+   * mal a transição: `__irisflowExp.set('cursorPeloCompositor', false)` e
+   * recarregar devolve o seguidor por rAF de antes.
+   */
+  cursorPeloCompositor: boolean;
+  /**
    * Mantém o cursor visível DURANTE o teste de precisão.
    *
    * Desligada por default, e o default não é conservadorismo: vendo o cursor,
@@ -360,6 +372,7 @@ const DEFAULTS_DO_CODIGO: ExperimentConfig = {
   blocoL2csCompleto: false,
   cursorSizePx: 48,
   dwellRingOnCursor: false,
+  cursorPeloCompositor: true,
   cursorNoTesteDePrecisao: false,
   persistirCalibracao: true,
   blinkClick: false,

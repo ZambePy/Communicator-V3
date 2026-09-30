@@ -66,6 +66,7 @@ vi.mock('./SettingsContext', () => ({
 }));
 
 import { GazeProvider } from './GazeContext';
+import { EXPERIMENT } from '@tracker/config/experiment';
 import { instalarRelogioDeQuadros, type RelogioDeQuadros } from '../test/quadros';
 
 /** Quantas amostras uma sessão de um segundo entrega. */
@@ -101,7 +102,7 @@ function cursor(): HTMLElement {
 }
 
 /** Nomes CSS, como o caminho quente os escreve. */
-type PropriedadeMedida = 'transform' | 'background' | 'box-shadow' | 'border' | 'opacity';
+type PropriedadeMedida = 'transform' | 'transition' | 'background' | 'box-shadow' | 'border' | 'opacity';
 
 /**
  * Conta escritas de estilo no elemento.
@@ -213,25 +214,104 @@ describe('GazeContext — o caminho quente a 30 Hz', () => {
       'border',
       'opacity',
       'transform',
+      'transition',
     ]);
 
     for (let i = 1; i <= AMOSTRAS_POR_SEGUNDO; i++) emitirEPintar(400 + i, 300 + i);
 
-    const QUADROS = AMOSTRAS_POR_SEGUNDO * QUADROS_POR_AMOSTRA;
-
-    // A posição muda a cada QUADRO — essa escrita é o trabalho útil, e é o
-    // trabalho que o desacoplamento acrescentou de propósito. O mesmo caminho
-    // percorrido, em passos menores.
-    expect(contagem.transform).toBe(QUADROS);
-    expect(contagem.transform).toBeGreaterThan(AMOSTRAS_POR_SEGUNDO);
+    // Cursor pelo compositor (o padrão): a posição é escrita UMA vez por
+    // AMOSTRA, com a duração da travessia — os quadros intermediários são do
+    // compositor, que não depende da thread principal (a do MediaPipe). O
+    // laço de rAF continua rodando, e não escreve posição nenhuma.
+    expect(contagem.transform).toBe(AMOSTRAS_POR_SEGUNDO);
+    // A travessia acompanha o intervalo entre amostras: com a câmera regular
+    // ela muda uma vez (do "aparece no lugar" da primeira para os 33 ms) e
+    // não é reescrita a cada amostra.
+    expect(contagem.transition).toBeLessThanOrEqual(1);
+    expect(cursor().style.transition).toBe('transform 33ms linear, opacity 600ms ease 300ms');
+    // Com prioridade: a regra de `prefers-reduced-motion` do index.css zera
+    // toda transição com `!important`, e o cursor voltaria aos saltos.
+    expect(cursor().style.getPropertyPriority('transition')).toBe('important');
     // Estas não mudam com a posição. Antes eram 30 escritas por segundo cada
     // uma; a de `background` ainda reiniciava uma transição CSS a cada quadro.
-    // Dobrar a taxa de pintura NÃO pode dobrar o custo delas: o cache é o que
-    // torna o laço de 60 Hz mais barato que o de 30 Hz que ele substituiu.
     expect(contagem.background).toBe(0);
     expect(contagem['box-shadow']).toBe(0);
     expect(contagem.border).toBe(0);
     expect(contagem.opacity).toBe(0);
+  });
+
+  it('volta segura (cursorPeloCompositor desligada): o laço de rAF escreve a posição a cada quadro', () => {
+    const original = EXPERIMENT.cursorPeloCompositor;
+    EXPERIMENT.cursorPeloCompositor = false;
+    try {
+      render(
+        <GazeProvider>
+          <div />
+        </GazeProvider>
+      );
+      emitirEPintar(400, 300);
+      const contagem = contarEscritas(cursor(), ['background', 'box-shadow', 'border', 'opacity', 'transform']);
+      for (let i = 1; i <= AMOSTRAS_POR_SEGUNDO; i++) emitirEPintar(400 + i, 300 + i);
+
+      // O seguidor de antes: a posição muda a cada QUADRO de display, com o
+      // passo dividido entre eles — e o resto continua no cache.
+      expect(contagem.transform).toBe(AMOSTRAS_POR_SEGUNDO * QUADROS_POR_AMOSTRA);
+      expect(contagem.background).toBe(0);
+      expect(contagem['box-shadow']).toBe(0);
+      expect(contagem.border).toBe(0);
+      expect(contagem.opacity).toBe(0);
+    } finally {
+      EXPERIMENT.cursorPeloCompositor = original;
+    }
+  });
+
+  it('fonte seca: sem amostra nova o cursor fica onde está e translúcido; a amostra seguinte o devolve', () => {
+    render(
+      <GazeProvider>
+        <div />
+      </GazeProvider>
+    );
+    emitirEPintar(400, 300);
+    emitirEPintar(401, 301);
+    expect(cursor().style.opacity).toBe('1');
+    const onde = cursor().style.transform;
+
+    // 400 ms de display sem amostra (o engine parou de emitir).
+    relogio.quadros(24);
+    expect(cursor().style.opacity).toBe('0.35');
+    expect(cursor().style.transform).toBe(onde);
+
+    emitirEPintar(402, 302);
+    expect(cursor().style.opacity).toBe('1');
+  });
+
+  it('esconder zera a travessia antes de mandar o cursor para fora da tela', () => {
+    render(
+      <GazeProvider>
+        <div />
+      </GazeProvider>
+    );
+    emitirEPintar(400, 300);
+    emitirEPintar(401, 301);
+    expect(cursor().style.transition).toContain('transform 33ms');
+
+    // Calibração: o cursor some. Com os 33 ms ainda valendo, ele atravessaria
+    // a tela até (-9999, -9999) na frente da pessoa.
+    const estadoOriginal = engineMock.getState;
+    engineMock.getState = () => 'calibrating';
+    try {
+      emitirEPintar(402, 302);
+      expect(cursor().style.transform).toContain('-9999px');
+      expect(cursor().style.transition).toContain('transform 0ms');
+    } finally {
+      engineMock.getState = estadoOriginal;
+    }
+
+    // E ao voltar ele aparece no lugar, sem atravessar desde onde sumiu.
+    emitirEPintar(700, 500);
+    expect(cursor().style.transition).toContain('transform 0ms');
+    expect(cursor().style.transform).toContain('translate3d(');
+    expect(cursor().style.transform).not.toContain('-9999px');
   });
 
   it('o cursor escondido não é reescrito a cada quadro', () => {

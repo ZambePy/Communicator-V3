@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   aoClicar, aoNavegar, criarRearme, filtrarAlvo, JANELA_DE_HERANCA_MS, SAIDA_PARA_REARMAR_MS,
-  AMOSTRAS_PARA_SALTO, type EstadoDoRearme, type PontoDoOlhar,
+  AMOSTRAS_PARA_SALTO, PERMANENCIA_PARA_REARMAR_MS, type EstadoDoRearme, type OpcoesDoAlvo, type PontoDoOlhar,
 } from './rearmePorSaida';
 import { DISTANCIA_DE_SALTO_PX } from './seguidorDeCursor';
 
@@ -17,15 +17,19 @@ const LONGE: PontoDoOlhar = { x: AQUI.x + 3 * DISTANCIA_DE_SALTO_PX, y: AQUI.y }
 
 function passar(
   estado: EstadoDoRearme, alvo: unknown | null, de: number, ate: number, passo = 33, ponto: PontoDoOlhar = AQUI,
+  opcoes?: OpcoesDoAlvo,
 ) {
   let e = estado;
   let ultimo = false;
+  /** Primeiro instante em que o alvo deixou de estar bloqueado (ou `null`). */
+  let liberouEm: number | null = null;
   for (let t = de; t <= ate; t += passo) {
-    const r = filtrarAlvo(e, alvo, t, ponto);
+    const r = filtrarAlvo(e, alvo, t, ponto, opcoes);
     e = r.estado;
     ultimo = r.bloqueado;
+    if (!r.bloqueado && liberouEm === null) liberouEm = t;
   }
-  return { estado: e, bloqueado: ultimo };
+  return { estado: e, bloqueado: ultimo, liberouEm };
 }
 
 describe('rearme por saída', () => {
@@ -144,5 +148,80 @@ describe('rearme por saída', () => {
     e = passar(e, A, 0, JANELA_DE_HERANCA_MS).estado;
     const r = passar(e, B, JANELA_DE_HERANCA_MS + 33, 2000, 33, LONGE);
     expect(r.bloqueado).toBe(false);
+  });
+});
+
+// Gravação de 30/09: escrito o "H", o teclado volta aos grupos e o
+// "G H I / J K L" cai sob o olhar; quem queria o "I" ficava olhando a célula e
+// nada acontecia, porque o grupo herdado só valia depois de o olhar sair.
+describe('rearme por permanência (grupos do teclado)', () => {
+  const GRUPO: OpcoesDoAlvo = { permanencia: true };
+
+  it('grupo herdado com o olhar parado nele volta a valer depois da permanência', () => {
+    const e = aoNavegar(0, AQUI);
+    const r = passar(e, B, 33, 3000, 33, AQUI, GRUPO);
+    expect(r.bloqueado).toBe(false);
+    // Nem antes da permanência, nem muito depois dela.
+    expect(r.liberouEm).not.toBeNull();
+    expect(r.liberouEm!).toBeGreaterThanOrEqual(33 + PERMANENCIA_PARA_REARMAR_MS);
+    expect(r.liberouEm!).toBeLessThanOrEqual(33 + PERMANENCIA_PARA_REARMAR_MS + 34);
+  });
+
+  it('sem a marca (as letras), o olhar parado continua bloqueado — a regra da Fase 8', () => {
+    const r = passar(aoNavegar(0, AQUI), B, 33, 12_000);
+    expect(r.bloqueado).toBe(true);
+    expect(r.liberouEm).toBeNull();
+  });
+
+  it('a permanência conta do alvo que está sob o olhar: trocar de alvo recomeça a conta', () => {
+    // A tela ainda trocando: A (que vai sumir) e depois o grupo B no lugar.
+    let e = aoNavegar(0, AQUI);
+    e = passar(e, A, 0, PERMANENCIA_PARA_REARMAR_MS - 100, 33, AQUI, GRUPO).estado;
+    const inicioB = PERMANENCIA_PARA_REARMAR_MS - 67;
+    const r = passar(e, B, inicioB, inicioB + PERMANENCIA_PARA_REARMAR_MS - 50, 33, AQUI, GRUPO);
+    expect(r.bloqueado).toBe(true);
+  });
+
+  it('sair do grupo zera a permanência', () => {
+    let e = aoNavegar(0, AQUI);
+    e = passar(e, B, 33, 33 + PERMANENCIA_PARA_REARMAR_MS - 100, 33, AQUI, GRUPO).estado;
+    // Um instante no vão entre as células (nenhum alvo) e de volta.
+    e = filtrarAlvo(e, null, 33 + PERMANENCIA_PARA_REARMAR_MS - 67, AQUI, GRUPO).estado;
+    const volta = 33 + PERMANENCIA_PARA_REARMAR_MS - 34;
+    expect(filtrarAlvo(e, B, volta + PERMANENCIA_PARA_REARMAR_MS - 50, AQUI, GRUPO).bloqueado).toBe(true);
+  });
+
+  it('célula grande: o olhar anda dentro dela para longe do ponto da troca e a conta continua', () => {
+    // Um salto confirmado (> 96 px por 3 amostras e 200 ms) sem sair do grupo.
+    let e = aoNavegar(0, AQUI);
+    e = passar(e, B, 33, 200, 33, AQUI, GRUPO).estado;
+    const r = passar(e, B, 233, 233 + PERMANENCIA_PARA_REARMAR_MS, 33, LONGE, GRUPO);
+    expect(r.bloqueado).toBe(false);
+    expect(r.liberouEm!).toBeLessThanOrEqual(33 + PERMANENCIA_PARA_REARMAR_MS + 34);
+  });
+
+  it('também rearma um grupo clicado que continue na tela', () => {
+    const r = passar(aoClicar(A, false), A, 0, 2000, 33, AQUI, GRUPO);
+    expect(r.bloqueado).toBe(false);
+    expect(r.liberouEm!).toBeGreaterThanOrEqual(PERMANENCIA_PARA_REARMAR_MS);
+  });
+
+  it('a permanência libera só o grupo: o botão que a tela nova desenha depois sob o olhar parado continua herdado', () => {
+    // Computador lento: a rota mudou (por um clique do cuidador), a célula de
+    // grupo da tela ANTIGA ficou 600 ms sob o olhar parado e foi liberada pela
+    // permanência; o botão da tela nova aparece depois no mesmo lugar.
+    let e = aoNavegar(0, AQUI);
+    const g = passar(e, A, 0, 600, 33, AQUI, GRUPO);
+    expect(g.bloqueado).toBe(false);
+    e = g.estado;
+    const r = passar(e, B, 633, 4000, 33, AQUI);
+    expect(r.bloqueado).toBe(true);
+    expect(r.liberouEm).toBeNull();
+  });
+
+  it('o grupo liberado continua livre enquanto a herança dura', () => {
+    const r = passar(aoNavegar(0, AQUI), A, 0, 3000, 33, AQUI, GRUPO);
+    expect(r.bloqueado).toBe(false);
+    expect(filtrarAlvo(r.estado, A, 3033, AQUI, GRUPO).bloqueado).toBe(false);
   });
 });

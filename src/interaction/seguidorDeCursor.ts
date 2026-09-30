@@ -1,6 +1,13 @@
 /**
  * Seguidor de cursor: separa a TAXA DE RENDER da TAXA DE INFERÊNCIA.
  *
+ * **Desde 30/09 é a volta segura, não o caminho padrão.** O laço de rAF que
+ * este módulo alimenta roda na thread do MediaPipe e perdia quadros com ela
+ * ocupada; o padrão agora entrega destino e travessia ao compositor
+ * (`cursorNoCompositor.ts`). Este seguidor continua valendo com
+ * `EXPERIMENT.cursorPeloCompositor = false`, e as constantes daqui
+ * (`DISTANCIA_DE_SALTO_PX`, `IDADE_MAXIMA_MS`) valem para os dois caminhos.
+ *
  * ## O problema que este módulo existe para resolver
  *
  * Até aqui a posição do cursor era escrita no DOM uma única vez por quadro de

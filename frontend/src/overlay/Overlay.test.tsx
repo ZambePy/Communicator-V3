@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import type { AcaoDoSistema, AmostraDeOlhar, ConfiguracaoDoModo, RespostaDaAcao } from '@tracker/computador/protocolo';
 import { Overlay } from './Overlay';
+import { EXPERIMENT } from '@tracker/config/experiment';
 import { instalarRelogioDeQuadros, type RelogioDeQuadros } from '../test/quadros';
 
 /**
@@ -102,6 +103,27 @@ describe('Overlay', () => {
     expect([890, 910]).toContain((clique as { ponto: { x: number } }).ponto.x);
   });
 
+  it('barra afastada da borda direita, com botões e ícones maiores (Full HD)', () => {
+    render(<Overlay />);
+    act(() => onConfig?.(CONFIG));
+    const barra = screen.getByLabelText('Ações do Modo Computador');
+    // Antes: colada a 8 px da borda, botões de 72 px e ícones de 26 px.
+    expect(barra.style.right).toBe('48px');
+    // Cantos livres: botões da barra de título e relógio da barra de tarefas.
+    expect(barra.style.top).toBe('44px');
+    expect(barra.style.bottom).toBe('60px');
+    const botoes = barra.querySelectorAll<HTMLElement>('[data-alvo^="botao:"]');
+    expect(botoes).toHaveLength(11);
+    for (const b of botoes) {
+      expect(b.style.width).toBe('81px');
+      expect(b.style.height).toBe('81px');
+      expect(Number(b.querySelector('svg')?.getAttribute('width'))).toBeGreaterThanOrEqual(36);
+    }
+    // O "Direito" continua sendo o ponteiro espelhado.
+    const direito = barra.querySelector('[data-alvo="botao:direito"] svg') as SVGElement;
+    expect(direito.style.transform).toBe('scaleX(-1)');
+  });
+
   it('"IrisFlow" pede saída; "Socorro" funciona mesmo em degradado', () => {
     render(<Overlay />);
     act(() => onConfig?.(CONFIG));
@@ -166,23 +188,50 @@ describe('Overlay — rótulo da correção por dwell e laço de pintura', () =>
     expect(acoes.some((a) => a.tipo === 'selecao')).toBe(false);
   });
 
-  it('a posição do cursor é escrita pelo laço de pintura, e a fonte seca deixa o cursor translúcido', () => {
+  /** O cursor é o div absoluto com o tamanho do cursor. */
+  const cursorDaSobreposicao = () =>
+    Array.from(document.querySelectorAll<HTMLElement>('div')).find((d) => d.style.width === `${CONFIG.tamanhoCursorPx}px`)!;
+
+  it('cursor pelo compositor: destino e travessia escritos na amostra; fonte seca deixa o cursor translúcido', () => {
     render(<Overlay />);
     act(() => onConfig?.(CONFIG));
-    const cursor = document.querySelector<HTMLElement>('[data-testid="cursor-da-sobreposicao"], .overlay-cursor');
-    // O elemento do cursor é o primeiro div absoluto com o tamanho do cursor.
-    const alvo = cursor ?? Array.from(document.querySelectorAll<HTMLElement>('div')).find((d) => d.style.width === `${CONFIG.tamanhoCursorPx}px`)!;
+    const alvo = cursorDaSobreposicao();
     expect(alvo).toBeTruthy();
 
+    // A primeira amostra aparece no lugar (sem travessia desde fora da tela).
     act(() => onOlhar?.({ x: 500, y: 300, t: 1, hasFace: true, eyeState: 'open', degraded: false, uncalibrated: false }));
-    // Sem quadro de display, nada foi escrito ainda.
-    expect(alvo.style.transform).not.toContain('500');
-    relogio.quadros(3);
-    expect(alvo.style.transform).toContain('translate3d(');
+    expect(alvo.style.transform).toContain('translate3d(486px, 286px, 0)');
+    expect(alvo.style.transition).toBe('transform 0ms linear');
     expect(alvo.style.opacity).toBe('1');
+
+    // A seguinte, 2 quadros depois: o compositor atravessa os ~33 ms sozinho.
+    relogio.quadros(2);
+    act(() => onOlhar?.({ x: 520, y: 300, t: 34, hasFace: true, eyeState: 'open', degraded: false, uncalibrated: false }));
+    expect(alvo.style.transform).toContain('translate3d(506px, 286px, 0)');
+    expect(alvo.style.transition).toBe('transform 33ms linear');
 
     // 400 ms sem amostra nova: congela E fica translúcido.
     relogio.quadros(26);
     expect(alvo.style.opacity).toBe('0.35');
+    expect(alvo.style.transform).toContain('translate3d(506px, 286px, 0)');
+  });
+
+  it('volta segura (cursorPeloCompositor desligada): a posição é escrita pelo laço de pintura', () => {
+    const original = EXPERIMENT.cursorPeloCompositor;
+    EXPERIMENT.cursorPeloCompositor = false;
+    try {
+      render(<Overlay />);
+      act(() => onConfig?.(CONFIG));
+      const alvo = cursorDaSobreposicao();
+      act(() => onOlhar?.({ x: 500, y: 300, t: 1, hasFace: true, eyeState: 'open', degraded: false, uncalibrated: false }));
+      // Sem quadro de display, nada foi escrito ainda.
+      expect(alvo.style.transform).not.toContain('486px');
+      relogio.quadros(3);
+      expect(alvo.style.transform).toContain('translate3d(486px, 286px, 0)');
+      relogio.quadros(26);
+      expect(alvo.style.opacity).toBe('0.35');
+    } finally {
+      EXPERIMENT.cursorPeloCompositor = original;
+    }
   });
 });
