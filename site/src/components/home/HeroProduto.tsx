@@ -38,7 +38,10 @@ export function HeroProduto() {
           {BETA.ativo && (
             <p className="aviso-pilula anim-entrada">
               {lancou ? (
-                <span>Beta gratuita, com download aberto.</span>
+                <>
+                  <EtiquetaLancamento lancamento={program.launchAt} />
+                  <span>Download gratuito para {BETA.sistemaDoLancamento}.</span>
+                </>
               ) : (
                 <>
                   <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />

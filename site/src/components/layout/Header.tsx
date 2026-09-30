@@ -21,8 +21,8 @@ const NAV: NavItem[] = [
   { to: '/como-funciona', label: 'Como funciona' },
   { to: '/cuidador', label: 'Cuidador' },
   { to: '/planos', label: 'Planos' },
-  // Só aparece com a beta ligada. Até o lançamento leva a etiqueta vermelha
-  // com o dia ("10/11"); depois dele, o selo "novo".
+  // Só aparece com a beta ligada, sempre com a etiqueta vermelha: até o
+  // lançamento, o dia ("10/11"); depois dele, "Liberada".
   ...(BETA.ativo ? [{ to: BETA_CTA.to, label: 'Beta', beta: true }] : []),
 ]
 
@@ -59,11 +59,7 @@ export function Header() {
   const { authenticated, loading } = useAccount()
   const program = useBetaProgram()
   const lancou = useJaLancou(program.launchAt)
-  const seloDaBeta = lancou ? (
-    <span className="header__badge">novo</span>
-  ) : (
-    <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
-  )
+  const seloDaBeta = <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
   // "Entrar" vai na mesma pílula das abas: o vidro chega até ele como chega
   // em Produto ou Planos (fora dela, o link não respondia do mesmo jeito).
   // Enquanto a sessão carrega, ele não aparece — nem "Meu perfil".
@@ -201,9 +197,16 @@ export function Header() {
                 Entrar
               </Button>
               {BETA.ativo ? (
-                <Button to={BETA_CTA.to} full onClick={fechar}>
-                  {BETA_CTA.labelLong}
-                </Button>
+                // Depois do lançamento, a mesma chamada do cabeçalho do computador.
+                lancou ? (
+                  <Button to="/baixar" full onClick={fechar}>
+                    Baixar grátis
+                  </Button>
+                ) : (
+                  <Button to={BETA_CTA.to} full onClick={fechar}>
+                    {BETA_CTA.labelLong}
+                  </Button>
+                )
               ) : (
                 <Button to="/cadastro" full onClick={fechar}>
                   Testar grátis por {TRIAL_DAYS} dias

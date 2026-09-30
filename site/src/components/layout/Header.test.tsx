@@ -5,9 +5,9 @@ import { Header } from './Header'
 import { esquecerBetaProgram } from '@/hooks/useBetaProgram'
 import { BETA_PROGRAM_RESERVA, type BetaProgram } from '@/services/api'
 
-/* O menu: a aba Beta leva a etiqueta vermelha do lançamento até o dia e o
-   selo "novo" depois; quem tem sessão vê "Meu perfil" — também antes de
-   responder a pesquisa, quando ainda não há conta completa. */
+/* O menu: a aba Beta leva a etiqueta vermelha nos dois estados — o dia até o
+   lançamento e "Liberada" depois; quem tem sessão vê "Meu perfil" — também
+   antes de responder a pesquisa, quando ainda não há conta completa. */
 
 const { sessao, apiFake } = vi.hoisted(() => ({
   sessao: { authenticated: false, loading: false, account: null as unknown },
@@ -50,15 +50,17 @@ describe('<Header />', () => {
     expect(within(beta).queryByText('novo')).not.toBeInTheDocument()
   })
 
-  it('depois do lançamento: volta o selo "novo" e a chamada vira "Baixar grátis"', async () => {
+  it('depois do lançamento: a etiqueta vermelha diz "Liberada" e a chamada vira "Baixar grátis"', async () => {
     apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: '2020-11-10T03:00:00Z' }
     montar()
     const nav = screen.getByRole('navigation', { name: 'Navegação principal' })
     // A pílula da navegação tem uma cópia visual dos rótulos, fora do leitor de
     // tela: a busca vai dentro do link de verdade.
     const beta = within(nav).getByRole('link', { name: /Beta/ })
-    expect(await within(beta).findByText('novo')).toBeInTheDocument()
-    expect(nav.querySelector('.etiqueta-lancamento')).toBeNull()
+    expect(await within(beta).findByText('Liberada')).toBeInTheDocument()
+    expect(beta.querySelector('.etiqueta-lancamento--liberada')).not.toBeNull()
+    expect(within(beta).getByText('Beta liberada: o download está aberto')).toHaveClass('sr-only')
+    expect(within(beta).queryByText('10/11')).not.toBeInTheDocument()
     expect((await screen.findAllByRole('link', { name: 'Baixar grátis' }))[0]).toHaveAttribute('href', '/baixar')
   })
 
@@ -78,11 +80,12 @@ describe('<Header />', () => {
     ])
   })
 
-  it('sem sessão: "Entrar" vai na pílula das abas e "Entrar na beta" fica ao lado', () => {
+  it('sem sessão: "Entrar" vai na pílula das abas e "Entrar na beta" fica ao lado', async () => {
     montar()
     const nav = screen.getByRole('navigation', { name: 'Navegação principal' })
     expect(within(nav).getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', '/entrar')
-    const chamada = screen.getAllByRole('link', { name: 'Entrar na beta' })[0]
+    // Antes do lançamento (a data do banco, que chega depois da reserva).
+    const chamada = (await screen.findAllByRole('link', { name: 'Entrar na beta' }))[0]
     expect(chamada).toHaveAttribute('href', '/beta')
     expect(nav.contains(chamada)).toBe(false)
     expect(screen.queryByRole('link', { name: 'Meu perfil' })).not.toBeInTheDocument()
@@ -134,6 +137,15 @@ describe('<Header />', () => {
       expect(gaveta).toHaveAttribute('hidden')
       expect(document.querySelector('main')).not.toHaveAttribute('inert')
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Abrir menu' }))
+    })
+
+    it('depois do lançamento, a gaveta chama para "Baixar grátis", como o cabeçalho', async () => {
+      apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: '2020-11-10T03:00:00Z' }
+      montar()
+      const gaveta = abrir()
+      expect(await within(gaveta).findByRole('link', { name: 'Baixar grátis' })).toHaveAttribute('href', '/baixar')
+      expect(within(gaveta).queryByRole('link', { name: 'Entrar na beta gratuita' })).not.toBeInTheDocument()
+      expect(within(gaveta).getByText('Liberada')).toBeInTheDocument()
     })
 
     it('um toque no destino da página atual também fecha (a rota não muda)', () => {

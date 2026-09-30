@@ -9,6 +9,7 @@ import { CallToAction } from '@/components/sections/CallToAction'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { BETA, BETA_CTA, BRAND, SEGMENTS } from '@/data/content'
+import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { ESTAGIOS, PASSOS_DO_PRIMEIRO_USO, TRAVAS, TRES_PERGUNTAS } from '@/data/produto'
 import './como-funciona.css'
 
@@ -19,6 +20,8 @@ import './como-funciona.css'
  * para quem o IrisFlow serve.
  */
 export default function ComoFunciona() {
+  const program = useBetaProgram()
+  const lancou = useJaLancou(program.launchAt)
   return (
     <>
       <PageHead
@@ -122,7 +125,12 @@ export default function ComoFunciona() {
             </Reveal>
             <Recursos itens={TRES_PERGUNTAS} numerar />
             <Reveal anim="up" className="como__perguntas-acoes">
-              <Button to={BETA.ativo ? BETA_CTA.to : '/baixar'}>{BETA.ativo ? BETA_CTA.label : 'Baixar grátis'}</Button>
+              {/* Antes do lançamento, a inscrição; depois, o download (como na Solução). */}
+              {BETA.ativo && !lancou ? (
+                <Button to={BETA_CTA.to}>{BETA_CTA.label}</Button>
+              ) : (
+                <Button to="/baixar">Baixar grátis</Button>
+              )}
               <Link to="/contato" className="link-seta">
                 Ficou em dúvida? A equipe responde caso a caso
               </Link>

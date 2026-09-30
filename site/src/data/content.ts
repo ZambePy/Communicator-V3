@@ -234,7 +234,7 @@ export const TRIAL_DAYS = 15
 export const BETA = {
   ativo: true,
   /** Versão exibida enquanto `beta_program` não responde. */
-  versaoReserva: '1.0.0-beta.1',
+  versaoReserva: '1.0.0-beta.10',
   /** Fim do acesso beta enquanto `beta_program` não responde. */
   fimReserva: '2027-03-31T23:59:59-03:00',
   /**
@@ -242,8 +242,11 @@ export const BETA = {
    * não responde. A data de verdade é `beta_program.launch_at`
    * (migração 20260924230017_beta_lancamento.sql): antes dela a inscrição
    * funciona e os botões de download mostram o dia; depois, liberam sozinhos.
+   * A beta foi liberada em 29/09/2026, às 21h50 de Brasília (antes marcada
+   * para 10/11): a reserva é a mesma data, para uma falha de leitura do banco
+   * não voltar o site ao "Download a partir de…".
    */
-  lancamentoReserva: '2026-11-10T00:00:00-03:00',
+  lancamentoReserva: '2026-09-29T21:50:00-03:00',
   /** O sistema que abre no lançamento (os outros seguem "em preparação"). */
   sistemaDoLancamento: 'Windows',
 }
