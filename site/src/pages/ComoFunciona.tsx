@@ -9,6 +9,7 @@ import { CallToAction } from '@/components/sections/CallToAction'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { BETA, BETA_CTA, BRAND, SEGMENTS } from '@/data/content'
+import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { ESTAGIOS, PASSOS_DO_PRIMEIRO_USO, TRAVAS, TRES_PERGUNTAS } from '@/data/produto'
 import './como-funciona.css'
 
@@ -19,6 +20,8 @@ import './como-funciona.css'
  * para quem o IrisFlow serve.
  */
 export default function ComoFunciona() {
+  const program = useBetaProgram()
+  const lancou = useJaLancou(program.launchAt)
   return (
     <>
       <PageHead
@@ -40,15 +43,16 @@ export default function ComoFunciona() {
           <div className="como__tecnico">
             <Detalhe resumo="Para quem quer o detalhe técnico">
               <p>
-                O rosto e a íris são localizados com o MediaPipe. Um modelo por olho, ajustado na
-                calibração, estima o ponto da tela; depois vêm as compensações de postura, a
-                correção dos cantos e um filtro que segura o cursor sem atrasá-lo.
+                O rosto e a íris são localizados com o MediaPipe, e uma rede neural de pesquisa, a
+                L2CS-Net, calcula o ângulo do olhar. Um modelo por olho, ajustado na calibração,
+                estima o ponto da tela; depois vêm as compensações de postura, a correção dos
+                cantos e um filtro que segura o cursor sem atrasá-lo.
               </p>
               <p>
-                Na medição de referência da equipe, com o modelo de pesquisa, o erro médio ficou em
-                1,40° — cerca de 1,5 cm na tela, a 60 cm. Trabalhos publicados com webcam ficam,
-                em geral, entre 2,4° e 4,2°. Foi uma medição com um só operador, em ambiente
-                controlado; a versão da beta, que roda sem o modelo de pesquisa, ainda vai ser
+                Na medição de referência da equipe, com essa rede, o erro médio ficou em 1,40° —
+                cerca de 1,5 cm na tela, a 60 cm. Trabalhos publicados com webcam ficam, em geral,
+                entre 2,4° e 4,2°. Foi uma medição com um só operador, em ambiente controlado; a
+                versão atual da beta, com os ajustes mais recentes do rastreamento, ainda vai ser
                 medida.
               </p>
               <p>
@@ -121,7 +125,12 @@ export default function ComoFunciona() {
             </Reveal>
             <Recursos itens={TRES_PERGUNTAS} numerar />
             <Reveal anim="up" className="como__perguntas-acoes">
-              <Button to={BETA.ativo ? BETA_CTA.to : '/baixar'}>{BETA.ativo ? BETA_CTA.label : 'Baixar grátis'}</Button>
+              {/* Antes do lançamento, a inscrição; depois, o download (como na Solução). */}
+              {BETA.ativo && !lancou ? (
+                <Button to={BETA_CTA.to}>{BETA_CTA.label}</Button>
+              ) : (
+                <Button to="/baixar">Baixar grátis</Button>
+              )}
               <Link to="/contato" className="link-seta">
                 Ficou em dúvida? A equipe responde caso a caso
               </Link>

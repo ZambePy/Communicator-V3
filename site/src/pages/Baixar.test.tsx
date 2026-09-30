@@ -72,6 +72,15 @@ describe('/baixar', () => {
     expect(await screen.findByText(/Download a partir de 10 de novembro/)).toBeInTheDocument()
   })
 
+  it('depois do lançamento, a etiqueta vermelha diz "Beta liberada"', async () => {
+    apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: '2020-11-10T03:00:00Z' }
+    montar()
+    expect(await screen.findByText('Download gratuito para Windows')).toBeInTheDocument()
+    const pilula = document.querySelector('.baixar-hero .aviso-pilula')!
+    expect(pilula.querySelector('.etiqueta-lancamento--liberada')).toHaveTextContent('Beta liberada')
+    expect(screen.queryByText(/Download a partir de/)).not.toBeInTheDocument()
+  })
+
   it('sem o app publicado nas lojas, os dois selos ficam "em breve" e levam à disponibilidade', () => {
     montar()
     expect(screen.getByRole('link', { name: 'Google Play, para Android: em breve' })).toHaveAttribute(

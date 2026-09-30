@@ -181,6 +181,18 @@ export interface ExperimentConfig {
   /** Anel de progresso do dwell desenhado ao redor do cursor. */
   dwellRingOnCursor: boolean;
   /**
+   * O cursor anda por transição CSS, animada pelo compositor (ver
+   * `interaction/cursorNoCompositor.ts`), em vez de ser reescrito a cada
+   * quadro pelo laço de rAF.
+   *
+   * Ligada por padrão: o laço de rAF roda na mesma thread do MediaPipe, e com
+   * ela ocupada 70–100 % do tempo o cursor andava aos degraus (gravação de
+   * 30/09). A flag existe como volta segura se alguma placa de vídeo animar
+   * mal a transição: `__irisflowExp.set('cursorPeloCompositor', false)` e
+   * recarregar devolve o seguidor por rAF de antes.
+   */
+  cursorPeloCompositor: boolean;
+  /**
    * Mantém o cursor visível DURANTE o teste de precisão.
    *
    * Desligada por default, e o default não é conservadorismo: vendo o cursor,
@@ -360,6 +372,7 @@ const DEFAULTS_DO_CODIGO: ExperimentConfig = {
   blocoL2csCompleto: false,
   cursorSizePx: 48,
   dwellRingOnCursor: false,
+  cursorPeloCompositor: true,
   cursorNoTesteDePrecisao: false,
   persistirCalibracao: true,
   blinkClick: false,
@@ -441,10 +454,11 @@ export function resolverPipeline(cfg: ExperimentConfig): ExperimentConfig {
  *
  * O `vite build` do frontend troca `__IRISFLOW_PADROES_DE_BUILD__` por um
  * objeto (frontend/vite.config.ts, `define`) montado de variáveis de ambiente
- * do build. Hoje há uma só, `IRISFLOW_BUILD_L2CS`: o release.yml passa `off`
- * enquanto os pesos do L2CS (Gaze360) não têm licença comercial — o instalador
- * público sai sem eles e com o rastreamento pelas features de íris. O caminho
- * `l2cs: 'off'` já existe inteiro: o engine marca o status `disabled`, a
+ * do build. Hoje há uma só, `IRISFLOW_BUILD_L2CS`: o release.yml passa `auto`
+ * desde a 1.0.0-beta.10 — a beta, acadêmica e não comercial, leva os pesos do
+ * L2CS (Gaze360, research-only) — e `off` quando a variável de repositório
+ * pede um instalador sem eles, com o rastreamento pelas features de íris. O
+ * caminho `l2cs: 'off'` existe inteiro: o engine marca o status `disabled`, a
  * pré-calibração libera o início, e o modelo treina sem o bloco angular (é a
  * condição B da M-ablação em docs/MEDICOES.md).
  *

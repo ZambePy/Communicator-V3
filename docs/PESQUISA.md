@@ -24,7 +24,7 @@ Regras de leitura:
 
 ## 1. A matemática de hoje
 
-Referências `arquivo:linha` valem para o commit-base do V2 (`e731357`). O caminho é o padrão do código; o instalador público é compilado com `IRISFLOW_BUILD_L2CS=off` e roda só com a íris.
+Referências `arquivo:linha` valem para o commit-base do V2 (`e731357`). O caminho é o padrão do código; o instalador público foi compilado com `IRISFLOW_BUILD_L2CS=off`, só com a íris, de 24/09 até a 1.0.0-beta.9, e leva o L2CS desde a beta.10 (README, *Pendências e riscos*, item 1).
 
 ### 1.1 Da câmera às features
 

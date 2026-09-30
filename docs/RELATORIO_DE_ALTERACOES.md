@@ -2,7 +2,7 @@
 
 Registro do que mudou no IrisFlow V2, fase por fase. Cada mudança de matemática ou de comportamento tem uma flag em `src/config/experiment.ts` (desligada, idêntica ao comportamento anterior — conferido por `golden.pipelineBase.test.ts`, Fase 7) e um número M1…M21 que remete à tabela de decisão de `docs/PESQUISA.md` §5; M11, o relatório de precisão, é a exceção sem flag. Ligadas por padrão, menos cinco que ficam desligadas e fora do interruptor: M12 e M13 desde o planejamento, M2 e M10 depois do replay (Fase 5) e M7 depois do olho sintético (Fase 7). O interruptor `?pipeline=base` desliga todas de uma vez. A Fase 8 percorreu o app como o paciente e o cuidador percorrem e corrigiu os defeitos do caminho — correções, sem flag.
 
-Nada disto foi commitado, publicado ou enviado. O commit é do responsável.
+Os commits e as publicações são do responsável.
 
 ## Fase 1 — Pesquisa (concluída)
 
@@ -278,4 +278,50 @@ As regras são as do resto do site: só `transform` e `opacity` (o teste lê o C
 - Replay com a gravação de 23/09: os números da §14.6 não mudaram — V3 62,4 e 39,4 px, base 64,2 e 40,2 px, e com `IRISFLOW_EXP_PIPELINE=base` os 5,7 px de diferença para o app gravado.
 - Electron com o bundle de produção (servido localmente, câmera simulada, rede externa bloqueada, perfil novo): abre na apresentação com a ponte do sistema presente, "Começar" leva ao login, nenhum pedido para fora e saída limpa. Os únicos erros no console são o aviso do XNNPACK (informativo, impresso como erro pelo TensorFlow Lite) e o L2CS sem o `.onnx`, que não está no repositório.
 - Nada mudou no L2CS nesta fase (rede, pesos, recorte, pré-processamento, decodificação, worker, cadência); `src/olho/`, `frontend/public/models/eyenet/`, `fixtures/recorte-olho.json` e a flag `eyeNet` seguem sem diferença para e731357. A calibração de 13 pontos, o perfil computador e o modo rápido, intactos.
+- Nenhum commit, push, publicação, release, Edge Function ou migration.
+
+## Depois da Fase 8 — a beta com o L2CS e a seção do vídeo no site
+
+**L2CS no instalador da beta.** Decisão do responsável em 29/09/2026: o projeto é acadêmico e a beta é gratuita e não comercial, então o instalador passa a levar os pesos do L2CS.
+
+- **O que mudou.** No `release.yml`, o padrão de `IRISFLOW_BUILD_L2CS` passou de `off` para `auto`. Numa tag, sem o release de modelos `0.0.0-modelos`, o workflow falha, como já fazia com `auto`. O aviso de "release de modelos público" virou nota.
+- **Arquivos.** Os comentários de `electron/package-app.mjs`, `frontend/vite.config.ts` e `src/config/experiment.ts`. No README, as seções Estado e resultados, Modelos, Pipeline V3, Publicar uma versão, a tabela de variáveis e o item 1 das Pendências. Também `docs/MEDICOES.md`, `docs/PESQUISA.md` e `docs/ROTEIRO_DE_MEDICAO.md`, e o detalhe técnico de `/como-funciona` no site, que dizia que a beta rodava sem o modelo.
+- **Testes.** `src/empacotamento.test.ts` confere três coisas: o padrão é `auto`; numa tag, sem o modelo, o release falha; e, com o modelo baixado, o empacotamento exige o arquivo.
+- **Quem já tem a beta instalada.** Com o L2CS, o vetor muda para `irisAbs+l2cs:4+rl+cab`. A calibração feita sem ele não carrega, e a conferência de abertura manda calibrar de novo.
+- **M3 e M4.** Elas só agem com o L2CS e passam a agir na beta. A única medida delas é o replay (MEDICOES §14.6), sem sessão ao vivo.
+- **SwiftShader e WebGPU.** Este item, visto e deixado na Fase 7, agora vale para a beta, e foi conferido no Electron 43 sob Xvfb, sem placa de vídeo: mesmo com o switch `enable-unsafe-swiftshader`, o WebGPU fica indisponível e o L2CS roda em WASM, com recorte 224² e cadência de 160 ms. Num computador lento, o L2CS lento não mostra a saída "calibrar só com a íris", porque ela só aparece quando o modelo não carrega.
+- **Teste de data.** `frontend/src/pages/setup/AtalhoDePreparo.test.tsx` procurava a taxa da câmera com `/30/`, que também casava com a data da linha "Concluído em 30 de …". O teste quebrava todo dia 30, e o CI roda em UTC: no dia 30/09 ele falharia desde as 21 h do dia 29, no horário de Brasília, e com ele a verificação que o `release.yml` roda antes dos instaladores. Agora a busca é por `/30 quadros por segundo/`.
+
+**Seção dos capítulos na home do site.** O pedido: tirar o olho desenhado, que não é da identidade visual, e fazer a explicação acompanhar o vídeo.
+
+- **O olho saiu.** Saiu `OlhoQuePisca` (capítulos) e `OlharQueFala` (chamada final, o mesmo olho), com o CSS e os testes deles. Fica o `CofreDoComputador` da privacidade. Arquivos: `site/src/components/effects/Ilustracoes.tsx`, `ilustracoes.css`, `Ilustracoes.test.tsx`, `site/src/components/sections/CallToAction.tsx` e `cta.css`.
+- **Explicação.** Abaixo do título entrou uma frase que diz como a solução funciona: a webcam acompanha o olhar, o cursor vai aonde ele vai, e olhar parado é o clique (`COMO_FUNCIONA_EM_UMA_FRASE`). Os textos dos três passos foram conferidos no código: as sugestões completam a palavra (`KeyboardScreen.tsx`), e o tutorial tem prática (passo 2 de 10).
+- **O vídeo acompanha os passos.** As imagens paradas saíram, e entrou a gravação real do Communicator. Ela mostra, em sequência, o teclado (0–9 s), o menu (9–16 s) e o tutorial (16 s ao fim), que são os três passos. O tempo do vídeo acende o passo, enche o trilho ao lado do número e troca a legenda sobre a tela. As legendas descrevem o que aparece naquele momento: os instantes foram conferidos quadro a quadro, a 0,1 s nas trocas de tela. Clicar num passo leva o vídeo ao começo dele. No computador, rolar até um passo faz o mesmo.
+- **Perspectiva.** No computador, a tela fica parada ao lado dos passos (sticky) e inclinada para eles. Entra mais inclinada e se assenta com a rolagem, reusando o `useInclinacaoAoRolar` da abertura. Sob o ponteiro, ela se endireita para a interface ficar legível. A legenda flutua na frente, com `translateZ`. A imagem inteira aparece em 16:9, sem o corte de antes. No celular, a tela fica reta, entre o título e os passos.
+- **Movimento reduzido.** Nada toca sozinho. Cada passo mostra um quadro parado do seu trecho, extraído da própria gravação (`site/public/media/capitulos/`), e o botão de reproduzir continua lá. Os passos fora do vídeo ficam em segundo plano pela cor, não pela opacidade, para o contraste passar de 4,5:1.
+- **Arquivos.** `site/src/components/home/Capitulos.tsx`, `capitulos.css`, `capitulosDoVideo.ts` (as funções puras de tempo), `site/src/data/home.ts` e os três quadros.
+- **Testes.** `capitulosDoVideo.test.ts` cobre os limites de capítulo, legenda e progresso. `Capitulos.test.tsx` cobre:
+  - o olho ausente e a explicação;
+  - o tempo do vídeo mandando no passo, na legenda e nos trilhos;
+  - o clique no passo;
+  - a rolagem no computador, mas não no celular;
+  - o pôster por passo com movimento reduzido, sem autoplay;
+  - a descrição e a pausa;
+  - a ordem e o tamanho das legendas;
+  - a existência dos quadros;
+  - o CSS que só anima `transform` e `opacity`.
+
+**Conferido no fim:**
+
+- **Núcleo:** tsc do núcleo e do Electron; vitest com 210 arquivos e 2 233 testes, mais 2 pulados, que são o replay e pedem a gravação.
+- **Interface:** vitest com 169 arquivos e 1 492 testes, rodado de novo em 30/09, o dia que o teste de data derrubava.
+- **Site:** tsc, vitest com 39 arquivos e 329 testes, e build.
+- **App do cuidador:** tsc e jest, com 16 suítes e 179 testes.
+- **Acessibilidade:** axe sem nenhuma violação em `/` e `/como-funciona`, a 1366 px e a 375 px.
+- **Capturas da seção nova:** a 1440, 1366 e 390 px e com movimento reduzido. A rolagem até os passos 2 e 3 levou o vídeo a 10,5 s e 18,4 s; o clique no passo 1, a 1,2 s. Com movimento reduzido, o vídeo não baixa e o pôster troca por passo.
+- **Build do instalador com o L2CS** (`IRISFLOW_BUILD_L2CS=auto`), com os pesos copiados da pasta do responsável:
+  - o bundle traz `aplicarPadroesDeBuild(…, {l2cs: "auto"})`;
+  - aberto no Electron por `file://`, como o app empacotado abre, o L2CS criou a sessão, ficou `ready` e inferiu com a câmera simulada, em WASM;
+  - `package-app.mjs --linux --dir` com `IRISFLOW_EXIGIR_MODELO=1` levou `frontend/dist/models/l2cs/l2cs_gaze360.onnx` para dentro do `app.asar`, e o `conferir-pacote.mjs` passou (fuses, sem fonte, sem source map).
+- **Sem mudança:** nada mudou na rede, nos pesos, no recorte, no pré-processamento, na decodificação, no worker ou na cadência do L2CS, nem em `src/olho/`, `frontend/public/models/eyenet/` ou `fixtures/recorte-olho.json`.
 - Nenhum commit, push, publicação, release, Edge Function ou migration.

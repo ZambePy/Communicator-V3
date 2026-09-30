@@ -466,6 +466,11 @@ export const KeyboardScreen: React.FC = () => {
             className={keyClass('group')}
             onClick={() => setActiveGroup(idx)}
             data-dwell-ms={cascata ? msDaCascata(cascata.dwellDoGrupo(GROUPS[idx])) : undefined}
+            // Abrir um grupo não escreve nada: ele rearma também com o olhar
+            // parado nele. Sem isto, depois de escrever o "H" o grupo que
+            // voltava sob o olhar ("G H I / J K L") só abria de novo se o
+            // olhar saísse e voltasse (ver `rearmePorSaida.ts`).
+            data-rearme-permanencia="true"
             noWarn
             style={cell}
           >
@@ -485,6 +490,7 @@ export const KeyboardScreen: React.FC = () => {
           data-dwell-ms={cascata
             ? msDaCascata(Math.min(cascata.dwellDoGrupo(['Y', 'Z']), cascata.espacoMs))
             : undefined}
+          data-rearme-permanencia="true"
           onClick={() => setActiveGroup(4)}
           noWarn
           style={cell}
@@ -520,6 +526,7 @@ export const KeyboardScreen: React.FC = () => {
           key="group-suggestions"
           className={keyClass('words')}
           onClick={() => { if (itensDeSugestao.length > 0) setActiveGroup(5); }}
+          data-rearme-permanencia="true"
           noWarn
           style={cell}
         >

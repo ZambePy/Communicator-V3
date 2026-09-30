@@ -48,6 +48,38 @@
  * Um Kalman de posição constante sem ruído de processo, reiniciado na sacada,
  * é exatamente esta média — é o formalismo sem o modelo de velocidade que o
  * Špakov achou ruim.
+ *
+ * ## Revisão de 30/09: o portão levava em conta um ruído que não existe
+ *
+ * O portão comparava a amostra com a média usando S = Σ·(1 + 1/n), que é a
+ * conta para amostras INDEPENDENTES. O ruído do olhar não é: ρ₁ ≈ 0,8 entre
+ * quadros vizinhos, e a média da janela (triangular, com as amostras recentes
+ * pesando mais) acompanha parte do próprio ruído. A diferença entre a amostra
+ * nova e a média varia só ~0,75 σ² — não os ~1,05 σ² da conta. Com isso:
+ *
+ *  - o portão ficava ~25 % mais largo que os 99,9 % nominais: passos médios
+ *    (2–5σ, de uma tecla para a vizinha num computador ruidoso) entravam na
+ *    média e o cursor ESCORREGAVA até lá por 250–430 ms, em vez de ir;
+ *  - a escala da sessão saía ~0,6× a verdadeira: com ruído maior que o da
+ *    calibração o portão ficava APERTADO demais, e o ruído virava "sacada" —
+ *    o cursor dava pulos parado.
+ *
+ * Agora S = Σ·Var(x − média)/σ² sob AR(1) com o ρ₁ da calibração
+ * (`varianciaDaInovacao`), e um detector de deslocamento reinicia a fixação
+ * quando a média das últimas `AMOSTRAS_DO_DESLOCAMENTO` amostras se afasta da
+ * média do resto além de `LIMIAR_DO_DESLOCAMENTO` desvios — com a variância
+ * EXATA da diferença sob AR(1) (`varianciaDoDeslocamento`), para a taxa de
+ * alarme falso não depender do ρ₁ da pessoa. Na simulação com o ruído REAL da
+ * gravação de 23/09 (resíduos das fixações do teste de precisão, emendados
+ * numa trajetória de uso; `estimadorDeFixacao.ruidoReal.test.ts`): com o
+ * ruído dobrado (σ ≈ 53 px, na calibração e no uso), passos de 160–260 px
+ * chegam a 90 % em 222 ms (eram 326 ms); com a calibração mais ruidosa que o
+ * uso, em 196 ms (eram 377 ms); com o ruído do uso 1,6× o da calibração, os
+ * pulos > 25 px com o olhar parado caem de 6,8 para 4,2 por minuto; e no
+ * replay do teste de precisão da gravação a dispersão vai de 24,3 para
+ * 24,7 px, com o erro médio igual. Passos abaixo de ~2σ continuam
+ * escorregando (~400 ms): ali o passo e o ruído não se separam sem atrasar a
+ * fixação inteira. Sacadas grandes chegam no mesmo tempo (±1 quadro).
  */
 
 import { amostrasEfetivas, MEDIANA_CHI2_2GL } from '../ruidoDaCalibracao';
@@ -71,6 +103,24 @@ export const AMOSTRAS_DA_ESCALA = 60;
 export const MINIMO_PARA_ESCALA = 15;
 /** Teto da escala da Σ: o dobro do desvio medido na calibração. */
 export const ESCALA_MAXIMA = 4;
+/** Amostras recentes cuja média o detector de deslocamento compara com a fixação (~133 ms a 30 Hz). */
+export const AMOSTRAS_DO_DESLOCAMENTO = 4;
+/**
+ * Distância (em desvios da diferença entre as duas médias) acima da qual o
+ * olhar se deslocou. Com a variância exata, a taxa de alarme falso não depende
+ * do ρ₁ da pessoa: com o olhar parado e ruído gaussiano, ≤ 0,1 reinício à toa
+ * por minuto para ρ₁ de 0 a 0,9. Na simulação com ruído real
+ * (docs/MEDICOES.md §14.7) é o limiar que ainda encurta os passos de 3–5σ.
+ */
+export const LIMIAR_DO_DESLOCAMENTO = 4.5;
+/**
+ * Teto do ρ₁ usado no modelo AR(1). Um ρ₁ da calibração perto de 1 (deriva
+ * lenta durante a coleta) faria a variância da inovação desabar e o portão
+ * disparar com o ruído normal; 0,95 já é bem acima do medido (0,76–0,80).
+ */
+export const RHO_MAXIMO_DO_MODELO = 0.95;
+/** O detector só age com a fixação já formada: as recentes mais esta quantidade. */
+const MINIMO_ANTIGAS_DO_DESLOCAMENTO = 6;
 
 export interface Covariancia2 {
   sxx: number;
@@ -108,16 +158,108 @@ interface Amostra {
   w: number;
 }
 
+/**
+ * Var(x_t − média) / σ², com ruído AR(1): 1 + Var(média) − 2·Cov(x_t, média).
+ *
+ * `amostras` são as da fixação, em ordem de tempo; a média é a da janela
+ * (núcleo triangular de `janelaMs` × o peso `w` de cada uma). A correlação
+ * entre duas amostras separadas por Δt é ρ₁^(Δt / 33,3 ms). Com amostras
+ * independentes (ρ₁ = 0) isto é 1 + Σŵᵢ² — o 1 + 1/n de antes com pesos
+ * iguais; com ρ₁ = 0,8 sai ~0,6–0,7, porque a média acompanha parte do
+ * próprio ruído. As duas somas são O(n): a correlação da amostra i com as
+ * anteriores se acumula por recorrência (a AR(1) é multiplicativa no tempo).
+ */
+export function varianciaDaInovacao(
+  amostras: readonly { t: number; w: number }[],
+  tMs: number,
+  janelaMs: number,
+  rho: number,
+): number {
+  const w = pesosDaJanela(amostras, tMs, janelaMs);
+  if (w === null) return 2;
+  let cov = 0;
+  for (let i = 0; i < w.length; i++) cov += w[i] * correlacaoAR1(rho, tMs - amostras[i].t);
+  return Math.max(0.05, 1 + varianciaDaMediaPonderada(amostras, w, rho) - 2 * cov);
+}
+
+/** Correlação AR(1) entre duas amostras separadas por `dtMs`. */
+function correlacaoAR1(rho: number, dtMs: number): number {
+  return rho ** (Math.abs(dtMs) / INTERVALO_PADRAO_MS);
+}
+
+/** Pesos normalizados da média da janela (núcleo triangular × peso do portão); `null` se somam zero. */
+function pesosDaJanela(amostras: readonly { t: number; w: number }[], tMs: number, janelaMs: number): number[] | null {
+  let sw = 0;
+  const w = amostras.map((a) => {
+    const k = Math.max(0, 1 - (tMs - a.t) / janelaMs) * a.w;
+    sw += k;
+    return k;
+  });
+  return sw > 0 ? w.map((k) => k / sw) : null;
+}
+
+/**
+ * Var(Σ ŵᵢ xᵢ) / σ² com ruído AR(1), para amostras em ordem de tempo e pesos
+ * já normalizados: Σᵢ ŵᵢ² + 2 Σᵢ ŵᵢ Σ_{j<i} ŵⱼ ρ^(tᵢ − tⱼ). A soma interna se
+ * acumula por recorrência (a AR(1) é multiplicativa no tempo): O(n).
+ */
+function varianciaDaMediaPonderada(amostras: readonly { t: number }[], w: readonly number[], rho: number): number {
+  let v = 0;
+  let acumulado = 0; // Σ_{j<i} ŵⱼ ρ^(tᵢ − tⱼ)
+  for (let i = 0; i < w.length; i++) {
+    if (i > 0) acumulado = correlacaoAR1(rho, amostras[i].t - amostras[i - 1].t) * (acumulado + w[i - 1]);
+    v += w[i] * w[i] + 2 * w[i] * acumulado;
+  }
+  return v;
+}
+
+/**
+ * Var(média simples das `k` últimas − média da janela das anteriores) / σ²,
+ * com ruído AR(1) — a estatística do detector de deslocamento, com a
+ * covariância POSITIVA entre as duas médias (amostras vizinhas no tempo).
+ *
+ * As anteriores são todas mais velhas que as recentes, então
+ * Cov = (1/k)·Σᵢ ρ^(tᵢ − t*) · Σⱼ ŵⱼ ρ^(t* − tⱼ), com t* a mais nova das
+ * anteriores: O(n) também. `null` sem amostras suficientes.
+ */
+export function varianciaDoDeslocamento(
+  amostras: readonly { t: number; w: number }[],
+  k: number,
+  tMs: number,
+  janelaMs: number,
+  rho: number,
+): number | null {
+  const n = amostras.length;
+  if (k < 1 || n <= k) return null;
+  const antigas = amostras.slice(0, n - k);
+  const recentes = amostras.slice(n - k);
+  const w = pesosDaJanela(antigas, tMs, janelaMs);
+  if (w === null) return null;
+  let varRecentes = 0;
+  for (const a of recentes) for (const b of recentes) varRecentes += correlacaoAR1(rho, a.t - b.t);
+  varRecentes /= k * k;
+  const tRef = antigas[antigas.length - 1].t;
+  let somaRecentes = 0;
+  for (const a of recentes) somaRecentes += correlacaoAR1(rho, a.t - tRef);
+  let somaAntigas = 0;
+  for (let j = 0; j < antigas.length; j++) somaAntigas += w[j] * correlacaoAR1(rho, tRef - antigas[j].t);
+  const cov = (somaRecentes / k) * somaAntigas;
+  return Math.max(0.02, varRecentes + varianciaDaMediaPonderada(antigas, w, rho) - 2 * cov);
+}
+
 export class EstimadorDeFixacao {
   private readonly janelaMs: number;
+  /** ρ₁ do ruído na calibração: a correlação entre quadros vizinhos. */
+  private readonly rho: number;
   private fixacao: Amostra[] = [];
   private pendente: { t: number; x: number; y: number } | null = null;
   /** d² (sob a Σ da calibração) das últimas amostras aceitas, em anel. */
   private readonly d2Recentes: number[] = [];
   private escalaAtual = 1;
 
-  constructor(janelaMs: number = JANELA_BASE_MS) {
+  constructor(janelaMs: number = JANELA_BASE_MS, rho1: number = RHO_DE_REFERENCIA) {
     this.janelaMs = janelaMs;
+    this.rho = Number.isFinite(rho1) ? Math.max(0, Math.min(RHO_MAXIMO_DO_MODELO, rho1)) : RHO_DE_REFERENCIA;
   }
 
   /** Janela em uso, em ms (vai para o diagnóstico). */
@@ -143,6 +285,46 @@ export class EstimadorDeFixacao {
       sy += w * a.y;
     }
     return sw > 0 ? { x: sx / sw, y: sy / sw, n: this.fixacao.length } : null;
+  }
+
+  /**
+   * Deslocamento pequeno demais para o portão, mas que PERSISTE: a média das
+   * últimas `AMOSTRAS_DO_DESLOCAMENTO` amostras longe da média das outras.
+   * Uma amostra sozinha não distingue um passo de 3σ do ruído; quatro
+   * seguidas do mesmo lado distinguem, e a fixação recomeça com elas em vez de
+   * escorregar até lá ao longo da janela inteira.
+   */
+  private deslocou(tMs: number, ruido: Covariancia2): boolean {
+    const k = AMOSTRAS_DO_DESLOCAMENTO;
+    const n = this.fixacao.length;
+    if (n < k + MINIMO_ANTIGAS_DO_DESLOCAMENTO) return false;
+    let rx = 0;
+    let ry = 0;
+    for (let i = n - k; i < n; i++) {
+      rx += this.fixacao[i].x;
+      ry += this.fixacao[i].y;
+    }
+    rx /= k;
+    ry /= k;
+    let sw = 0;
+    let vx = 0;
+    let vy = 0;
+    for (let i = 0; i < n - k; i++) {
+      const a = this.fixacao[i];
+      const w = Math.max(0, 1 - (tMs - a.t) / this.janelaMs) * a.w;
+      sw += w;
+      vx += w * a.x;
+      vy += w * a.y;
+    }
+    if (!(sw > 0)) return false;
+    // Variância exata da diferença entre as duas médias sob AR(1), com a
+    // covariância entre elas: a taxa de alarme falso fica a mesma qualquer
+    // que seja o ρ₁ da pessoa (ver `LIMIAR_DO_DESLOCAMENTO`).
+    const v = varianciaDoDeslocamento(this.fixacao, k, tMs, this.janelaMs, this.rho);
+    if (v === null) return false;
+    const c = this.escalaAtual * v;
+    const d = distanciaDeMahalanobis(rx - vx / sw, ry - vy / sw, { sxx: c * ruido.sxx, syy: c * ruido.syy, sxy: c * ruido.sxy });
+    return d > LIMIAR_DO_DESLOCAMENTO;
   }
 
   /** Registra o d² de uma amostra aceita e atualiza a escala pela mediana. */
@@ -171,8 +353,9 @@ export class EstimadorDeFixacao {
       return { x, y };
     }
 
-    // S = Σ·(1 + 1/n): a incerteza da amostra nova mais a da média atual.
-    const inflado = 1 + 1 / Math.max(1, est.n);
+    // S = Σ·Var(x − média)/σ²: a incerteza da diferença entre a amostra nova
+    // e a média atual, com a correlação do ruído (ver `varianciaDaInovacao`).
+    const inflado = varianciaDaInovacao(this.fixacao, tMs, this.janelaMs, this.rho);
     const s: Covariancia2 = { sxx: ruido.sxx * inflado, syy: ruido.syy * inflado, sxy: ruido.sxy * inflado };
     const dBase = distanciaDeMahalanobis(x - est.x, y - est.y, s);
     const r = dBase / Math.sqrt(this.escalaAtual);
@@ -197,6 +380,10 @@ export class EstimadorDeFixacao {
     } else if (peso > 0) {
       this.fixacao.push({ t: tMs, x, y, w: peso });
       this.registrarD2(dBase * dBase);
+      if (this.deslocou(tMs, ruido)) {
+        // O olhar foi para perto: a fixação nova começa com as recentes.
+        this.fixacao = this.fixacao.slice(-AMOSTRAS_DO_DESLOCAMENTO).map((a) => ({ ...a, w: 1 }));
+      }
     } else {
       // Fora do portão: segura a fixação um quadro para saber se é pico ou sacada.
       this.pendente = { t: tMs, x, y };

@@ -176,3 +176,33 @@ describe('empacotamento — electron-builder', () => {
     expect(wf).toContain('--no-git-tag-version');
   });
 });
+
+/**
+ * L2CS no instalador da beta (decisão de 29/09/2026). A beta é acadêmica e não
+ * comercial e leva os pesos do L2CS: o padrão da variável no release.yml é
+ * `auto`. Com `off` como padrão (de 24/09 até a beta.9) o instalador saía sem
+ * eles e o app rastreava só pela íris — uma palavra que muda o produto, por
+ * isso o teste. E numa tag, sem o release de modelos, o workflow tem de FALHAR:
+ * um instalador que espera o L2CS e não o traz sairia degradado sem aviso.
+ */
+describe('empacotamento — L2CS no instalador da beta', () => {
+  const wf = () => readFileSync(resolve(RAIZ, '.github/workflows/release.yml'), 'utf8');
+  const passoDoModelo = () => wf().split('- name: Modelo do L2CS')[1].split('- name:')[0];
+
+  it('o padrão do IRISFLOW_BUILD_L2CS no release é auto', () => {
+    expect(wf()).toMatch(/^\s*IRISFLOW_BUILD_L2CS: \$\{\{ vars\.IRISFLOW_BUILD_L2CS \|\| 'auto' \}\}\s*$/m);
+  });
+
+  it('numa tag, sem o modelo, o release falha em vez de sair sem ele', () => {
+    expect(passoDoModelo()).toMatch(
+      /elif \[ "\$PUBLICAR" = "true" \]; then\s+echo "::error::Modelo L2CS não encontrado[^\n]*\n\s+exit 1/,
+    );
+  });
+
+  it('com o modelo baixado, o empacotamento exige o arquivo no build', () => {
+    expect(passoDoModelo()).toContain('echo "IRISFLOW_EXIGIR_MODELO=1" >> "$GITHUB_ENV"');
+    expect(script()).toMatch(
+      /env\('IRISFLOW_EXIGIR_MODELO'\) === '1'\) \{ console\.error\(msg\); process\.exit\(1\); \}/,
+    );
+  });
+});

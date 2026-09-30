@@ -78,8 +78,8 @@ release que, sem cadastro, deixa o envio desligado.
 
 ## Estado e resultados
 
-**Fase:** beta gratuita. O site já recebe inscrições; o download abre em
-**10/11/2026**, primeiro para Windows 10 e 11 (macOS e Linux em preparação —
+**Fase:** beta gratuita, com o download aberto desde **29/09/2026** (antes
+marcado para 10/11), primeiro para Windows 10 e 11 (macOS e Linux em preparação —
 [Pendências e riscos](#pendências-e-riscos), item 7).
 
 **Acurácia medida.** Protocolo, métricas e todas as ressalvas em
@@ -89,7 +89,7 @@ release que, sem cadastro, deixa o envio desligado.
 |---|---|---|---|
 | baseline de 20/09/2026, **com** o L2CS | **1,40°** (56 px) | 76 % | menor erro medido; uma pessoa, sem réplica |
 | M1, 06/09/2026 (pipeline anterior) | 1,86° (74 px) | 64 % | reproduzido em 1,93° numa segunda calibração |
-| instalador da beta, **sem** o L2CS | não medido | — | é a próxima medição (M-ablação, `docs/MEDICOES.md` §4.6) |
+| **sem** o L2CS (a beta de 24/09 até a 1.0.0-beta.9; hoje, "calibrar só com a íris") | não medido | — | M-ablação, `docs/MEDICOES.md` §4.6 |
 | literatura, webcam | 2–4° | — | WebGazer 4,17° · FAZE 2,4° · L2CS-Net sozinho 3,92° (MPIIGaze) |
 | literatura, infravermelho de laboratório | 0,5–1° | — | Tobii Pro Nano 0,54–0,69° · EyeLink 0,75–0,86° |
 
@@ -97,11 +97,12 @@ Três coisas precisam andar junto com esse número sempre que ele for citado:
 
 - **É N = 1.** Uma pessoa, num posto de uso conhecido, calibrada para ela
   mesma. A faixa da literatura vem de muitos participantes.
-- **Foi medido com o L2CS**, e os pesos dele têm licença só para pesquisa. O
-  instalador da beta sai sem eles ([Modelos](#modelos)) e rastreia só pela
-  íris; a acurácia dessa versão ainda não foi medida. O caminho para
-  recuperar o bloco angular com licença comercial é o retreino do V2 (ramo
-  ocular com UnityEyes 2, MIT; ramo facial dependente de licença).
+- **Foi medido com o L2CS, em 20/09, antes do V2.** Os pesos do L2CS têm
+  licença só para pesquisa; desde a 1.0.0-beta.10 eles vão no instalador, e
+  por isso a beta é acadêmica e não comercial ([Pendências e riscos](#pendências-e-riscos),
+  item 1). O pipeline padrão de hoje ([V3](#pipeline-v3-m1m21)) ainda não foi
+  medido ao vivo. Para uma versão comercial, o caminho é o retreino do V2
+  (ramo ocular com UnityEyes 2, MIT; ramo facial dependente de licença).
 - **A precisão piorou** enquanto a acurácia melhorava (tremor de 21,8 → 38,1 px
   entre M1 e o baseline), e o efeito do filtro sobre o dwell não tem medida
   própria (`docs/MEDICOES.md` §14.3 e §14.4).
@@ -255,19 +256,22 @@ Webcam (getUserMedia, até 1920×1080)
   │     extremos são o comportamento de sempre; o que sumiu foi o degrau entre
   │     eles. Teto rígido de 0,5°: a média limpa ruído, não inventa posição
   │
-  ├─ Seguidor de cursor ─ SEPARA A TAXA DE RENDER DA TAXA DE INFERÊNCIA. A
-  │     posição era escrita no DOM uma vez por quadro de câmera, o que é
-  │     zero-order hold puro: ~65 % dos quadros de display sem movimento
-  │     nenhum e os outros recebendo o passo inteiro. Agora um laço de rAF
-  │     distribui o mesmo passo pelos quadros de tela — mesmo caminho, mesmo
-  │     tempo, passos menores. Custo de meio intervalo de amostra de latência
-  │     (~16 ms a 30 Hz, ~24 ms nos 21 Hz medidos), deliberado e abaixo do
-  │     limiar em que a latência começa a custar acerto. Vale na janela do app
-  │     E na sobreposição do Modo Computador (que até 22/09 ainda escrevia a
-  │     posição uma vez por amostra). NÃO
-  │     extrapola (errar no fim da sacada custa uma seleção errada) e NÃO
-  │     segura predição velha: passados 300 ms sem amostra ele congela e
-  │     avisa, e o cursor fica translúcido
+  ├─ Cursor pelo compositor ─ SEPARA A TAXA DE RENDER DA TAXA DE INFERÊNCIA.
+  │     A posição era escrita no DOM uma vez por quadro de câmera (zero-order
+  │     hold: ~65 % dos quadros de display parados, os outros com o passo
+  │     inteiro). Um laço de rAF passou a distribuir o passo pelos quadros de
+  │     tela — mas o rAF roda na thread do MediaPipe, ocupada 70–100 % do
+  │     tempo, e na gravação de 30/09 o cursor ainda andava aos degraus a
+  │     ~15 Hz. Agora cada amostra escreve UMA vez o destino e a duração da
+  │     travessia (`transform` com `transition`), e a thread do COMPOSITOR
+  │     desenha os quadros intermediários a 60 Hz, com a thread principal
+  │     ocupada ou não (`interaction/cursorNoCompositor.ts`). Mesmo custo de
+  │     meio intervalo de amostra de latência (~16 ms a 30 Hz); a sacada
+  │     atravessa em ~1 quadro. Vale na janela do app E na sobreposição do
+  │     Modo Computador. NÃO extrapola (errar no fim da sacada custa uma
+  │     seleção errada) e NÃO segura predição velha: passados 300 ms sem
+  │     amostra o cursor para e fica translúcido. O laço de rAF de antes
+  │     continua como volta segura (`cursorPeloCompositor: false`)
   │
   └─ Interação ─ dwell, cursor, emergência, varredura opcional, fallback
         quando o olhar se perde. É na conclusão do dwell que a correção por
@@ -512,8 +516,9 @@ src/                        núcleo do pipeline (TypeScript puro, testado com Vi
   filters/                  One Euro, Kalman 2D, EMA adaptativa, hold na piscada,
                             estabilizador de fixação (peso contínuo da média)
   interaction/              dwell, cursor, varredura, clique por piscada, fallback,
-                            correção por dwell; seguidorDeCursor.ts desenha o cursor
-                            na taxa do DISPLAY, não na da câmera
+                            correção por dwell; cursorNoCompositor.ts entrega a
+                            posição ao compositor (60 Hz, fora da thread do
+                            MediaPipe); seguidorDeCursor.ts é a volta segura por rAF
   poseCompensation.ts       compensação geométrica de pose
   distanceCompensation.ts   compensação de distância (fator 0,6–1,6)
   translationCompensation.ts compensação de translação lateral do tronco
@@ -676,14 +681,15 @@ projetos, e um `torchvision` de outra versão faz o modelo falhar ao carregar
 
 | modelo | arquivo | origem |
 |---|---|---|
-| L2CS-Net | `frontend/public/models/l2cs/l2cs_gaze360.onnx` (92 MB, não versionado) | treinado em Gaze360; 90 bins por eixo; entrada 224² ou 448² (padrão 448²). **Licença research-only: uso comercial proibido, inclusive de modelos treinados.** A decisão registrada em 15/09 era não distribuí-lo; o `release.yml` hoje o empacota em todo instalador — decisão jurídica pendente ([Pendências e riscos](#pendências-e-riscos), item 1) |
+| L2CS-Net | `frontend/public/models/l2cs/l2cs_gaze360.onnx` (92 MB, não versionado) | treinado em Gaze360; 90 bins por eixo; entrada 224² ou 448² (padrão 448²). **Licença research-only: uso comercial proibido, inclusive de modelos treinados.** Vai dentro do instalador da beta desde a 1.0.0-beta.10: a beta é acadêmica e não comercial ([Pendências e riscos](#pendências-e-riscos), item 1) |
 | EyeNet (V2, ramo ocular) | `frontend/public/models/eyenet/eyenet.onnx` (ainda não existe; só a meta de exemplo) | treinada no UnityEyes 2 (MIT) pelo projeto *Communicator V2*; entrada 3×64×96; liga com `?olho=onnx` |
 | Face Landmarker | `frontend/public/mediapipe/models/face_landmarker.task` | MediaPipe Tasks Vision, 478 landmarks com íris |
 | ONNX Runtime Web | `frontend/public/ort/` | binários WASM/WebGPU carregados pelo worker |
 
 Sem o arquivo `.onnx` (ou com `?ep=off`) o vetor fica só com as duas dimensões
-absolutas da íris por olho (`irisAbs`) — é assim que o instalador da beta roda
-desde 24/09 ([Pendências e riscos](#pendências-e-riscos), item 1).
+absolutas da íris por olho (`irisAbs`). Foi assim que o instalador da beta rodou
+de 24/09 até a 1.0.0-beta.9; hoje é o caminho de quem escolhe "calibrar só com a
+íris" ([Pendências e riscos](#pendências-e-riscos), item 1).
 
 Cada modelo tem uma **ficha de proveniência** no seu `*.meta.json` (bloco
 `proveniencia`: bases de treino, licença, `usoComercial`, contrato) e um
@@ -795,7 +801,7 @@ Como os outros parâmetros de URL, esses ficam gravados no `localStorage` até
 | M6 | `calibracaoRobusta` | `true` | peso por quadro, centro robusto por alvo e Huber entre alvos |
 | M7 | `alvoInferiorCentral` | `false` ¹ | 14º alvo no meio da borda de baixo, no perfil padrão completo |
 | M8 | `assentamentoPelaChegada` | `true` | a coleta de cada alvo abre na chegada da bola e descarta 800 ms |
-| M9 | `estimadorDeFixacao` | `true` | estimador de fixação com portão de Mahalanobis no lugar de One Euro + estabilizador |
+| M9 | `estimadorDeFixacao` | `true` | estimador de fixação com portão de Mahalanobis no lugar de One Euro + estabilizador; o portão usa a variância da inovação com o ruído correlacionado (ρ₁ da calibração) e um detector de deslocamento reinicia a fixação em passos médios (revisão de 30/09) |
 | M10 | `fusaoPorCovariancia` | `false` ¹ | fusão dos dois olhos por variância mínima, com a covariância entre eles |
 | M11 | — | — | relatório de precisão /3 (métricas novas; sem flag) |
 | M12 | `saida6DoF` | `false` ¹ | interseção do raio de olhar com o plano da tela; pergunta onde fica a câmera |
@@ -824,8 +830,9 @@ duas ficam no valor de antes até decisão do responsável.
 perfil: trocar uma delas pede uma recalibração, por construção. Com o
 padrão, o identificador é `irisAbs+l2cs:4+rl+cab`; com `?pipeline=base`, o de
 antes (`irisAbs+l2cs:4`), e os perfis antigos continuam valendo. Sem o L2CS
-(o instalador da beta), o vetor é só de íris: M3, M4 e M13 não agem, e o
-identificador é o mesmo nos dois pipelines.
+("calibrar só com a íris"), o vetor é só de íris: M3, M4 e M13 não agem, e o
+identificador é o mesmo nos dois pipelines. Um perfil calibrado sem o L2CS (a
+beta até a 1.0.0-beta.9) não serve com ele: a abertura pede uma calibração nova.
 
 **O que está medido.** No replay da gravação de 23/09 pelo núcleo
 (`IRISFLOW_GRAVACAO=… npx vitest run src/replayDeGravacao.test.ts`), com os 13
@@ -1000,7 +1007,11 @@ dele (o Apagar repete com o olhar parado). Numa tela nova — ou quando o que fo
 clicado some e outra coisa aparece no lugar, como o grupo do teclado que vira
 as letras dele e o painel do teste que fecha sobre a preparação — o que estiver
 sob o olhar parado não é selecionado até o olhar saltar para outro ponto (mais
-de 96 px por 200 ms, em três quadros seguidos).
+de 96 px por 200 ms, em três quadros seguidos). A exceção são os **grupos do
+teclado** (`data-rearme-permanencia`): abrir um grupo não escreve nada, então
+ele também volta a valer com o olhar parado nele por 500 ms — escrito o "H", o
+"G H I / J K L" que volta sob o olhar abre de novo sem sair dele. As letras
+continuam exigindo a saída: o olhar parado nunca escreve sozinho.
 
 Regras da interface do paciente: alvos de no mínimo 160×120 px (ou, quando o
 botão é menor e não tem vizinho, zona de acerto `isolado` ampliada até os 5°
@@ -1055,7 +1066,13 @@ O que acontece ao ligar:
 - uma janela de **sobreposição** transparente, sempre no topo e atravessável
   pelo mouse cobre o monitor: nela ficam o cursor (encolhido para ~60 % do
   tamanho do app, sem descer de 24 px), o anel de progresso, uma **barra
-  lateral** de ações e, quando abertos, a lupa e o teclado;
+  lateral** de ações e, quando abertos, a lupa e o teclado. A barra fica a
+  48 px da borda direita, com o centro dos botões na faixa dos alvos
+  externos da calibração (a borda é onde o olhar erra mais); os botões
+  crescem com a altura do monitor (81 px num Full HD, de 52 a 96 px, ícone
+  de 45 % do botão) e deixam os cantos livres — os botões de
+  minimizar/maximizar das janelas e o relógio da barra de tarefas continuam
+  alcançáveis pelo olhar (`frontend/src/overlay/geometriaDaBarra.ts`);
 - cada amostra de olhar vai da janela do app ao processo principal, que a
   converte para o monitor (px CSS da janela → DIP da tela → px físicos, com
   `screen.dipToScreenPoint` no Windows, para a escala de 125/150 % e
@@ -1628,10 +1645,14 @@ do código, que estava em 8 e passou a 6. O advisor de segurança do Supabase ap
 única cobrem o risco. Se o projeto for recriado, a ordem é migração, depois modelo,
 assunto e tamanho do código, e só então o site.
 
-**Lançamento.** O download abre em `beta_program.launch_at` (10/11/2026 00:00 de
-Brasília, migração `20260924230017_beta_lancamento.sql`); até lá a inscrição
-funciona, os botões mostram "Disponível em 10/11" sem nenhum link de arquivo, e a
-aba Beta do menu leva a etiqueta vermelha com o dia (depois, o selo "novo"). Na
+**Lançamento.** O download abre em `beta_program.launch_at` (migração
+`20260924230017_beta_lancamento.sql`). A beta foi liberada em **29/09/2026, às 21h50
+de Brasília** — antes marcada para 10/11 —, e `BETA.lancamentoReserva`
+(`site/src/data/content.ts`) tem a mesma data, para uma falha de leitura do banco
+não voltar o site ao estado de antes. Antes da data, a inscrição funciona, os botões
+mostram "Disponível em <dia>" sem nenhum link de arquivo e a etiqueta vermelha leva o
+dia; depois, a mesma etiqueta diz "Liberada" (no menu, ao lado de "Beta") ou "Beta
+liberada" (abertura, `/baixar`, `/beta` e chamada final), com um ponto que pulsa. Na
 virada, tudo libera sozinho, sem novo deploy; adiantar ou adiar é
 `update public.beta_program set launch_at = '…' where id = 1`. A página Solução
 mostra os sistemas como vitrine, sem link de arquivo: o download fica para quem
@@ -1828,8 +1849,8 @@ O build embute os `VITE_*` de `frontend/.env.production` — versionado, com a U
 anon do Supabase de produção, as mesmas do release; no modo produção do Vite ele vale mais
 que o `.env.local` (para empacotar contra outro projeto, use `frontend/.env.production.local`,
 fora do git). Leva o modelo L2CS e o motor de voz se existirem na máquina (sem o modelo,
-avisa e sai com rastreamento degradado); com `IRISFLOW_BUILD_L2CS=off`, como no release,
-sai sem o L2CS de propósito. Onde cada um sai: Windows gera só Windows (Linux com Docker/WSL); **só o
+avisa e sai com rastreamento degradado); com `IRISFLOW_BUILD_L2CS=off`, sai sem o L2CS
+de propósito (o release usa `auto` desde a 1.0.0-beta.10). Onde cada um sai: Windows gera só Windows (Linux com Docker/WSL); **só o
 macOS gera `.dmg`** e assina/notariza (o script recusa `--mac` fora dele); Linux gera
 Linux (o `rpm` exige `rpmbuild`) e Windows via Wine. No `release.yml` cada sistema
 empacota no seu runner, e o motor de voz (PyInstaller) só entra no de Windows.
@@ -1936,14 +1957,22 @@ API do site ignoram pré-lançamentos, então a beta fica no número.
   prioridade). O primeiro job confere a URL e a chave (o mesmo teste do app: URL
   `https://`, chave com mais de 20 caracteres) e **para o workflow** se faltarem — sem elas
   o instalador cairia na licença simulada, sem login real e sem cuidador.
-- **L2CS:** desde 24/09/2026 o instalador sai **sem** os pesos: a variável de repositório
-  `IRISFLOW_BUILD_L2CS` vale `off` por padrão, o app nasce com `l2cs: 'off'` e rastreia
-  pelas features de íris (item 1 das Pendências). Com `IRISFLOW_BUILD_L2CS=auto`, o
-  workflow baixa `l2cs_gaze360.onnx` do release de tag `0.0.0-modelos` no repositório da
-  variável `IRISFLOW_MODELOS_REPO` (sem ela, o de releases; pode ser privado, lido com o
-  `RELEASES_TOKEN`) e, numa tag, falha sem ele; no repositório dos instaladores esse
-  release precisa ser pré-lançamento (o workflow confere). A tag antiga `modelos` ainda é
-  aceita, com aviso.
+- **L2CS:** desde a 1.0.0-beta.10 (29/09/2026) o instalador sai **com** os pesos, e o
+  porquê está no item 1 das Pendências. A variável de repositório `IRISFLOW_BUILD_L2CS`
+  vale `auto` por padrão: o workflow baixa `l2cs_gaze360.onnx` do release de tag
+  `0.0.0-modelos` no repositório da variável `IRISFLOW_MODELOS_REPO` (sem ela, o de
+  releases; pode ser privado, lido com o `RELEASES_TOKEN`) e, numa tag, **falha** sem ele
+  em vez de publicar um instalador degradado. No repositório dos instaladores esse release
+  precisa ser pré-lançamento (o workflow confere); a tag antiga `modelos` ainda é aceita,
+  com aviso. Para criá-lo, uma vez, do seu computador:
+
+  ```bash
+  gh release create 0.0.0-modelos frontend/public/models/l2cs/l2cs_gaze360.onnx --prerelease --title "Modelos (não é versão do app)" --notes "Pesos usados pelo release.yml"
+  ```
+
+  ou pela página de Releases: tag nova `0.0.0-modelos`, o arquivo anexado e *Set as a
+  pre-release* marcado. Com `IRISFLOW_BUILD_L2CS=off`, o instalador sai sem os pesos e o
+  app rastreia pelas features de íris, como de 24/09 até a beta.9.
 - **Teste sem publicar:** *Actions → Release → Run workflow*. Instaladores como artefato
   por 14 dias, sem release. A opção *permitir_sem_nuvem* (desligada por padrão) aceita
   testar sem a configuração da nuvem.
@@ -2219,7 +2248,7 @@ agendada — até alguém aprovar à mão. O `GITHUB_TOKEN` automático publica 
 | `RELEASES_TOKEN` | segredo | `release.yml` (modelo e publicação) | só com releases ou modelos em outro repositório |
 | `IRISFLOW_RELEASES_REPO` | **variável** | `release.yml` → `package-app.mjs` | opcional (padrão: este repositório) |
 | `IRISFLOW_MODELOS_REPO` | **variável** | `release.yml` (modelo) | opcional (padrão: o de releases); pode ser privado |
-| `IRISFLOW_BUILD_L2CS` | **variável** | `release.yml` → `vite build` e `package-app.mjs` | opcional: `off` (padrão, instalador sem os pesos do L2CS) ou `auto` |
+| `IRISFLOW_BUILD_L2CS` | **variável** | `release.yml` → `vite build` e `package-app.mjs` | opcional: `auto` (padrão, instalador com os pesos do L2CS) ou `off` (sem eles) |
 | `IRISFLOW_APK_CUIDADOR_URL` | **variável** | `release.yml` (publicar) | opcional: link do APK do build do EAS; sem ela, o APK do cuidador é copiado do release anterior |
 | `SUPABASE_URL`, `SUPABASE_ANON_KEY` | segredo | `supabase-keepalive.yml` | opcionais: sobrepõem `site/.env.production` |
 
@@ -2317,16 +2346,16 @@ diz qual ajuste físico é necessário.
 
 Estado em 27/09/2026.
 
-1. **Pesos do L2CS — decisão jurídica.** A licença do Gaze360 é *research-only* e proíbe
-   uso comercial, inclusive de modelos treinados na base; a decisão de 15/09/2026 é não
-   distribuí-los ([Modelos](#modelos); `usoComercial: "proibido"`). Desde 24/09/2026 o
-   `release.yml` cumpre isso: o instalador sai **sem** os pesos e com o L2CS desligado
-   (variável `IRISFLOW_BUILD_L2CS`, padrão `off`), rastreando pelas features de íris, com
-   menor precisão. O repositório não tem release de modelos (`0.0.0-modelos` ou
-   `modelos`). Para religar: autorização escrita dos titulares ou o modelo retreinado em
-   base licenciada e, então, `IRISFLOW_BUILD_L2CS=auto`, com o release de modelos num
-   repositório privado (`IRISFLOW_MODELOS_REPO` + `RELEASES_TOKEN`) — os pesos voltariam a
-   ir dentro de cada instalador.
+1. **Pesos do L2CS — beta acadêmica.** A licença do Gaze360 é *research-only* e proíbe
+   uso comercial, inclusive de modelos treinados na base ([Modelos](#modelos);
+   `usoComercial: "proibido"`). De 24/09 até a 1.0.0-beta.9 o instalador saiu sem os
+   pesos, rastreando pelas features de íris. Em 29/09/2026 a equipe decidiu levá-los na
+   beta: o IrisFlow é, por enquanto, um projeto acadêmico, e a beta é gratuita e não
+   comercial. O `release.yml` usa `IRISFLOW_BUILD_L2CS=auto` por padrão e baixa os pesos
+   do release de modelos `0.0.0-modelos` (pré-lançamento), que precisa existir antes da
+   tag ([Publicar uma versão](#publicar-uma-versão)). Qualquer uso comercial continua
+   dependendo de autorização escrita dos titulares ou do modelo retreinado do V2; até lá,
+   um release comercial sai com `IRISFLOW_BUILD_L2CS=off`.
 2. **Conta de teste pública.** `admin@irisflow.com` / `irisflow2026` existe no projeto de
    produção (`supabase/seed.sql`) e a senha está no repositório público (`seed.sql`,
    `app/src/lib/config.ts`, `frontend/src/services/license/mockLicenseService.ts`) — de
