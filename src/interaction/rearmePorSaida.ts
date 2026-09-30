@@ -28,6 +28,23 @@
  * clicado sozinho 1,5 s mais tarde — no tutorial, o "Abrir as frases" voltava
  * a abrir as frases a cada retorno (percurso da Fase 8).
  *
+ * ## Rearme por permanência (grupos do teclado)
+ *
+ * A regra da saída protege uma AÇÃO — falar, escrever, avançar o tutorial.
+ * Os grupos do teclado não fazem nenhuma: abrir um grupo só mostra as letras.
+ * E eles caem sob o olhar o tempo todo: escrita a letra, o teclado volta aos
+ * grupos e a célula sob o olhar é o grupo daquela posição — o "H" volta como
+ * "G H I / J K L". Quem queria outra letra do mesmo grupo (o "I" depois do
+ * "H", o segundo "S" de "isso") ficava olhando a célula e nada acontecia: o
+ * grupo só valia depois de o olhar sair e voltar, e nada na tela dizia isso
+ * (gravação de 30/09).
+ *
+ * Um alvo marcado com `data-rearme-permanencia="true"` também rearma quando
+ * o olhar FICA nele por `PERMANENCIA_PARA_REARMAR_MS` seguidos; depois disso o
+ * dwell normal começa. Continua valendo o que a Fase 8 exige: as letras não
+ * têm a marca, então o olhar parado abre o grupo no máximo uma vez e nunca
+ * escreve sozinho.
+ *
  * Módulo puro (sem DOM): os alvos são comparados por identidade.
  */
 
@@ -37,6 +54,19 @@ export const SAIDA_PARA_REARMAR_MS = 200;
 export const JANELA_DE_HERANCA_MS = 400;
 /** Amostras seguidas longe da fixação herdada para o salto valer. */
 export const AMOSTRAS_PARA_SALTO = 3;
+/**
+ * Olhar parado num alvo com rearme por permanência por este tempo: o bloqueio
+ * cai e o dwell começa. Curto o bastante para não parecer travado (o dwell
+ * vem depois dele), longo o bastante para o grupo não começar a encher no
+ * mesmo quadro em que aparece sob o olhar de quem só está conferindo a letra.
+ */
+export const PERMANENCIA_PARA_REARMAR_MS = 500;
+
+/** Opções de cada alvo. */
+export interface OpcoesDoAlvo {
+  /** O alvo rearma também pela permanência do olhar (`data-rearme-permanencia`). */
+  permanencia?: boolean;
+}
 
 /** Posição do olhar na tela, em px. */
 export interface PontoDoOlhar {
@@ -62,13 +92,42 @@ export interface EstadoDoRearme {
   saltoDesdeMs: number | null;
   /** Amostras seguidas longe de `herdarDe`. */
   amostrasDoSalto: number;
+  /**
+   * Desde quando o olhar está, sem sair, sobre o alvo bloqueado. Só conta
+   * para o rearme por permanência; `null` com o olhar fora dele.
+   */
+  sobreDesdeMs: number | null;
+  /**
+   * Alvo que a permanência liberou DURANTE uma herança. Só ele fica livre: a
+   * herança continua valendo para qualquer outro que apareça sob o olhar
+   * parado (a tela nova de um computador lento, desenhada depois).
+   */
+  liberado: unknown | null;
 }
 
 export function criarRearme(): EstadoDoRearme {
   return {
     bloqueado: null, foraDesdeMs: null,
     herdarAteMs: null, herdarDe: null, amostrasDaFixacao: 0, saltoDesdeMs: null, amostrasDoSalto: 0,
+    sobreDesdeMs: null, liberado: null,
   };
+}
+
+/** Libera só `alvo`, mantendo a herança em curso para os outros. */
+function liberarNaHeranca(e: EstadoDoRearme, alvo: unknown): { estado: EstadoDoRearme; bloqueado: boolean } {
+  return { estado: { ...e, bloqueado: null, foraDesdeMs: null, sobreDesdeMs: null, liberado: alvo }, bloqueado: false };
+}
+
+/**
+ * O olhar está sobre o alvo bloqueado `alvo` (que já pode ser o de antes):
+ * atualiza o relógio da permanência e diz se ela já rearmou o alvo.
+ */
+function permanecer(
+  e: EstadoDoRearme, alvo: unknown, agoraMs: number, opcoes: OpcoesDoAlvo | undefined,
+): { estado: EstadoDoRearme; rearmou: boolean } {
+  const desde = alvo === e.bloqueado && e.sobreDesdeMs !== null ? e.sobreDesdeMs : agoraMs;
+  const estado = { ...e, bloqueado: alvo, foraDesdeMs: null, sobreDesdeMs: desde };
+  return { estado, rearmou: opcoes?.permanencia === true && agoraMs - desde >= PERMANENCIA_PARA_REARMAR_MS };
 }
 
 /** Depois de um clique em `alvo`. `repetivel`: tecla que pode disparar de novo sem sair. */
@@ -88,13 +147,15 @@ export function aoNavegar(agoraMs: number, ponto: PontoDoOlhar): EstadoDoRearme 
 
 /**
  * A cada amostra, com o `alvo` sob o olhar (ou `null`) e o olhar em `ponto`:
- * o novo estado e se esse alvo está bloqueado agora.
+ * o novo estado e se esse alvo está bloqueado agora. `opcoes` descreve o alvo
+ * (ver o rearme por permanência, no topo).
  */
 export function filtrarAlvo(
   estado: EstadoDoRearme,
   alvo: unknown | null,
   agoraMs: number,
   ponto: PontoDoOlhar,
+  opcoes?: OpcoesDoAlvo,
 ): { estado: EstadoDoRearme; bloqueado: boolean } {
   let e = estado;
   if (e.herdarAteMs !== null && e.herdarDe !== null) {
@@ -108,8 +169,13 @@ export function filtrarAlvo(
         ? { x: e.herdarDe.x + (ponto.x - e.herdarDe.x) / n, y: e.herdarDe.y + (ponto.y - e.herdarDe.y) / n }
         : e.herdarDe;
       e = { ...e, herdarDe: centro, amostrasDaFixacao: perto ? n : e.amostrasDaFixacao, saltoDesdeMs: null, amostrasDoSalto: 0 };
-      if (alvo !== null) e = { ...e, bloqueado: alvo, foraDesdeMs: null };
-      return { estado: e, bloqueado: alvo !== null };
+      if (alvo === null) return { estado: { ...e, sobreDesdeMs: null }, bloqueado: false };
+      if (alvo === e.liberado) return { estado: e, bloqueado: false };
+      const p = permanecer(e, alvo, agoraMs, opcoes);
+      // Permanência cumprida num grupo do teclado: ele vale como escolha nova,
+      // e só ele — o que aparecer depois sob o olhar parado ainda é herdado.
+      if (p.rearmou) return liberarNaHeranca(p.estado, alvo);
+      return { estado: p.estado, bloqueado: true };
     }
     // Longe da fixação herdada: salto em confirmação. Enquanto não se
     // confirma, só o herdado continua bloqueado — o alvo lá longe é escolha
@@ -121,17 +187,29 @@ export function filtrarAlvo(
     e = {
       ...e, saltoDesdeMs: desde, amostrasDoSalto: amostras,
       foraDesdeMs: naHerdada ? null : (e.foraDesdeMs ?? agoraMs),
+      sobreDesdeMs: naHerdada ? e.sobreDesdeMs : null,
     };
     if (agoraMs - desde < SAIDA_PARA_REARMAR_MS || amostras < AMOSTRAS_PARA_SALTO) {
-      return { estado: e, bloqueado: naHerdada };
+      if (naHerdada) {
+        // Ainda dentro da célula herdada, só longe do ponto onde a troca
+        // aconteceu (uma célula grande): a permanência continua contando.
+        const p = permanecer(e, alvo, agoraMs, opcoes);
+        if (p.rearmou) return liberarNaHeranca(p.estado, alvo);
+        return { estado: p.estado, bloqueado: true };
+      }
+      return { estado: e, bloqueado: false };
     }
     // O olhar saltou: acabou a herança, e o último bloqueado segue a regra de
     // sempre (volta a valer quando o olhar fica fora dele).
     e = { ...e, herdarAteMs: null, herdarDe: null, amostrasDaFixacao: 0, saltoDesdeMs: null, amostrasDoSalto: 0 };
   }
   if (e.bloqueado === null) return { estado: e, bloqueado: false };
-  if (alvo === e.bloqueado) return { estado: { ...e, foraDesdeMs: null }, bloqueado: true };
+  if (alvo === e.bloqueado) {
+    const p = permanecer(e, alvo, agoraMs, opcoes);
+    if (p.rearmou) return { estado: criarRearme(), bloqueado: false };
+    return { estado: p.estado, bloqueado: true };
+  }
   const fora = e.foraDesdeMs ?? agoraMs;
   if (agoraMs - fora >= SAIDA_PARA_REARMAR_MS) return { estado: criarRearme(), bloqueado: false };
-  return { estado: { ...e, foraDesdeMs: fora }, bloqueado: false };
+  return { estado: { ...e, foraDesdeMs: fora, sobreDesdeMs: null }, bloqueado: false };
 }

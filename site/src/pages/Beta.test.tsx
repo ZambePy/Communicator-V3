@@ -424,6 +424,8 @@ describe('etapa 4 — download (conta beta)', () => {
     programa(DEPOIS)
     montar()
     expect(await screen.findByRole('heading', { name: /Tudo pronto, Maria! Baixe o IrisFlow/ })).toBeInTheDocument()
+    // A etiqueta vermelha continua lá, agora dizendo que a beta foi liberada.
+    expect(document.querySelector('.success .etiqueta-lancamento--liberada')).toHaveTextContent('Beta liberada')
     const painel = document.querySelector('.dl') as HTMLElement
     const baixar = within(painel)
       .getAllByRole('link')

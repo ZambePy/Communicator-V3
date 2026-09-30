@@ -41,53 +41,77 @@ export const DEMO_CUIDADOR: Demo = {
     'Gravação da tela do IrisFlow Cuidador, com dados de demonstração: o resumo da sessão do paciente, a conversa em que as respostas são faladas na tela dele, os relatórios da semana, os ajustes feitos a distância e a conta.',
 }
 
+/** A explicação curta da solução, no alto dos capítulos. */
+export const COMO_FUNCIONA_EM_UMA_FRASE =
+  'A webcam comum acompanha o olhar, e o cursor vai aonde ele vai. Parar o olhar num botão por um instante é o clique — com tempo para desistir.'
+
 export type Capitulo = {
   id: string
+  /** Nome curto do trecho, na legenda do vídeo. */
+  rotulo: string
   titulo: string
   texto: string
-  imagem: { src: string; alt: string; largura: number; altura: number }
+  /** Onde o capítulo começa na gravação DEMO_COMMUNICATOR, em segundos. Termina onde o próximo começa. */
+  inicio: number
+  /** O que a gravação mostra a partir de cada instante (segundos da gravação, dentro do capítulo). */
+  legendas: { de: number; texto: string }[]
+  /** Um quadro da gravação neste capítulo: o pôster com movimento reduzido, que não toca sozinho. */
+  quadro: string
 }
 
+/** Duração da gravação DEMO_COMMUNICATOR, para o último capítulo antes de o vídeo carregar. */
+export const DURACAO_DA_DEMO_COMMUNICATOR = 23.57
+
 /**
- * Os capítulos do produto, na ordem em que a pessoa vive o dia: falar, escolher,
- * usar o computador, aprender. Cada um com UMA tela de verdade do aplicativo.
+ * Os capítulos do produto, na ordem da gravação DEMO_COMMUNICATOR: o teclado
+ * (0–9 s), o menu (9–16 s) e o tutorial (16 s ao fim). O vídeo toca uma vez
+ * por todos, e o passo aceso e a legenda seguem o tempo dele. As legendas
+ * dizem só o que aparece na tela naquele momento (conferido quadro a quadro).
  */
 export const CAPITULOS: Capitulo[] = [
   {
     id: 'falar',
+    rotulo: 'Escrever',
     titulo: 'Escreva com o olhar. O computador fala.',
     texto:
-      'Um teclado feito para a fixação: primeiro o grupo de letras, depois a letra. Frases prontas para o que se diz todo dia, ditas em voz alta na hora.',
-    imagem: {
-      src: '/media/telas/teclado.webp',
-      alt: 'Teclado do IrisFlow Communicator com as letras em seis grupos grandes; o cursor do olhar está sobre o grupo A B C D E F.',
-      largura: 1600,
-      altura: 900,
-    },
+      'Um teclado feito para a fixação: primeiro o grupo de letras, depois a letra. As sugestões completam a palavra, e as frases prontas do dia a dia são faladas na hora.',
+    inicio: 0,
+    legendas: [
+      { de: 0, texto: 'O círculo é o cursor do olhar.' },
+      { de: 1.2, texto: 'Olhar parado no grupo: ele se abre.' },
+      { de: 2.6, texto: 'Depois, a letra.' },
+      { de: 5.1, texto: 'A letra entra no texto.' },
+      { de: 6.4, texto: 'O mesmo gesto volta ao início.' },
+    ],
+    quadro: '/media/capitulos/escrever.jpg',
   },
   {
     id: 'escolher',
+    rotulo: 'Escolher',
     titulo: 'Tudo a um olhar de distância.',
     texto:
       'Comunicação, teclado, computador, conversa com quem cuida e lazer, em alvos grandes e sempre no mesmo lugar. A emergência fica no canto de todas as telas.',
-    imagem: {
-      src: '/media/telas/menu.webp',
-      alt: 'Menu principal do IrisFlow Communicator: nove cartões grandes (Comunicação, Teclado Virtual, Computador, Configurações, Lazer e bem-estar, Conversa, Modo Descanso, Controle de Voz e Acessibilidade) e o botão Emergência no canto superior direito.',
-      largura: 1600,
-      altura: 900,
-    },
+    inicio: 9,
+    legendas: [
+      { de: 9, texto: 'Nove cartões, sempre no mesmo lugar.' },
+      { de: 10, texto: 'O cartão sob o olhar se acende.' },
+      { de: 13.8, texto: 'A emergência fica sempre no canto.' },
+    ],
+    quadro: '/media/capitulos/escolher.jpg',
   },
   {
     id: 'aprender',
+    rotulo: 'Aprender',
     titulo: 'No tempo de quem usa.',
     texto:
-      'Uma calibração guiada e um tutorial de dez passos. O tempo que o olhar precisa ficar parado para clicar é a pessoa quem escolhe.',
-    imagem: {
-      src: '/media/telas/tutorial.webp',
-      alt: 'Passo do tutorial "O tempo certo é o seu", com a escolha do tempo de permanência entre lento, normal e rápido e um alvo para testar.',
-      largura: 1280,
-      altura: 800,
-    },
+      'Uma calibração guiada e um tutorial de dez passos, com prática. O tempo que o olhar precisa ficar parado para clicar é a pessoa quem escolhe.',
+    inicio: 16.1,
+    legendas: [
+      { de: 16.1, texto: 'O tutorial ensina com a prática.' },
+      { de: 17.2, texto: 'Frases prontas: o caminho mais curto.' },
+      { de: 18.3, texto: 'Depois, uma frase escrita por você.' },
+    ],
+    quadro: '/media/capitulos/aprender.jpg',
   },
 ]
 

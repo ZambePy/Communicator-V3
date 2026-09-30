@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { BETA, BETA_CTA } from '@/data/content'
+import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { naRota } from '@/routes'
 import './sticky-cta.css'
 
@@ -51,13 +52,17 @@ function typing(): boolean {
  * ou o rodapé está visível (qualquer elemento com `data-sticky-hide`),
  * com o teclado aberto, nas rotas de fluxo e enquanto o aviso de cookies
  * ocupa a base da tela. Tem botão de fechar, lembrado até o fim da visita.
+ * Depois do lançamento da beta, a chamada é "Baixar grátis", como no
+ * cabeçalho, e a barra some em /baixar, que já é o destino.
  * Respeita a área segura inferior (iPhone com barra de gestos).
  */
 export function StickyCta() {
   const { pathname } = useLocation()
   const [dismissed, setDismissed] = useState(readDismissed)
   const [blocked, setBlocked] = useState(true)
-  const hiddenRoute = naRota(pathname, HIDDEN_ON)
+  const program = useBetaProgram()
+  const lancou = useJaLancou(program.launchAt)
+  const hiddenRoute = naRota(pathname, HIDDEN_ON) || (BETA.ativo && lancou && naRota(pathname, ['/baixar']))
 
   useEffect(() => {
     if (dismissed || hiddenRoute) return
@@ -104,9 +109,15 @@ export function StickyCta() {
     >
       <div className="sticky-cta__inner">
         {BETA.ativo ? (
-          <Button to={BETA_CTA.to} full className="sticky-cta__btn">
-            {BETA_CTA.labelLong}
-          </Button>
+          lancou ? (
+            <Button to="/baixar" full className="sticky-cta__btn">
+              Baixar grátis
+            </Button>
+          ) : (
+            <Button to={BETA_CTA.to} full className="sticky-cta__btn">
+              {BETA_CTA.labelLong}
+            </Button>
+          )
         ) : (
           <Button to="/cadastro" full className="sticky-cta__btn">
             Testar grátis

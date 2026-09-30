@@ -72,6 +72,14 @@ roteiro das sessões que decidem cada mudança está em
 não mudou; o painel passou a explicar a rodada "Não medido" quando a causa é a
 taxa de quadros (§2, *Tempo por ponto*).
 
+**Revisão de 2026-09-29 — a beta volta a levar o L2CS.** Nenhuma medição nova.
+A partir da 1.0.0-beta.10 o instalador sai com os pesos do L2CS (o projeto é
+acadêmico e a beta, gratuita e não comercial; README, *Pendências e riscos*,
+item 1). O item 1 da revisão de 26/09 vale para as versões de 24/09 até a
+beta.9 e, hoje, só para quem escolhe "calibrar só com a íris". O que a família
+instala volta a ter o bloco angular das sessões desta página, mas roda o
+pipeline V3, que só foi medido em replay (§14.6).
+
 ---
 
 ## 0. Resumo em linguagem simples
@@ -94,8 +102,10 @@ O 1,40° está abaixo da faixa típica de webcam e ainda acima do infravermelho.
 
 **O que o número não diz.** É uma pessoa, num posto conhecido, sem réplica
 (N = 1), e foi medido **com** o L2CS, cujos pesos têm licença só para
-pesquisa. O instalador da beta roda sem ele, e a acurácia dessa versão ainda
-não foi medida. A precisão (o tremor) também piorou entre o pipeline antigo e
+pesquisa — o instalador da beta os leva desde a 1.0.0-beta.10, e por isso a
+beta é acadêmica e não comercial. O pipeline padrão de hoje (V3) ainda não foi
+medido ao vivo, e sem o L2CS ("calibrar só com a íris") a acurácia nunca foi
+medida. A precisão (o tremor) também piorou entre o pipeline antigo e
 o atual (§14.4): acertar o botão ficou mais fácil, segurar o olhar parado nele,
 não.
 
@@ -598,20 +608,22 @@ Regras comuns: N ≥ 3 por condição (três calibrações independentes, não t
 testes sobre a mesma calibração); `pipeline.runtime.modelo` conferido em todos
 os relatórios — **a ficha de proveniência diz com que pesos a rodada foi
 feita**, e uma rodada com `usoComercial: 'proibido'` pode ser medida e
-comparada, mas nunca sair num release; `l2csValidFraction` ≥ 0,98, senão a
+comparada, e só sai no release da beta acadêmica, nunca num comercial (README,
+*Pendências e riscos*, item 1); `l2csValidFraction` ≥ 0,98, senão a
 sessão é de iluminação, não da condição.
 
 #### M-ablação — quanto vale o bloco L2CS
 
 A pergunta que dimensiona todo o resto: se o bloco angular vale 0,3°, o
 retreino é urgente; se vale 0,05°, o V2 pode sair sem L2CS enquanto a licença
-não vem. **É também o número da beta**: desde 24/09 o instalador roda a
-condição B.
+não vem. De 24/09 até a 1.0.0-beta.9 era também o número da beta (o instalador
+rodava a condição B); desde a beta.10 a beta roda a condição A, e a B é o
+caminho de quem escolhe "calibrar só com a íris".
 
 | | condição A | condição B |
 |---|---|---|
 | URL | `?ep=auto&l2cs=448&filtro=oneEuro&diagonal=…` | `?ep=off&filtro=oneEuro&diagonal=…` |
-| conjunto de features | `irisAbs+l2cs` (4 dims por olho) | `irisAbs` (2 dims por olho — o que o instalador da beta roda) |
+| conjunto de features | `irisAbs+l2cs` (4 dims por olho — o que o instalador da beta roda) | `irisAbs` (2 dims por olho — "calibrar só com a íris") |
 | pessoa, distância, hora | iguais | iguais |
 
 Registrar `meanErrorDeg`, `looErrorPx`, centro/periferia, e o `featureSet` do
@@ -1486,6 +1498,56 @@ padrão deu 65,0 px no miolo e 41,5 px nos cantos — do outro lado do base, a
 menos de 2 px dele, como aqui. M7 foi desligada por outro caminho: a
 gravação não tem o 14º alvo, e o olho sintético que satura como o real mostrou
 a troca de erro (README, *Pipeline V3*).
+
+### 14.7 Cursor travando e M9 revisado — 2026-09-30 *(simulação com ruído real, não é medição ao vivo)*
+
+**O cursor aos degraus.** Na gravação de tela de 30/09 o cursor andava a
+~15 Hz efetivos: um quadro com passo de 10–20 px, o seguinte parado. A causa
+está na gravação de sessão de 23/09: entre a captura e a emissão de cada
+quadro de câmera, a thread principal fica ocupada 24 ms na mediana e 41 ms no
+p90 (`emitTs − captureTs`), com um quadro a cada 33 ms. O laço de rAF que
+interpolava o cursor divide essa thread com o MediaPipe e perdia quadros de
+display. Correção: a posição passa a ser animada pelo compositor
+(`transform` + `transition`, uma escrita por amostra; `cursorNoCompositor.ts`),
+que desenha a 60 Hz sem a thread principal. Não há número de antes/depois
+aqui: isso só se mede numa gravação de tela nova na mesma máquina.
+
+**M9: o portão supunha ruído independente.** Com ρ₁ ≈ 0,8, a diferença entre a
+amostra e a média da janela varia ~0,6–0,7 σ², não os ~1,05 σ² da conta
+Σ·(1 + 1/n). O portão ficava largo demais (passos médios escorregavam até o
+destino) e a escala da sessão, abaixo da verdadeira. A revisão usa a variância
+da inovação sob AR(1) e acrescenta um detector de deslocamento (média das 4
+últimas amostras contra a do resto, com a variância exata da diferença sob
+AR(1) e limiar de 4,5 desvios — com o olhar parado, ≤ 0,1 reinício à toa por
+minuto para ρ₁ de 0 a 0,9 em ruído sintético).
+
+Método: resíduos das fixações do teste de precisão da gravação de 23/09 (σ
+médio 26,5 px, ρ₁ = 0,76), emendados numa trajetória de uso de 4 min × 4
+sementes, com passos de 40 a 700 px; mediana do tempo até a saída cobrir 90 %
+do passo, e pulos > 25 px por minuto com o olhar parado (depois de 700 ms de
+fixação). Reprodutível com
+`IRISFLOW_GRAVACAO=… npx vitest run src/filters/estimadorDeFixacao.ruidoReal.test.ts`.
+
+| cenário | versão | 90–160 px | 160–260 px | 260–450 px | pulos/min |
+|---|---|---|---|---|---|
+| ruído da gravação (σ 26 px) | antes | 136 ms | 113 ms | 97 ms | 0,2 |
+| | revisão | 119 ms | 122 ms | 100 ms | 0,3 |
+| ruído ×2 (σ 53 px) | antes | 424 ms | 326 ms | 114 ms | 0,8 |
+| | revisão | 420 ms | **222 ms** | 118 ms | 1,5 |
+| uso 1,6× o ruído da calibração | antes | 344 ms | 115 ms | 112 ms | 6,8 |
+| | revisão | 369 ms | 133 ms | 119 ms | **4,2** |
+| calibração 2×, uso 1,6× | antes | 429 ms | 377 ms | 114 ms | 0,2 |
+| | revisão | 430 ms | **196 ms** | 121 ms | 0,2 |
+
+No replay do teste de precisão da própria gravação, o erro médio fica igual
+(123,5 → 123,6 px, o viés do modelo de 23/09) e a dispersão vai de 24,3 para
+24,7 px. **Leitura:** o ganho está nos passos de 3–5σ, que antes escorregavam;
+abaixo de ~2σ (de 30 a 90 px com o ruído da gravação) os dois levam ~400 ms,
+porque ali passo e ruído não se separam sem atrasar a fixação inteira. Com o
+ruído do uso maior que o da calibração, a revisão pula menos (a escala
+acompanha o ruído de verdade), ao custo de passos de 90–260 px um pouco mais
+lentos nesse cenário (a escala honesta abre o portão). Com o ruído dobrado, o
+custo é ~0,7 pulo a mais por minuto.
 
 ---
 

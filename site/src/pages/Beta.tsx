@@ -253,10 +253,18 @@ function CriarConta({ program }: { program: BetaProgram }) {
 
             <Reveal anim="up" delay={100}>
               {lancou ? (
-                <p className="lead flow__lead">
-                  A beta está aberta para {BETA.sistemaDoLancamento}. Crie sua conta, responda uma
-                  pesquisa rápida e baixe o aplicativo. Sem cartão e sem cobrança. {PRIVACY_LINE}
-                </p>
+                <>
+                  <p className="beta__lancamento">
+                    <EtiquetaLancamento lancamento={program.launchAt} />
+                    <span>
+                      O download está aberto para <strong>{BETA.sistemaDoLancamento}</strong>.
+                    </span>
+                  </p>
+                  <p className="lead flow__lead">
+                    Crie sua conta, responda uma pesquisa rápida e baixe o aplicativo. Sem cartão e
+                    sem cobrança. {PRIVACY_LINE}
+                  </p>
+                </>
               ) : (
                 <>
                   <p className="beta__lancamento">
@@ -644,6 +652,10 @@ function Download({ account, program }: { account: Account; program: BetaProgram
             {lancou ? `Tudo pronto, ${primeiroNome}! Baixe o IrisFlow.` : `Inscrição concluída, ${primeiroNome}!`}
           </h1>
 
+          {/* A etiqueta vermelha nos dois estados: o dia, e depois "Beta liberada". */}
+          <p className="beta__lancamento beta__lancamento--centro">
+            <EtiquetaLancamento lancamento={program.launchAt} />
+          </p>
           {lancou ? (
             <p className="lead success__lead">
               {naBeta ? (
@@ -659,16 +671,11 @@ function Download({ account, program }: { account: Account; program: BetaProgram
               )}
             </p>
           ) : (
-            <>
-              <p className="beta__lancamento beta__lancamento--centro">
-                <EtiquetaLancamento lancamento={program.launchAt} />
-              </p>
-              <p className="lead success__lead">
-                A beta fica disponível em <strong>{diaPorExtenso(program.launchAt)}</strong>. Nesse
-                dia, o download para {BETA.sistemaDoLancamento} é liberado aqui e no seu perfil: é só
-                voltar e baixar.
-              </p>
-            </>
+            <p className="lead success__lead">
+              A beta fica disponível em <strong>{diaPorExtenso(program.launchAt)}</strong>. Nesse
+              dia, o download para {BETA.sistemaDoLancamento} é liberado aqui e no seu perfil: é só
+              voltar e baixar.
+            </p>
           )}
         </div>
 
