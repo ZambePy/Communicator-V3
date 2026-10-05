@@ -457,7 +457,7 @@ function ConfirmeOCodigo({
   senha?: string
   onCorrigir: () => void
 }) {
-  const { refresh, signIn } = useAccount()
+  const { refresh } = useAccount()
 
   useEffect(() => {
     window.scrollTo?.({ top: 0 })
@@ -488,21 +488,6 @@ function ConfirmeOCodigo({
               }
               await refresh()
             }}
-            aoRecusar={
-              senha
-                ? async () => {
-                    // Confirmado pelo botão do e-mail, em outro aparelho? Então o
-                    // código daqui não vale mais, mas a senha desta tela entra.
-                    try {
-                      await signIn(email, senha)
-                      esquecerInscricaoPendente()
-                      return true
-                    } catch {
-                      return false
-                    }
-                  }
-                : undefined
-            }
             aoReenviar={async () => {
               await reenviarConfirmacao(email)
               guardarInscricaoPendente(email)
