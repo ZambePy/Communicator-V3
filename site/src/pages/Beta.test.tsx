@@ -268,22 +268,22 @@ describe('etapa 1 — criar conta (sem sessão)', () => {
     expect(screen.getByText(/pedir outro em 0:42/)).toBeInTheDocument()
   })
 
-  it('confirmado pelo botão em outro aparelho: o código não vale mais, mas a senha desta tela entra', async () => {
+  it('código errado é recusado mesmo com a senha certa nesta tela: não entra e segue no código', async () => {
     const { CodigoIncorreto } = await import('@/services/api')
     apiFake.conferirCodigo.mockRejectedValueOnce(new CodigoIncorreto())
-    acoes.signIn.mockResolvedValueOnce(null)
     montar()
     preencherConta()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
     })
     await act(async () => {
-      fireEvent.change(await screen.findByLabelText('Código de 4 dígitos'), { target: { value: '4829' } })
+      fireEvent.change(await screen.findByLabelText('Código de 4 dígitos'), { target: { value: '1234' } })
     })
-    await waitFor(() => expect(acoes.signIn).toHaveBeenCalledWith('maria@exemplo.com.br', 'segredo123'))
-    // nada de "Código incorreto" para quem já confirmou
-    expect(screen.queryByText(/Código incorreto/)).not.toBeInTheDocument()
-    expect(sessionStorage.getItem('irisflow:beta-pendente')).toBeNull()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Código incorreto/)
+    expect(acoes.signIn).not.toHaveBeenCalled()
+    expect(apiFake.verificarLinkDoEmail).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Digite o código do e-mail' })).toBeInTheDocument()
+    expect(sessionStorage.getItem('irisflow:beta-pendente')).not.toBeNull()
   })
 
   it('corrigir o e-mail volta ao formulário com as senhas limpas', async () => {

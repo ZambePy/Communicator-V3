@@ -18,6 +18,11 @@ import './codigo.css'
    nesse instante desfazem a animação e explicam o que houve. Cor, só para o
    veredito: verde no acerto, vermelho no erro. Com movimento reduzido, o
    check aparece direto.
+
+   Código errado é recusado, sempre: nada abre a sessão por outro caminho.
+   As caixas acendem em vermelho e tremem, o celular vibra, os dígitos se
+   apagam e o campo volta vazio para outra tentativa. Quem já confirmou pelo
+   botão do e-mail entra pela senha ("Confirmei pelo botão do e-mail").
    ============================================================ */
 
 type Estado = 'digitando' | 'conferindo' | 'confirmado' | 'entrando' | 'erro'
@@ -26,12 +31,6 @@ type Props = {
   email: string
   /** Abre a sessão com o token_hash do cadastro. Roda depois da animação. */
   aoConfirmar: (tokenHash: string) => Promise<void>
-  /**
-   * Código recusado (errado ou bloqueado): outra chance de seguir antes de
-   * mostrar o erro — ex.: o e-mail já foi confirmado pelo botão, em outro
-   * aparelho, e a senha desta tela entra. Devolve `true` se resolveu.
-   */
-  aoRecusar?: () => Promise<boolean>
   /** Manda um código novo para o e-mail. */
   aoReenviar: () => Promise<void>
   /** Segundos até o primeiro reenvio (o Supabase exige 60 s entre envios). */
@@ -42,6 +41,8 @@ type Props = {
 
 const ESPERA_ENTRE_ENVIOS = 60
 const DURACAO_DA_ORBITA = 1700
+/** A recusa (tremor + dígitos se apagando, em codigo.css) antes de o campo esvaziar. */
+const DURACAO_DA_RECUSA = 650
 
 /** Posição de um ponto na órbita, relativa ao ponto de partida da caixa. */
 function naOrbita(angulo: number, raio: number, dx: number, dy: number) {
@@ -104,7 +105,6 @@ function mensagemDoErro(e: unknown): string {
 export function CodigoDeVerificacao({
   email,
   aoConfirmar,
-  aoRecusar,
   aoReenviar,
   esperaInicial = ESPERA_ENTRE_ENVIOS,
   instrucao,
@@ -144,16 +144,8 @@ export function CodigoDeVerificacao({
       setMensagem(null)
       setAviso(null)
       try {
-        let hash: string
-        try {
-          hash = await conferirCodigo(email, codigo)
-        } catch (e) {
-          const recusado = e instanceof CodigoIncorreto || (e instanceof ApiError && e.message === CODIGO_BLOQUEADO)
-          // O e-mail pode já ter sido confirmado por outro caminho: quem
-          // chamou tenta seguir antes de dizer que o código está errado.
-          if (recusado && aoRecusar && (await aoRecusar().catch(() => false))) return
-          throw e
-        }
+        // Só o código certo devolve o hash; errado ou bloqueado cai no catch.
+        const hash = await conferirCodigo(email, codigo)
         if (!vivo.current) return
         setEstado('confirmado')
         if (!prefersReducedMotion() && palco.current && typeof Element.prototype.animate === 'function') {
@@ -173,22 +165,25 @@ export function CodigoDeVerificacao({
         animacoes.current = []
         setEstado('erro')
         setMensagem(mensagemDoErro(e))
+        if (e instanceof CodigoIncorreto || (e instanceof ApiError && e.message === CODIGO_BLOQUEADO)) {
+          navigator.vibrate?.([70, 50, 70])
+        }
         window.setTimeout(() => {
           if (!vivo.current) return
           setValor('')
           setEstado('digitando')
           campo.current?.focus()
-        }, 520)
+        }, DURACAO_DA_RECUSA)
       }
     },
-    [email, aoConfirmar, aoRecusar],
+    [email, aoConfirmar],
   )
 
   const digitar = (e: ChangeEvent<HTMLInputElement>) => {
-    if (estado !== 'digitando' && estado !== 'erro') return
+    // Durante a recusa o campo espera a animação acabar: ele esvazia sozinho.
+    if (estado !== 'digitando') return
     const so = e.target.value.replace(/\D/g, '').slice(0, DIGITOS_DO_CODIGO)
     setValor(so)
-    if (estado === 'erro') setEstado('digitando')
     if (so.length === DIGITOS_DO_CODIGO) void conferir(so)
   }
 
