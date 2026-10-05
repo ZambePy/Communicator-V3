@@ -74,18 +74,31 @@ describe('<CodigoDeVerificacao />', () => {
     expect(await screen.findByRole('alert', {}, { timeout: 2500 })).toHaveTextContent(/Este código venceu/)
   })
 
-  it('código recusado com outro caminho resolvido (confirmado em outro aparelho): sem erro', async () => {
+  it('código errado é recusado: treme em vermelho, vibra, esvazia e não segue', async () => {
     const { CodigoIncorreto } = await import('@/services/api')
     conferir.mockRejectedValue(new CodigoIncorreto())
-    const aoRecusar = vi.fn(async () => true)
-    render(
-      <CodigoDeVerificacao email="maria@exemplo.com" aoConfirmar={vi.fn()} aoRecusar={aoRecusar} aoReenviar={vi.fn()} />,
+    const vibrate = vi.fn(() => true)
+    Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true })
+    const aoConfirmar = vi.fn(async () => {})
+    const { container } = render(
+      <CodigoDeVerificacao email="maria@exemplo.com" aoConfirmar={aoConfirmar} aoReenviar={vi.fn()} />,
     )
+    const campo = screen.getByLabelText('Código de 4 dígitos')
     await act(async () => {
-      fireEvent.change(screen.getByLabelText('Código de 4 dígitos'), { target: { value: '4829' } })
+      fireEvent.change(campo, { target: { value: '1111' } })
     })
-    await waitFor(() => expect(aoRecusar).toHaveBeenCalled())
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Código incorreto/)
+    expect(container.firstChild).toHaveClass('codigo--erro')
+    expect(campo).toHaveAttribute('aria-invalid', 'true')
+    expect(vibrate).toHaveBeenCalled()
+    // durante a recusa, digitar não muda nada
+    fireEvent.change(campo, { target: { value: '22' } })
+    expect(campo).toHaveValue('1111')
+    // depois da animação, o campo volta vazio e pronto para outra tentativa
+    await waitFor(() => expect(campo).toHaveValue(''))
+    expect(container.firstChild).toHaveClass('codigo--digitando')
+    expect(aoConfirmar).not.toHaveBeenCalled()
+    delete (navigator as { vibrate?: unknown }).vibrate
   })
 
   it('o reenvio espera 1 minuto e depois manda um código novo, recomeçando a contagem', async () => {

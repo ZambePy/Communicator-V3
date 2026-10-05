@@ -101,13 +101,19 @@
   animation-delay: calc(var(--i) * 110ms);
 }
 
-/* ---------- erro ---------- */
+/* ---------- erro: código recusado ----------
+   As caixas acendem em vermelho, tremem num "não" que perde força e os
+   dígitos se apagam; só então o campo esvazia (DURACAO_DA_RECUSA, 650 ms,
+   em CodigoDeVerificacao.tsx). */
 .codigo--erro .codigo__caixas {
-  animation: codigo-tremer 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  animation: codigo-tremer 520ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
 }
 
 .codigo--erro .codigo__caixa {
   border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+  animation: codigo-recusa 650ms ease-out both;
 }
 
 /* ---------- confirmado: órbita, fusão e o selo ---------- */
@@ -269,22 +275,51 @@
 }
 
 @keyframes codigo-tremer {
-  10%,
-  90% {
-    transform: translateX(-2px);
+  0%,
+  100% {
+    transform: translateX(0);
   }
-  20%,
-  80% {
-    transform: translateX(4px);
+  12% {
+    transform: translateX(-12px);
   }
-  30%,
-  50%,
+  26% {
+    transform: translateX(10px);
+  }
+  40% {
+    transform: translateX(-8px);
+  }
+  54% {
+    transform: translateX(6px);
+  }
+  68% {
+    transform: translateX(-4px);
+  }
+  82% {
+    transform: translateX(2px);
+  }
+}
+
+/* O vermelho acende de uma vez e vai baixando; no fim os dígitos somem. */
+@keyframes codigo-recusa {
+  0% {
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+  18% {
+    background: rgba(255, 154, 157, 0.2);
+    box-shadow:
+      0 0 0 4px var(--danger-line),
+      0 0 30px rgba(255, 154, 157, 0.35);
+  }
   70% {
-    transform: translateX(-7px);
+    color: var(--danger);
+    background: var(--danger-soft);
+    box-shadow: 0 0 0 4px var(--danger-soft);
   }
-  40%,
-  60% {
-    transform: translateX(7px);
+  100% {
+    color: transparent;
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: none;
   }
 }
 
@@ -337,6 +372,11 @@
 
 /* Movimento reduzido: nada gira; o check aparece direto. */
 @media (prefers-reduced-motion: reduce) {
+  /* A recusa fica só na cor (borda e dígitos vermelhos) e na mensagem. */
+  .codigo--erro .codigo__caixas,
+  .codigo--erro .codigo__caixa {
+    animation: none;
+  }
   .codigo--confirmado .codigo__caixas,
   .codigo--entrando .codigo__caixas {
     opacity: 0;
