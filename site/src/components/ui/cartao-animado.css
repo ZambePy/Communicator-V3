@@ -1,0 +1,214 @@
+/* ============================================================
+   Cartão em 3D da tela de pagamento (CartaoAnimado.tsx).
+   Três camadas: .cartao3d dá a perspectiva, .cartao3d__corpo inclina com o
+   mouse (transição curta) e .cartao3d__giro vira para o verso (transição
+   longa), cada uma com a sua própria transição.
+   ============================================================ */
+
+.cartao3d {
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 1.6;
+  margin-bottom: var(--sp-5);
+  perspective: 1200px;
+}
+
+.cartao3d__corpo {
+  --incl-x: 0deg;
+  --incl-y: 0deg;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--incl-x)) rotateY(var(--incl-y));
+  transition: transform 180ms var(--ease-out);
+}
+
+.cartao3d__giro {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 750ms var(--ease-out);
+}
+
+.cartao3d.is-virado .cartao3d__giro {
+  transform: rotateY(180deg);
+}
+
+.cartao3d__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: var(--sp-5);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(140deg, #16305c, #0b1b3a 60%, #061020);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transition: box-shadow 400ms var(--ease-out);
+}
+
+/* --- frente --- */
+.cartao3d__frente::after {
+  content: '';
+  position: absolute;
+  inset: -40% -20%;
+  background: radial-gradient(40% 40% at 30% 24%, rgba(61, 118, 212, 0.5), transparent 70%),
+    radial-gradient(36% 36% at 76% 74%, rgba(0, 166, 147, 0.4), transparent 70%);
+  background-size: 190% 190%;
+  animation: gradient-drift 16s var(--ease-in-out) infinite;
+  pointer-events: none;
+}
+
+.cartao3d__linha,
+.cartao3d__numero,
+.cartao3d__dados {
+  position: relative;
+  z-index: 1;
+}
+
+.cartao3d__linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+.cartao3d__chip {
+  width: 44px;
+  height: 32px;
+  border-radius: 7px;
+  background: linear-gradient(140deg, #d8c07a, #a98a3f);
+}
+
+.cartao3d__bandeira {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cartao3d__numero {
+  margin: 0;
+  font-size: clamp(1.05rem, 2.6vw, 1.42rem);
+  letter-spacing: 0.13em;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.cartao3d__dados {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.cartao3d__dados strong {
+  display: block;
+  font-size: 0.94rem;
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* --- verso --- */
+.cartao3d__verso {
+  transform: rotateY(180deg);
+  justify-content: flex-start;
+  gap: 9%;
+  padding: 9% 0 0;
+}
+
+.cartao3d__tarja {
+  display: block;
+  height: 21%;
+  background: #03070e;
+}
+
+.cartao3d__assinatura {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 19%;
+  margin: 0 var(--sp-5);
+  padding-right: 10px;
+  border-radius: 6px;
+  background: repeating-linear-gradient(135deg, #eef2f8 0 6px, #d7e0ee 6px 12px);
+}
+
+.cartao3d__cvv {
+  min-width: 3.4em;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: #fff;
+  color: var(--navy);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.cartao3d__aviso {
+  margin: 0 var(--sp-5);
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+/* --- brilho durante a confirmação --- */
+.cartao3d--processando .cartao3d__face {
+  animation: cartao3d-pulso 1.4s var(--ease-in-out) infinite;
+}
+
+.cartao3d--sucesso .cartao3d__face {
+  box-shadow: 0 0 0 2px rgba(63, 214, 194, 0.9), 0 0 44px 8px rgba(63, 214, 194, 0.42);
+}
+
+.cartao3d--erro .cartao3d__face {
+  box-shadow: 0 0 0 2px rgba(255, 154, 157, 0.9), 0 0 44px 8px rgba(255, 154, 157, 0.38);
+}
+
+.cartao3d--erro {
+  animation: cartao3d-tremor 420ms var(--ease-out) 1;
+}
+
+@keyframes cartao3d-pulso {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(77, 134, 224, 0.55), 0 0 18px 2px rgba(77, 134, 224, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(77, 134, 224, 0.95), 0 0 48px 10px rgba(77, 134, 224, 0.5);
+  }
+}
+
+@keyframes cartao3d-tremor {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-7px);
+  }
+  75% {
+    transform: translateX(7px);
+  }
+}
+
+/* Movimento reduzido: o giro e a inclinação já ficam instantâneos pela regra
+   global; aqui o pulso vira um brilho parado, que ainda indica o estado. */
+@media (prefers-reduced-motion: reduce) {
+  .cartao3d--processando .cartao3d__face {
+    animation: none;
+    box-shadow: 0 0 0 2px rgba(77, 134, 224, 0.9), 0 0 36px 6px rgba(77, 134, 224, 0.45);
+  }
+  .cartao3d__frente::after {
+    animation: none;
+  }
+}

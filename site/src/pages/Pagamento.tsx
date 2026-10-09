@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Field, SelectField } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { CartaoAnimado } from '@/components/ui/CartaoAnimado'
 import { useAccount, type Payment } from '@/context/AccountContext'
 import { SessionLoading } from '@/components/ui/Skeleton'
 import {
@@ -31,6 +32,16 @@ const METHODS: { id: Method; icon: IconName; name: string; note: string }[] = [
 
 type CardForm = { number: string; holder: string; expiry: string; cvv: string; installments: number }
 type Errors = Partial<Record<keyof CardForm, string>>
+type Etapa = 'formulario' | 'processando' | 'sucesso' | 'erro'
+
+/** Quanto o "processando" dura no mínimo e quanto o sucesso e o erro ficam na tela. */
+const MIN_PROCESSANDO_MS = 1400
+const SUCESSO_MS = 1300
+const ERRO_MS = 1100
+
+const esperar = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+const movimentoReduzido = () =>
+  window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false
 
 export default function Pagamento() {
   const { account, authenticated, loading, attachPayment } = useAccount()
@@ -47,6 +58,15 @@ export default function Pagamento() {
   const [errors, setErrors] = useState<Errors>({})
   const [processing, setProcessing] = useState(false)
   const [falha, setFalha] = useState<string | null>(null)
+  const [etapa, setEtapa] = useState<Etapa>('formulario')
+  const [cvvEmFoco, setCvvEmFoco] = useState(false)
+  const formulario = useRef<HTMLFormElement>(null)
+
+  // Enquanto a camada de confirmação cobre o formulário, ele sai do alcance
+  // do teclado e do leitor de tela.
+  useEffect(() => {
+    formulario.current?.toggleAttribute('inert', etapa !== 'formulario')
+  }, [etapa])
 
   if (loading) return <SessionLoading />
   if (!account) return <Navigate to={authenticated ? '/cadastro' : '/entrar'} replace />
@@ -81,6 +101,9 @@ export default function Pagamento() {
     if (!validate()) return
     setProcessing(true)
     setFalha(null)
+    setEtapa('processando')
+    const reduzido = movimentoReduzido()
+    const inicio = Date.now()
 
     // Sem gateway ainda: o cartão não é cobrado e o número completo não sai
     // desta tela. O que segue para o banco (e é dito ao usuário no aviso
@@ -100,8 +123,15 @@ export default function Pagamento() {
 
     try {
       await attachPayment(payment)
+      // Segura o "processando" um instante, para a confirmação não piscar e sumir.
+      await esperar(Math.max(0, (reduzido ? 0 : MIN_PROCESSANDO_MS) - (Date.now() - inicio)))
+      setEtapa('sucesso')
+      await esperar(reduzido ? 400 : SUCESSO_MS)
       navigate('/sucesso')
     } catch (e) {
+      setEtapa('erro')
+      await esperar(reduzido ? 0 : ERRO_MS)
+      setEtapa('formulario')
       setFalha(e instanceof Error ? e.message : 'Não foi possível salvar a forma de pagamento.')
     } finally {
       setProcessing(false)
@@ -133,6 +163,25 @@ export default function Pagamento() {
 
         <Reveal anim="up" delay={200}>
           <div className="flow__card panel">
+            {etapa !== 'formulario' && (
+              <StatusDaConfirmacao
+                etapa={etapa}
+                cobranca={`${brl(price)} em ${formatDate(account.trialEndsAt)}`}
+                cartao={
+                  method === 'cartao' ? (
+                    <CartaoAnimado
+                      numero={card.number}
+                      titular={card.holder}
+                      validade={card.expiry}
+                      digitosCvv={card.cvv.length}
+                      bandeira={brand}
+                      estado={etapa}
+                    />
+                  ) : null
+                }
+              />
+            )}
+
             {import.meta.env.DEV && (
               <div className="notice">
                 <span className="notice__icon">
@@ -147,7 +196,7 @@ export default function Pagamento() {
               </div>
             )}
 
-            <form onSubmit={submit} noValidate>
+            <form ref={formulario} onSubmit={submit} noValidate>
               {/* Rádios nativos, visualmente escondidos: as setas do teclado
                   trocam a opção e o leitor de tela anuncia "1 de 3". */}
               <fieldset className="methods">
@@ -173,26 +222,16 @@ export default function Pagamento() {
 
               {method === 'cartao' && (
                 <div className="flow__fieldset" key="cartao">
-                  {/* pré-visualização do cartão, atualizada enquanto se digita */}
-                  <div className="creditcard" aria-hidden="true">
-                    <div className="creditcard__row">
-                      <span className="creditcard__chip" />
-                      <span className="creditcard__brand">{card.number ? brand : 'IrisFlow'}</span>
-                    </div>
-                    <p className="creditcard__number">
-                      {card.number || '•••• •••• •••• ••••'}
-                    </p>
-                    <div className="creditcard__meta">
-                      <span>
-                        titular
-                        <strong>{card.holder || 'NOME NO CARTÃO'}</strong>
-                      </span>
-                      <span>
-                        validade
-                        <strong>{card.expiry || 'MM/AA'}</strong>
-                      </span>
-                    </div>
-                  </div>
+                  {/* pré-visualização do cartão: atualiza enquanto se digita e vira
+                      para o verso enquanto o código de segurança está em foco */}
+                  <CartaoAnimado
+                    numero={card.number}
+                    titular={card.holder}
+                    validade={card.expiry}
+                    digitosCvv={card.cvv.length}
+                    bandeira={brand}
+                    virado={cvvEmFoco}
+                  />
 
                   <Field
                     label="Número do cartão"
@@ -228,6 +267,8 @@ export default function Pagamento() {
                       label="Código de segurança"
                       value={card.cvv}
                       onChange={set('cvv', maskCVV)}
+                      onFocus={() => setCvvEmFoco(true)}
+                      onBlur={() => setCvvEmFoco(false)}
                       error={errors.cvv}
                       inputMode="numeric"
                       autoComplete="cc-csc"
@@ -337,6 +378,60 @@ export default function Pagamento() {
             token é enviado.
           </p>
         </Reveal>
+      </div>
+    </div>
+  )
+}
+
+/** Camada sobre o formulário enquanto a forma de pagamento é salva. */
+function StatusDaConfirmacao({
+  etapa,
+  cartao,
+  cobranca,
+}: {
+  etapa: Exclude<Etapa, 'formulario'>
+  cartao: ReactNode
+  cobranca: string
+}) {
+  const conteudo = useRef<HTMLDivElement>(null)
+
+  // O botão de confirmar fica no fim de um formulário longo: ao abrir, a
+  // página sobe até o cartão para a animação acontecer à vista.
+  useEffect(() => {
+    conteudo.current?.scrollIntoView?.({
+      block: 'center',
+      behavior: movimentoReduzido() ? 'auto' : 'smooth',
+    })
+  }, [])
+
+  const texto = {
+    processando: { titulo: 'Salvando a forma de pagamento…', sub: 'Leva só um instante.' },
+    sucesso: {
+      titulo: 'Tudo certo!',
+      sub: `Nada foi cobrado hoje. A primeira cobrança é de ${cobranca}.`,
+    },
+    erro: { titulo: 'Não foi possível salvar.', sub: 'Confira os dados e tente de novo.' },
+  }[etapa]
+
+  return (
+    <div className={`checkout-status checkout-status--${etapa}`} role="status" aria-live="polite">
+      <div className="checkout-status__conteudo" ref={conteudo}>
+        {cartao}
+        <span className="checkout-status__marca" aria-hidden="true">
+          {etapa === 'processando' && <span className="checkout-status__giro" />}
+          {etapa === 'sucesso' && (
+            <svg viewBox="0 0 24 24" className="checkout-status__check">
+              <path d="M5 12.5 10 17.5 19 7" />
+            </svg>
+          )}
+          {etapa === 'erro' && (
+            <svg viewBox="0 0 24 24" className="checkout-status__x">
+              <path d="M7 7 17 17M17 7 7 17" />
+            </svg>
+          )}
+        </span>
+        <p className="checkout-status__titulo">{texto.titulo}</p>
+        <p className="checkout-status__sub">{texto.sub}</p>
       </div>
     </div>
   )
