@@ -26,6 +26,7 @@
 }
 
 .flow__card {
+  position: relative;
   padding: clamp(var(--sp-5), 4vw, var(--sp-6));
 }
 
@@ -213,91 +214,6 @@
   color: var(--text-dim);
 }
 
-/* --- cartão visual --- */
-.creditcard {
-  position: relative;
-  overflow: hidden;
-  aspect-ratio: 1.6;
-  max-width: 380px;
-  padding: var(--sp-5);
-  margin-bottom: var(--sp-5);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line-strong);
-  background: linear-gradient(140deg, #16305c, #0b1b3a 60%, #061020);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  transition: transform var(--dur) var(--ease-spring);
-}
-
-.creditcard::after {
-  content: '';
-  position: absolute;
-  inset: -40% -20%;
-  background: radial-gradient(40% 40% at 30% 24%, rgba(61, 118, 212, 0.5), transparent 70%),
-    radial-gradient(36% 36% at 76% 74%, rgba(0, 166, 147, 0.4), transparent 70%);
-  background-size: 190% 190%;
-  animation: gradient-drift 16s var(--ease-in-out) infinite;
-  pointer-events: none;
-}
-
-.creditcard.is-flipped {
-  transform: rotateY(8deg) scale(0.99);
-}
-
-.creditcard__row {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-4);
-}
-
-.creditcard__chip {
-  width: 44px;
-  height: 32px;
-  border-radius: 7px;
-  background: linear-gradient(140deg, #d8c07a, #a98a3f);
-  position: relative;
-  z-index: 1;
-}
-
-.creditcard__brand {
-  font-family: var(--font-display);
-  font-size: 0.95rem;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.creditcard__number {
-  position: relative;
-  z-index: 1;
-  font-size: clamp(1.05rem, 2.6vw, 1.42rem);
-  letter-spacing: 0.13em;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-}
-
-.creditcard__meta {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  justify-content: space-between;
-  gap: var(--sp-4);
-  font-size: 0.82rem;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.creditcard__meta strong {
-  display: block;
-  font-size: 0.94rem;
-  color: #fff;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 /* --- pix --- */
 .pix {
   display: grid;
@@ -395,4 +311,116 @@
   border-radius: var(--r-lg);
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
+}
+
+/* --- camada de confirmação (processando, sucesso, erro) --- */
+.checkout-status {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  padding: var(--sp-6);
+  border-radius: inherit;
+  background: rgba(6, 18, 35, 0.9);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  text-align: center;
+  animation: fade-in 320ms var(--ease-out) both;
+}
+
+.checkout-status__conteudo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-4);
+  padding-top: var(--sp-5);
+}
+
+.checkout-status .cartao3d {
+  width: min(360px, 84%);
+  margin-bottom: var(--sp-3);
+  animation: checkout-status-entrada 650ms var(--ease-spring) both;
+}
+
+.checkout-status__marca {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+}
+
+.checkout-status__giro {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid rgba(143, 180, 240, 0.25);
+  border-top-color: var(--blue-300);
+  animation: spin 900ms linear infinite;
+}
+
+.checkout-status__check,
+.checkout-status__x {
+  width: 40px;
+  height: 40px;
+  fill: none;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.checkout-status__check {
+  stroke: var(--ok);
+}
+
+.checkout-status__x {
+  stroke: var(--danger);
+}
+
+.checkout-status__check path,
+.checkout-status__x path {
+  stroke-dasharray: 32;
+  stroke-dashoffset: 32;
+  animation: checkout-traco 480ms var(--ease-out) 120ms forwards;
+}
+
+.checkout-status__titulo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.checkout-status--sucesso .checkout-status__titulo {
+  color: var(--ok);
+}
+
+.checkout-status__sub {
+  margin: 0;
+  max-width: 40ch;
+  color: var(--text-dim);
+}
+
+@keyframes checkout-status-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes checkout-traco {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Sem animação, o traço do ✓/✕ precisa aparecer inteiro de uma vez. */
+@media (prefers-reduced-motion: reduce) {
+  .checkout-status__check path,
+  .checkout-status__x path {
+    stroke-dashoffset: 0;
+  }
 }
