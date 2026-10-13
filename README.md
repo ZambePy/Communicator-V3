@@ -1550,7 +1550,7 @@ SQL Editor (todos são idempotentes; os que já estão aplicados não mudam nada
 e publique a função pelo painel (*Edge Functions → desktop-sync*, com os três
 arquivos `index.ts`, `horario.ts` e `respostas.ts`, "Verify JWT" desligado). O `seed.sql`
 roda à parte, no SQL Editor. No Auth do painel: Site URL = a origem do site
-(`https://irisflow-communicator.pages.dev`) e Redirect URLs `<site>/entrar` e
+(`https://irisflow.ia.br`) e Redirect URLs `<site>/entrar` e
 `<site>/nova-senha` — o "Esqueci a senha" do site e o do app mandam
 `redirectTo` para `/nova-senha`, e o site leva o evento de recuperação para lá
 de qualquer página. Os modelos de e-mail (*Authentication → Emails → Templates*)
@@ -1995,7 +1995,7 @@ confira antes de pagar.
 
 | peça | agora (R$ 0) | limite que importa | quando pagar |
 |---|---|---|---|
-| site | Cloudflare Pages, `irisflow-communicator.pages.dev` | 500 builds/mês, 20 min cada, 20 000 arquivos de até 25 MiB | domínio próprio |
+| site | Cloudflare Pages, `irisflow.ia.br` (endereço do Pages: `irisflow-communicator.pages.dev`) | 500 builds/mês, 20 min cada, 20 000 arquivos de até 25 MiB | domínio próprio |
 | banco e login | Supabase Free | pausa após 7 dias parado, sem backup, 500 MB | Pro, US$ 25/mês |
 | instaladores | GitHub Releases, repositório público | arquivo < 2 GiB; Actions ilimitado só se público | privado: 2 000 min/mês |
 | app do cuidador | EAS Free | 15 builds Android + 15 iOS/mês, fila lenta; Update até 1 000 usuários | Starter, US$ 19/mês |
@@ -2004,7 +2004,7 @@ confira antes de pagar.
 
 ### Site no Cloudflare Pages
 
-Projeto **irisflow-communicator** (`https://irisflow-communicator.pages.dev`), ligado ao `ZambePy/Communicator-V3` pelo
+Projeto **irisflow-communicator** (domínio oficial `https://irisflow.ia.br`; endereço do Pages `https://irisflow-communicator.pages.dev`), ligado ao `ZambePy/Communicator-V3` pelo
 app do GitHub da Cloudflare; cada push na `main` publica. Build: branch `main`, root directory `site`,
 comando `npm run build` (`tsc -b && vite build`), saída `dist` (dentro de `site/`) e *build
 watch paths* `site/*`, para commit só de desktop ou app não gastar build. **Nada fica no
@@ -2093,7 +2093,14 @@ domínio e o `www`. Depois:
 | `app/app.json` → `extra.privacyPolicyUrl`, `termsUrl`, `accountDeletionUrl` | e as fichas da Play e da App Store |
 
 Mantenha os dois endereços `pages.dev` no ar: versões antigas abrem o
-`irisflow.pages.dev` (que redireciona), e os dois estão na lista fixa de hosts do desktop.
+`irisflow.pages.dev` (que redireciona), e os dois estão na lista fixa de hosts do desktop,
+junto com o `irisflow.ia.br`. Quem abre o `irisflow-communicator.pages.dev` (instalador ou
+APK antigo, favorito, busca, e-mail antigo) é levado pelo próprio site ao mesmo caminho no
+domínio, com a busca e o fragmento (`site/src/seo/hostCanonico.ts`, antes de montar o app,
+para o login nascer no domínio certo); as prévias de deploy (`<hash>.`/`<branch>.`) ficam
+onde estão. O segredo `VITE_SITE_URL` do GitHub Actions, se existir, **vence** o
+`frontend/.env.production` no build do instalador: precisa ser `https://irisflow.ia.br` (ou
+ser apagado), senão o "Esqueci a senha" e o "Criar conta" do desktop abrem o `pages.dev`.
 Releases, keepalive e Edge Function não mudam, e não há deep link a trocar: o scheme
 `irisflow://` do app não participa do Auth.
 

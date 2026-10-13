@@ -7,8 +7,8 @@
    o vite.config.ts também o importa (geração do sitemap no build).
    ============================================================ */
 
-/** Usado quando VITE_SITE_URL não está definida. */
-export const DEFAULT_SITE_URL = 'https://irisflow-communicator.pages.dev'
+/** Usado quando VITE_SITE_URL não está definida: o domínio oficial. */
+export const DEFAULT_SITE_URL = 'https://irisflow.ia.br'
 
 /**
  * Normaliza a origem: aceita "irisflow.tech", "https://irisflow.tech/",
