@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
-  "homepage": "https://irisflow-communicator.pages.dev",
+  "homepage": "https://irisflow.ia.br",
   "desktopName": "irisflow-communicator.desktop",
   "engines": {
     "node": ">=22.12.0"

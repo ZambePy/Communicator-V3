@@ -298,7 +298,7 @@ describe('criarContaBeta (etapa 1: só a conta)', () => {
     const chamada = auth.signUp.mock.calls[0][0]
     expect(chamada.email).toBe('maria@exemplo.com.br')
     expect(chamada.password).toBe('segredo123')
-    expect(chamada.options.emailRedirectTo).toBe('https://irisflow-communicator.pages.dev/confirmar-email')
+    expect(chamada.options.emailRedirectTo).toBe('https://irisflow.ia.br/confirmar-email')
     expect(chamada.options.data.buyer_name).toBe('Maria Aparecida Souza')
     expect(chamada.options.data.newsletter).toBe(false)
     expect(Number.isNaN(Date.parse(chamada.options.data.terms_accepted_at))).toBe(false)
@@ -617,7 +617,7 @@ describe('e-mails de conta (confirmação e nova senha)', () => {
     expect(auth.resend).toHaveBeenCalledWith({
       type: 'signup',
       email: 'maria@exemplo.com.br',
-      options: { emailRedirectTo: 'https://irisflow-communicator.pages.dev/confirmar-email' },
+      options: { emailRedirectTo: 'https://irisflow.ia.br/confirmar-email' },
     })
   })
 
@@ -640,11 +640,11 @@ describe('e-mails de conta (confirmação e nova senha)', () => {
     await api.requestPasswordReset('maria@exemplo.com.br')
 
     expect(auth.resetPasswordForEmail).toHaveBeenCalledWith('maria@exemplo.com.br', {
-      redirectTo: 'https://irisflow-communicator.pages.dev/nova-senha',
+      redirectTo: 'https://irisflow.ia.br/nova-senha',
     })
     expect(api.AUTH_REDIRECT).toEqual({
-      confirmacao: 'https://irisflow-communicator.pages.dev/confirmar-email',
-      novaSenha: 'https://irisflow-communicator.pages.dev/nova-senha',
+      confirmacao: 'https://irisflow.ia.br/confirmar-email',
+      novaSenha: 'https://irisflow.ia.br/nova-senha',
     })
   })
 

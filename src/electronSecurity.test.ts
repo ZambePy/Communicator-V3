@@ -322,17 +322,24 @@ describe('links externos: só no navegador do sistema, só para a lista', () => 
     expect(permitirAberturaExterna('https://github.com/dono/repositorio-de-releases/releases')).toBe(true);
   });
 
-  it('a lista fixa não carrega domínio próprio nem nome de repositório', () => {
-    // Domínio próprio entra por VITE_SITE_URL (teste abaixo); repositório não
-    // entra em lista nenhuma — o host github.com basta.
+  it('a lista fixa tem o domínio oficial e os endereços do Pages, e nenhum nome de repositório', () => {
+    // O repositório não entra em lista nenhuma — o host github.com basta.
     expect([...HOSTS_EXTERNOS_PERMITIDOS].sort()).toEqual([
       'github.com',
       'irisflow-communicator.pages.dev',
+      'irisflow.ia.br',
       'irisflow.pages.dev',
     ]);
   });
 
-  it('domínio próprio só abre quando o build o configura (VITE_SITE_URL)', () => {
+  it('o domínio oficial abre mesmo sem VITE_SITE_URL no build', () => {
+    expect(permitirAberturaExterna('https://irisflow.ia.br/recuperar-senha')).toBe(true);
+    expect(permitirAberturaExterna('https://www.irisflow.ia.br/')).toBe(true);
+    expect(permitirAberturaExterna('http://irisflow.ia.br/')).toBe(false);
+    expect(permitirAberturaExterna('https://irisflow.ia.br.evil.com/')).toBe(false);
+  });
+
+  it('outro domínio só abre quando o build o configura (VITE_SITE_URL)', () => {
     expect(permitirAberturaExterna('https://irisflow.com.br/conta')).toBe(false);
     expect(permitirAberturaExterna('https://www.irisflow.tech/')).toBe(false);
     const extras = [hostDoSite('https://irisflow.com.br')!];
