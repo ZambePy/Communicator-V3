@@ -26,3 +26,24 @@ describe('buildRuntimeInfo — lado do recorte do L2CS', () => {
     expect(info?.l2csInputSize).toBe(448);
   });
 });
+
+describe('buildRuntimeInfo — ramo ocular (EyeNet)', () => {
+  // Um relatório de `?ep=off&olho=onnx` saía com `modelo: null` e nada sobre a
+  // EyeNet: não dava para saber, lendo o arquivo, que modelo produziu o número.
+  it('com o ramo ligado, grava status, provider e a ficha do modelo do olho', () => {
+    const ficha = { arquivo: 'eyenet.onnx', integridade: 'confere' } as never;
+    const info = buildRuntimeInfo({
+      l2cs: { executionProvider: null },
+      olho: { ativo: true, status: 'pronto', executionProvider: 'webgpu', latencyMs: 4, stalePct: 1, modelo: ficha },
+    } as Parameters<typeof buildRuntimeInfo>[0]);
+    expect(info?.olho).toEqual({ status: 'pronto', executionProvider: 'webgpu', latencyMs: 4, stalePct: 1, modelo: ficha });
+  });
+
+  it('com o ramo desligado, `olho` é null', () => {
+    const info = buildRuntimeInfo({
+      l2cs: { executionProvider: 'webgpu' },
+      olho: { ativo: false, status: 'desligado' },
+    } as Parameters<typeof buildRuntimeInfo>[0]);
+    expect(info?.olho).toBeNull();
+  });
+});

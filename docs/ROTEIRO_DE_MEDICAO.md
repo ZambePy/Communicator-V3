@@ -14,6 +14,7 @@ os de [`MEDICOES.md`](MEDICOES.md); aqui entra só o que o V3 acrescenta.
 | 4. Condições de ELA | M2, M3, M7, M10, M13; luz e óculos | 30 min por condição |
 | 5. 30 min de uso | M15, M16 | 40 min |
 | 6. Sessão longa | M17–M21, deriva e fadiga | 2 h |
+| 7. Ramo ocular | se a EyeNet substitui a L2CS-Net do rosto (`eyeNet` com `ep=off`) | 70 min |
 
 ---
 
@@ -246,3 +247,61 @@ IRISFLOW_GRAVACAO=/caminho/irisflow-recording-….jsonl npx vitest run src/repla
 O teste imprime o erro por alvo em cada cenário, inclusive o pipeline base.
 Para testar outra flag no replay, acrescente um cenário em
 `src/replayDeGravacao.test.ts` com `experimento: { <flag>: true }`.
+
+## 9. Sessão 7 — ramo ocular: a EyeNet no lugar da L2CS-Net
+
+A pergunta: a rede do olho, treinada só em renders do UnityEyes 2 (1,55° no
+teste sintético), pode substituir a L2CS-Net do rosto, cujos pesos (Gaze360,
+GazeGene) não têm licença comercial? É o Passo 0 do plano de 15/10: quanto custa
+tirar a rede do rosto, e quanto a EyeNet devolve.
+
+`?olho=onnx` sozinho não responde isso: ele soma a EyeNet à L2CS-Net (conjunto
+`irisCore+l2cs+olho`). A condição da EyeNet no lugar da L2CS-Net leva também
+`&ep=off`.
+
+| | P — produção | I — só íris | E — íris + EyeNet |
+|---|---|---|---|
+| parâmetros | `&rosto=gaze360&ep=auto&olho=off&dimsIris=absolutas` | `&ep=off&olho=off&dimsIris=ambas` | `&ep=off&olho=onnx` |
+| redes que rodam | L2CS-Net (Gaze360) | nenhuma | EyeNet, um worker por olho |
+| conjunto do vetor | `irisAbs+l2cs` | `irisCore` (4 dims) | `irisCore+olho` (6 dims) |
+| ordem | P I E E I P P I E, cinco minutos de pausa entre as rodadas | | |
+| cada rodada | calibração completa (13 alvos) e teste de precisão | | |
+
+I é o controle da EyeNet: o mesmo bloco de íris de E (com o ramo ligado,
+`dimsDaIris` é ignorado e o vetor leva as quatro dimensões), sem as duas do
+olho. P é o que a beta entrega hoje, com o modelo da beta: o navegador pode ter
+`rosto=gazegene` gravado de outra sessão, e o `&rosto=gaze360` volta ao da beta.
+
+Antes de cada rodada, confira a condição:
+
+- a linha `[IrisFlow] redes desta sessão` do console diz a rede do rosto e a dos
+  olhos. Em E: `rosto: desligada (?ep=off) · olhos: EyeNet`;
+- em E, a linha `[olho] ramo ocular pronto` termina em `hash confere`, a linha
+  `olhos` do HUD diz `pronto`, e o preflight passa nos itens `olhos (EyeNet)` e
+  `olhos · pesos` (este fica em atenção: uso comercial não declarado). A tela de
+  calibração espera a EyeNet carregar; se ela não carregar, a tela avisa e não
+  deixa começar;
+- o relatório grava a condição em `pipeline.experiment` (`l2cs`, `eyeNet`) e a
+  ficha da EyeNet em `pipeline.runtime.olho`.
+
+No fim, `__irisflowExp.reset()`.
+
+**Métrica principal:** `meanErrorDeg`. **Tabela da sessão:** a da sessão 1, com
+atenção a `jitterRMS` (a EyeNet responde a cada 33 ms por olho; a L2CS-Net, a
+cada 100 ms) e às bordas de baixo (B3, B4), onde a pálpebra cobre a íris.
+
+**Decisão.**
+
+- I contra P é o custo de tirar a rede do rosto.
+- E contra I é o que a EyeNet devolve: ela fica no vetor sem rede do rosto se
+  ganhar ≥ 15 % em `meanErrorDeg` (a régua do §0).
+- E contra P decide a troca, pela regra do plano de 15/10: a EyeNet substitui a
+  L2CS-Net se ficar no máximo 0,2° acima de P em `meanErrorDeg`, sem `jitterRMS`
+  pior, em pelo menos três pessoas. Com menos de três, a troca fica "não
+  decidida", e a sessão entra no histórico como uma delas.
+- Antes de ir para o instalador, a licença dos modelos de olho do UnityEyes
+  precisa estar resolvida.
+
+A EyeNet junto com a L2CS-Net (`&ep=auto&olho=onnx`, conjunto
+`irisCore+l2cs+olho`) fica como ablação, se sobrar tempo: ela responde se o olho
+acrescenta algo à rede do rosto, não se pode substituí-la.

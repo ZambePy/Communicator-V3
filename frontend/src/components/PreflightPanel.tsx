@@ -127,6 +127,8 @@ export const PreflightPanel: React.FC = () => {
           hz: d.l2cs.hz,
           modelo: d.l2cs.modelo ?? null,
         },
+        // Ramo ocular: sem ele o preflight não dizia se a EyeNet carregou.
+        olho: d.olho ?? null,
         filtro: d.filtro,
         flags: EXPERIMENT as unknown as Record<string, unknown>,
       }),

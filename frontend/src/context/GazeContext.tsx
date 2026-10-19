@@ -2181,6 +2181,13 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 `inferência=${d.l2cs.latencyMs.toFixed(0)} ms stale=${d.l2cs.stalePct.toFixed(1)}% ` +
                 `crop=${d.l2cs.inputSize}² ep=${d.l2cs.executionProvider ?? '?'}`
             );
+            if (d.olho?.ativo) {
+              console.log(
+                `[latencia] EyeNet ${d.olho.status} hz=${d.olho.hz.toFixed(1)} ` +
+                  `inferência=${d.olho.latencyMs.toFixed(0)} ms stale=${d.olho.stalePct.toFixed(1)}% ` +
+                  `ep=${d.olho.executionProvider ?? '?'}`
+              );
+            }
             if (d.l2cs.stalePct > 50) {
               console.warn(
                 `[latencia] ${d.l2cs.stalePct.toFixed(0)}% das leituras do L2CS estão OBSOLETAS ` +
@@ -2242,7 +2249,9 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 stalePct: d.l2cs.stalePct,
                 pendingCount: d.l2cs.pendingCount,
                 hz: d.l2cs.hz,
+                modelo: d.l2cs.modelo ?? null,
               },
+              olho: d.olho ?? null,
               filtro: d.filtro,
               flags: EXPERIMENT as unknown as Record<string, unknown>,
               condicaoEsperada,

@@ -65,6 +65,10 @@ export interface L2CSClientOptions {
   /** Idade máxima de um resultado, em ms. Sem valor, é derivada da latência medida. */
   staleMs?: number;
   provider?: L2CSProviderRequest;
+  /** Prefixo das mensagens no console, daqui e do worker. Padrão `[L2CS]` (a
+   *  rede do rosto); o ramo ocular passa `[olho esquerdo]`/`[olho direito]`,
+   *  para o console não anunciar uma L2CS-Net que não está rodando. */
+  rotulo?: string;
 }
 
 export interface L2CSClient {
@@ -134,6 +138,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
   const metaUrl = opts.metaUrl ?? urlRelativa(doRosto.meta);
   const lados = opts.lados ?? (opts.modelUrl === undefined ? doRosto.lados : undefined);
   const ortBaseUrl = urlRelativa(DEFAULT_ORT_PATH);
+  const rotulo = opts.rotulo ?? '[L2CS]';
   // Cadência explícita (testes, harness) vence a política; sem ela, a
   // cadência nasce em `EXPERIMENT` e é trocada no `ready` pelo provider.
   const cadenciaFixa = opts.cadenceMs;
@@ -208,7 +213,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
     for (const [id, capturaMs] of inFlight) {
       if (now - capturaMs > IN_FLIGHT_TIMEOUT_MS) {
         inFlight.delete(id);
-        console.warn(`[L2CS] inferência ${id} sem resposta há ${((now - capturaMs) / 1000).toFixed(1)} s — slot liberado.`);
+        console.warn(`${rotulo} inferência ${id} sem resposta há ${((now - capturaMs) / 1000).toFixed(1)} s — slot liberado.`);
       }
     }
   }
@@ -227,14 +232,14 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       politica = politicaPorProvider(msg.executionProvider, EXPERIMENT, lados);
       if (cadenciaFixa === undefined) cadenceMs = politica.cadenceMs;
       if (fallback) {
-        console.warn(`[L2CS] WebGPU indisponível — rodando em '${msg.executionProvider}'. Latência e staleness maiores; o relatório registra o provider.`);
+        console.warn(`${rotulo} WebGPU indisponível — rodando em '${msg.executionProvider}'. Latência e staleness maiores; o relatório registra o provider.`);
       }
       readyResolve?.();
       readyResolve = null;
       readyReject = null;
     } else if (msg.type === 'init_error') {
-      const err = new Error(`L2CS init: ${msg.error}`);
-      console.error('[L2CS]', err);
+      const err = new Error(`init de ${modelUrl}: ${msg.error}`);
+      console.error(rotulo, err);
       readyReject?.(err);
       readyResolve = null;
       readyReject = null;
@@ -247,7 +252,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       if (capturaMs === undefined) {
         // id de uma sessão anterior ou resposta duplicada: sem hora de captura
         // não dá para julgar a idade do dado.
-        console.warn(`[L2CS] resultado com id desconhecido (${msg.id}) descartado.`);
+        console.warn(`${rotulo} resultado com id desconhecido (${msg.id}) descartado.`);
         return;
       }
       latest = {
@@ -263,7 +268,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       if (recentConfidences.length > 20) recentConfidences.shift();
     } else if (msg.type === 'infer_error') {
       inFlight.delete(msg.id);
-      console.warn('[L2CS] infer error:', msg.error);
+      console.warn(`${rotulo} infer error:`, msg.error);
     }
   }
 
@@ -273,7 +278,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       worker = new Worker(new URL('./l2cs.worker.ts', import.meta.url), { type: 'module' });
       worker.addEventListener('message', handleMessage);
       worker.addEventListener('error', (e) => {
-        console.error('[L2CS] Worker execution error:', e.message, e.filename, e.lineno);
+        console.error(`${rotulo} Worker execution error:`, e.message, e.filename, e.lineno);
         readyReject?.(new Error('Worker execution error: ' + e.message));
         // Um worker que morreu depois do `ready` nunca vai responder o que
         // está em voo; `derrubarWorker` libera os slots e ainda termina a
@@ -285,7 +290,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
         readyResolve = resolve;
         readyReject = reject;
       });
-      post({ type: 'init', modelUrl, metaUrl, provider, ortBaseUrl });
+      post({ type: 'init', modelUrl, metaUrl, provider, ortBaseUrl, rotulo });
       return readyPromise;
     },
 
@@ -330,7 +335,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       } catch (e) {
         // Buffer já destacado ou worker indisponível: nada foi enviado, então o
         // slot não pode ficar ocupado.
-        console.warn('[L2CS] submissão falhou:', e);
+        console.warn(`${rotulo} submissão falhou:`, e);
         return false;
       }
       lastSubmitMs = now;

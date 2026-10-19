@@ -29,6 +29,8 @@ export interface RamoOcular {
   /** Ficha do modelo (a dos dois olhos é a mesma). `null` antes do `ready`. */
   ficha(): FichaDoModelo | null;
   latenciaMediaMs(): number;
+  /** Provider em vigor (`'webgpu'` ou `'wasm'`); `null` antes do `ready`. */
+  executionProvider(): string | null;
 }
 
 const SAIDA_INVALIDA: SaidaDoRamoOcular = { yaw: 0, pitch: 0, confianca: 0, valid: false, timestamp: 0 };
@@ -42,6 +44,7 @@ export const ramoOcularNulo: RamoOcular = {
   ultimas() { return { esquerdo: null, direito: null }; },
   ficha() { return null; },
   latenciaMediaMs() { return 0; },
+  executionProvider() { return null; },
 };
 
 export interface OpcoesDoRamoOnnx {
@@ -56,14 +59,17 @@ const DEFAULT_MODEL_PATH = 'models/eyenet/eyenet.onnx';
 const DEFAULT_META_PATH = 'models/eyenet/eyenet.meta.json';
 
 export function criarRamoOcularOnnx(opts: OpcoesDoRamoOnnx = {}): RamoOcular {
-  const fabricar = (): L2CSClient =>
+  // O rótulo separa no console a EyeNet de cada olho da L2CS-Net do rosto: o
+  // worker é o mesmo, e sem ele as três instâncias diziam `[L2CS]`.
+  const fabricar = (rotulo: string): L2CSClient =>
     createL2CSClient({
       modelUrl: opts.modelUrl ?? urlRelativa(DEFAULT_MODEL_PATH),
       metaUrl: opts.metaUrl ?? urlRelativa(DEFAULT_META_PATH),
       cadenceMs: opts.cadenceMs ?? 33,
+      rotulo,
     });
-  const esq = fabricar();
-  const dir = fabricar();
+  const esq = fabricar('[olho esquerdo]');
+  const dir = fabricar('[olho direito]');
   const dims: [number, number] = [ALTURA_DO_OLHO, LARGURA_DO_OLHO];
 
   const traduzir = (c: L2CSClient, nowMs?: number): SaidaDoRamoOcular => {
@@ -97,6 +103,9 @@ export function criarRamoOcularOnnx(opts: OpcoesDoRamoOnnx = {}): RamoOcular {
     },
     latenciaMediaMs() {
       return (esq.getAverageLatencyMs() + dir.getAverageLatencyMs()) / 2;
+    },
+    executionProvider() {
+      return esq.getExecutionProvider() ?? dir.getExecutionProvider();
     },
   };
 }

@@ -683,20 +683,23 @@ projetos, e um `torchvision` de outra versão faz o modelo falhar ao carregar
 |---|---|---|
 | L2CS-Net | `frontend/public/models/l2cs/l2cs_gaze360.onnx` (92 MB, não versionado) | treinado em Gaze360; 90 bins por eixo; entrada 224² ou 448² (padrão 448²). **Licença research-only: uso comercial proibido, inclusive de modelos treinados.** Vai dentro do instalador da beta desde a 1.0.0-beta.10: a beta é acadêmica e não comercial ([Pendências e riscos](#pendências-e-riscos), item 1) |
 | L2CS-Net (GazeGene v2) | `frontend/public/models/l2cs-gazegene/gazegene_l2cs_r50_v2.onnx` (95,9 MB, não versionado; a meta está no repositório) | mesma ResNet-50, treinada no GazeGene (sintético, 828 mil imagens): 3,38° de erro médio no teste do próprio GazeGene; entrada **fixa** 224²; 120 bins de 2°, decodificação linear. **Só pesquisa** (CC BY-NC-SA 4.0 + termos dos autores; a BUAA pediu para não usar comercialmente sem licença por escrito): fica fora do git e do instalador. Liga com `?rosto=gazegene` |
-| EyeNet (V2, ramo ocular) | `frontend/public/models/eyenet/eyenet.onnx` (não versionado; gerado pelo kit de treino do UnityEyes 2) | treinada nos renders próprios do UnityEyes 2 (MIT); entrada 3×64×96; liga com `?olho=onnx`. O kit grava `eyenet.onnx` e `eyenet.meta.json`: os dois vão juntos para a pasta, a meta nova por cima da de exemplo |
+| EyeNet (V2, ramo ocular) | `frontend/public/models/eyenet/eyenet.onnx` (não versionado; gerado pelo kit de treino do UnityEyes 2) | treinada nos renders próprios do UnityEyes 2 (MIT); entrada 3×64×96; liga com `?olho=onnx`, que a SOMA à rede do rosto (no lugar dela: `?ep=off&olho=onnx`). O kit grava `eyenet.onnx` e `eyenet.meta.json`: os dois vão juntos para a pasta, a meta nova por cima da de exemplo |
 | Face Landmarker | `frontend/public/mediapipe/models/face_landmarker.task` | MediaPipe Tasks Vision, 478 landmarks com íris |
 | ONNX Runtime Web | `frontend/public/ort/` | binários WASM/WebGPU carregados pelo worker |
 
 Sem o arquivo `.onnx` (ou com `?ep=off`) o vetor fica só com as duas dimensões
 absolutas da íris por olho (`irisAbs`). Foi assim que o instalador da beta rodou
 de 24/09 até a 1.0.0-beta.9; hoje é o caminho de quem escolhe "calibrar só com a
-íris" ([Pendências e riscos](#pendências-e-riscos), item 1).
+íris" ([Pendências e riscos](#pendências-e-riscos), item 1). Com
+`?ep=off&olho=onnx`, o vetor é íris + EyeNet (`irisCore+olho`).
 
 Cada modelo tem uma **ficha de proveniência** no seu `*.meta.json` (bloco
 `proveniencia`: bases de treino, licença, `usoComercial`, contrato) e um
 `sha256` que o worker confere ao carregar. A ficha aparece em Configurações
 ("Modelo de olhar: …"), no item "L2CS · pesos" do preflight e em
-`pipeline.runtime.modelo` de todo relatório de precisão. A meta também
+`pipeline.runtime.modelo` de todo relatório de precisão; a da EyeNet, em
+Configurações ("Modelo dos olhos: …"), no item "olhos · pesos" e em
+`pipeline.runtime.olho`. A meta também
 declara a grade de bins (`outputBins`, `binWidth`, `binOffset`, `decoding`):
 um modelo retreinado em ±45° usa decodificação `linear`, e o worker recusa uma
 meta cuja grade não bate com o tensor que o modelo devolve.
@@ -728,11 +731,15 @@ independentes e podem ser combinadas.
 3. **Calibre de novo.** A chave do perfil leva o modelo do rosto e o conjunto
    de features: um perfil do Gaze360 nunca carrega com o GazeGene, nem o
    contrário (o Ridge aprendeu os ângulos de um modelo só).
-4. **Confira qual rodou.** O console mostra `[L2CS] modelo do rosto: …` e
-   `[olho] ramo ocular pronto`; a ficha aparece em Configurações, no preflight e
-   em `pipeline.runtime.modelo` do relatório de precisão, e a flag em
-   `pipeline.experiment`. Sem o ONNX na pasta, o L2CS fica em erro e o console
-   diz onde pôr o arquivo.
+4. **Confira qual rodou.** O console abre com `[IrisFlow] redes desta sessão —
+   rosto: … · olhos: … · vetor: …`, e depois `[L2CS] modelo do rosto: …` e
+   `[olho] ramo ocular pronto: …`. Os workers da EyeNet falam como
+   `[olho esquerdo]` e `[olho direito]`: com `?ep=off`, nenhuma linha do console
+   fala de uma L2CS-Net rodando. As fichas aparecem em Configurações, no
+   preflight e em `pipeline.runtime` do relatório de precisão, e as flags em
+   `pipeline.experiment`. Sem o ONNX do rosto, o L2CS fica em erro e o console
+   diz onde pôr o arquivo; sem o da EyeNet, a tela de calibração avisa e não
+   deixa começar.
 
 O GazeGene foi exportado com entrada fixa de 224²: o app manda sempre recorte
 de 224 com ele, mesmo com WebGPU (`politicaPorProvider` respeita os lados do

@@ -338,3 +338,63 @@ describe('proveniência dos pesos', () => {
     expect(preflight(e).find((i) => i.item === 'L2CS · pesos')).toBeUndefined();
   });
 });
+
+describe('sem a rede do rosto e com a EyeNet (`?ep=off&olho=onnx`)', () => {
+  // A condição da EyeNet NO LUGAR da L2CS-Net. Antes, o item `L2CS` bloqueava
+  // qualquer sessão sem a rede do rosto — inclusive as que a desligam de
+  // propósito —, e nada no preflight dizia se a EyeNet tinha carregado.
+  const FICHA_OLHO: FichaDoModelo = {
+    ...FICHA_LIMPA,
+    arquivo: 'eyenet.onnx',
+    dataset: 'unityeyes2',
+    bins: { n: 60, larguraGraus: 1.5, offsetGraus: -44.25, decodificacao: 'linear' },
+    usoComercial: 'desconhecido',
+    bases: ['UnityEyes 2 (renders próprios) (MIT)'],
+    contrato: null,
+  };
+  const SEM_ROSTO = com({
+    l2cs: { status: 'disabled', executionProvider: null, stalePct: 0, pendingCount: 0, hz: 0, modelo: null },
+  });
+  const comOlho = (o: Partial<NonNullable<EntradaPreflight['olho']>>): EntradaPreflight => ({
+    ...SEM_ROSTO,
+    olho: { ativo: true, status: 'pronto', executionProvider: 'webgpu', stalePct: 0, modelo: FICHA_OLHO, ...o },
+  });
+
+  it('a L2CS-Net desligada de propósito é atenção, não bloqueio', () => {
+    const itens = preflight(SEM_ROSTO);
+    expect(nivelDe(SEM_ROSTO, 'L2CS')).toBe('atencao');
+    expect(itens.find((i) => i.item === 'L2CS')!.detalhe).toMatch(/ep=off/);
+    expect(itens.find((i) => i.item === 'L2CS · pesos')).toBeUndefined();
+    expect(podeComecar(itens)).toBe(true);
+  });
+
+  it('EyeNet pronta passa; a ficha sem licença comercial é atenção', () => {
+    const itens = preflight(comOlho({}));
+    expect(nivelDe(comOlho({}), 'olhos (EyeNet)')).toBe('ok');
+    const pesos = itens.find((i) => i.item === 'olhos · pesos')!;
+    expect(pesos.nivel).toBe('atencao');
+    expect(pesos.detalhe).toContain('uso comercial não declarado');
+    expect(pesos.detalhe).toContain('hash confere');
+    expect(podeComecar(itens)).toBe(true);
+  });
+
+  it('EyeNet carregando ou com erro bloqueia: a sessão mediria só a íris', () => {
+    expect(nivelDe(comOlho({ status: 'carregando', modelo: null }), 'olhos (EyeNet)')).toBe('bloqueio');
+    expect(nivelDe(comOlho({ status: 'erro', modelo: null }), 'olhos (EyeNet)')).toBe('bloqueio');
+    expect(podeComecar(preflight(comOlho({ status: 'erro', modelo: null })))).toBe(false);
+  });
+
+  it('EyeNet com leituras obsoletas bloqueia', () => {
+    expect(nivelDe(comOlho({ stalePct: 40 }), 'olhos (EyeNet)')).toBe('bloqueio');
+  });
+
+  it('hash da EyeNet que não confere bloqueia', () => {
+    const e = comOlho({ modelo: { ...FICHA_OLHO, integridade: 'nao-confere' } });
+    expect(nivelDe(e, 'olhos · pesos')).toBe('bloqueio');
+  });
+
+  it('com a flag do olho desligada, nenhum item do olho aparece', () => {
+    const e = com({ olho: { ativo: false, status: 'desligado', executionProvider: null, stalePct: 0 } });
+    expect(preflight(e).some((i) => i.item.startsWith('olhos'))).toBe(false);
+  });
+});

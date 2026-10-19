@@ -1,31 +1,54 @@
 {
-  "model": "EyeNet (Communicator V2)",
+  "model": "EyeNet (IrisFlow, UnityEyes 2)",
   "dataset": "unityeyes2",
   "file": "eyenet.onnx",
   "inputSize": 96,
-  "inputShape": [1, 3, 64, 96],
+  "inputShape": [
+    1,
+    3,
+    64,
+    96
+  ],
   "inputLayout": "NCHW",
   "inputColorOrder": "RGB",
-  "normalization": { "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225] },
-  "outputBins": 67,
+  "normalization": {
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ]
+  },
+  "outputBins": 60,
   "binWidth": 1.5,
-  "binOffset": -50,
+  "binOffset": -44.25,
   "decoding": "linear",
   "angleUnit": "degrees",
   "inputTensorName": "input",
-  "outputTensorNames": { "yaw": "yaw", "pitch": "pitch" },
-  "sha256": null,
+  "outputTensorNames": {
+    "yaw": "yaw",
+    "pitch": "pitch"
+  },
+  "sha256": "a1f223442d288509a29621c7f9bf509f21034d2002f36b113a6fcd1e6d8466a1",
   "proveniencia": {
     "treino": {
       "bases": [
-        { "nome": "UnityEyes 2 (renders próprios)", "licenca": "MIT", "url": "https://github.com/alexanderdsmith/UnityEyes2/blob/main/LICENSE" }
+        {
+          "nome": "UnityEyes 2 (renders próprios)",
+          "licenca": "MIT",
+          "url": "https://github.com/alexanderdsmith/UnityEyes2/blob/main/LICENSE"
+        }
       ],
-      "config": "configs/eyenet_unityeyes2.yaml (Communicator V2)",
-      "data": null,
+      "config": "IrisFlow_Treino/treino_olho_unityeyes.py",
+      "data": "2026-10-13",
       "commit": null
     },
-    "usoComercial": "permitido",
+    "usoComercial": "desconhecido",
     "contrato": null,
-    "notas": "Arquivo de META de exemplo: o ONNX ainda não existe. `exportar_onnx.py --modelo eyenet` do Communicator V2 sobrescreve este arquivo com sha256, data e commit reais. Recorte do olho: fixtures/recorte-olho.json (96×64, canônico como olho direito). Saída extra 'pupil' do modelo é ignorada pelo worker."
+    "notas": "Treinado só com renders sintéticos do UnityEyes 2. Recorte igual a src/olho/recorte.ts (96x64, canônico como olho direito, fator 1,8). Rótulo: olhar relativo ao raio câmera->olho no referencial do recorte; yaw > 0 = direita do recorte, pitch > 0 = para cima. Uso comercial a confirmar: o código do UnityEyes 2 é MIT, mas os modelos do olho vêm do UnityEyes original, sem licença publicada. Erro no teste sintético: 1.55° médio."
   }
 }

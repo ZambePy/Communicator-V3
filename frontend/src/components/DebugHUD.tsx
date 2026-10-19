@@ -39,6 +39,11 @@ export const DebugHUD: React.FC = () => {
         <span>{diag.fpsRender.toFixed(1)}</span>
 
         <span className="hud__key">L2CS</span>
+        {/* `disabled` = desligada por configuração (`?ep=off`): sem rede do
+            rosto. Os números de uma rede que não roda só confundiam. */}
+        {diag.l2cs.status === 'disabled' ? (
+          <span>desligada (?ep=off)</span>
+        ) : (
         <span>
           {diag.l2cs.status} &middot; {diag.l2cs.hz.toFixed(1)} Hz &middot;{' '}
           {diag.l2cs.latencyMs.toFixed(0)} ms &middot;{' '}
@@ -55,6 +60,31 @@ export const DebugHUD: React.FC = () => {
             </>
           )}
         </span>
+        )}
+
+        {/* Ramo ocular (EyeNet), só com a flag `eyeNet` ligada. Sem esta linha
+            o HUD só falava da L2CS-Net, e a EyeNet rodando não aparecia. */}
+        {diag.olho?.ativo && (
+          <>
+            <span className="hud__key">olhos</span>
+            <span>
+              EyeNet{' '}
+              <span className={diag.olho.status === 'pronto' ? undefined : 'hud__bad'}>
+                {diag.olho.status}
+              </span>
+              {diag.olho.status === 'pronto' && (
+                <>
+                  {' '}
+                  &middot; {diag.olho.executionProvider ?? '?'} &middot; {diag.olho.hz.toFixed(1)} Hz &middot;{' '}
+                  {diag.olho.latencyMs.toFixed(0)} ms &middot;{' '}
+                  <span className={diag.olho.stalePct > 10 ? 'hud__bad' : undefined}>
+                    stale {diag.olho.stalePct.toFixed(0)} %
+                  </span>
+                </>
+              )}
+            </span>
+          </>
+        )}
 
         <span className="hud__key">yaw / pitch</span>
         <span>

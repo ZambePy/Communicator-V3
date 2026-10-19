@@ -274,6 +274,19 @@ export interface RuntimeInfo {
   fpsRender?: number;
   video?: { width: number; height: number };
   appVersion?: string;
+  /**
+   * Ramo ocular (EyeNet) quando a flag `eyeNet` está ligada; `null` quando
+   * desligada. `modelo` é a ficha dos pesos do olho — sem ela, um relatório da
+   * condição sem a rede do rosto (`?ep=off&olho=onnx`) não dizia que modelo
+   * produziu o número, e `status` diz se a EyeNet de fato carregou.
+   */
+  olho?: {
+    status: string;
+    executionProvider: string | null;
+    latencyMs: number;
+    stalePct: number;
+    modelo: FichaDoModelo | null;
+  } | null;
 }
 
 export type ScreenGeometrySource = 'default' | 'auto' | 'manual';
