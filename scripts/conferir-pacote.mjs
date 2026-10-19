@@ -20,7 +20,9 @@
  *      estão minificados e não apontam para source map (`sourceMappingURL`);
  *   4. os fuses do binário do Electron estão como o package.json pede
  *      (`build.electronFuses`): RunAsNode e as duas portas do Node desligadas,
- *      OnlyLoadAppFromAsar ligado.
+ *      OnlyLoadAppFromAsar ligado;
+ *   5. nenhum modelo só de pesquisa foi junto (pastas em PASTAS_DE_PESQUISA,
+ *      as mesmas de `vaiNoInstalador: false` em src/l2cs/modelos.ts).
  *
  * Sai com código 1 se algo falhar. Sem dependência nova: `@electron/asar` e
  * `@electron/fuses` já vêm com o electron-builder.
@@ -54,6 +56,15 @@ const SENTINELA_DOS_FUSES = Buffer.from('dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX');
 
 /** Única coisa que pode existir dentro do app.asar. */
 const RAIZES_PERMITIDAS = ['/frontend/dist/', '/dist-electron/', '/node_modules/', '/package.json'];
+
+/**
+ * Modelos só de pesquisa: não podem sair em instalador nenhum. São as pastas
+ * dos modelos com `vaiNoInstalador: false` em src/l2cs/modelos.ts (o teste
+ * src/l2cs/modelos.test.ts confere que as duas listas e o `build.files` do
+ * package.json andam juntos). Hoje: o L2CS treinado no GazeGene (CC BY-NC-SA,
+ * sem licença comercial).
+ */
+const PASTAS_DE_PESQUISA = ['/frontend/dist/models/l2cs-gazegene/'];
 
 /**
  * Bundle minificado: linhas longas. Um bundle legível (esbuild sem minify,
@@ -137,6 +148,7 @@ function conferirApp({ rotulo, recursos, binarioOuApp }) {
   });
   for (const e of arquivos) {
     if (!RAIZES_PERMITIDAS.some((r) => e === r || e.startsWith(r))) falhar(rotulo, `fora do build: ${e}`);
+    if (PASTAS_DE_PESQUISA.some((p) => e.startsWith(p))) falhar(rotulo, `modelo só de pesquisa no pacote: ${e}`);
     if (e.endsWith('.map')) falhar(rotulo, `source map no pacote: ${e}`);
     if (/\.(ts|tsx|mts|cts)$/.test(e) && !e.endsWith('.d.ts')) falhar(rotulo, `TypeScript no pacote: ${e}`);
   }

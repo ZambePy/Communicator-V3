@@ -90,6 +90,20 @@ export function decodeAngleWithConfidence(
   return { deg, confidence: clamped };
 }
 
+/**
+ * Multiplicadores de sinal da meta (`sinais`), que levam a saída do modelo à
+ * convenção do app: yaw > 0 = olhar para a direita da pessoa, pitch > 0 =
+ * para cima. Ausentes ou inválidos valem +1 — o checkpoint Gaze360 já está na
+ * convenção do app e a meta dele não declara nada.
+ */
+export function sinaisDaMeta(meta: { sinais?: { yaw?: unknown; pitch?: unknown } | null }): {
+  yaw: 1 | -1;
+  pitch: 1 | -1;
+} {
+  const um = (v: unknown): 1 | -1 => (v === -1 ? -1 : 1);
+  return { yaw: um(meta.sinais?.yaw), pitch: um(meta.sinais?.pitch) };
+}
+
 export function degToRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }

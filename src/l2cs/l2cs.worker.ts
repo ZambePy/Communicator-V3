@@ -10,7 +10,7 @@
 
 /// <reference lib="webworker" />
 
-import { decodeAngleWithConfidence, degToRad, modoDeDecodificacao, type ModoDeDecodificacao } from './decode';
+import { decodeAngleWithConfidence, degToRad, modoDeDecodificacao, sinaisDaMeta, type ModoDeDecodificacao } from './decode';
 import { tamanhoDoTensor } from './crop';
 import { validarMeta } from './proveniencia';
 import type { L2CSModelMeta, L2CSWorkerRequest, L2CSWorkerResponse, VerificacaoDoModelo } from './types';
@@ -23,6 +23,8 @@ let modo: ModoDeDecodificacao = 'circular';
 let ortApi: any = null;
 /** Comprimento de saída já conferido contra `outputBins` (uma vez basta). */
 let saidaConferida = false;
+/** Multiplicadores de sinal da meta (`sinais`); +1/+1 no checkpoint Gaze360. */
+let sinais: { yaw: 1 | -1; pitch: 1 | -1 } = { yaw: 1, pitch: 1 };
 
 function post(msg: L2CSWorkerResponse, transfer?: Transferable[]): void {
   if (transfer && transfer.length > 0) ctx.postMessage(msg, transfer);
@@ -139,6 +141,7 @@ async function init(
 
   meta = rawMeta;
   modo = modoDeDecodificacao(rawMeta);
+  sinais = sinaisDaMeta(rawMeta);
   saidaConferida = false;
   console.log(
     `[L2CS] sessão criada com executionProvider='${ativo}' (pedido: '${pedido}'), ` +
@@ -162,6 +165,15 @@ async function infer(id: number, tensor: Float32Array, dims?: [number, number]):
     shape = [1, 3, h, w];
   } else {
     const size = tamanhoDoTensor(tensor);
+    // ONNX de entrada fixa (o do GazeGene só aceita 224): sem esta conferência o
+    // erro do ONNX Runtime chega como uma mensagem críptica a cada inferência.
+    const lados = meta.supportedInputSizes;
+    if (Array.isArray(lados) && lados.length > 0 && !lados.includes(size)) {
+      throw new Error(
+        `o modelo aceita recorte de ${lados.join(' ou ')} px, mas recebeu ${size} px ` +
+        `(confira src/l2cs/modelos.ts e a flag l2csInputSize).`,
+      );
+    }
     shape = [1, 3, size, size];
   }
   const input = new ortApi.Tensor('float32', tensor, shape);
@@ -196,8 +208,9 @@ async function infer(id: number, tensor: Float32Array, dims?: [number, number]):
   post({
     type: 'result',
     id,
-    yaw: degToRad(yaw.deg),
-    pitch: degToRad(pitch.deg),
+    // `sinais` leva a saída à convenção do app (ver `sinaisDaMeta`).
+    yaw: degToRad(sinais.yaw * yaw.deg),
+    pitch: degToRad(sinais.pitch * pitch.deg),
     // O eixo pior é o gargalo, por isso min e não média.
     confidence: Math.min(yaw.confidence, pitch.confidence),
     inferenceMs: dt,

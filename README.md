@@ -682,7 +682,8 @@ projetos, e um `torchvision` de outra versão faz o modelo falhar ao carregar
 | modelo | arquivo | origem |
 |---|---|---|
 | L2CS-Net | `frontend/public/models/l2cs/l2cs_gaze360.onnx` (92 MB, não versionado) | treinado em Gaze360; 90 bins por eixo; entrada 224² ou 448² (padrão 448²). **Licença research-only: uso comercial proibido, inclusive de modelos treinados.** Vai dentro do instalador da beta desde a 1.0.0-beta.10: a beta é acadêmica e não comercial ([Pendências e riscos](#pendências-e-riscos), item 1) |
-| EyeNet (V2, ramo ocular) | `frontend/public/models/eyenet/eyenet.onnx` (ainda não existe; só a meta de exemplo) | treinada no UnityEyes 2 (MIT) pelo projeto *Communicator V2*; entrada 3×64×96; liga com `?olho=onnx` |
+| L2CS-Net (GazeGene v2) | `frontend/public/models/l2cs-gazegene/gazegene_l2cs_r50_v2.onnx` (95,9 MB, não versionado; a meta está no repositório) | mesma ResNet-50, treinada no GazeGene (sintético, 828 mil imagens): 3,38° de erro médio no teste do próprio GazeGene; entrada **fixa** 224²; 120 bins de 2°, decodificação linear. **Só pesquisa** (CC BY-NC-SA 4.0 + termos dos autores; a BUAA pediu para não usar comercialmente sem licença por escrito): fica fora do git e do instalador. Liga com `?rosto=gazegene` |
+| EyeNet (V2, ramo ocular) | `frontend/public/models/eyenet/eyenet.onnx` (não versionado; gerado pelo kit de treino do UnityEyes 2) | treinada nos renders próprios do UnityEyes 2 (MIT); entrada 3×64×96; liga com `?olho=onnx`. O kit grava `eyenet.onnx` e `eyenet.meta.json`: os dois vão juntos para a pasta, a meta nova por cima da de exemplo |
 | Face Landmarker | `frontend/public/mediapipe/models/face_landmarker.task` | MediaPipe Tasks Vision, 478 landmarks com íris |
 | ONNX Runtime Web | `frontend/public/ort/` | binários WASM/WebGPU carregados pelo worker |
 
@@ -700,6 +701,62 @@ declara a grade de bins (`outputBins`, `binWidth`, `binOffset`, `decoding`):
 um modelo retreinado em ±45° usa decodificação `linear`, e o worker recusa uma
 meta cuja grade não bate com o tensor que o modelo devolve.
 
+#### Modelos: como escolher
+
+O modelo do rosto é escolhido pela flag `modeloDoRosto` (catálogo em
+`src/l2cs/modelos.ts`); o ramo do olho, pela flag `eyeNet`. As duas são
+independentes e podem ser combinadas.
+
+1. **Ponha os arquivos.** O ONNX não vem no git. Para o GazeGene, baixe
+   `gazegene_l2cs_r50_v2.onnx` do Drive (IrisFlow_GazeGene/v2/modelos) e ponha
+   em `frontend/public/models/l2cs-gazegene/`, ao lado da meta que já está lá.
+   Para o olho, copie `eyenet.onnx` e `eyenet.meta.json` de
+   `IrisFlow_Treino\resultados` para `frontend/public/models/eyenet/`.
+2. **Abra o app no desenvolvimento** (`npm run dev` ou `npm run electron:dev`)
+   com o parâmetro na URL:
+
+   | o que testar | URL |
+   |---|---|
+   | rosto Gaze360 (padrão da beta) | `?rosto=gaze360&olho=off` |
+   | rosto GazeGene | `?rosto=gazegene&olho=off` |
+   | só íris + olho UnityEyes | `?ep=off&olho=onnx` |
+   | rosto GazeGene + olho UnityEyes | `?rosto=gazegene&olho=onnx` |
+
+   A escolha fica gravada (`localStorage`) e vale nas próximas aberturas. Pelo
+   console: `__irisflowExp.set('modeloDoRosto', 'gazegene')` e recarregar; no
+   Electron também `IRISFLOW_EXP_MODELODOROSTO=gazegene`.
+3. **Calibre de novo.** A chave do perfil leva o modelo do rosto e o conjunto
+   de features: um perfil do Gaze360 nunca carrega com o GazeGene, nem o
+   contrário (o Ridge aprendeu os ângulos de um modelo só).
+4. **Confira qual rodou.** O console mostra `[L2CS] modelo do rosto: …` e
+   `[olho] ramo ocular pronto`; a ficha aparece em Configurações, no preflight e
+   em `pipeline.runtime.modelo` do relatório de precisão, e a flag em
+   `pipeline.experiment`. Sem o ONNX na pasta, o L2CS fica em erro e o console
+   diz onde pôr o arquivo.
+
+O GazeGene foi exportado com entrada fixa de 224²: o app manda sempre recorte
+de 224 com ele, mesmo com WebGPU (`politicaPorProvider` respeita os lados do
+catálogo). O sinal de cada eixo vem da meta (`sinais`, +1/+1 quando ausente):
+os do GazeGene foram derivados do rótulo, não medidos em foto. Antes de medir
+acurácia com ele, rode uma vez a validação de eixos com as cinco fotos
+(`look_center`, `look_up`, `look_down`, `look_right`, `look_left`):
+
+```
+npm install --no-save onnxruntime-node sharp
+node frontend/scripts/l2cs_axis_validation.mjs --modelo gazegene
+```
+
+Se um eixo sair invertido, o script diz o que pôr em `sinais` na meta; não é
+preciso mexer no código.
+
+Modelos só de pesquisa (`vaiNoInstalador: false` no catálogo) ficam fora do
+instalador em três lugares que andam juntos: `build.files` do `package.json`,
+`scripts/conferir-pacote.mjs` (falha se o arquivo aparecer no pacote) e o
+teste `src/l2cs/modelos.test.ts`, que confere os dois. Para pôr um modelo novo:
+pasta em `frontend/public/models/`, ONNX + meta no formato de
+`l2cs.meta.json`, entrada no catálogo e o nome em
+`VALORES_ACEITOS.modeloDoRosto`.
+
 O recorte facial e o recorte do olho são um **contrato com o treino**:
 `fixtures/recorte-l2cs.json` e `fixtures/recorte-olho.json` são gerados pelo
 TypeScript e lidos pelos testes do *Communicator V2* em Python — treinar com um
@@ -710,7 +767,7 @@ recorte e inferir com outro é o modo de falha silencioso de um retreino.
 Definidas em `src/config/experiment.ts` e lidas uma vez no boot, de três
 fontes: `localStorage` (`irisflow.experiment`), parâmetros de URL e variáveis
 de ambiente `IRISFLOW_EXP_<chave>` no Electron. Os parâmetros de URL são
-`?ep=`, `?l2cs=`, `?filtro=`, `?diagonal=`, `?olho=`, `?expansao=`,
+`?ep=`, `?l2cs=`, `?filtro=`, `?diagonal=`, `?olho=`, `?rosto=`, `?expansao=`,
 `?dimsIris=`, `?cursorNoTeste=`, `?compTranslacao=` e os booleanos (1/0)
 `?rollCrop=`, `?estabilizar=`, `?dwellCorrige=`, `?refLenta=`, `?cantos=` e
 `?calib=` — e eles **ficam gravados** no `localStorage`: a flag vale nas
@@ -740,15 +797,17 @@ principais e avisa quando falta recarregar.
 | `blocoL2csCompleto` | `false` | ablação — ver abaixo |
 | `persistirCalibracao` | `true` | `?calib=0` no desenvolvimento |
 | `eyeNet` | `off` | `off` · `onnx` |
+| `modeloDoRosto` | `gaze360` | `gaze360` · `gazegene` — ver [Modelos: como escolher](#modelos-como-escolher) |
 | `cursorSizePx` | `48` | 24–128 |
 | `blinkClick`, `scanningMode`, `dwellRingOnCursor` | `false` | |
 | `gazeLostFallback` | `true` | |
 | `cursorNoTesteDePrecisao` | `false` | escotilha do operador — ver abaixo |
 
-Três dessas flags **invalidam perfis salvos** quando mudam, por construção:
-`dimsDaIris` e `blocoL2csCompleto` mudam o `FEATURE_VECTOR_ID`, e
+Quatro dessas flags **invalidam perfis salvos** quando mudam, por construção:
+`dimsDaIris` e `blocoL2csCompleto` mudam o `FEATURE_VECTOR_ID`,
 `formaDaExpansao` muda o número e a ordem das colunas que o Ridge vê (os
-coeficientes são posicionais). A invalidação é proteção, não obstáculo: sem
+coeficientes são posicionais) e `modeloDoRosto` troca os ângulos que chegam ao
+vetor (entra na chave do perfil). A invalidação é proteção, não obstáculo: sem
 ela um perfil treinado num arranjo carregaria no outro sem erro nenhum e
 preveria deslocado. Ao alternar para medir, conte uma recalibração por troca.
 

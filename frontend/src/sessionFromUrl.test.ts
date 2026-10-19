@@ -22,6 +22,31 @@ describe('aplicarSessaoDaUrl', () => {
   beforeEach(() => { localStorage.clear(); });
   afterEach(() => { vi.restoreAllMocks(); });
 
+  describe('rosto — qual rede lê o recorte do rosto', () => {
+    it.each(['gazegene', 'gaze360'])('aceita %s', (modelo) => {
+      expect(aplicarSessaoDaUrl(`?rosto=${modelo}`, '')).toBe(true);
+      expect(exp().modeloDoRosto).toBe(modelo);
+    });
+
+    it('vale também dentro do hash (HashRouter)', () => {
+      expect(aplicarSessaoDaUrl('', '#/calibration?rosto=gazegene')).toBe(true);
+      expect(exp().modeloDoRosto).toBe('gazegene');
+    });
+
+    it('ignora modelo desconhecido em vez de aplicar pela metade', () => {
+      const avisos: string[] = [];
+      vi.spyOn(console, 'warn').mockImplementation((m: unknown) => { avisos.push(String(m)); });
+      expect(aplicarSessaoDaUrl('?rosto=gazegene-v9', '')).toBe(false);
+      expect(exp().modeloDoRosto).toBeUndefined();
+      expect(avisos.join(' ')).toContain('rosto=gazegene-v9');
+    });
+
+    it('a mesma URL duas vezes não recarrega de novo', () => {
+      expect(aplicarSessaoDaUrl('?rosto=gazegene', '')).toBe(true);
+      expect(aplicarSessaoDaUrl('?rosto=gazegene', '')).toBe(false);
+    });
+  });
+
   describe('filtro — o que separa M1, M2 e M3', () => {
     it.each(['oneEuro', 'kalman', 'kalmanEma'])('aceita %s', (modo) => {
       expect(aplicarSessaoDaUrl(`?filtro=${modo}`, '')).toBe(true);

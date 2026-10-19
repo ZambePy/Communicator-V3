@@ -1,0 +1,13 @@
+L2CS-Net treinado no GazeGene v2 (so pesquisa academica)
+=========================================================
+
+1. Baixe do Google Drive (pasta IrisFlow_GazeGene/v2/modelos) o arquivo
+   gazegene_l2cs_r50_v2.onnx (95,9 MB) e ponha NESTA pasta, ao lado de
+   gazegene_l2cs_r50_v2.meta.json.
+2. Rode o app em desenvolvimento (npm run dev ou npm run electron:dev) e abra
+   com ?rosto=gazegene na URL. Para voltar ao modelo da beta: ?rosto=gaze360.
+3. Calibre de novo (o perfil salvo e por modelo).
+
+O .onnx nao vai para o git nem para o instalador (licenca CC BY-NC-SA 4.0 +
+termos dos autores; sem licenca comercial). Detalhes: README, "Modelos: como
+escolher".

@@ -8,6 +8,7 @@
 import type { L2CSGaze, L2CSModelMeta, L2CSWorkerRequest, L2CSWorkerResponse, VerificacaoDoModelo } from './types';
 import { fichaDoModelo, type FichaDoModelo } from './proveniencia';
 import { EXPERIMENT, type ExperimentConfig } from '../config/experiment';
+import { descricaoDoModelo, ladoAceito, type LadoDoRecorte } from './modelos';
 
 export type L2CSProviderRequest = 'auto' | 'webgpu' | 'wasm';
 
@@ -30,21 +31,36 @@ export interface PoliticaL2cs {
  * Com o provider FORÇADO (`l2cs = 'webgpu' | 'wasm'`, condição de medição) a
  * política não se aplica: o operador escolheu tamanho e cadência de propósito,
  * e o relatório precisa refletir o que ele pediu.
+ *
+ * `lados`: os lados que o ONNX aceita (catálogo em `modelos.ts`). Por cima de
+ * tudo, o lado sai sempre desta lista — um ONNX de entrada fixa (o do GazeGene
+ * só aceita 224) não recebe 448 nem com WebGPU nem com a flag pedindo.
+ * Ausente = qualquer lado (ramo ocular, que passa as dimensões à parte).
  */
 export function politicaPorProvider(
   provider: 'webgpu' | 'wasm' | null,
   config: Pick<ExperimentConfig, 'l2cs' | 'l2csInputSize' | 'l2csCadenceMs'> = EXPERIMENT,
+  lados?: readonly LadoDoRecorte[],
 ): PoliticaL2cs {
   const pedida: PoliticaL2cs = { inputSize: config.l2csInputSize, cadenceMs: config.l2csCadenceMs };
-  if (config.l2cs !== 'auto' || provider === null) return pedida;
-  return provider === 'webgpu'
-    ? { inputSize: 448, cadenceMs: 100 }
-    : { inputSize: 224, cadenceMs: 160 };
+  const politica: PoliticaL2cs = config.l2cs !== 'auto' || provider === null
+    ? pedida
+    : provider === 'webgpu'
+      ? { inputSize: 448, cadenceMs: 100 }
+      : { inputSize: 224, cadenceMs: 160 };
+  return lados && lados.length > 0
+    ? { ...politica, inputSize: ladoAceito(lados, politica.inputSize) }
+    : politica;
 }
 
 export interface L2CSClientOptions {
+  /** Sem `modelUrl`/`metaUrl`, vale o modelo do rosto escolhido em
+   *  `EXPERIMENT.modeloDoRosto` (catálogo em `modelos.ts`). */
   modelUrl?: string;
   metaUrl?: string;
+  /** Lados de recorte que o ONNX aceita. Sem valor: os do catálogo quando o
+   *  modelo é o do rosto; nenhuma restrição quando a URL vem de quem chama. */
+  lados?: readonly LadoDoRecorte[];
   cadenceMs?: number;
   /** Idade máxima de um resultado, em ms. Sem valor, é derivada da latência medida. */
   staleMs?: number;
@@ -87,8 +103,6 @@ export function urlRelativa(caminho: string): string {
   return new URL(caminho, location.href).href;
 }
 
-const DEFAULT_MODEL_PATH = 'models/l2cs/l2cs_gaze360.onnx';
-const DEFAULT_META_PATH = 'models/l2cs/l2cs.meta.json';
 /** Artefatos do ORT (frontend/public/ort/). Resolvido AQUI, na página: dentro
  *  do worker `location.href` é a URL do script do worker, não a do app. */
 const DEFAULT_ORT_PATH = 'ort/';
@@ -113,13 +127,17 @@ export function staleMsParaLatencia(latenciaMs: number, cadenceMs: number): numb
 export const IN_FLIGHT_TIMEOUT_MS = 8000;
 
 export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
-  const modelUrl = opts.modelUrl ?? urlRelativa(DEFAULT_MODEL_PATH);
-  const metaUrl = opts.metaUrl ?? urlRelativa(DEFAULT_META_PATH);
+  // O modelo do rosto vem do catálogo (`EXPERIMENT.modeloDoRosto`); quem passa
+  // a URL (ramo ocular, testes) escolhe o próprio arquivo.
+  const doRosto = descricaoDoModelo(EXPERIMENT.modeloDoRosto);
+  const modelUrl = opts.modelUrl ?? urlRelativa(doRosto.modelo);
+  const metaUrl = opts.metaUrl ?? urlRelativa(doRosto.meta);
+  const lados = opts.lados ?? (opts.modelUrl === undefined ? doRosto.lados : undefined);
   const ortBaseUrl = urlRelativa(DEFAULT_ORT_PATH);
   // Cadência explícita (testes, harness) vence a política; sem ela, a
   // cadência nasce em `EXPERIMENT` e é trocada no `ready` pelo provider.
   const cadenciaFixa = opts.cadenceMs;
-  let politica: PoliticaL2cs = politicaPorProvider(null);
+  let politica: PoliticaL2cs = politicaPorProvider(null, EXPERIMENT, lados);
   let cadenceMs = cadenciaFixa ?? politica.cadenceMs;
   const staleFixo = opts.staleMs;
   const provider: L2CSProviderRequest =
@@ -206,7 +224,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       fallback = msg.fallback;
       // Primeiro status com provider: a política entra AQUI, antes de
       // `readyResolve`, para quem ouve o `ready` já ler o valor em vigor.
-      politica = politicaPorProvider(msg.executionProvider);
+      politica = politicaPorProvider(msg.executionProvider, EXPERIMENT, lados);
       if (cadenciaFixa === undefined) cadenceMs = politica.cadenceMs;
       if (fallback) {
         console.warn(`[L2CS] WebGPU indisponível — rodando em '${msg.executionProvider}'. Latência e staleness maiores; o relatório registra o provider.`);
@@ -281,7 +299,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       readyPromise = null;
       readyResolve = null;
       readyReject = null;
-      politica = politicaPorProvider(null);
+      politica = politicaPorProvider(null, EXPERIMENT, lados);
       cadenceMs = cadenciaFixa ?? politica.cadenceMs;
       lastSubmitMs = 0;
       latest = { yaw: 0, pitch: 0, timestamp: 0, valid: false };

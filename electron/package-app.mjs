@@ -132,6 +132,16 @@ if (env('IRISFLOW_BUILD_L2CS') === 'off') {
   console.warn(`${msg}. (IRISFLOW_EXIGIR_MODELO=1 transforma isto em erro.)`);
 }
 
+// Modelos so de pesquisa (src/l2cs/modelos.ts, `vaiNoInstalador: false`): o
+// `vite build` copia frontend/public inteiro para frontend/dist, entao o ONNX do
+// GazeGene chega la se estiver na pasta de quem empacota. O `build.files` do
+// package.json o exclui do asar e o conferir-pacote.mjs falha se ele aparecer;
+// aqui so se avisa, para ninguem achar que o instalador vai com ele.
+const pastaDoGazeGene = path.join(RAIZ, 'frontend', 'dist', 'models', 'l2cs-gazegene');
+if (fs.existsSync(pastaDoGazeGene) && fs.readdirSync(pastaDoGazeGene).some((n) => n.endsWith('.onnx'))) {
+  console.log('[electron:package] modelo do GazeGene (so pesquisa) encontrado em frontend/dist: fica FORA do instalador (package.json build.files)');
+}
+
 // ── Atualizacao automatica (electron/atualizacao.ts) ───────────────────────
 // Provedor GitHub: o electron-builder grava owner/repo em resources/app-update.yml.
 // Ordem: IRISFLOW_RELEASES_REPO (dono/repo) > GITHUB_REPOSITORY (o proprio repo,

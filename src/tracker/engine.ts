@@ -24,6 +24,7 @@ import { suavizarRoll, type EstadoDoRoll } from '../l2cs/rollSuave';
 import { criarContextoDoOlho, recortarOlhoParaTensor } from '../olho/recorte';
 import { criarRamoOcularOnnx, ramoOcularNulo, type RamoOcular, type SaidasDoRamoOcular } from '../olho/ramoOcular';
 import { createCropContext, cropFaceToTensor, type CropContext } from '../l2cs/crop';
+import { descricaoDoModelo, ladoAceito } from '../l2cs/modelos';
 import { L2CSHealthMonitor, isGazePlausible, reiniciarReusoDoBloco, ultimoDiagnosticoDoBloco } from '../l2cs/block';
 import { SuavizadorDeAngulos } from '../l2cs/suavizacao';
 import { AcumuladorDeReancoragem, DURACAO_PADRAO_MS as REANCORAGEM_PADRAO_MS } from '../reancoragem';
@@ -1121,8 +1122,12 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       return;
     }
     // O canvas nasce do tamanho configurado e é a fonte única do lado do crop:
-    // `cropFaceToTensor` lê o canvas, e o worker deduz o lado do tensor.
-    cropCtx = createCropContext(EXPERIMENT.l2csInputSize);
+    // `cropFaceToTensor` lê o canvas, e o worker deduz o lado do tensor. O lado
+    // já sai da lista do modelo do rosto (o GazeGene só aceita 224).
+    const modeloDoRosto = descricaoDoModelo(EXPERIMENT.modeloDoRosto);
+    let ladoDoRecorte: number = ladoAceito(modeloDoRosto.lados, EXPERIMENT.l2csInputSize);
+    cropCtx = createCropContext(ladoDoRecorte);
+    console.log(`[L2CS] modelo do rosto: ${modeloDoRosto.nome} (${modeloDoRosto.modelo})`);
     l2csClient = createL2CSClient();
     l2csClient.start().then(
       () => {
@@ -1131,7 +1136,8 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         // usar esse lado na chave do perfil — ANTES do status, para quem ouve
         // `onL2CSStatusChange` já ler o valor efetivo em `getDiagnostics()`.
         const politica = l2csClient?.getPolitica();
-        if (politica && politica.inputSize !== EXPERIMENT.l2csInputSize) {
+        if (politica && politica.inputSize !== ladoDoRecorte) {
+          ladoDoRecorte = politica.inputSize;
           cropCtx = createCropContext(politica.inputSize);
         }
         if (politica) calibration.setL2csInputSizeEfetivo(politica.inputSize);
@@ -1144,6 +1150,13 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       (err) => {
         setL2CSStatus('error');
         console.error('[L2CS] worker init FAILED — o bloco angular fica zerado. Motivo:', err);
+        if (!modeloDoRosto.vaiNoInstalador) {
+          console.error(
+            `[L2CS] o modelo '${modeloDoRosto.id}' é só de pesquisa e não vem no repositório: ` +
+            `ponha o ONNX em frontend/public/${modeloDoRosto.modelo} (README, "Modelos: como escolher") ` +
+            `ou volte ao padrão com ?rosto=gaze360.`,
+          );
+        }
       },
     );
   }

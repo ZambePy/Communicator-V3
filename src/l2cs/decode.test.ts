@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { softmax, decodeAngleWithConfidence, degToRad } from './decode';
+import { softmax, decodeAngleWithConfidence, degToRad, sinaisDaMeta } from './decode';
 
 describe('softmax', () => {
   it('normaliza para soma 1', () => {
@@ -107,5 +107,21 @@ describe('decodeAngleWithConfidence', () => {
   it('N=1 (bin único no vetor) → confidence = 1 por convenção (não há incerteza a medir)', () => {
     const { confidence } = decodeAngleWithConfidence([0], 4, 0);
     expect(confidence).toBe(1);
+  });
+});
+
+describe('sinaisDaMeta', () => {
+  it('meta sem `sinais` (checkpoint Gaze360) vale +1/+1', () => {
+    expect(sinaisDaMeta({})).toEqual({ yaw: 1, pitch: 1 });
+    expect(sinaisDaMeta({ sinais: null })).toEqual({ yaw: 1, pitch: 1 });
+  });
+
+  it('respeita -1 por eixo', () => {
+    expect(sinaisDaMeta({ sinais: { yaw: 1, pitch: -1 } })).toEqual({ yaw: 1, pitch: -1 });
+    expect(sinaisDaMeta({ sinais: { yaw: -1, pitch: 1 } })).toEqual({ yaw: -1, pitch: 1 });
+  });
+
+  it('valor estranho não inverte nada (a meta inválida é recusada antes, em validarMeta)', () => {
+    expect(sinaisDaMeta({ sinais: { yaw: 0, pitch: '−1' } })).toEqual({ yaw: 1, pitch: 1 });
   });
 });

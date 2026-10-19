@@ -51,6 +51,18 @@ export interface L2CSModelMeta {
   /** Espaço dos bins. Ausente → inferido pela cobertura (ver decode.ts). */
   decoding?: 'circular' | 'linear' | null;
   inputSize: number;
+  /** Lados de recorte que o ONNX aceita. Ausente = eixos dinâmicos (qualquer
+   *  lado). Quem escolhe o lado é o catálogo (`modelos.ts`); o worker só
+   *  recusa, com mensagem clara, um tensor de lado que o ONNX não aceita. */
+  supportedInputSizes?: number[] | null;
+  /**
+   * Multiplicadores que levam a saída do modelo à convenção do app
+   * (yaw > 0 = olhar para a DIREITA da pessoa, pitch > 0 = para CIMA).
+   * Ausente = +1/+1. Um modelo treinado noutra convenção corrige aqui, sem
+   * mexer no código: `frontend/scripts/l2cs_axis_validation.mjs` mede o sinal
+   * de cada eixo com cinco fotos e diz o valor certo.
+   */
+  sinais?: { yaw: 1 | -1; pitch: 1 | -1 } | null;
   inputTensorName: string;
   outputTensorNames: { yaw: string; pitch: string };
   /** SHA-256 do arquivo ONNX. Ausente → o worker calcula e informa, mas não

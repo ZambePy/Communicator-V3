@@ -178,3 +178,24 @@ describe('ficha do modelo', () => {
     expect(r).toContain('Gaze360 (research-only)');
   });
 });
+
+describe('validarMeta — sinais e lados aceitos', () => {
+  const base = {
+    dataset: 'gazegene', outputBins: 120, binWidth: 2, binOffset: -119, decoding: 'linear' as const,
+    inputSize: 224, inputTensorName: 'input', outputTensorNames: { yaw: 'yaw', pitch: 'pitch' },
+  };
+
+  it('aceita sinais ±1 e lista de lados', () => {
+    expect(validarMeta({ ...base, sinais: { yaw: 1, pitch: -1 }, supportedInputSizes: [224] })).toBeNull();
+  });
+
+  it('recusa sinal que não seja 1 ou -1: inverteria o olhar pela metade', () => {
+    expect(validarMeta({ ...base, sinais: { yaw: 1, pitch: 0 as unknown as 1 } })).toMatch(/sinais/);
+    expect(validarMeta({ ...base, sinais: { yaw: 2 as unknown as 1, pitch: 1 } })).toMatch(/sinais/);
+  });
+
+  it('recusa lista de lados vazia ou com lixo', () => {
+    expect(validarMeta({ ...base, supportedInputSizes: [] })).toMatch(/supportedInputSizes/);
+    expect(validarMeta({ ...base, supportedInputSizes: [224.5] })).toMatch(/supportedInputSizes/);
+  });
+});
