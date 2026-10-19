@@ -146,3 +146,17 @@ describe('sanitize aplica faixa por chave', () => {
     expect(warn).toHaveBeenCalled();
   });
 });
+
+describe('modeloDoRosto', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('aceita os modelos do catálogo', () => {
+    expect(sanitizeExperiment({ modeloDoRosto: 'gazegene' }).modeloDoRosto).toBe('gazegene');
+    expect(sanitizeExperiment({ modeloDoRosto: 'gaze360' }).modeloDoRosto).toBe('gaze360');
+  });
+
+  it('nome desconhecido volta ao padrão com aviso', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(sanitizeExperiment({ modeloDoRosto: 'gazegene-v9' }).modeloDoRosto).toBe('gaze360');
+  });
+});

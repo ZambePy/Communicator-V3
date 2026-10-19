@@ -54,6 +54,21 @@ export function validarMeta(meta: Partial<L2CSModelMeta> | null | undefined): st
   if (meta.sha256 != null && !/^[0-9a-fA-F]{64}$/.test(meta.sha256)) {
     return 'sha256 não é um hex de 64 caracteres';
   }
+  if (meta.sinais != null) {
+    const s = meta.sinais as { yaw?: unknown; pitch?: unknown };
+    if (![1, -1].includes(s.yaw as number) || ![1, -1].includes(s.pitch as number)) {
+      return `sinais.yaw/pitch devem ser 1 ou -1 (veio ${JSON.stringify(meta.sinais)})`;
+    }
+  }
+  if (meta.supportedInputSizes != null) {
+    const lados = meta.supportedInputSizes as unknown;
+    if (
+      !Array.isArray(lados) || lados.length === 0 ||
+      !lados.every((l) => Number.isInteger(l) && (l as number) > 0)
+    ) {
+      return `supportedInputSizes deve ser uma lista de inteiros positivos (veio ${JSON.stringify(lados)})`;
+    }
+  }
   if (meta.proveniencia != null) {
     const p = meta.proveniencia;
     if (!['permitido', 'proibido', 'desconhecido'].includes(p.usoComercial)) {

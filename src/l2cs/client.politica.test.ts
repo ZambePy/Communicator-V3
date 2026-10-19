@@ -70,6 +70,18 @@ describe('politicaPorProvider', () => {
     expect(politicaPorProvider('wasm', { l2cs: 'wasm', l2csInputSize: 448, l2csCadenceMs: 100 }))
       .toEqual({ inputSize: 448, cadenceMs: 100 });
   });
+
+  it('ONNX de entrada fixa (GazeGene, só 224) nunca recebe 448 — nem com WebGPU, nem forçado', () => {
+    expect(politicaPorProvider('webgpu', AUTO, [224])).toEqual({ inputSize: 224, cadenceMs: 100 });
+    expect(politicaPorProvider(null, AUTO, [224])).toEqual({ inputSize: 224, cadenceMs: 100 });
+    expect(politicaPorProvider('wasm', { l2cs: 'wasm', l2csInputSize: 448, l2csCadenceMs: 100 }, [224]))
+      .toEqual({ inputSize: 224, cadenceMs: 100 });
+  });
+
+  it('modelo de eixos dinâmicos (Gaze360) segue a política de antes', () => {
+    expect(politicaPorProvider('webgpu', AUTO, [448, 224])).toEqual({ inputSize: 448, cadenceMs: 100 });
+    expect(politicaPorProvider('wasm', AUTO, [448, 224])).toEqual({ inputSize: 224, cadenceMs: 160 });
+  });
 });
 
 describe('cliente — a política entra no primeiro status', () => {

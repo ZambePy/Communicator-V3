@@ -136,6 +136,19 @@ export interface ExperimentConfig {
    * depois do A/B no conjunto interno. Ligar muda o `FEATURE_VECTOR_ID`.
    */
   eyeNet: 'off' | 'onnx';
+  /**
+   * Qual rede lê o recorte do ROSTO (catálogo em `src/l2cs/modelos.ts`).
+   *  - `gaze360`  (padrão) os pesos da beta, `models/l2cs/l2cs_gaze360.onnx`.
+   *  - `gazegene` o L2CS treinado no GazeGene v2 (3,38° no teste do próprio
+   *               GazeGene), `models/l2cs-gazegene/`. Só pesquisa: fica fora do
+   *               git e do instalador, roda no `npm run dev`.
+   *
+   * URL `?rosto=gazegene` (ou `?rosto=gaze360` para voltar). O lado do recorte
+   * vem do modelo quando ele não aceita o pedido (o GazeGene só aceita 224).
+   * Entra na chave do perfil: trocar de modelo exige calibrar de novo, porque
+   * o Ridge aprendeu os ângulos de um modelo e preveria deslocado com outro.
+   */
+  modeloDoRosto: 'gaze360' | 'gazegene';
   /** Filtro temporal. `oneEuro` é o de produção; os outros existem para o benchmark. */
   filterMode: 'oneEuro' | 'kalman' | 'kalmanEma';
   /**
@@ -366,6 +379,7 @@ const DEFAULTS_DO_CODIGO: ExperimentConfig = {
   suavizarL2csNaFixacao: true,
   correcaoPorDwell: true,
   eyeNet: 'off',
+  modeloDoRosto: 'gaze360',
   filterMode: 'oneEuro',
   estabilizarFixacao: true,
   normalizarRollNoCrop: true,
@@ -404,6 +418,7 @@ const DEFAULTS_DO_CODIGO: ExperimentConfig = {
 export const VALORES_ACEITOS = {
   l2cs: ['auto', 'webgpu', 'wasm', 'off'],
   eyeNet: ['off', 'onnx'],
+  modeloDoRosto: ['gaze360', 'gazegene'],
   filterMode: ['oneEuro', 'kalman', 'kalmanEma'],
   formaDaExpansao: ['completa', 'parcial'],
   dimsDaIris: ['ambas', 'normalizadas', 'absolutas'],

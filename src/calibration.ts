@@ -32,7 +32,8 @@ import { ultimoDiagnosticoDoBloco, L2CS_CONFIDENCE_MIN } from './l2cs/block';
 
 /** Posições do bloco angular dentro do vetor projetado (vazio sem L2CS). */
 const L2CS_SLOTS: readonly number[] = l2csSlotsInSet();
-import { EXPERIMENT, L2CS_INPUT_SIZES_ACEITOS } from './config/experiment';
+import { EXPERIMENT } from './config/experiment';
+import { descricaoDoModelo, ladoAceito, MODELO_DO_ROSTO_PADRAO } from './l2cs/modelos';
 import { compensarPredicao, deslocamentoPorPose, poseDeReferencia } from './poseCompensation';
 import type { Pose } from './poseCompensation';
 import { compensarTranslacao, centroDeReferencia } from './translationCompensation';
@@ -1763,6 +1764,16 @@ export interface CalibrationContext {
    * os perfis já salvos continuarem válidos.
    */
   expansaoParcial?: boolean;
+  /**
+   * Modelo do rosto (`EXPERIMENT.modeloDoRosto`, catálogo em `l2cs/modelos.ts`).
+   *
+   * Mesma classe de falha do `l2csInputSize`: dois modelos produzem
+   * tan(yaw)/tan(pitch) diferentes para o mesmo olhar, com o mesmo vetor. Um
+   * perfil do Gaze360 carregado com o GazeGene preveria deslocado sem erro
+   * nenhum. Ausente/padrão (`gaze360`) NÃO entra na chave, para os perfis já
+   * salvos continuarem válidos.
+   */
+  modeloDoRosto?: string;
 }
 
 export function buildContextKeyFrom(ctx: CalibrationContext): string {
@@ -1771,6 +1782,7 @@ export function buildContextKeyFrom(ctx: CalibrationContext): string {
     ctx.geometricPoseCompensation ? 'posecomp' : '',
     `xf${ctx.expandFactor}`,
     `l2cs${ctx.l2csInputSize}`,
+    ctx.modeloDoRosto && ctx.modeloDoRosto !== MODELO_DO_ROSTO_PADRAO ? `rosto-${ctx.modeloDoRosto}` : '',
   ].filter(Boolean).join(',');
   const perfil = ctx.perfil && ctx.perfil !== 'padrao' ? `_${ctx.perfil}` : '';
   return `${ctx.viewportW}x${ctx.viewportH}_${ctx.featureVectorId}_v${ctx.formatVersion}_${expKey}${perfil}`;
@@ -1797,6 +1809,7 @@ function contextoAtual(): CalibrationContext {
     geometricPoseCompensation: EXPERIMENT.geometricPoseCompensation,
     expandFactor: EXPERIMENT.expandFactor,
     l2csInputSize: l2csInputSizeEfetivo,
+    modeloDoRosto: EXPERIMENT.modeloDoRosto,
     perfil: perfilAtivo,
   };
 }
@@ -1807,7 +1820,9 @@ function contextoAtual(): CalibrationContext {
  * 224²). Entra na chave do perfil: 224 e 448 produzem tan(yaw)/tan(pitch)
  * diferentes para o mesmo rosto, e um perfil treinado num não serve no outro.
  */
-let l2csInputSizeEfetivo: number = EXPERIMENT.l2csInputSize;
+// Já no lado que o modelo do rosto aceita (o GazeGene só aceita 224): a chave
+// pedida antes do worker subir é a mesma que ele vai confirmar.
+let l2csInputSizeEfetivo: number = ladoAceito(descricaoDoModelo(EXPERIMENT.modeloDoRosto).lados, EXPERIMENT.l2csInputSize);
 
 export function getL2csInputSizeEfetivo(): number {
   return l2csInputSizeEfetivo;
@@ -1886,7 +1901,7 @@ export function haCalibracaoNoDisco(): boolean {
   const ctx = contextoAtual();
   const chaves = new Set([buildContextKeyFrom(ctx)]);
   if (EXPERIMENT.l2cs === 'auto') {
-    for (const lado of L2CS_INPUT_SIZES_ACEITOS) chaves.add(buildContextKeyFrom({ ...ctx, l2csInputSize: lado }));
+    for (const lado of descricaoDoModelo(EXPERIMENT.modeloDoRosto).lados) chaves.add(buildContextKeyFrom({ ...ctx, l2csInputSize: lado }));
   }
   return tryParseStoredProfiles().some(p => motivoParaIgnorarPerfil(p, chaves) === null);
 }

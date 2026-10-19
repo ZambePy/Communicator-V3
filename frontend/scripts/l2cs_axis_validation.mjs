@@ -7,8 +7,17 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MODEL_PATH = path.resolve(__dirname, '../public/models/l2cs/l2cs_gaze360.onnx');
-const META_PATH = path.resolve(__dirname, '../public/models/l2cs/l2cs.meta.json');
+// Modelos do rosto: os mesmos caminhos do catálogo em src/l2cs/modelos.ts
+// (este script roda em Node puro e não importa TypeScript). `--modelo` escolhe.
+const MODELOS = {
+  gaze360: { model: '../public/models/l2cs/l2cs_gaze360.onnx', meta: '../public/models/l2cs/l2cs.meta.json' },
+  gazegene: {
+    model: '../public/models/l2cs-gazegene/gazegene_l2cs_r50_v2.onnx',
+    meta: '../public/models/l2cs-gazegene/gazegene_l2cs_r50_v2.meta.json',
+  },
+};
+let MODEL_PATH = path.resolve(__dirname, MODELOS.gaze360.model);
+let META_PATH = path.resolve(__dirname, MODELOS.gaze360.meta);
 const DEFAULT_PHOTO_DIR = path.resolve(__dirname, '../python_scripts/l2cs_validation');
 
 // O que este script mede, e o que não mede.
@@ -53,7 +62,7 @@ const CENTER_TOL_DEG = 10;
 const MIN_DELTA_DEG = 5;
 
 function parseArgs(argv) {
-  const args = { dirs: null, bbox: null, size: INPUT_SIZE };
+  const args = { dirs: null, bbox: null, size: INPUT_SIZE, sizeExplicito: false, modelo: 'gaze360' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dir') args.dirs = [argv[++i]];
@@ -64,6 +73,12 @@ function parseArgs(argv) {
         throw new Error('--size espera um múltiplo de 32 (a ResNet-50 reduz por 32). Ex.: 224 ou 448.');
       }
       args.size = n;
+      args.sizeExplicito = true;
+    }
+    else if (a === '--modelo') {
+      const m = argv[++i];
+      if (!Object.hasOwn(MODELOS, m)) throw new Error(`--modelo espera um de: ${Object.keys(MODELOS).join(', ')}`);
+      args.modelo = m;
     }
     else if (a === '--bbox') {
       // Reproduz a geometria de `crop.ts`. Formato: `x,y,side` em pixels da
@@ -90,6 +105,13 @@ Uso:
   node frontend/scripts/l2cs_axis_validation.mjs --dirs <p1>,<p2>[,<p3>...]
   node frontend/scripts/l2cs_axis_validation.mjs --bbox <x>,<y>,<side>
   node frontend/scripts/l2cs_axis_validation.mjs --size 224
+  node frontend/scripts/l2cs_axis_validation.mjs --modelo gazegene   (L2CS do GazeGene, recorte 224)
+
+MODELO
+  --modelo gaze360 (padrão) ou gazegene: os mesmos do ?rosto= do app
+  (src/l2cs/modelos.ts). Os ângulos saem já com os \`sinais\` da meta aplicados,
+  como o app usa. Se um eixo sair invertido, o script diz qual valor pôr em
+  \`sinais\` na meta do modelo.
 
 TAMANHO DE ENTRADA
   O ONNX foi reexportado com eixos espaciais dinâmicos, então o mesmo binário
@@ -217,11 +239,14 @@ async function runPose(session, meta, filepath, ort, bbox, size = INPUT_SIZE) {
   const t0 = performance.now();
   const out = await session.run({ [session.inputNames[0]]: input });
   const dt = performance.now() - t0;
-  const y = decodeAngleDegWithConfidence(out.yaw.data, meta.binWidth, meta.binOffset);
-  const p = decodeAngleDegWithConfidence(out.pitch.data, meta.binWidth, meta.binOffset);
+  const y = decodeAngleDegWithConfidence(out[meta.outputTensorNames?.yaw ?? 'yaw'].data, meta.binWidth, meta.binOffset);
+  const p = decodeAngleDegWithConfidence(out[meta.outputTensorNames?.pitch ?? 'pitch'].data, meta.binWidth, meta.binOffset);
+  // Mesmos multiplicadores que o worker aplica (decode.ts, `sinaisDaMeta`).
+  const sy = meta.sinais?.yaw === -1 ? -1 : 1;
+  const sp = meta.sinais?.pitch === -1 ? -1 : 1;
   return {
-    yawDeg: Number(y.deg.toFixed(2)),
-    pitchDeg: Number(p.deg.toFixed(2)),
+    yawDeg: Number((sy * y.deg).toFixed(2)),
+    pitchDeg: Number((sp * p.deg).toFixed(2)),
     yawConfidence: Number(y.confidence.toFixed(3)),
     pitchConfidence: Number(p.confidence.toFixed(3)),
     inferenceMs: Number(dt.toFixed(1)),
@@ -364,8 +389,22 @@ async function main() {
     process.exit(1);
   }
 
+  MODEL_PATH = path.resolve(__dirname, MODELOS[args.modelo].model);
+  META_PATH = path.resolve(__dirname, MODELOS[args.modelo].meta);
+  if (!existsSync(MODEL_PATH)) {
+    process.stderr.write(`\nERRO: modelo não encontrado: ${MODEL_PATH}\n(o ONNX não vem no git; ver README, "Modelos: como escolher")\n`);
+    process.exit(1);
+  }
   const meta = JSON.parse(await readFile(META_PATH, 'utf-8'));
-  console.log(`[axis] Model: ${path.basename(MODEL_PATH)}`);
+  // ONNX de entrada fixa (o do GazeGene só aceita 224): sem --size, usa o lado aceito.
+  if (Array.isArray(meta.supportedInputSizes) && !meta.supportedInputSizes.includes(args.size)) {
+    if (args.sizeExplicito) {
+      throw new Error(`o modelo ${args.modelo} aceita só ${meta.supportedInputSizes.join(' ou ')} px (veio --size ${args.size})`);
+    }
+    args.size = meta.supportedInputSizes[0];
+  }
+  console.log(`[axis] Model: ${path.basename(MODEL_PATH)} (--modelo ${args.modelo}, recorte ${args.size}²)`);
+  console.log(`[axis] Sinais da meta: yaw ${meta.sinais?.yaw ?? 1}, pitch ${meta.sinais?.pitch ?? 1}`);
   console.log(`[axis] Dataset: ${meta.dataset}  bins=${meta.outputBins} binWidth=${meta.binWidth} offset=${meta.binOffset}`);
   console.log(`[axis] Diretórios: ${dirs.join(' | ')}`);
 
@@ -431,9 +470,32 @@ async function main() {
     }
   }
 
+  // O que pôr em `sinais` na meta, a partir dos pares simétricos medidos (os
+  // ângulos acima já saíram com os sinais atuais da meta aplicados).
+  const sinaisAtuais = { yaw: meta.sinais?.yaw === -1 ? -1 : 1, pitch: meta.sinais?.pitch === -1 ? -1 : 1 };
+  const sugestao = { ...sinaisAtuais };
+  for (const d of perDir) {
+    for (const v of d.verdicts) {
+      if (!v.name.endsWith('_symmetry') || !v.opposite || !v.bothSignificant || !v.dominant) continue;
+      // posDelta é o de look_up (pitch) e o de look_right (yaw): na convenção do app os dois são positivos.
+      if (v.posDelta < 0) sugestao[v.axis] = -sinaisAtuais[v.axis];
+    }
+  }
+  if (sugestao.yaw !== sinaisAtuais.yaw || sugestao.pitch !== sinaisAtuais.pitch) {
+    console.log(
+      `\n[axis] ⚠ Eixo invertido em relação à convenção do app (direita e cima positivos).\n` +
+      `       Ponha na meta (${path.relative(process.cwd(), META_PATH)}):\n` +
+      `       "sinais": { "yaw": ${sugestao.yaw}, "pitch": ${sugestao.pitch} }`,
+    );
+  } else if (perDir.some((d) => d.verdicts.some((v) => v.name.endsWith('_symmetry') && v.pass))) {
+    console.log(`\n[axis] Sinais da meta conferem com a convenção do app (yaw ${sinaisAtuais.yaw}, pitch ${sinaisAtuais.pitch}).`);
+  }
+
   const report = {
     timestamp: new Date().toISOString(),
     model: path.basename(MODEL_PATH),
+    modelo: args.modelo,
+    sinais: { daMeta: sinaisAtuais, sugeridos: sugestao },
     meta: { dataset: meta.dataset, bins: meta.outputBins, binWidth: meta.binWidth, binOffset: meta.binOffset },
     dirs: perDir,
     crossDistance: crossDistanceVerdicts,

@@ -160,3 +160,19 @@ describe('a forma da expansão entra na chave', () => {
     );
   });
 });
+
+describe('o modelo do rosto entra na chave', () => {
+  it('Gaze360 e GazeGene não compartilham perfil', () => {
+    expect(buildContextKeyFrom({ ...BASE, l2csInputSize: 224, modeloDoRosto: 'gazegene' })).not.toBe(
+      buildContextKeyFrom({ ...BASE, l2csInputSize: 224, modeloDoRosto: 'gaze360' }),
+    );
+  });
+
+  it('ausente == gaze360: os perfis já salvos continuam válidos', () => {
+    expect(buildContextKeyFrom({ ...BASE })).toBe(buildContextKeyFrom({ ...BASE, modeloDoRosto: 'gaze360' }));
+  });
+
+  it('a marca do GazeGene aparece na chave', () => {
+    expect(buildContextKeyFrom({ ...BASE, modeloDoRosto: 'gazegene' })).toContain('rosto-gazegene');
+  });
+});

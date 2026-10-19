@@ -1,0 +1,75 @@
+{
+  "model": "L2CS (ResNet-50) treinado no GazeGene v2",
+  "dataset": "gazegene",
+  "file": "gazegene_l2cs_r50_v2.onnx",
+  "inputSize": 224,
+  "inputSizeDynamic": false,
+  "supportedInputSizes": [
+    224
+  ],
+  "inputShape": [
+    1,
+    3,
+    224,
+    224
+  ],
+  "inputLayout": "NCHW",
+  "inputColorOrder": "RGB",
+  "normalization": {
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ]
+  },
+  "outputBins": 120,
+  "binWidth": 2.0,
+  "binOffset": -119.0,
+  "decoding": "linear",
+  "angleUnit": "degrees",
+  "inputTensorName": "input",
+  "outputTensorNames": {
+    "yaw": "yaw",
+    "pitch": "pitch"
+  },
+  "sinais": {
+    "yaw": 1,
+    "pitch": 1
+  },
+  "signConvention": {
+    "yaw": {
+      "positive": "right",
+      "confidence": "provisional",
+      "evidence": "Derivado do rótulo, não medido em foto: yaw = atan2(-g_x, -g_z) com a câmera em x para a direita da imagem → olhar para a direita da pessoa dá yaw > 0 (a mesma convenção do checkpoint Gaze360)."
+    },
+    "pitch": {
+      "positive": "up",
+      "confidence": "provisional",
+      "evidence": "Derivado do rótulo, não medido em foto: pitch = asin(-g_y) com y da câmera para baixo (convenção OpenCV/ETH-XGaze) → olhar para cima dá pitch > 0. Se o GazeGene usar y para cima, o sinal inverte: confirme com `node frontend/scripts/l2cs_axis_validation.mjs --modelo gazegene` e, se o script mandar, troque `sinais.pitch` para -1."
+    }
+  },
+  "sha256": "8532c88d81dc3c1055386625cb22ccd8da305cf5bd939c8f79d11f3314ed7872",
+  "proveniencia": {
+    "treino": {
+      "bases": [
+        {
+          "nome": "GazeGene (FaceCrops)",
+          "licenca": "CC BY-NC-SA 4.0 + termos dos autores",
+          "url": "https://huggingface.co/datasets/vigil1917/GazeGene"
+        }
+      ],
+      "config": "IrisFlow_GazeGene_v2.ipynb",
+      "data": "2026-10-13",
+      "commit": null
+    },
+    "usoComercial": "proibido",
+    "contrato": null,
+    "notas": "Só pesquisa acadêmica. Rótulo normalizado: olhar relativo ao raio câmera->rosto (origem alvo-dist). Convenção do L2CS: vetor = (-cos p sen y, -sen p, -cos p cos y). Treinado nos recortes de rosto do GazeGene; erro no teste (sujeitos 47-56): 3.38° médio, 2.46° mediano."
+  },
+  "notes": "Modelo do ROSTO escolhido com ?rosto=gazegene (flag modeloDoRosto; catálogo em src/l2cs/modelos.ts). Entrada FIXA 1×3×224×224: o app manda sempre recorte de 224, mesmo com WebGPU. Saída: 120 bins de 2° com centros em -119°…+119°, decodificação LINEAR (Σ p·(2i − 119)). Só pesquisa acadêmica (GazeGene CC BY-NC-SA 4.0 + termos dos autores; a BUAA pediu para não usar comercialmente sem licença por escrito): o ONNX (gazegene_l2cs_r50_v2.onnx, 95,9 MB, Drive: IrisFlow_GazeGene/v2/modelos) fica fora do git (*.onnx no .gitignore) e fora do instalador (package.json build.files; scripts/conferir-pacote.mjs falha se ele aparecer no pacote). Trocar de modelo exige calibrar de novo: a chave do perfil leva o modelo do rosto."
+}

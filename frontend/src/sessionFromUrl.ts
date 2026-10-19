@@ -3,7 +3,9 @@
 // junto do relatório. `EXPERIMENT` é resolvido uma vez no import, então a
 // página recarrega — só quando algum valor mudou de fato.
 
-import { VALORES_DA_BASE } from '@tracker/config/experiment';
+import { VALORES_ACEITOS, VALORES_DA_BASE } from '@tracker/config/experiment';
+
+const MODELOS_DO_ROSTO_ACEITOS = VALORES_ACEITOS.modeloDoRosto;
 
 const CHAVE_EXP = 'irisflow.experiment';
 const CHAVE_SETTINGS = 'irisflow_settings';
@@ -28,7 +30,8 @@ function lerJson(chave: string): Record<string, unknown> {
 }
 
 /**
- * Aplica `?ep=`, `?l2cs=`, `?filtro=` e `?diagonal=` ao armazenamento local.
+ * Aplica `?ep=`, `?l2cs=`, `?filtro=`, `?rosto=`, `?olho=` e `?diagonal=` (entre
+ * outros, abaixo) ao armazenamento local.
  *
  * Devolve `true` quando alguma coisa mudou e a página precisa recarregar.
  * Valores inválidos são IGNORADOS com aviso — nunca aplicados parcialmente,
@@ -132,6 +135,13 @@ export function aplicarSessaoDaUrl(
   if (olho !== null) {
     if (olho === 'off' || olho === 'onnx') exp.eyeNet = olho;
     else console.warn(`[sessão] ?olho=${olho} inválido — aceitos: off, onnx.`);
+  }
+  // Qual rede lê o rosto (catálogo em src/l2cs/modelos.ts). Trocar exige
+  // calibrar de novo: a chave do perfil leva o modelo.
+  const rosto = p.get('rosto');
+  if (rosto !== null) {
+    if ((MODELOS_DO_ROSTO_ACEITOS as readonly string[]).includes(rosto)) exp.modeloDoRosto = rosto;
+    else console.warn(`[sessão] ?rosto=${rosto} inválido — aceitos: ${MODELOS_DO_ROSTO_ACEITOS.join(', ')}.`);
   }
 
   // Arranjo do vetor que entra no Ridge. Os dois variam a MESMA coisa por
