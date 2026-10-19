@@ -1367,10 +1367,30 @@ export const SettingsScreen: React.FC = () => {
                 aqui — não escondido num JSON — que a resposta mora. */}
             <span data-testid="ficha-do-modelo" style={{ flexBasis: '100%' }}>
               {(() => {
-                const f = getDiagnostics()?.l2cs?.modelo ?? null;
-                return f ? `Modelo de olhar: ${resumoDaFicha(f)}.` : 'Modelo de olhar: ficha de proveniência indisponível.';
+                const d = getDiagnostics();
+                const f = d?.l2cs?.modelo ?? null;
+                if (f) return `Modelo de olhar: ${resumoDaFicha(f)}.`;
+                // Rede do rosto desligada de propósito (calibrar só com a íris,
+                // ou `?ep=off`): não há ficha a mostrar, e "indisponível"
+                // sugeria uma falha.
+                return d?.l2cs?.status === 'disabled'
+                  ? 'Modelo de olhar: desligado (rastreamento sem a rede do rosto).'
+                  : 'Modelo de olhar: ficha de proveniência indisponível.';
               })()}
             </span>
+            {/* Ramo ocular (EyeNet), só quando a flag está ligada — no
+                instalador ela nunca está. */}
+            {(() => {
+              const o = getDiagnostics()?.olho;
+              if (!o?.ativo) return null;
+              return (
+                <span data-testid="ficha-do-modelo-do-olho" style={{ flexBasis: '100%' }}>
+                  {o.modelo
+                    ? `Modelo dos olhos: ${resumoDaFicha(o.modelo)}.`
+                    : `Modelo dos olhos: EyeNet ${o.status === 'erro' ? 'não carregou' : 'carregando'}.`}
+                </span>
+              );
+            })()}
             {atualizacao.fase === 'pronta' ? (
               <button
                 type="button"

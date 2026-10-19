@@ -23,6 +23,15 @@ export interface DiagnosticosDeRuntime {
     stalePct?: number;
     modelo?: FichaDoModelo | null;
   } | null;
+  /** Ramo ocular (EyeNet). Ausente em diagnósticos antigos. */
+  olho?: {
+    ativo?: boolean;
+    status?: string;
+    executionProvider?: string | null;
+    latencyMs?: number;
+    stalePct?: number;
+    modelo?: FichaDoModelo | null;
+  } | null;
   filtro?: { efetivo?: string; preset?: string | null } | null;
   fpsRender?: number;
   video?: { width: number; height: number } | null;
@@ -47,5 +56,16 @@ export function buildRuntimeInfo(
     filterPreset: d.filtro?.preset ?? null,
     fpsRender: d.fpsRender,
     video: d.video ? { width: d.video.width, height: d.video.height } : undefined,
+    // `null` com o ramo desligado: o relatório diz que a EyeNet não rodou, em
+    // vez de deixar a dúvida de um campo ausente.
+    olho: d.olho?.ativo
+      ? {
+          status: d.olho.status ?? 'desconhecido',
+          executionProvider: d.olho.executionProvider ?? null,
+          latencyMs: d.olho.latencyMs ?? 0,
+          stalePct: d.olho.stalePct ?? 0,
+          modelo: d.olho.modelo ?? null,
+        }
+      : null,
   };
 }

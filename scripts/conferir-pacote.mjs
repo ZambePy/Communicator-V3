@@ -62,9 +62,11 @@ const RAIZES_PERMITIDAS = ['/frontend/dist/', '/dist-electron/', '/node_modules/
  * dos modelos com `vaiNoInstalador: false` em src/l2cs/modelos.ts (o teste
  * src/l2cs/modelos.test.ts confere que as duas listas e o `build.files` do
  * package.json andam juntos). Hoje: o L2CS treinado no GazeGene (CC BY-NC-SA,
- * sem licença comercial).
+ * sem licença comercial) e a EyeNet do ramo ocular, treinada em renders do
+ * UnityEyes 2 (os modelos de olho do UnityEyes não têm licença publicada; o
+ * teste src/olho/modeloDoOlho.test.ts guarda esta pasta).
  */
-const PASTAS_DE_PESQUISA = ['/frontend/dist/models/l2cs-gazegene/'];
+const PASTAS_DE_PESQUISA = ['/frontend/dist/models/l2cs-gazegene/', '/frontend/dist/models/eyenet/'];
 
 /**
  * Bundle minificado: linhas longas. Um bundle legível (esbuild sem minify,

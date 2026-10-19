@@ -55,6 +55,7 @@
       "!frontend/dist/**/*.ai",
       "!frontend/dist/l2cs_capture.html",
       "!frontend/dist/models/l2cs-gazegene/**",
+      "!frontend/dist/models/eyenet/**",
       "!frontend/dist/ort/ort.mjs",
       "!frontend/dist/ort/ort.{all,jspi,wasm,webgpu,webgl}.mjs",
       "!frontend/dist/ort/ort.{webgl,node}.min.mjs",

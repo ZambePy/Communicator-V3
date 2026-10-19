@@ -83,8 +83,12 @@ export interface VerificacaoDoModelo {
 export type L2CSWorkerRequest =
   /** `ortBaseUrl`: diretório dos artefatos do ORT, resolvido pela PÁGINA. Dentro
    *  do worker `location.href` é a URL do script do worker (em `assets/` no
-   *  build, em `/@fs/...` no dev-server), não a da página. */
-  | { type: 'init'; modelUrl: string; metaUrl: string; provider: 'auto' | 'webgpu' | 'wasm'; ortBaseUrl?: string }
+   *  build, em `/@fs/...` no dev-server), não a da página.
+   *  `rotulo`: prefixo das mensagens do worker no console. O mesmo worker roda
+   *  a L2CS-Net do rosto (`[L2CS]`, o padrão) e a EyeNet de cada olho
+   *  (`[olho esquerdo]`, `[olho direito]`); sem o rótulo, o console dizia
+   *  `[L2CS]` também quando nenhuma L2CS-Net estava rodando. */
+  | { type: 'init'; modelUrl: string; metaUrl: string; provider: 'auto' | 'webgpu' | 'wasm'; ortBaseUrl?: string; rotulo?: string }
   /** `dims`: `[altura, largura]` do tensor quando ele NÃO é quadrado (ramo
    *  ocular, 64×96). Ausente, o lado é deduzido do comprimento. */
   | { type: 'infer'; id: number; tensor: Float32Array; dims?: [number, number] };

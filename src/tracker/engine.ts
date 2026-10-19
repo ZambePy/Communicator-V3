@@ -18,7 +18,7 @@ import { extractFeatures } from '../featurePipeline';
 import { feedAccuracyRaw, feedAccuracyFiltered, getCurrentTargetPx as getAccuracyTargetPx } from '../accuracy';
 import { EyeQualityAnalyzer } from '../qualityAnalyzer';
 import { createL2CSClient, type L2CSClient } from '../l2cs/client';
-import type { FichaDoModelo } from '../l2cs/proveniencia';
+import { resumoDaFicha, type FichaDoModelo } from '../l2cs/proveniencia';
 import { desfazerRollNoOlhar } from '../l2cs/roll';
 import { suavizarRoll, type EstadoDoRoll } from '../l2cs/rollSuave';
 import { criarContextoDoOlho, recortarOlhoParaTensor } from '../olho/recorte';
@@ -48,7 +48,7 @@ import { SuavizadorDePose } from '../filters/suavizadorDePose';
 import { olharNoReferencialDaCabeca } from '../referencialDaCabeca';
 import { FOV_PADRAO_DEG } from '../camera/fovPorCamera';
 import type { L2CSGazeInput } from '../extractor';
-import { getRecentBlinkRatePerMinute, resetEarHistory } from '../extractor';
+import { ACTIVE_FEATURE_SET, getRecentBlinkRatePerMinute, resetEarHistory } from '../extractor';
 import * as recorder from '../telemetry/recorder';
 import type { RecordedQuality, RecordedTarget } from '../telemetry/types';
 import { EXPERIMENT } from '../config/experiment';
@@ -70,6 +70,10 @@ import { StageTimer, STAGE, type StageSnapshot } from '../telemetry/stageTimer';
  *  porque a saída dele não entra no vetor de features ativo. Distinto de
  *  `error`, que é o worker tendo tentado e falhado. */
 export type L2CSStatus = 'loading' | 'ready' | 'error' | 'disabled';
+
+/** Estado do ramo ocular (EyeNet). `desligado` = flag `eyeNet` em `off`, ou
+ *  engine descartado; `erro` = a carga falhou e o bloco ocular sai zerado. */
+export type StatusDoRamoOcular = 'desligado' | 'carregando' | 'pronto' | 'erro';
 
 export interface GazeSample {
   x: number;
@@ -330,10 +334,19 @@ export interface EngineDiagnostics {
     inputSize: number;
     cadenceMs: number;
   };
-  /** Ramo ocular (V2). `ativo` segue a flag `eyeNet`. */
+  /** Ramo ocular (V2): a EyeNet, um worker por olho. `ativo` segue a flag
+   *  `eyeNet`; `status` diz se o modelo de fato carregou. */
   olho: {
     ativo: boolean;
+    status: StatusDoRamoOcular;
+    /** Provider em vigor nos workers do olho; `null` antes do `ready`. */
+    executionProvider: string | null;
+    /** Inferências concluídas por segundo, somando os dois olhos. */
+    hz: number;
     latencyMs: number;
+    /** Leituras sem saída válida (por olho e por quadro), em %. Acima de 10 %
+     *  o bloco ocular passa boa parte do tempo zerado. */
+    stalePct: number;
     modelo: FichaDoModelo | null;
   };
   gaze: {
@@ -791,6 +804,15 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   // Ramo ocular (V2). Nulo por padrão: nenhum custo, vetor idêntico ao de antes.
   let ramoOcular: RamoOcular = ramoOcularNulo;
   let ramoOcularAtivo = false;
+  let statusDoRamoOcular: StatusDoRamoOcular = 'desligado';
+  // Contadores do ramo ocular, no molde dos do L2CS: leituras por olho e por
+  // quadro (válidas ou não) e inferências concluídas (o timestamp de captura
+  // muda quando chega resultado novo).
+  let olhoLeiturasValidas = 0;
+  let olhoLeiturasTotais = 0;
+  let olhoInferencias = 0;
+  let ultimoTsOlhoEsq = -1;
+  let ultimoTsOlhoDir = -1;
   let contextoOlhoEsq: CropContext | null = null;
   let contextoOlhoDir: CropContext | null = null;
   let l2csStatus: L2CSStatus = 'loading';
@@ -809,6 +831,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   let diagFramesSeen = 0;
   let diagL2csValidFrames = 0;
   let diagL2csTotalFrames = 0;
+  let diagOlhoHz = 0;
+  let diagOlhoStalePct = 0;
+  let diagOlhoValidas = 0;
+  let diagOlhoTotais = 0;
+  let diagOlhoInferencias = 0;
   let diagPose: { yaw: number; pitch: number; roll: number } = { yaw: 0, pitch: 0, roll: 0 };
   let latestIod = 0;
   let latestFaceCenter = { x: 0.5, y: 0.5 };
@@ -968,6 +995,18 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     l2csInferencias = 0;
     ultimoL2csTimestamp = -1;
     diagL2csInferencias = 0;
+    // Contadores do ramo ocular. O `statusDoRamoOcular` NÃO volta aqui: ele é
+    // do modelo carregado, que sobrevive ao `stop()` como o worker do L2CS.
+    olhoLeiturasValidas = 0;
+    olhoLeiturasTotais = 0;
+    olhoInferencias = 0;
+    ultimoTsOlhoEsq = -1;
+    ultimoTsOlhoDir = -1;
+    diagOlhoHz = 0;
+    diagOlhoStalePct = 0;
+    diagOlhoValidas = 0;
+    diagOlhoTotais = 0;
+    diagOlhoInferencias = 0;
     lastFpsLogMs = 0;
     diagFpsLogFrames = 0;
     stageTimer.reset();
@@ -1099,9 +1138,24 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     contextoOlhoDir = criarContextoDoOlho();
     ramoOcular = criarRamoOcularOnnx();
     ramoOcularAtivo = true;
+    statusDoRamoOcular = 'carregando';
+    console.log('[olho] modelo dos olhos: EyeNet (models/eyenet/eyenet.onnx), um worker por olho.');
+    // Um `dispose()` no meio da carga troca o ramo pelo nulo: a resposta que
+    // chega depois é de um ramo que já não existe e não pode mexer no status.
+    const ramoDestaCarga = ramoOcular;
     ramoOcular.start().then(
-      () => console.log('[olho] ramo ocular pronto (dois workers).'),
+      () => {
+        if (ramoOcular !== ramoDestaCarga) return;
+        statusDoRamoOcular = 'pronto';
+        const ficha = ramoOcular.ficha();
+        console.log(
+          `[olho] ramo ocular pronto: EyeNet nos dois olhos, provider ${ramoOcular.executionProvider() ?? '?'}` +
+          (ficha ? ` · ${resumoDaFicha(ficha)}` : ''),
+        );
+      },
       (err) => {
+        if (ramoOcular !== ramoDestaCarga) return;
+        statusDoRamoOcular = 'erro';
         // Falhou: volta ao nulo. O vetor do conjunto ativo continua exigindo o
         // bloco ocular, que sai zerado com motivo 'stale' — visível no
         // diagnóstico, e a S1 tira o peso dessas amostras.
@@ -1112,13 +1166,41 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     );
   }
 
+  /**
+   * Uma linha no console com as redes desta sessão. O ramo ocular reusa o
+   * worker do L2CS e roda JUNTO com a rede do rosto quando as duas flags estão
+   * ligadas; sem esta linha, `?olho=onnx` parecia não ter efeito, porque o
+   * console continuava falando da L2CS-Net.
+   */
+  function anunciarRedesDaSessao(): void {
+    const rosto = EXPERIMENT.l2cs === 'off'
+      ? 'desligada (?ep=off)'
+      : descricaoDoModelo(EXPERIMENT.modeloDoRosto).nome;
+    const olhos = EXPERIMENT.eyeNet === 'off' ? 'desligados (?olho=off)' : 'EyeNet';
+    console.log(`[IrisFlow] redes desta sessão — rosto: ${rosto} · olhos: ${olhos} · vetor: ${ACTIVE_FEATURE_SET}`);
+    if (EXPERIMENT.l2cs !== 'off' && EXPERIMENT.eyeNet !== 'off') {
+      console.log(
+        '[olho] a EyeNet roda JUNTO com a L2CS-Net do rosto. Para testar a EyeNet no lugar da ' +
+        'L2CS-Net, abra com ?ep=off&olho=onnx.',
+      );
+    }
+  }
+
   function initL2CSAsync(): void {
+    // Antes das mensagens de cada rede, e uma vez por carga: com o worker do
+    // rosto já carregado (um `start()` depois de `stop()`), nada é recarregado.
+    if (!l2csClient) anunciarRedesDaSessao();
     initRamoOcularAsync();
     if (l2csClient) return;
     if (EXPERIMENT.l2cs === 'off') {
-      // Sem o bloco angular, o modelo usa só as 4 features de íris.
+      // Sem o bloco angular, o modelo usa as features de íris (e as do olho,
+      // com o ramo ocular ligado).
       setL2CSStatus('disabled');
-      console.log('[L2CS] desligado por configuração (l2cs=off) — modelo só com features de íris.');
+      console.log(
+        EXPERIMENT.eyeNet === 'off'
+          ? '[L2CS] desligado por configuração (l2cs=off) — modelo só com features de íris.'
+          : '[L2CS] desligada por configuração (l2cs=off): nenhuma L2CS-Net roda nesta sessão — o vetor é íris + EyeNet.',
+      );
       return;
     }
     // O canvas nasce do tamanho configurado e é a fonte única do lado do crop:
@@ -1628,6 +1710,19 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             }
           }
           saidasDoOlho = ramoOcular.ultimas(startTimeMs);
+          // Contadores do diagnóstico (`olho.hz`, `olho.stalePct`): uma
+          // leitura por olho por quadro; inferência nova = timestamp novo.
+          olhoLeiturasTotais += 2;
+          const oe = saidasDoOlho.esquerdo;
+          const od = saidasDoOlho.direito;
+          if (oe?.valid) {
+            olhoLeiturasValidas++;
+            if (oe.timestamp !== ultimoTsOlhoEsq) { ultimoTsOlhoEsq = oe.timestamp; olhoInferencias++; }
+          }
+          if (od?.valid) {
+            olhoLeiturasValidas++;
+            if (od.timestamp !== ultimoTsOlhoDir) { ultimoTsOlhoDir = od.timestamp; olhoInferencias++; }
+          }
           if (l2csGaze == null) l2csGaze = { yaw: 0, pitch: 0, valid: false };
         }
 
@@ -2169,11 +2264,17 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       const deltaSec = (now - lastFpsLogMs) / 1000;
       const frames = framesSeen - diagFpsLogFrames;
       if (deltaSec > 0) {
+        const rosto = l2csStatus === 'disabled'
+          ? '| L2CS: desligada'
+          : `| L2CS: ${l2csInferencias} inferências (${l2csFramesValid} leituras válidas, ` +
+            `${l2csFramesStale} stale)`;
+        const olhos = ramoOcularAtivo
+          ? ` | EyeNet: ${olhoInferencias} inferências (${olhoLeiturasValidas} de ${olhoLeiturasTotais} leituras válidas)`
+          : '';
         console.log(
           `[IrisFlow] FPS: ${(frames / deltaSec).toFixed(1)} ` +
           `| Face: ${((framesWithFace / framesSeen) * 100).toFixed(0)}% ` +
-          `| L2CS: ${l2csInferencias} inferências (${l2csFramesValid} leituras válidas, ` +
-          `${l2csFramesStale} stale)`,
+          rosto + olhos,
         );
       }
       lastFpsLogMs = now;
@@ -2188,6 +2289,13 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     // Taxa de INFERÊNCIAS concluídas, não de leituras do cache.
     diagL2csHz = ((l2csInferencias - diagL2csInferencias) * 1000) / deltaMs;
     diagL2csStalePct = l2csTotal > 0 ? ((l2csTotal - l2csValid) / l2csTotal) * 100 : 0;
+    const olhoTotal = olhoLeiturasTotais - diagOlhoTotais;
+    const olhoValid = olhoLeiturasValidas - diagOlhoValidas;
+    diagOlhoHz = ((olhoInferencias - diagOlhoInferencias) * 1000) / deltaMs;
+    diagOlhoStalePct = olhoTotal > 0 ? ((olhoTotal - olhoValid) / olhoTotal) * 100 : 0;
+    diagOlhoValidas = olhoLeiturasValidas;
+    diagOlhoTotais = olhoLeiturasTotais;
+    diagOlhoInferencias = olhoInferencias;
 
     diagFramesSeen = framesSeen;
     diagL2csValidFrames = l2csFramesValid;
@@ -2294,6 +2402,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         contextoOlhoEsq = null;
         contextoOlhoDir = null;
       }
+      statusDoRamoOcular = 'desligado';
       qualityAnalyzer.dispose?.();
       medidorDeContraluz.dispose();
       calibration.dispose();
@@ -2491,7 +2600,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         },
         olho: {
           ativo: ramoOcularAtivo,
+          status: statusDoRamoOcular,
+          executionProvider: ramoOcular.executionProvider(),
+          hz: diagOlhoHz,
           latencyMs: ramoOcular.latenciaMediaMs(),
+          stalePct: diagOlhoStalePct,
           modelo: ramoOcular.ficha(),
         },
         gaze: {

@@ -1,7 +1,10 @@
 // Web Worker do L2CS-Net.
 //
 // Carrega o ONNX via onnxruntime-web e roda a inferência a pedido do client.
-// Existe para a ResNet-50 nunca bloquear o loop principal.
+// Existe para a ResNet-50 nunca bloquear o loop principal. O ramo ocular
+// reusa este mesmo worker para a EyeNet (uma instância por olho): por isso as
+// mensagens do console levam o `rotulo` que o client manda no `init`, e não
+// `[L2CS]` fixo.
 //
 // Os artefatos do ORT ficam em frontend/public/ort/ e são importados por URL,
 // o que evita a resolução de módulos do Vite dentro de Workers. O bundle
@@ -25,6 +28,8 @@ let ortApi: any = null;
 let saidaConferida = false;
 /** Multiplicadores de sinal da meta (`sinais`); +1/+1 no checkpoint Gaze360. */
 let sinais: { yaw: 1 | -1; pitch: 1 | -1 } = { yaw: 1, pitch: 1 };
+/** Prefixo das mensagens no console (vem no `init`; ver `L2CSWorkerRequest`). */
+let rotulo = '[L2CS]';
 
 function post(msg: L2CSWorkerResponse, transfer?: Transferable[]): void {
   if (transfer && transfer.length > 0) ctx.postMessage(msg, transfer);
@@ -109,11 +114,11 @@ async function init(
     // Não é fatal: o produto continua funcionando. Mas a ficha do relatório
     // passa a dizer que os pesos NÃO são os descritos, e isso é um alarme.
     console.error(
-      `[L2CS] SHA-256 do ONNX não confere com a meta — declarado ${declarado}, ` +
+      `${rotulo} SHA-256 do ONNX não confere com a meta — declarado ${declarado}, ` +
       `calculado ${sha256Calculado}. A ficha de proveniência não descreve este arquivo.`,
     );
   } else if (declarado === null && sha256Calculado) {
-    console.warn(`[L2CS] meta sem sha256; o arquivo carregado tem ${sha256Calculado}.`);
+    console.warn(`${rotulo} meta sem sha256; o arquivo carregado tem ${sha256Calculado}.`);
   }
 
   let ativo: 'webgpu' | 'wasm';
@@ -124,7 +129,7 @@ async function init(
         await criarSessao(modelBuf, 'webgpu');
         ativo = 'webgpu';
       } catch (e) {
-        console.warn('[L2CS] sessão WebGPU falhou, caindo para WASM:', e);
+        console.warn(`${rotulo} sessão WebGPU falhou, caindo para WASM:`, e);
         await criarSessao(modelBuf, 'wasm');
         ativo = 'wasm';
         fallback = true;
@@ -144,7 +149,7 @@ async function init(
   sinais = sinaisDaMeta(rawMeta);
   saidaConferida = false;
   console.log(
-    `[L2CS] sessão criada com executionProvider='${ativo}' (pedido: '${pedido}'), ` +
+    `${rotulo} sessão criada com executionProvider='${ativo}' (pedido: '${pedido}'), ` +
     `${rawMeta.outputBins} bins × ${rawMeta.binWidth}° desde ${rawMeta.binOffset}°, decodificação ${modo}`,
   );
   post({ type: 'ready', meta: rawMeta, executionProvider: ativo, requested: pedido, fallback, verificacao });
@@ -197,7 +202,7 @@ async function infer(id: number, tensor: Float32Array, dims?: [number, number]):
     if (nYaw !== meta.outputBins || nPitch !== meta.outputBins) {
       throw new Error(
         `a meta declara ${meta.outputBins} bins, mas o modelo devolveu ${nYaw} (yaw) e ${nPitch} (pitch). ` +
-        `Atualize l2cs.meta.json para o modelo carregado.`,
+        `Atualize a meta (.meta.json) do modelo carregado.`,
       );
     }
     saidaConferida = true;
@@ -222,6 +227,7 @@ ctx.addEventListener('message', async (ev: MessageEvent<L2CSWorkerRequest>) => {
   try {
     if (msg.type === 'init') {
       if (msg.ortBaseUrl) ortDir = msg.ortBaseUrl.endsWith('/') ? msg.ortBaseUrl : `${msg.ortBaseUrl}/`;
+      if (msg.rotulo) rotulo = msg.rotulo;
       await init(msg.modelUrl, msg.metaUrl, msg.provider);
     } else if (msg.type === 'infer') {
       await infer(msg.id, msg.tensor, msg.dims);

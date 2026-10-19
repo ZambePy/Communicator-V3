@@ -31,6 +31,7 @@ import { isDevMode } from '../../devMode';
 import { PreparoDaCalibracao } from '../calibration/PreparoDaCalibracao';
 import { ordemDaSequencia } from '../calibration/ordemDaGrade';
 import { EXPERIMENT, gravarExperimento } from '@tracker/config/experiment';
+import { olhoNaCalibracao } from '../../utils/olhoNaCalibracao';
 import { tutorialConcluido } from '../../services/local/tutorialProfile';
 import { useAuth } from '../../context/AuthContext';
 
@@ -103,7 +104,24 @@ export const CalibrationCheck: React.FC = () => {
   // `iris12`), o status virou 'disabled' — e sem esta linha o usuário ficaria
   // preso na tela de pré-calibração para sempre, esperando um modelo que nunca
   // vai carregar porque ninguém pediu que carregasse.
-  const l2csReady = l2csStatus === 'ready' || l2csStatus === 'disabled';
+  const l2csPronto = l2csStatus === 'ready' || l2csStatus === 'disabled';
+  // Ramo ocular (EyeNet): carrega à parte da rede do rosto e também precisa
+  // estar pronto antes de calibrar (`utils/olhoNaCalibracao.ts`). O status vem
+  // do diagnóstico do engine; com a flag desligada nem é consultado.
+  const [statusDoOlho, setStatusDoOlho] = useState<string | null>(() =>
+    EXPERIMENT.eyeNet === 'off' ? null : (getDiagnostics()?.olho?.status ?? null),
+  );
+  useEffect(() => {
+    if (EXPERIMENT.eyeNet === 'off') return;
+    const id = setInterval(() => {
+      const s = getDiagnostics()?.olho?.status ?? null;
+      setStatusDoOlho((antes) => (antes === s ? antes : s));
+    }, 300);
+    return () => clearInterval(id);
+  }, [getDiagnostics]);
+  const olho = olhoNaCalibracao(EXPERIMENT.eyeNet, statusDoOlho);
+  // "Os modelos estão prontos": a rede do rosto (ou desligada) E a dos olhos.
+  const l2csReady = l2csPronto && olho === 'livre';
   const podeComecar = l2csReady && checksProntos;
   const l2csFailed = l2csStatus === 'error';
   // 'error' tem duas causas. Na carga (arquivo ausente, sessão do ONNX que não
@@ -1171,6 +1189,18 @@ export const CalibrationCheck: React.FC = () => {
                     Modelo indisponível
                   </>
                 )}
+                {l2csPronto && olho === 'aguardando' && (
+                  <>
+                    <Loader2 size={20} style={{ animation: 'cfSpin 1s linear infinite' }} />
+                    Carregando o modelo dos olhos...
+                  </>
+                )}
+                {l2csPronto && olho === 'falhou' && (
+                  <>
+                    <AlertTriangle size={20} />
+                    Modelo dos olhos indisponível
+                  </>
+                )}
               </button>
 
               {/* Reaproveitar a calibração salva.
@@ -1272,11 +1302,11 @@ export const CalibrationCheck: React.FC = () => {
 
               <div
                 id="l2cs-status-message"
-                role={l2csFailed ? 'alert' : 'status'}
+                role={l2csFailed || (l2csPronto && olho === 'falhou') ? 'alert' : 'status'}
                 aria-live="polite"
                 style={{
                   fontSize: '0.88rem',
-                  color: l2csFailed ? DANGER : TEXT_DIM,
+                  color: l2csFailed || (l2csPronto && olho === 'falhou') ? DANGER : TEXT_DIM,
                   minHeight: '1.4rem',
                   maxWidth: 400,
                   lineHeight: 1.5,
@@ -1290,6 +1320,10 @@ export const CalibrationCheck: React.FC = () => {
                     : 'O modelo do olhar (L2CS) não carregou. Dá para calibrar só com a íris — o mesmo rastreamento do instalador.')}
                 {l2csFailed && !l2csNaoCarregou &&
                   'O modelo do olhar (L2CS) parou de responder: a imagem da câmera ficou parada ou escura. Ele volta sozinho quando a imagem voltar.'}
+                {l2csPronto && olho === 'aguardando' &&
+                  'Aguardando a EyeNet, o modelo dos olhos (alguns segundos). Não feche a página.'}
+                {l2csPronto && olho === 'falhou' &&
+                  'A EyeNet (modelo dos olhos) não carregou. Confira a pasta frontend/public/models/eyenet (LEIA-ME.txt) ou abra o app com ?olho=off.'}
               </div>
             </div>
           </div>

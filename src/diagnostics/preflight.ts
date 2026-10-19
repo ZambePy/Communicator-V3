@@ -77,6 +77,19 @@ export interface EntradaPreflight {
     modelo?: FichaDoModelo | null;
   };
 
+  /**
+   * Ramo ocular (EyeNet), quando a flag `eyeNet` está ligada. Ausente ou
+   * `ativo: false` = sem itens do olho: o preflight do produto não muda.
+   */
+  olho?: {
+    ativo: boolean;
+    /** `'carregando' | 'pronto' | 'erro' | 'desligado'` (engine). */
+    status: string;
+    executionProvider: string | null;
+    stalePct: number;
+    modelo?: FichaDoModelo | null;
+  } | null;
+
   /** Modo de filtragem pedido e o que de fato está governando. */
   filtro: { pedido: string; efetivo: string; degradado: boolean };
 
@@ -284,7 +297,14 @@ export function preflight(e: EntradaPreflight): ItemPreflight[] {
   }
 
   // ── L2CS ───────────────────────────────────────────────────────────────
-  if (e.l2cs.status !== 'ready') {
+  if (e.l2cs.status === 'disabled') {
+    // Desligada DE PROPÓSITO (`?ep=off`): é condição de medição — o caminho de
+    // "calibrar só com a íris" e o da EyeNet no lugar da L2CS-Net. Bloquear
+    // aqui impedia justamente as sessões sem rede do rosto. Fica a atenção,
+    // para ninguém medir sem a rede achando que ela estava ligada.
+    add('L2CS', 'atencao', 'desligada por configuração (`?ep=off`): nenhuma rede do rosto nesta sessão',
+      'Se a condição pretendida tem a rede do rosto, abra com `?ep=auto` e calibre de novo.');
+  } else if (e.l2cs.status !== 'ready') {
     add('L2CS', 'bloqueio', `status '${e.l2cs.status}'`,
       'Sessão sem L2CS pronto é descartada pelo protocolo de medição.');
   } else if (e.l2cs.stalePct > STALE_PCT_MAX) {
@@ -316,14 +336,13 @@ export function preflight(e: EntradaPreflight): ItemPreflight[] {
   // Não bloqueia a medição: a bancada pode e deve rodar o checkpoint Gaze360
   // para comparar. Bloqueia a LEITURA — quem vê "USO COMERCIAL PROIBIDO" numa
   // rodada de release sabe que aquele número não pode sair de casa.
-  if (e.l2cs.status === 'ready') {
-    const f = e.l2cs.modelo ?? null;
+  const avaliarPesos = (item: string, f: FichaDoModelo | null, acaoSemLicenca: string) => {
     if (!f) {
-      add('L2CS · pesos', 'atencao', 'ficha de proveniência ausente',
+      add(item, 'atencao', 'ficha de proveniência ausente',
         'A meta do modelo não traz `proveniencia`. O relatório não sabe dizer '
         + 'com que dado os pesos foram treinados nem sob que licença.');
     } else if (f.integridade === 'nao-confere') {
-      add('L2CS · pesos', 'bloqueio', `SHA-256 não confere (${f.arquivo ?? 'onnx'})`,
+      add(item, 'bloqueio', `SHA-256 não confere (${f.arquivo ?? 'onnx'})`,
         'O arquivo carregado não é o que a ficha descreve. Ou a meta é de '
         + 'outro modelo, ou o ONNX foi trocado sem atualizar a meta. Nenhum '
         + 'relatório desta sessão tem proveniência conhecida.');
@@ -333,12 +352,46 @@ export function preflight(e: EntradaPreflight): ItemPreflight[] {
         : f.usoComercial === 'proibido' ? 'USO COMERCIAL PROIBIDO' : 'uso comercial não declarado';
       const integridade = f.integridade === 'confere' ? 'hash confere'
         : f.integridade === 'nao-declarado' ? 'hash não declarado na meta' : 'hash não calculado';
-      add('L2CS · pesos', f.usoComercial === 'permitido' ? 'ok' : 'atencao',
+      add(item, f.usoComercial === 'permitido' ? 'ok' : 'atencao',
         `${f.bases.join(', ') || f.dataset} · ${uso} · ${integridade}`,
-        f.usoComercial === 'permitido'
-          ? null
-          : 'Vale para medir e comparar, não para distribuir. O V2 troca estes '
-            + 'pesos por um modelo treinado em base licenciada.');
+        f.usoComercial === 'permitido' ? null : acaoSemLicenca);
+    }
+  };
+
+  if (e.l2cs.status === 'ready') {
+    avaliarPesos('L2CS · pesos', e.l2cs.modelo ?? null,
+      'Vale para medir e comparar, não para distribuir. O V2 troca estes '
+      + 'pesos por um modelo treinado em base licenciada.');
+  }
+
+  // ── Ramo ocular (EyeNet) ───────────────────────────────────────────────
+  //
+  // Com a flag ligada, o conjunto ativo leva o bloco do olho. Se a EyeNet não
+  // carregou, o bloco sai zerado e a sessão mede só a íris sob o rótulo do
+  // ramo ocular — o "dado de aparência perfeita atribuído à condição errada"
+  // de que este arquivo existe para proteger.
+  if (e.olho?.ativo) {
+    const o = e.olho;
+    if (o.status === 'pronto') {
+      if (o.stalePct > STALE_PCT_MAX) {
+        add('olhos (EyeNet)', 'bloqueio', `${o.stalePct.toFixed(1)}% das leituras sem saída válida`,
+          'O bloco do olho está sendo zerado boa parte do tempo. Confira o '
+          + 'provider (WASM é mais lento) e o enquadramento dos olhos.');
+      } else {
+        add('olhos (EyeNet)', 'ok',
+          `${o.executionProvider ?? 'provider desconhecido'}, stale ${o.stalePct.toFixed(1)}%`);
+      }
+      avaliarPesos('olhos · pesos', o.modelo ?? null,
+        'Vale para medir e comparar, não para distribuir: a licença dos pesos '
+        + 'não está resolvida (LEIA-ME da pasta do modelo).');
+    } else if (o.status === 'erro') {
+      add('olhos (EyeNet)', 'bloqueio', 'o modelo dos olhos não carregou',
+        'Veja a mensagem `[olho]` no console. O modelo fica em '
+        + '`frontend/public/models/eyenet/` (LEIA-ME.txt da pasta); sem ele, '
+        + 'a sessão mediria só a íris.');
+    } else {
+      add('olhos (EyeNet)', 'bloqueio', `status '${o.status}'`,
+        'Espere a EyeNet carregar (alguns segundos) e verifique de novo.');
     }
   }
 

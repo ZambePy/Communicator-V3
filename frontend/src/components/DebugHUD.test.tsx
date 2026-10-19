@@ -19,8 +19,10 @@ const diag = {
   stageLatency: {},
 };
 
+let diagAtual: Record<string, unknown> = diag;
+
 vi.mock('../context/GazeContext', () => ({
-  useGaze: () => ({ getDiagnostics: () => diag, state: 'tracking' }),
+  useGaze: () => ({ getDiagnostics: () => diagAtual, state: 'tracking' }),
 }));
 vi.mock('../urlParams', () => ({ lerParametroDeUrl: (nome: string) => (nome === 'debug' ? '1' : null) }));
 
@@ -36,5 +38,38 @@ describe('<DebugHUD />', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('<DebugHUD /> — redes em uso', () => {
+  // `?olho=onnx` liga a EyeNet; com `?ep=off` a L2CS-Net não roda. O HUD só
+  // falava da L2CS-Net, com os números zerados de uma rede desligada.
+  async function renderizar(d: Record<string, unknown>): Promise<string> {
+    diagAtual = d;
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<DebugHUD />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      return container.textContent ?? '';
+    } finally {
+      vi.useRealTimers();
+      diagAtual = diag;
+    }
+  }
+
+  it('L2CS desligada aparece como desligada, e a EyeNet pronta ganha linha própria', async () => {
+    const texto = await renderizar({
+      ...diag,
+      olho: { ativo: true, status: 'pronto', executionProvider: 'webgpu', hz: 58, latencyMs: 4, stalePct: 2, modelo: null },
+    });
+    expect(texto).toMatch(/desligada \(\?ep=off\)/);
+    expect(texto).toMatch(/EyeNet pronto · webgpu · 58\.0 Hz · 4 ms · stale 2 %/);
+  });
+
+  it('sem a flag do olho, a linha da EyeNet não aparece', async () => {
+    const texto = await renderizar({ ...diag, olho: { ativo: false, status: 'desligado' } });
+    expect(texto).not.toMatch(/EyeNet/);
   });
 });
