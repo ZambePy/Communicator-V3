@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act, within } from '@testing-library/react';
+import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import React from 'react';
 import { definirPerfilAtivo, setConsent } from '../../utils/clinicalLogger';
@@ -18,6 +18,19 @@ vi.mock('../../context/AuthContext', () => ({
 }));
 
 import { FolhaDaConsulta } from './FolhaDaConsulta';
+
+/**
+ * Espera o fluxo de imprimir/salvar terminar de verdade: a ponte foi chamada e o
+ * botão voltou ao rótulo de repouso, habilitado. O fluxo espera dois quadros de
+ * pintura antes de chamar a ponte, e os 50 ms fixos de antes não bastaram no
+ * Windows do GitHub (Release #14, 22/10/2026).
+ */
+async function esperarFim(botao: RegExp, chamado: () => void): Promise<void> {
+  await waitFor(() => {
+    chamado();
+    expect(screen.getByRole('button', { name: botao })).toBeEnabled();
+  }, { timeout: 5000 });
+}
 
 const AGORA = Date.parse('2026-10-21T15:00:00Z');
 
@@ -98,8 +111,7 @@ describe('FolhaDaConsulta', () => {
       });
       render(<FolhaDaConsulta />);
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: /imprimir folha/i })); });
-      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
-      expect(print).toHaveBeenCalledTimes(1);
+      await esperarFim(/imprimir folha/i, () => expect(print).toHaveBeenCalledTimes(1));
       expect(copia).toBe(true);
       expect(modo).toBe(true);
       expect(document.body.querySelector('.consulta-impressao')).toBeNull();
@@ -116,8 +128,7 @@ describe('FolhaDaConsulta', () => {
       render(<FolhaDaConsulta />);
       fireEvent.click(screen.getByRole('button', { name: '30 dias' }));
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: /imprimir folha/i })); });
-      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
-      expect(linhas).toBe(30);
+      await esperarFim(/imprimir folha/i, () => expect(linhas).toBe(30));
     });
 
     it('no app instalado: vai pelo processo principal (sem window.print) e diz em qual impressora saiu', async () => {
@@ -131,8 +142,7 @@ describe('FolhaDaConsulta', () => {
       ponte({ salvarPdf: vi.fn(), imprimir });
       render(<FolhaDaConsulta />);
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: /imprimir folha/i })); });
-      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
-      expect(imprimir).toHaveBeenCalledTimes(1);
+      await esperarFim(/imprimir folha/i, () => expect(imprimir).toHaveBeenCalledTimes(1));
       expect(print).not.toHaveBeenCalled();
       expect(copiaNaHora).toBe(true);
       expect(screen.getByRole('status')).toHaveTextContent('Folha enviada para a impressora HP LaserJet.');
@@ -145,10 +155,12 @@ describe('FolhaDaConsulta', () => {
       ponte({ salvarPdf: vi.fn(), imprimir });
       render(<FolhaDaConsulta />);
       const botao = screen.getByRole('button', { name: /imprimir folha/i });
-      await act(async () => { fireEvent.click(botao); await new Promise((r) => setTimeout(r, 50)); });
+      await act(async () => { fireEvent.click(botao); });
+      await esperarFim(/imprimir folha/i, () => expect(imprimir).toHaveBeenCalledTimes(1));
       expect(screen.queryByRole('status')).toBeNull();
       expect(screen.queryByRole('alert')).toBeNull();
-      await act(async () => { fireEvent.click(botao); await new Promise((r) => setTimeout(r, 50)); });
+      await act(async () => { fireEvent.click(botao); });
+      await esperarFim(/imprimir folha/i, () => expect(imprimir).toHaveBeenCalledTimes(2));
       expect(screen.getByRole('alert')).toHaveTextContent('A impressora recusou o trabalho.');
     });
   });
@@ -164,8 +176,7 @@ describe('FolhaDaConsulta', () => {
       const pdf = screen.getByRole('button', { name: /salvar em pdf/i });
       expect(pdf).toHaveAttribute('data-no-dwell', 'true');
       await act(async () => { fireEvent.click(pdf); });
-      await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
-      expect(salvarPdf).toHaveBeenCalledTimes(1);
+      await esperarFim(/salvar em pdf/i, () => expect(salvarPdf).toHaveBeenCalledTimes(1));
       expect(screen.getByRole('status')).toHaveTextContent('Folha salva em C:\\Users\\Ana\\Documents');
       expect(document.body.querySelector('.consulta-impressao')).toBeNull();
     });
@@ -177,10 +188,12 @@ describe('FolhaDaConsulta', () => {
       ponte({ salvarPdf });
       render(<FolhaDaConsulta />);
       const pdf = screen.getByRole('button', { name: /salvar em pdf/i });
-      await act(async () => { fireEvent.click(pdf); await new Promise((r) => setTimeout(r, 50)); });
+      await act(async () => { fireEvent.click(pdf); });
+      await esperarFim(/salvar em pdf/i, () => expect(salvarPdf).toHaveBeenCalledTimes(1));
       expect(screen.queryByRole('status')).toBeNull();
       expect(screen.queryByRole('alert')).toBeNull();
-      await act(async () => { fireEvent.click(pdf); await new Promise((r) => setTimeout(r, 50)); });
+      await act(async () => { fireEvent.click(pdf); });
+      await esperarFim(/salvar em pdf/i, () => expect(salvarPdf).toHaveBeenCalledTimes(2));
       expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível gravar o arquivo nessa pasta.');
     });
   });
