@@ -20,19 +20,29 @@ beforeEach(() => {
 })
 
 describe('<Contato /> — validação em tempo real', () => {
-  it('o botão de enviar fica desabilitado até tudo estar válido', () => {
+  it('o botão de enviar fica ativo; com campo faltando, diz qual e leva o foco ao primeiro', () => {
     montar()
     const enviarBtn = screen.getByRole('button', { name: 'Enviar mensagem' })
-    expect(enviarBtn).toBeDisabled()
+    expect(enviarBtn).toBeEnabled()
+
+    fireEvent.click(enviarBtn)
+    expect(enviar).not.toHaveBeenCalled()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Para enviar, falta preencher ou corrigir: nome, e-mail, quem é você e mensagem.',
+    )
+    expect(screen.getByLabelText('Nome completo')).toHaveFocus()
 
     fireEvent.change(screen.getByLabelText('Nome completo'), { target: { value: 'Maria Souza' } })
     fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'maria@exemplo.com.br' } })
     fireEvent.change(screen.getByLabelText('Você é'), { target: { value: 'familiar' } })
-    expect(enviarBtn).toBeDisabled()
+    fireEvent.click(enviarBtn)
+    expect(screen.getByRole('status')).toHaveTextContent('Para enviar, falta preencher ou corrigir: mensagem.')
+    expect(screen.getByLabelText('Mensagem')).toHaveFocus()
 
     fireEvent.change(screen.getByLabelText('Mensagem'), {
       target: { value: 'Minha mãe tem ELA e queria saber se ela consegue usar.' },
     })
+    expect(screen.queryByRole('status')).toBeNull()
     expect(enviarBtn).toBeEnabled()
   })
 

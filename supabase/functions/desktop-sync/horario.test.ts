@@ -8,6 +8,7 @@ import {
   IDADE_MAXIMA_MS,
   TOLERANCIA_FUTURO_MS,
   chegouComAtraso,
+  corpoDoPedido,
   horaDeBrasilia,
   horarioDoEvento,
 } from './horario.ts';
@@ -85,4 +86,11 @@ Deno.test('atraso relevante a partir de 2 min', () => {
 
 Deno.test('hora curta no horário de Brasília', () => {
   strictEqual(horaDeBrasilia('2026-09-23T14:30:00.000Z'), '11:30');
+});
+
+Deno.test('texto do push: o pedido que chegou com atraso diz a hora em que foi feito; o recente vai como está', () => {
+  strictEqual(corpoDoPedido('Dor', menos(60_000), AGORA), 'Dor');
+  strictEqual(corpoDoPedido('Dor', '2026-09-23T14:30:00.000Z', AGORA), 'Dor — pedido às 11:30, chegou com atraso');
+  strictEqual(corpoDoPedido('', '2026-09-23T14:30:00.000Z', AGORA), 'pedido às 11:30, chegou com atraso');
+  strictEqual(corpoDoPedido('', AGORA.toISOString(), AGORA), '');
 });

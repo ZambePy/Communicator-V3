@@ -4,7 +4,8 @@
  *
  *   falar(texto) → voz clonada local, se estiver pronta e liberada;
  *                  senão, voz do sistema. Nunca lança; sempre fala com
- *                  alguma voz ou explica por que não falou.
+ *                  alguma voz ou explica por que não falou
+ *                  (`{ origem: 'nenhuma', motivo }`).
  *
  * Alarmes (emergência) e a leitura das mensagens do CUIDADOR não passam por
  * aqui de propósito: não são a fala do paciente e não devem sair na voz dele
@@ -19,19 +20,16 @@ import type { EstadoDoMotorDeVoz } from '@tracker/voz/protocolo';
 import { LICENSE_KEY } from '../../context/LicenseContext';
 import type { Plan } from '../license/types';
 import { pararVozClonada, ponteDaVoz, tocarWav, type PonteDaVoz } from './local';
-import { falarComVozDoSistema, pararVozDoSistema, type OpcoesDaVozDoSistema } from './sistema';
+import { falarComVozDoSistemaComDesfecho, pararVozDoSistema, type OpcoesDaVozDoSistema } from './sistema';
+import { comAFalaDoPacienteMarcada } from './falaEmCurso';
+import type { ResultadoDaFala } from './resultado';
 
-export type OrigemDaVoz = 'clonada' | 'sistema' | 'nenhuma';
+export type { OrigemDaVoz, ResultadoDaFala } from './resultado';
+export { falaSaiu, falaFalhou } from './resultado';
 
 export interface OpcoesDeFala extends OpcoesDaVozDoSistema {
   /** Força a voz do sistema mesmo com a clonada pronta. */
   sistema?: boolean;
-}
-
-export interface ResultadoDaFala {
-  origem: OrigemDaVoz;
-  /** Por que a clonada não foi usada, quando havia intenção de usá-la. */
-  motivo?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,62 +125,124 @@ let turno = 0;
 
 const esperar = (ms: number) => new Promise<null>((r) => setTimeout(() => r(null), ms));
 
-export async function falar(texto: string, opcoes: OpcoesDeFala = {}): Promise<ResultadoDaFala> {
-  const t = texto.trim();
-  if (!t) return { origem: 'nenhuma', motivo: 'texto vazio' };
-  const meuTurno = ++turno;
-  pararFala();
-  // Primeira fala do app: o espelho do estado pode ainda não ter chegado.
-  if (!opcoes.sistema && estadoAtual === null) await acompanharEstadoDaVoz();
-  const ponte = ponteDaVoz();
+/** O que a tentativa com a voz clonada deu. */
+type TentativaClonada =
+  | { desfecho: 'tocou' }
+  | { desfecho: 'substituida' }
+  /** Começou a decodificar e alguém parou a voz antes do som sair. */
+  | { desfecho: 'interrompida' }
+  /** A clonada não serve agora: fala com a do sistema (`motivo` diz por quê). */
+  | { desfecho: 'usar_sistema'; motivo?: string };
 
-  if (!opcoes.sistema && ponte && vozClonadaPronta()) {
+/**
+ * A voz clonada, inteira dentro de um `try`.
+ *
+ * Relato de 18/10/2026 (auditoria de falhas silenciosas, item 5): o
+ * `sintetizar` do cache e o `Promise.race` da geração ficavam fora de qualquer
+ * `try`, embora o contrato de `falar()` seja "nunca lança". Quando o IPC
+ * rejeitava (arquivo do cache preso pelo antivírus, apagado no meio da leitura),
+ * `falar()` rejeitava, as telas só registravam no console, e a frase sumia —
+ * sem cair para a voz do sistema. Agora qualquer exceção aqui vira "usar a voz
+ * do sistema".
+ */
+async function tentarVozClonada(
+  t: string,
+  opcoes: OpcoesDeFala,
+  substituida: () => boolean,
+): Promise<TentativaClonada> {
+  try {
+    // Primeira fala do app: o espelho do estado pode ainda não ter chegado.
+    if (estadoAtual === null) await acompanharEstadoDaVoz();
+    const ponte = ponteDaVoz();
+    if (!ponte || !vozClonadaPronta()) return { desfecho: 'usar_sistema' };
+
     // 1. Já está no cache? Toca na hora.
     const emCache = await ponte.sintetizar(t, { soCache: true });
-    if (turno !== meuTurno) return { origem: 'nenhuma', motivo: 'substituida' };
+    if (substituida()) return { desfecho: 'substituida' };
+    let wav: ArrayBuffer;
     if (emCache.ok) {
-      try {
-        await tocarWav(emCache.wav);
-        return { origem: 'clonada' };
-      } catch (e) {
-        console.warn('[voz] falha ao tocar o cache, usando a voz do sistema:', e);
-      }
+      wav = emCache.wav;
     } else if (emCache.motivo === 'nao_em_cache') {
       // 2. Gera com prazo. Dentro do prazo, toca clonada; fora dele, fala com
       //    o sistema agora e deixa a geração terminar para o cache.
       const geracao = ponte.sintetizar(t);
+      // A geração segue sozinha quando não é esperada: uma falha depois do
+      // prazo não pode virar rejeição sem dono.
+      geracao.catch(() => undefined);
       const vencedor = await Promise.race([geracao.then((r) => ({ r })), esperar(ORCAMENTO_DA_VOZ_CLONADA_MS)]);
-      if (turno !== meuTurno) {
-        geracao.catch(() => undefined);
-        return { origem: 'nenhuma', motivo: 'substituida' };
+      if (substituida()) return { desfecho: 'substituida' };
+      if (!vencedor) return { desfecho: 'usar_sistema', motivo: 'demorou' };
+      if (!vencedor.r.ok) {
+        console.warn('[voz] clonada indisponível, usando a voz do sistema:', vencedor.r.motivo, vencedor.r.erro ?? '');
+        return { desfecho: 'usar_sistema', motivo: vencedor.r.motivo };
       }
-      if (vencedor && vencedor.r.ok) {
-        try {
-          await tocarWav(vencedor.r.wav);
-          return { origem: 'clonada' };
-        } catch (e) {
-          console.warn('[voz] falha ao tocar, usando a voz do sistema:', e);
-        }
-      } else if (vencedor && !vencedor.r.ok) {
-        const falha = vencedor.r;
-        console.warn('[voz] clonada indisponível, usando a voz do sistema:', falha.motivo, falha.erro ?? '');
-        await falarComVozDoSistema(t, opcoes);
-        return { origem: 'sistema', motivo: falha.motivo };
-      } else if (!vencedor) {
-        geracao.catch(() => undefined);
-        await falarComVozDoSistema(t, opcoes);
-        return { origem: 'sistema', motivo: 'demorou' };
-      }
+      wav = vencedor.r.wav;
     } else {
       console.warn('[voz] clonada indisponível, usando a voz do sistema:', emCache.motivo, emCache.erro ?? '');
-      await falarComVozDoSistema(t, opcoes);
-      return { origem: 'sistema', motivo: emCache.motivo };
+      return { desfecho: 'usar_sistema', motivo: emCache.motivo };
     }
+
+    const tocou = await tocarWav(wav, opcoes.aoComecar);
+    if (substituida()) return { desfecho: 'substituida' };
+    return tocou ? { desfecho: 'tocou' } : { desfecho: 'interrompida' };
+  } catch (e) {
+    console.warn('[voz] a voz clonada falhou, usando a voz do sistema:', e);
+    return { desfecho: 'usar_sistema', motivo: 'erro' };
+  }
+}
+
+/**
+ * Último aviso no console por motivo de silêncio: a frase que não saiu vai
+ * para o console uma vez a cada minuto por motivo, não a cada "Falar".
+ */
+const ultimoAvisoDeSilencio = new Map<string, number>();
+const INTERVALO_DO_AVISO_DE_SILENCIO_MS = 60_000;
+
+function avisarSilencio(motivo: string): void {
+  const agora = Date.now();
+  const ultimo = ultimoAvisoDeSilencio.get(motivo) ?? -Infinity;
+  if (agora - ultimo < INTERVALO_DO_AVISO_DE_SILENCIO_MS) return;
+  ultimoAvisoDeSilencio.set(motivo, agora);
+  console.warn(`[voz] a fala do paciente não saiu (${motivo}); a tela mostra o texto em letra grande.`);
+}
+
+/**
+ * Fala `texto` em nome do paciente.
+ *
+ * Do instante da chamada até a fala acabar — a espera pela voz clonada
+ * inclusive —, `pacienteFalando()` (`./falaEmCurso`) é verdadeiro: a varredura
+ * falada do Plano B (rodada 3, 21/10/2026) consulta isso antes de anunciar um
+ * botão, porque a voz do sistema começa com `cancel()` e cortaria a frase.
+ */
+export function falar(texto: string, opcoes: OpcoesDeFala = {}): Promise<ResultadoDaFala> {
+  return comAFalaDoPacienteMarcada(() => falarDeVerdade(texto, opcoes));
+}
+
+async function falarDeVerdade(texto: string, opcoes: OpcoesDeFala): Promise<ResultadoDaFala> {
+  const t = texto.trim();
+  if (!t) return { origem: 'nenhuma', motivo: 'texto vazio' };
+  const meuTurno = ++turno;
+  const substituida = () => turno !== meuTurno;
+  pararFala();
+
+  let motivoDaClonada: string | undefined;
+  if (!opcoes.sistema) {
+    const tentativa = await tentarVozClonada(t, opcoes, substituida);
+    if (tentativa.desfecho === 'tocou') return { origem: 'clonada' };
+    if (tentativa.desfecho === 'substituida') return { origem: 'nenhuma', motivo: 'substituida' };
+    if (tentativa.desfecho === 'interrompida') return { origem: 'nenhuma', motivo: 'interrompida' };
+    motivoDaClonada = tentativa.motivo;
   }
 
-  if (turno !== meuTurno) return { origem: 'nenhuma', motivo: 'substituida' };
-  await falarComVozDoSistema(t, opcoes);
-  return { origem: 'sistema' };
+  if (substituida()) return { origem: 'nenhuma', motivo: 'substituida' };
+  // O desfecho da voz do sistema era descartado: a tela dizia "falou" com o
+  // sistema sem voz instalada ou o sintetizador travado.
+  const d = await falarComVozDoSistemaComDesfecho(t, opcoes);
+  if (substituida()) return { origem: 'nenhuma', motivo: 'substituida' };
+  if (d.falou) return motivoDaClonada ? { origem: 'sistema', motivo: motivoDaClonada } : { origem: 'sistema' };
+  if (d.motivo === 'interrompida') return { origem: 'nenhuma', motivo: 'interrompida' };
+  avisarSilencio(d.motivo);
+  return { origem: 'nenhuma', motivo: d.motivo };
 }
 
 /**
@@ -213,4 +273,5 @@ export function _redefinirVoz(): void {
   cancelarAssinatura = null;
   carregando = null;
   ouvintes.clear();
+  ultimoAvisoDeSilencio.clear();
 }

@@ -24,6 +24,7 @@ import {
   tamanhoDoModelo,
   type ModeloDoAssistente,
 } from '@tracker/assistente';
+import { apagarAprendizadoDoPaciente, apagarTudoDoPaciente } from './chavesPorPaciente';
 
 export const CHAVE_DO_MODELO = 'irisflow.assistente.v1';
 
@@ -38,6 +39,12 @@ export const chaveDoModeloDoPerfil = (perfilId: string): string => `${CHAVE_DO_M
 
 let perfil: string | null = null;
 const chaveAtual = (): string => (perfil ? chaveDoModeloDoPerfil(perfil) : CHAVE_DO_MODELO);
+
+/**
+ * De quem é o modelo em uso. As abreviações e a taxa de aceitação das sugestões
+ * guardam as chaves delas por este mesmo paciente (`chavesPorPaciente.ts`).
+ */
+export const perfilDoAssistente = (): string | null => perfil;
 
 /** Chaves do preditor antigo, lidas uma única vez para não perder o aprendido. */
 const CHAVES_ANTIGAS = {
@@ -119,6 +126,9 @@ export function apagarModeloDoPerfil(perfilId: string): void {
   } catch {
     /* nada a fazer */
   }
+  // As abreviações, as frases curtas contadas e a aceitação das sugestões
+  // também eram dele (rodada 3, 21/10/2026).
+  apagarTudoDoPaciente(perfilId);
 }
 
 /** O modelo em memória, carregando do disco na primeira chamada. */
@@ -220,6 +230,24 @@ export function descarregar(): void {
   if (memoria) gravarAgora(memoria);
 }
 
+/**
+ * Esquece o modelo que está na memória SEM gravá-lo (restauração de backup,
+ * 21/10/2026). A restauração põe o vocabulário do backup direto no
+ * `localStorage` e recarrega a página; mas `main.tsx` grava a memória ao fechar a
+ * janela (`pagehide` → `descarregar`), e o modelo de ANTES da restauração
+ * sobrescreveria o recém-restaurado. Aqui a gravação adiada é cancelada e a
+ * memória solta; o paciente do assistente continua o mesmo (diferente de
+ * `reiniciarParaTeste`), e a próxima leitura vem do armazenamento.
+ */
+export function esquecerSemGravar(): void {
+  if (gravacaoAgendada) {
+    clearTimeout(gravacaoAgendada);
+    gravacaoAgendada = null;
+  }
+  memoria = null;
+  aprendizadosDesdeAPoda = 0;
+}
+
 /** Apaga tudo o que o assistente aprendeu, inclusive o resíduo do preditor antigo. */
 export function apagarModelo(): void {
   memoria = modeloVazio();
@@ -236,6 +264,9 @@ export function apagarModelo(): void {
   } catch {
     /* nada a fazer */
   }
+  // O que o aparelho aprendeu para as abreviações e a taxa de aceitação das
+  // sugestões também é "aprendizado". As abreviações escritas à mão ficam.
+  apagarAprendizadoDoPaciente(perfil);
 }
 
 /** O que a tela de ajustes mostra sobre o aprendizado. */

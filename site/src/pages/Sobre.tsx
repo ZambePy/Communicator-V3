@@ -1,6 +1,5 @@
 import { PageHead } from '@/components/layout/PageHead'
 import { Capitulo, Numeros, Recursos } from '@/components/pagina/Blocos'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Picture } from '@/components/ui/Picture'
 import { Portrait } from '@/components/ui/Portrait'
@@ -18,6 +17,7 @@ import {
   VALUES,
 } from '@/data/content'
 import './sobre.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 const SITUACAO: Record<string, string> = {
   Concluído: 'is-feito',
@@ -34,11 +34,11 @@ const SITUACAO: Record<string, string> = {
 export default function Sobre() {
   return (
     <>
+      <FundoDaPagina />
       <PageHead
         eyebrow="A empresa"
         title="Para nenhuma família ficar sem voz."
-        highlight={['voz.']}
-        lead="Somos três pessoas construindo a comunicação pelo olhar que cabe no computador que a família já tem — sem aparelho de dezenas de milhares de reais."
+        lead="Somos três pessoas fazendo um comunicador por olhar que funciona no computador que a família já tem, sem aparelho de dezenas de milhares de reais."
         visual={
           <figure className="sobre-foto">
             <Picture
@@ -79,7 +79,6 @@ export default function Sobre() {
       </section>
 
       <section className="faixa on-dark" aria-labelledby="pesquisa-titulo">
-        <AmbientBackground variante="suave" />
         <div className="container">
           <Capitulo
             id="pesquisa-titulo"
@@ -127,7 +126,6 @@ export default function Sobre() {
       </section>
 
       <section className="faixa on-dark" aria-labelledby="valores-titulo">
-        <AmbientBackground variante="suave" />
         <div className="container">
           <Capitulo
             id="valores-titulo"
@@ -178,7 +176,12 @@ export default function Sobre() {
         </div>
       </section>
 
-      <CallToAction />
+      <CallToAction
+        titulo="Conheça o programa de validação."
+        texto="Clínicas, associações e profissionais de saúde usam o IrisFlow de graça por noventa dias e nos ajudam a melhorá-lo. Se você é um deles, escreva."
+        principal={{ label: 'Ver como participar', to: '/contato#validacao' }}
+        secundario={false}
+      />
     </>
   )
 }

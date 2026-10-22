@@ -18,12 +18,22 @@
 //   `irisflowVoz`    — motor de voz local (clonagem): status, importar
 //                      áudio de referência, sintetizar. Áudio e modelo ficam
 //                      na pasta de dados do app; nada disto sai do computador.
+//   `irisflowBackup` — a cópia de segurança que o app guarda ANTES de restaurar
+//                      um backup (a página manda só o texto; o main escolhe a pasta).
 import { contextBridge, ipcRenderer } from 'electron';
 import { CANAIS } from '../src/computador/protocolo';
 import type { SelecaoDaSobreposicao } from '../src/computador/protocolo';
 import type { AmostraDeOlhar, CapacidadesDoSistema, MotivoDeSaida } from '../src/computador/protocolo';
 import { CANAIS_VOZ } from '../src/voz/protocolo';
-import type { EstadoDoMotorDeVoz, OpcoesDeSintese, ResultadoDaImportacao, ResultadoDaSintese } from '../src/voz/protocolo';
+import type { EstadoDoMotorDeVoz, OpcoesDeSintese, ResultadoDaImportacao, ResultadoDaRemocaoDoPerfil, ResultadoDaSintese } from '../src/voz/protocolo';
+import { CANAL_DA_BATIDA } from '../src/vigiaDoRenderer';
+import { CANAIS_VOZ_GUARDADA } from '../src/voz/vozGuardada';
+import type {
+  ArquivoParaRestaurar, PedidoDeSalvar, ResultadoDaListaDoBackup, ResultadoDaListagem, ResultadoDaRestauracaoDaVoz, ResultadoDeLer,
+  ResultadoDeLerParaBackup, ResultadoDeSalvar, ResultadoSimples,
+} from '../src/voz/vozGuardada';
+import { CANAL_DA_COPIA_DE_SEGURANCA } from '../src/backup/protocolo';
+import type { ResultadoDaCopiaDeSeguranca } from '../src/backup/protocolo';
 
 export interface PhysicalPanelSizeIPC {
   widthCm: number;
@@ -56,10 +66,22 @@ contextBridge.exposeInMainWorld('irisflowSystem', {
     return () => ipcRenderer.removeListener('irisflow:tela-mudou', handler);
   },
 
+  /** Alarme de emergência do lado do sistema (electron/alarme.ts): `true`
+   *  traz a janela para a frente, por cima de tudo, e — com `volumeMaximo` —
+   *  sobe o volume do Windows; `false` desfaz e devolve o volume. */
+  alarme: (ligar: boolean, opcoes?: { volumeMaximo?: boolean }): Promise<boolean> =>
+    ipcRenderer.invoke('irisflow:alarme', ligar, opcoes),
+
   /** Abre a pasta de registros do app (log do processo principal, sem imagem
    *  nem texto do paciente) no gerenciador de arquivos — para anexar num
    *  pedido de suporte. `false` se não deu. */
   abrirPastaDosLogs: (): Promise<boolean> => ipcRenderer.invoke('irisflow:abrir-pasta-dos-logs'),
+
+  /** Batida do laço do rastreador para o vigia de página travada do main
+   *  (`electron/vigiaDoRenderer.ts`). `send`, sem resposta; só o booleano
+   *  atravessa — nada do que a página mandar além disso chega ao main. */
+  vivo: (batida: { rastreando: boolean }): void =>
+    ipcRenderer.send(CANAL_DA_BATIDA, { rastreando: batida?.rastreando === true }),
 
   desktop: {
     capacidades: (): Promise<CapacidadesDoSistema> => ipcRenderer.invoke(CANAIS.capacidades),
@@ -94,6 +116,11 @@ contextBridge.exposeInMainWorld('irisflowVoz', {
   importar: (consentimento: { texto: string; aceitoEm: string; perfilId: string | null }): Promise<ResultadoDaImportacao> =>
     ipcRenderer.invoke(CANAIS_VOZ.importar, consentimento),
   remover: (): Promise<void> => ipcRenderer.invoke(CANAIS_VOZ.remover),
+  /**
+   * Remover o paciente (N1, 21/10/2026): apaga a voz clonada importada SÓ se o termo dela for deste
+   * perfil. Só o id do perfil sai daqui; o main compara com o termo que gravou.
+   */
+  removerDoPerfil: (perfilId: string): Promise<ResultadoDaRemocaoDoPerfil> => ipcRenderer.invoke(CANAIS_VOZ.removerDoPerfil, perfilId),
   baixarModelo: (): Promise<{ ok: boolean; erro?: string }> => ipcRenderer.invoke(CANAIS_VOZ.baixarModelo),
   sintetizar: (texto: string, opcoes?: OpcoesDeSintese): Promise<ResultadoDaSintese> => ipcRenderer.invoke(CANAIS_VOZ.sintetizar, texto, opcoes ?? {}),
   /** Acorda o motor e consulta status/dispositivo (tela de Voz). */
@@ -124,4 +151,58 @@ contextBridge.exposeInMainWorld('irisflowAtualizacao', {
     ipcRenderer.on('irisflow:atualizacao-mudou', ouvinte);
     return () => ipcRenderer.removeListener('irisflow:atualizacao-mudou', ouvinte);
   },
+});
+
+// Voz guardada (19/10/2026): frases gravadas pelo próprio paciente, guardadas
+// em `userData/voz/guardadas/` (nada sai do computador). A página manda e
+// recebe o WAV e escolhe as gravações pelo id — nunca por caminho de arquivo.
+contextBridge.exposeInMainWorld('irisflowVozGuardada', {
+  listar: (): Promise<ResultadoDaListagem> => ipcRenderer.invoke(CANAIS_VOZ_GUARDADA.listar),
+  consentir: (consentimento: { texto: string; aceitoEm: string; perfilId: string | null }): Promise<ResultadoSimples> =>
+    ipcRenderer.invoke(CANAIS_VOZ_GUARDADA.consentir, consentimento),
+  salvar: (pedido: PedidoDeSalvar): Promise<ResultadoDeSalvar> => ipcRenderer.invoke(CANAIS_VOZ_GUARDADA.salvar, pedido),
+  ler: (id: string): Promise<ResultadoDeLer> => ipcRenderer.invoke(CANAIS_VOZ_GUARDADA.ler, id),
+  apagar: (id: string): Promise<ResultadoSimples> => ipcRenderer.invoke(CANAIS_VOZ_GUARDADA.apagar, id),
+  /** Remover o paciente: todas as gravações e o termo dele (M4, 21/10/2026). */
+  apagarDoPerfil: (perfilId: string): Promise<ResultadoSimples> => ipcRenderer.invoke(CANAIS_VOZ_GUARDADA.apagarDoPerfil, perfilId),
+  /** A importação da voz clonada, com uma gravação guardada no lugar do arquivo escolhido. */
+  usarComoReferencia: (id: string, consentimento: { texto: string; aceitoEm: string; perfilId: string | null }): Promise<ResultadoDaImportacao> =>
+    ipcRenderer.invoke(CANAIS_VOZ_GUARDADA.usarComoReferencia, id, consentimento),
+  // Backup completo (rodada 3, 21/10/2026): as gravações viajam no arquivo de backup. A
+  // página lista o que há (nomes e tamanhos), lê um arquivo por vez PELO NOME — nada de
+  // caminho — e, ao restaurar, devolve tudo de uma vez para somar ao que já existe.
+  backupListar: (): Promise<ResultadoDaListaDoBackup> => ipcRenderer.invoke(CANAIS_VOZ_GUARDADA.backupListar),
+  backupLer: (nome: string): Promise<ResultadoDeLerParaBackup> => ipcRenderer.invoke(CANAIS_VOZ_GUARDADA.backupLer, nome),
+  backupRestaurar: (arquivos: ArquivoParaRestaurar[], opcoes?: { perfil?: string }): Promise<ResultadoDaRestauracaoDaVoz> =>
+    ipcRenderer.invoke(CANAIS_VOZ_GUARDADA.backupRestaurar, arquivos, opcoes ?? {}),
+});
+
+// Backup completo (rodada 3, 21/10/2026): antes de restaurar, o app guarda o estado de
+// agora. A página manda só o TEXTO; pasta, nome e extensão são do processo principal
+// (`electron/copiaDeSeguranca.ts`) — um download pela página abriria o "Salvar como" do
+// sistema e a recarga que vem logo depois poderia cancelá-lo.
+contextBridge.exposeInMainWorld('irisflowBackup', {
+  guardarCopia: (texto: string): Promise<ResultadoDaCopiaDeSeguranca> => ipcRenderer.invoke(CANAL_DA_COPIA_DE_SEGURANCA, texto),
+});
+
+// Prancha de letras (plano C): gera o PDF da página que está na tela (o main
+// decide tamanho e orientação) e pergunta ao cuidador onde salvar. E imprime
+// pelo main, que pergunta a impressora sem segurar a página — o
+// `window.print()` parava o app inteiro, a Emergência incluída, até o diálogo
+// fechar (revisão de UX de 20/10/2026, achado 8).
+contextBridge.exposeInMainWorld('irisflowPrancha', {
+  salvarPdf: (): Promise<{ ok: true; caminho: string } | { ok: false; cancelado?: boolean; erro?: string }> =>
+    ipcRenderer.invoke('irisflow:prancha-pdf'),
+  imprimir: (): Promise<{ ok: true; impressora: string | null } | { ok: false; cancelado?: boolean; erro?: string }> =>
+    ipcRenderer.invoke('irisflow:prancha-imprimir'),
+});
+
+// Folha da consulta (21/10/2026): o mesmo caminho da prancha — o main gera o PDF
+// e imprime sem segurar a página —, em A4 em pé. Ponte própria e canais
+// próprios; a página continua sem escolher tamanho nem orientação.
+contextBridge.exposeInMainWorld('irisflowConsulta', {
+  salvarPdf: (): Promise<{ ok: true; caminho: string } | { ok: false; cancelado?: boolean; erro?: string }> =>
+    ipcRenderer.invoke('irisflow:consulta-pdf'),
+  imprimir: (): Promise<{ ok: true; impressora: string | null } | { ok: false; cancelado?: boolean; erro?: string }> =>
+    ipcRenderer.invoke('irisflow:consulta-imprimir'),
 });

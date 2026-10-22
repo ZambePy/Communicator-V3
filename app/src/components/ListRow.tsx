@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { PressableScale } from './PressableScale';
 import { Text } from './Text';
-import { motion, radius, sizes, spacing, useTheme } from '@/theme';
+import { motion, sizes, spacing, useTheme } from '@/theme';
 
 export type RowTone = 'primary' | 'accent' | 'danger' | 'warning' | 'muted';
 
@@ -20,15 +20,19 @@ interface Props {
   role?: 'button' | 'link';
 }
 
-/** Linha de lista: bloco de ícone, título, subtítulo e acessório. Altura mínima de 64 dp. */
+/**
+ * Linha de lista: ícone, título, subtítulo e acessório. Altura mínima de 64 dp.
+ * O ícone vem só na cor do estado, sem o quadrado de fundo (19/10/2026): um
+ * bloco colorido em cada linha transformava toda lista num mosaico de selos.
+ */
 export function ListRow({ icon, title, subtitle, onPress, right, tone = 'primary', last, accessibilityHint, role = 'button' }: Props) {
   const { colors } = useTheme();
-  const cor: Record<RowTone, { fg: string; bg: string }> = {
-    primary: { fg: colors.primary, bg: colors.primaryTint },
-    accent: { fg: colors.accentText, bg: colors.accentTint },
-    danger: { fg: colors.dangerText, bg: colors.dangerTint },
-    warning: { fg: colors.warningText, bg: colors.warningTint },
-    muted: { fg: colors.textMuted, bg: colors.surfaceAlt },
+  const cor: Record<RowTone, { fg: string }> = {
+    primary: { fg: colors.primary },
+    accent: { fg: colors.accentText },
+    danger: { fg: colors.dangerText },
+    warning: { fg: colors.warningText },
+    muted: { fg: colors.textMuted },
   };
   const c = cor[tone];
   return (
@@ -42,8 +46,8 @@ export function ListRow({ icon, title, subtitle, onPress, right, tone = 'primary
       scaleTo={motion.pressScaleCard}
       style={[styles.row, !last && { borderBottomWidth: sizes.hairline, borderBottomColor: colors.border }]}
     >
-      <View style={[styles.icon, { backgroundColor: c.bg }]}>
-        <Ionicons name={icon} size={sizes.icon.sm} color={c.fg} />
+      <View style={styles.icon}>
+        <Ionicons name={icon} size={sizes.icon.md} color={c.fg} />
       </View>
       <View style={styles.texts}>
         <Text variant="body" weight="medium" style={tone === 'danger' && onPress ? { color: colors.dangerText } : undefined}>
@@ -64,6 +68,6 @@ export function ListRow({ icon, title, subtitle, onPress, right, tone = 'primary
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minHeight: sizes.row },
-  icon: { width: sizes.tile.md, height: sizes.tile.md, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  icon: { width: sizes.icon.lg, alignItems: 'center', justifyContent: 'center' },
   texts: { flex: 1, gap: spacing.xxs },
 });

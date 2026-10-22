@@ -99,3 +99,18 @@ export function greeting() {
   if (h < 18) return 'Boa tarde';
   return 'Boa noite';
 }
+
+/**
+ * Texto que chegou TODO em maiúsculas (os motivos do socorro no computador são
+ * "FALTA DE AR", "DOR"…) vira frase normal para ler: "Falta de ar". Caixa alta
+ * é mais lenta de ler — e a tela de emergência é lida por quem acabou de
+ * acordar (19/10/2026). Siglas curtas ("ELA", "TV") ficam como estão; texto com
+ * minúsculas também (foi escrito assim de propósito).
+ */
+export function textoLegivel(texto: string): string {
+  const t = texto.trim();
+  const letras = t.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  if (letras.length <= 3 || t !== t.toLocaleUpperCase('pt-BR')) return t;
+  const minusc = t.toLocaleLowerCase('pt-BR');
+  return minusc.charAt(0).toLocaleUpperCase('pt-BR') + minusc.slice(1);
+}

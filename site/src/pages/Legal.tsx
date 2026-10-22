@@ -13,18 +13,19 @@ import { PageHead } from '@/components/layout/PageHead'
 import { Reveal } from '@/components/effects/Reveal'
 import { BRAND } from '@/data/content'
 import './legal.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 type Block = { id: string; h: string; p?: string[]; list?: string[]; after?: string[] }
 
 /** Data da versão em vigor dos dois documentos. */
-const ATUALIZADO_EM = '27 de setembro de 2026'
+const ATUALIZADO_EM = '21 de outubro de 2026'
 
 const PRIVACIDADE: Block[] = [
   {
     id: 'quem-somos',
     h: '1. Quem é responsável pelos seus dados',
     p: [
-      `A IrisFlow é a controladora dos dados pessoais tratados por este site, pelo aplicativo IrisFlow Communicator (computador) e pelo app do cuidador (celular). Para qualquer assunto sobre dados pessoais — inclusive falar com o encarregado (DPO) — escreva para ${BRAND.email}.`,
+      `A IrisFlow é a controladora dos dados pessoais tratados por este site, pelo aplicativo IrisFlow Communicator (computador) e pelo app do cuidador (celular). Para qualquer assunto sobre dados pessoais, inclusive falar com o encarregado (DPO), escreva para ${BRAND.email}.`,
       'O IrisFlow está em fase beta: o produto, e esta política com ele, ainda estão mudando. Quando algo relevante mudar, avisamos por e-mail quem tem conta.',
     ],
   },
@@ -32,9 +33,13 @@ const PRIVACIDADE: Block[] = [
     id: 'local',
     h: '2. O que nunca sai do seu computador',
     p: [
-      'O rastreamento ocular roda inteiro no computador onde o IrisFlow Communicator está instalado. As imagens da webcam, os pontos do rosto extraídos de cada quadro, os dados de calibração e os registros brutos de sessão são processados ali e não são enviados para a internet — nem para nós, nem para ninguém.',
+      'O rastreamento ocular roda inteiro no computador onde o IrisFlow Communicator está instalado. As imagens da webcam, os pontos do rosto extraídos de cada quadro, os dados de calibração e os registros brutos de sessão são processados ali e não são enviados para a internet: nem para nós, nem para ninguém.',
       'O mesmo vale para a voz personalizada e para o assistente de escrita: a gravação de referência da voz, o modelo de voz e o vocabulário que o assistente aprende ficam no computador. Para a voz, o aplicativo baixa uma vez os arquivos do modelo (do Hugging Face), sem enviar nenhum dado seu.',
-      'Este site não acessa a sua câmera. A verificação de compatibilidade da página da beta só consulta se o navegador oferece acesso à webcam, sem ligá-la.',
+      // Relato da revisão final de 21/10/2026: aqui estava "Este site não acessa a sua câmera",
+      // mas o "Teste com o seu olhar" (home) e o "Meu computador funciona?" ligam a webcam.
+      'Este site só liga a sua câmera quando você pede: no “Teste com o seu olhar”, na página inicial, e em “Meu computador funciona?”. Nos dois, a imagem é lida no seu navegador e não é gravada nem enviada: a imagem e os pontos do rosto não saem do seu computador.',
+      'A câmera apaga quando você sai do teste. No “Teste com o seu olhar” ela também apaga se você troca de aba; em “Meu computador funciona?”, ao desligá-la ou ao sair da página. O reconhecimento do rosto do “Teste com o seu olhar” é baixado deste mesmo site, só quando você pede, e roda no seu navegador.',
+      'Nesse teste, o “Sim” ou o “Não” é falado pela voz do seu navegador. Em alguns navegadores essa voz é online, e a palavra falada passa pelo provedor dela; a imagem e os pontos do rosto, nunca.',
     ],
   },
   {
@@ -45,7 +50,7 @@ const PRIVACIDADE: Block[] = [
       'Conta e inscrição na beta: nome e e-mail de quem se inscreve; o telefone, se você quiser informar (é opcional); a senha, que fica com o serviço de autenticação e não é legível pela equipe; nome de quem vai usar, a relação com essa pessoa, a condição principal, o sistema do computador, o profissional que acompanha (opcional), como conheceu a IrisFlow e as suas escolhas de contato. Servem para criar a conta, liberar o aplicativo, ajustar o perfil inicial e falar com você sobre a beta.',
       'Mensagens e alertas: o texto que a pessoa escolheu enviar pelo IrisFlow, as respostas do cuidador e os pedidos de ajuda ou de emergência, para chegarem ao celular do cuidador e ficarem no histórico que a família consulta.',
       'Configurações e frases: ajustes do aplicativo (tempo de fixação, estabilidade do cursor, voz) e as frases rápidas e textos que o cuidador cadastra.',
-      'Dados técnicos e de uso agregado: o computador vinculado (nome, sistema, versão do aplicativo e se câmera, rastreamento e calibração estão funcionando) e números de cada sessão — duração, qualidade da calibração, quantidade de frases e de caracteres, pedidos de ajuda e módulos usados. Nunca imagem, vídeo ou o conteúdo digitado fora das mensagens enviadas.',
+      'Dados técnicos e de uso agregado: o computador vinculado (nome, sistema, versão do aplicativo e se câmera, rastreamento e calibração estão funcionando) e números de cada sessão: duração, qualidade da calibração, quantidade de frases e de caracteres, pedidos de ajuda e módulos usados. Nunca imagem, vídeo ou o conteúdo digitado fora das mensagens enviadas.',
       'Relatórios de erro: quando o aplicativo falha, ou quando você toca em “Enviar relatório”, ele envia dados técnicos (versão, erro, números), sem conteúdo do paciente.',
       'Formulário de contato: nome, e-mail, perfil e a mensagem, para responder você.',
       'Notificações do app do cuidador: o identificador do celular usado para entregar os avisos.',
@@ -55,7 +60,7 @@ const PRIVACIDADE: Block[] = [
     id: 'sensiveis',
     h: '4. Dados de saúde',
     p: [
-      'A condição principal informada na inscrição, e muitas vezes o conteúdo das mensagens e dos pedidos de suporte, revelam informação de saúde — dado pessoal sensível pela LGPD. Tratamos esses dados só para as finalidades acima, com o consentimento específico que você dá ao se inscrever, e nunca para publicidade.',
+      'A condição principal informada na inscrição, e muitas vezes o conteúdo das mensagens e dos pedidos de suporte, revelam informação de saúde, que é dado pessoal sensível pela LGPD. Tratamos esses dados só para as finalidades acima, com o consentimento específico que você dá ao se inscrever, e nunca para publicidade.',
       'Em muitos casos quem usa o IrisFlow não consegue assinar nem digitar, e o consentimento é dado por um responsável. Quando a pessoa que usa é criança ou adolescente, a conta é criada e gerida por um responsável legal, e os dados são tratados no melhor interesse dela.',
     ],
   },
@@ -64,7 +69,7 @@ const PRIVACIDADE: Block[] = [
     h: '5. Bases legais',
     list: [
       'Execução de contrato e procedimentos preliminares (art. 7º, V, da LGPD): conta, inscrição na beta, aplicativo, app do cuidador e suporte.',
-      'Consentimento (art. 7º, I, e art. 11, I): dados de saúde, contato para retorno sobre a beta e envio de novidades — cada um pode ser revogado a qualquer momento.',
+      'Consentimento (art. 7º, I, e art. 11, I): dados de saúde, contato para retorno sobre a beta e envio de novidades. Cada um pode ser revogado a qualquer momento.',
       'Legítimo interesse (art. 7º, IX): estatísticas anônimas de visita ao site, segurança e prevenção de abuso.',
       'Cumprimento de obrigação legal (art. 7º, II), quando uma lei exigir guardar ou informar algum dado.',
     ],
@@ -76,11 +81,11 @@ const PRIVACIDADE: Block[] = [
       'Não vendemos, não alugamos e não compartilhamos dados pessoais para publicidade. Usamos fornecedores que tratam dados em nosso nome, só para operar o serviço:',
     ],
     list: [
-      'Supabase — banco de dados e autenticação (conta, mensagens, configurações, uso agregado).',
-      'Cloudflare — hospedagem deste site e estatísticas de visita sem cookies.',
-      'GitHub — hospedagem dos instaladores. Nas páginas com a área de downloads, o seu navegador consulta a API pública do GitHub (sem cookies e sem informar de qual página veio) para saber quais instaladores estão publicados; ao baixar, acessa o github.com. Nos dois casos vale a política de privacidade do GitHub.',
-      'Serviços de notificação do celular (Expo, Apple e Google) — entrega dos avisos do app do cuidador.',
-      'Google (Gmail) — o e-mail da equipe; o que você nos escreve passa por ele.',
+      'Supabase: banco de dados e autenticação (conta, mensagens, configurações, uso agregado).',
+      'Cloudflare: hospedagem deste site e estatísticas de visita sem cookies.',
+      'GitHub: hospedagem dos instaladores. Nas páginas com a área de downloads, o seu navegador consulta a API pública do GitHub (sem cookies e sem informar de qual página veio) para saber quais instaladores estão publicados; ao baixar, acessa o github.com. Nos dois casos vale a política de privacidade do GitHub.',
+      'Serviços de notificação do celular (Expo, Apple e Google): entrega dos avisos do app do cuidador.',
+      'Google (Gmail): o e-mail da equipe; o que você nos escreve passa por ele.',
     ],
     after: [
       'Alguns desses fornecedores mantêm servidores fora do Brasil. Nesses casos a transferência internacional se apoia nas garantias contratuais dos próprios fornecedores, nos termos do art. 33 da LGPD.',
@@ -90,7 +95,7 @@ const PRIVACIDADE: Block[] = [
     id: 'cookies',
     h: '7. Cookies, armazenamento local e estatísticas',
     p: [
-      'Este site não usa cookies de publicidade nem de rastreamento. No seu navegador ficam apenas: a sessão de login (para você continuar conectado), a sua escolha sobre estatísticas, pequenas preferências de interface, como ter fechado a barra de atalho no celular, a lista de instaladores publicados (por até 10 minutos, só na aba aberta) e, enquanto você digita o código de confirmação do e-mail, o endereço de e-mail e a hora do envio (só na aba aberta, para a etapa do código sobreviver a uma recarga da página) — nunca a senha —, apagados ao confirmar, ao corrigir o e-mail ou em 24 horas.',
+      'Este site não usa cookies de publicidade nem de rastreamento. No seu navegador ficam apenas: a sessão de login (para você continuar conectado), a sua escolha sobre estatísticas, pequenas preferências de interface, como ter fechado a barra de atalho no celular, a lista de instaladores publicados (por até 10 minutos, só na aba aberta) e, enquanto você digita o código de confirmação do e-mail, o endereço de e-mail e a hora do envio (só na aba aberta, para a etapa do código sobreviver a uma recarga da página), nunca a senha, apagados ao confirmar, ao corrigir o e-mail ou em 24 horas.',
       'Para saber quantas pessoas visitam cada página usamos o Cloudflare Web Analytics, que não grava cookies, não cria identificador do visitante e mostra só números agregados. Você pode recusar essas estatísticas no aviso que aparece na primeira visita ou, depois, em “Preferências de cookies”, no rodapé; com a recusa, o script de estatísticas nem é carregado.',
     ],
   },
@@ -167,7 +172,7 @@ const TERMOS: Block[] = [
     id: 'conta',
     h: '4. Conta',
     list: [
-      'A conta deve ser criada por um adulto — a própria pessoa que vai usar ou o responsável por ela — com dados verdadeiros, em especial o e-mail, que é o canal de acesso.',
+      'A conta deve ser criada por um adulto (a própria pessoa que vai usar ou o responsável por ela) com dados verdadeiros, em especial o e-mail, que é o canal de acesso.',
       'O mesmo e-mail e senha abrem o aplicativo do computador e o app do cuidador. Guarde a senha com cuidado e avise a equipe se suspeitar de uso indevido.',
       'Você pode pedir o encerramento da conta a qualquer momento pelo e-mail da equipe.',
     ],
@@ -193,7 +198,7 @@ const TERMOS: Block[] = [
     id: 'planos',
     h: '7. Planos pagos futuros',
     p: [
-      'Os preços de planos exibidos no site durante a beta são previsões, não uma oferta: podem mudar até o lançamento e não podem ser contratados agora. Quando a contratação abrir, as condições — preço, período de avaliação e cancelamento — serão apresentadas antes, conforme o Código de Defesa do Consumidor.',
+      'Os preços de planos exibidos no site durante a beta são previsões, não uma oferta: podem mudar até o lançamento e não podem ser contratados agora. Quando a contratação abrir, as condições (preço, período de avaliação e cancelamento) serão apresentadas antes, conforme o Código de Defesa do Consumidor.',
     ],
   },
   {
@@ -215,13 +220,11 @@ const TERMOS: Block[] = [
 ]
 
 function LegalPage({
-  eyebrow,
   title,
   lead,
   blocks,
   other,
 }: {
-  eyebrow: string
   title: string
   lead: string
   blocks: Block[]
@@ -229,11 +232,12 @@ function LegalPage({
 }) {
   return (
     <>
-      <PageHead eyebrow={eyebrow} title={title} lead={lead} />
+      <FundoDaPagina variante="calmo" />
+      <PageHead title={title} lead={lead} />
       <section className="section">
         <div className="container container--narrow legal">
           <p className="legal__meta">
-            Versão para o período de beta · atualizada em {ATUALIZADO_EM}
+            Versão para o período de beta, atualizada em {ATUALIZADO_EM}.
           </p>
 
           <nav className="legal__toc" aria-label="Nesta página">
@@ -275,9 +279,8 @@ function LegalPage({
 export function Privacidade() {
   return (
     <LegalPage
-      eyebrow="Legal"
       title="Política de privacidade"
-      lead="O rastreamento ocular roda no seu computador e nenhuma imagem da câmera sai dele. Aqui está, sem letra miúda, o que guardamos para a conta e o app do cuidador funcionarem, com quem, por quanto tempo e como exercer seus direitos pela LGPD."
+      lead="O rastreamento acontece no seu computador e nenhuma imagem da câmera sai dele. Aqui está, sem letra miúda, o que guardamos para a conta e o app do cuidador funcionarem, com quem compartilhamos, por quanto tempo e como você exerce seus direitos pela LGPD."
       blocks={PRIVACIDADE}
       other={{ to: '/termos', label: 'Termos de uso' }}
     />
@@ -287,7 +290,6 @@ export function Privacidade() {
 export function Termos() {
   return (
     <LegalPage
-      eyebrow="Legal"
       title="Termos de uso"
       lead="As regras de uso do site e do IrisFlow Communicator durante a beta: o que o produto é e não é, seus limites e as responsabilidades de cada parte."
       blocks={TERMOS}

@@ -44,13 +44,13 @@
   "signConvention": {
     "yaw": {
       "positive": "right",
-      "confidence": "provisional",
-      "evidence": "Derivado do rótulo, não medido em foto: yaw = atan2(-g_x, -g_z) com a câmera em x para a direita da imagem → olhar para a direita da pessoa dá yaw > 0 (a mesma convenção do checkpoint Gaze360)."
+      "confidence": "medium",
+      "evidence": "Derivado do rótulo (yaw = atan2(-g_x, -g_z), câmera com x para a direita da imagem → olhar para a direita da pessoa dá yaw > 0, a mesma convenção do Gaze360) e conferido em 19/10/2026 com deslocamento sintético da íris em 3 rostos reais (scripts/verificar_modelos_olhar.py): 6 de 6 deslocamentos no sinal esperado, em 224². Falta a matriz de fotos reais (frontend/scripts/l2cs_axis_validation.mjs --modelo gazegene) para virar 'high'."
     },
     "pitch": {
       "positive": "up",
-      "confidence": "provisional",
-      "evidence": "Derivado do rótulo, não medido em foto: pitch = asin(-g_y) com y da câmera para baixo (convenção OpenCV/ETH-XGaze) → olhar para cima dá pitch > 0. Se o GazeGene usar y para cima, o sinal inverte: confirme com `node frontend/scripts/l2cs_axis_validation.mjs --modelo gazegene` e, se o script mandar, troque `sinais.pitch` para -1."
+      "confidence": "medium",
+      "evidence": "Derivado do rótulo (pitch = asin(-g_y), y da câmera para baixo → olhar para cima dá pitch > 0) e conferido em 19/10/2026 com deslocamento sintético da íris em 3 rostos reais (scripts/verificar_modelos_olhar.py): 6 de 6 deslocamentos no sinal esperado, em 224² — o y do GazeGene é para baixo, e `sinais.pitch` = 1 está certo. Falta a matriz de fotos reais (frontend/scripts/l2cs_axis_validation.mjs --modelo gazegene) para virar 'high'."
     }
   },
   "sha256": "8532c88d81dc3c1055386625cb22ccd8da305cf5bd939c8f79d11f3314ed7872",

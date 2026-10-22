@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import Perfil from './Perfil'
 import type { Account } from '@/context/AccountContext'
@@ -90,6 +90,8 @@ vi.mock('@/hooks/useDownloads', async () => {
       releasesPage: 'https://github.com/dono/repo/releases',
       status: 'github',
       platformsText: platformsText(['windows']),
+      // o APK do cuidador anexado ao mesmo release
+      apk: { situacao: 'disponivel', url: 'https://github.com/dono/repo/releases/download/v1/IrisFlow-Cuidador.apk' },
     }),
   }
 })
@@ -168,8 +170,15 @@ describe('<Perfil />', () => {
     apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: DEPOIS }
     aparelho.celular = true
     montar()
-    expect(await screen.findByText(/é instalado no computador do paciente/)).toBeInTheDocument()
+    expect(await screen.findByText(/é instalado no computador da pessoa/)).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Windows/ })).not.toBeInTheDocument()
+    // E o que dá para instalar ali: o app de quem cuida, com o APK do release
+    // (relato de 19/10/2026: o painel de download não oferecia o APK).
+    const cuidador = screen.getByRole('region', { name: 'IrisFlow Cuidador para Android' })
+    expect(within(cuidador).getByRole('link', { name: 'Baixar para Android' })).toHaveAttribute(
+      'href',
+      'https://github.com/dono/repo/releases/download/v1/IrisFlow-Cuidador.apk',
+    )
   })
 
   it('o botão de baixar do perfil rola até os downloads na mesma aba', async () => {

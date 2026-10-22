@@ -23,11 +23,14 @@ export const FALLBACK_HOLD_MS = 2000;
 /**
  * Mensagem exibida quando o hold expira.
  *
- * Imperativa e acionável de propósito. "Rosto não detectado" descreve o estado
- * do software; "Posicione o rosto na câmera" diz ao paciente o que fazer — e
- * quem lê isto pode não ter como pedir ajuda para interpretar a tela.
+ * Calma, em primeira pessoa e sem culpar ninguém (pedido do dono, 19/10/2026):
+ * "Posicione o rosto na câmera" soava como bronca para quem não consegue se
+ * mexer. A frase diz o que está acontecendo e que o programa continua
+ * tentando; o que ajuda ("fique de frente para a câmera", se puder) vai no
+ * detalhe do banner. Quem lê isto pode não ter como pedir ajuda para
+ * interpretar a tela — por isso ela continua curta e concreta.
  */
-export const MENSAGEM_SEM_ROSTO = 'Posicione o rosto na câmera';
+export const MENSAGEM_SEM_ROSTO = 'Não estou vendo seu rosto, tentando de novo…';
 
 export type EstadoFallback =
   /** Gaze válido — o cursor segue a medição. */

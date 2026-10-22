@@ -42,6 +42,12 @@ export interface EscolhaDaCameraProps {
   aoRecarregar: () => void;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   /**
+   * A câmera escolhida não abriu (ou abriu outra no lugar). O rastreador é
+   * quem abre a câmera desta tela, e esta é a forma de a escolha não falhar
+   * em silêncio (relato de 18/10/2026, item 3).
+   */
+  aviso?: string | null;
+  /**
    * Pergunta de que lado da tela fica a câmera. Só aparece com a saída 6DoF
    * experimental ligada (o wizard só passa `aoEscolherPosicao` nesse caso):
    * sem ela, a resposta não mudaria nada, e pergunta sem efeito é ruído para
@@ -59,6 +65,7 @@ export const EscolhaDaCamera: React.FC<EscolhaDaCameraProps> = ({
   aoSelecionar,
   aoRecarregar,
   videoRef,
+  aviso = null,
   posicaoDaCamera = null,
   aoEscolherPosicao,
 }) => {
@@ -140,6 +147,25 @@ export const EscolhaDaCamera: React.FC<EscolhaDaCameraProps> = ({
               );
             })}
           </div>
+
+          {aviso && (
+            <p
+              role="status"
+              data-testid="aviso-da-camera"
+              style={{
+                margin: 0,
+                padding: '0.85rem 1rem',
+                borderRadius: '0.9rem',
+                background: 'var(--tint-warn-bg)',
+                border: '1px solid var(--tint-warn-border)',
+                color: 'var(--tint-warn-text)',
+                fontSize: '0.98rem',
+                lineHeight: 1.5,
+              }}
+            >
+              {aviso}
+            </p>
+          )}
 
           {aoEscolherPosicao && (
             <div

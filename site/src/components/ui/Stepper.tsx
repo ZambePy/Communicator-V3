@@ -14,7 +14,7 @@ type Props = {
  * passava por cima dos rótulos e os deixava com cara de riscados.
  *
  * No celular os rótulos não cabem ao lado das bolinhas: somem da tela (mas
- * continuam para o leitor de tela) e a linha de baixo diz "Etapa 2 de 4 ·
+ * continuam para o leitor de tela) e a linha de baixo diz "Etapa 2 de 4:
  * Confirmar e-mail" — só números não diziam onde a pessoa estava.
  */
 export function Stepper({ steps, current }: Props) {
@@ -54,7 +54,7 @@ export function Stepper({ steps, current }: Props) {
         })}
       </ol>
       <p className="stepper__agora" aria-hidden="true">
-        Etapa {Math.min(current + 1, steps.length)} de {steps.length} · <strong>{atual}</strong>
+        Etapa {Math.min(current + 1, steps.length)} de {steps.length}: <strong>{atual}</strong>
       </p>
     </nav>
   )

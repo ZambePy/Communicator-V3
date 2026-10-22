@@ -95,8 +95,12 @@ export const CaregiverPageLayout: React.FC<CaregiverPageLayoutProps> = ({ childr
         </button>
       </header>
 
-      {/* Área de Conteúdo Principal */}
+      {/* Área de Conteúdo Principal. `reserva-da-faixa`: no modo só horizontal a
+          Emergência é uma faixa de 5° ou mais na borda direita, da altura toda,
+          e o corpo de 1200 px passava por baixo dela (M3, 21/10/2026). Só age
+          com `html[data-emergencia='faixa']`. */}
       <div
+        className="reserva-da-faixa"
         style={{
           flex: 1,
           padding: '2.5rem 2.5rem 4rem 2.5rem',

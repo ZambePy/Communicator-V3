@@ -154,8 +154,9 @@ export type OrigemDaSelecao = 'app' | 'overlay' | 'externo';
  * 96 NENHUM alvo da sobreposição passava, o que deixava a correção sem
  * aprender nada no Modo Computador, exatamente onde o cursor mais importa.
  * Um botão de 52 px com um dwell de 1 s é ~30 amostras cuja média está a no
- * máximo ±26 px do centro; como o rótulo entra num integrador de ganho 0,05
- * com teto de 8 % da tela, esse erro por rótulo se dilui. O que continua
+ * máximo ±26 px do centro; como o rótulo entra no filtro da correção (o
+ * Kalman da M15 no V3; antes, um integrador de ganho 0,05) com teto de 8 % da
+ * tela, esse erro por rótulo se dilui. O que continua
  * fora é o que sempre esteve: ícone de 32 px do Windows (`externo`).
  */
 export const ALVO_MINIMO_OVERLAY_PX = 52;

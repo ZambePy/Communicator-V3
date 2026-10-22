@@ -1,41 +1,44 @@
 /* Seções da home que não têm arquivo próprio: contraste de preço, destaque do
-   app do cuidador, resumo dos planos e privacidade. Mais os passos numerados,
-   que a página do cuidador e a de download também usam. (A lista com check e o
-   link com seta ficam em styles/global.css.) */
+   app do cuidador e resumo dos planos. Mais os passos numerados, que a página
+   do cuidador e a de download também usam. (A lista com check e o link
+   sublinhado ficam em styles/global.css.) A faixa de privacidade saiu na
+   rodada 3 (21/10/2026): virou o cartão 04 de "O que um olhar faz". */
 
-/* Passos numerados (páginas do cuidador e de download). */
+/* ---------- passos numerados ----------
+   São uma sequência de verdade (primeiro a conta, depois a instalação...),
+   por isso levam número: grande, em Sora, alinhado ao título — sem bolinha
+   colorida em volta. Separados por um fio no topo, como as listas do site. */
 .passos {
   list-style: none;
   counter-reset: passo;
   padding: 0;
   margin: var(--sp-6) 0 0;
   display: grid;
-  gap: var(--sp-4);
+  gap: var(--sp-6) var(--sp-5);
 }
 
 .passo {
   margin: 0;
-  padding: var(--sp-5);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line-strong);
 }
 
 .passo__numero {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  margin-bottom: var(--sp-4);
-  border-radius: 50%;
-  background: var(--blue);
-  color: #fff;
+  display: block;
+  margin-bottom: var(--sp-3);
   font-family: var(--font-display);
-  font-weight: 700;
+  font-size: 2.25rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  /* Número de uma sequência, não confirmação: azul claro da marca (auditoria
+     de 21/10/2026, P2-12). */
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 
 .passo__titulo {
-  font-size: 1.15rem;
+  font-size: 1.3125rem;
   margin-bottom: var(--sp-2);
 }
 
@@ -49,11 +52,10 @@
   }
 }
 
-/* ---------- contraste de preço ---------- */
+/* ---------- contraste de preço: duas linhas de uma conta ---------- */
 .contraste {
   position: relative;
-  padding-block: clamp(80px, 12vh, 140px);
-  background: var(--navy-deep);
+  padding-block: var(--faixa);
 }
 
 .contraste__titulo {
@@ -61,56 +63,85 @@
   margin-bottom: clamp(32px, 6vh, 64px);
 }
 
-.contraste__lados {
+.contraste__linhas {
+  margin: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-5);
+  gap: var(--sp-3);
 }
 
-.contraste__lado {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  padding: clamp(24px, 3vw, 40px);
+.contraste__linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-2) var(--sp-6);
+  padding: clamp(24px, 3.4vw, 40px) clamp(20px, 3vw, 40px);
   border-radius: var(--r-lg);
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.contraste__lado--irisflow {
-  border-color: rgba(63, 214, 194, 0.35);
-  background: linear-gradient(160deg, rgba(0, 166, 147, 0.12), rgba(27, 84, 168, 0.08));
 }
 
 .contraste__rotulo {
-  font-size: 0.85rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 700;
+  font-size: var(--fs-sm);
+  font-weight: 600;
   color: var(--text-dim);
 }
 
 .contraste__valor {
+  margin: 0;
+  text-wrap: balance;
   font-family: var(--font-display);
-  font-size: clamp(1.9rem, 4vw, 3.2rem);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.contraste__lado--dedicado .contraste__valor {
+  font-size: clamp(2rem, 1.3rem + 2.6vw, 3.5rem);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
   color: var(--text-soft);
 }
 
 .contraste__nota {
+  margin: 0;
+  max-width: 44ch;
   color: var(--text-soft);
-  font-size: 1rem;
+}
+
+/* A linha do IrisFlow: o azul da marca, chapado. Texto branco (7,3:1) e o
+   de apoio em #dbe6f8 (5,8:1). */
+.contraste__linha--irisflow {
+  background: var(--blue);
+  border-color: transparent;
+}
+
+.contraste__linha--irisflow .contraste__rotulo,
+.contraste__linha--irisflow .contraste__nota {
+  color: #dbe6f8;
+}
+
+.contraste__linha--irisflow .contraste__valor {
+  color: #fff;
+}
+
+@media (min-width: 900px) {
+  .contraste__linha {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    grid-template-areas:
+      'rotulo valor'
+      'nota valor';
+    align-items: start;
+  }
+  .contraste__rotulo {
+    grid-area: rotulo;
+    padding-top: 0.4em;
+  }
+  .contraste__nota {
+    grid-area: nota;
+    font-size: var(--fs-sm);
+  }
+  .contraste__valor {
+    grid-area: valor;
+    text-align: right;
+  }
 }
 
 /* ---------- destaque do app do cuidador ---------- */
 .cuidador-destaque {
-  padding-block: clamp(80px, 12vh, 140px);
+  padding-block: var(--faixa);
   overflow: hidden;
 }
 
@@ -122,87 +153,76 @@
 }
 
 .cuidador-destaque__marca {
-  width: 88px;
+  width: 72px;
   height: auto;
   margin-bottom: var(--sp-5);
 }
 
-/* A ressalva dos alertas (beta), logo abaixo da promessa. */
-.cuidador-destaque__ressalva {
-  margin: calc(-1 * var(--sp-3)) 0 var(--sp-5);
-  font-size: 0.92rem;
-  color: var(--text-dim);
-}
-
-/* ---------- resumo dos planos ---------- */
+/* ---------- resumo dos planos: três colunas de uma tabela ---------- */
 .planos-resumo {
-  padding-block: clamp(72px, 11vh, 128px);
-  border-top: 1px solid var(--line);
+  padding-block: var(--faixa);
 }
 
 .planos-resumo__grade {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-4);
-  margin-top: clamp(28px, 5vh, 48px);
+  border-top: 1px solid var(--line-strong);
 }
 
 .plano-mini {
   display: flex;
   flex-direction: column;
-  padding: var(--sp-5) var(--sp-5) var(--sp-5);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-sm);
+  padding: var(--sp-5) var(--sp-5) var(--sp-5) 0;
 }
 
+.plano-mini + .plano-mini {
+  padding-left: var(--sp-5);
+  border-left: 1px solid var(--line);
+}
+
+/* O recomendado: um traço menta no topo da coluna e a palavra ao lado do nome. */
 .plano-mini--destaque {
-  border-color: var(--accent-line);
-  box-shadow:
-    0 0 0 1px var(--accent-line),
-    var(--shadow-md);
+  box-shadow: inset 0 3px 0 var(--teal-300);
 }
 
 .plano-mini__topo {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-3);
 }
 
 .plano-mini__nome {
-  font-size: 1.25rem;
+  font-size: 1.5rem;
   margin: 0;
 }
 
 .plano-mini__selo {
-  padding: 3px 10px;
-  border-radius: var(--r-pill);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 0.78rem;
-  font-weight: 700;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ok);
 }
 
 .plano-mini__preco {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 6px;
   margin: var(--sp-4) 0 var(--sp-4);
   color: var(--text);
 }
 
 .plano-mini__preco strong {
   font-family: var(--font-display);
-  font-size: 2.4rem;
+  font-size: 3rem;
+  font-weight: 600;
   line-height: 1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
 }
 
 .plano-mini__moeda,
 .plano-mini__periodo {
-  font-size: 0.95rem;
+  font-size: var(--fs-sm);
   color: var(--text-dim);
 }
 
@@ -226,46 +246,19 @@
   content: '';
   position: absolute;
   left: 0;
-  top: 0.6em;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
+  top: 0.68em;
+  width: 8px;
+  height: 1.5px;
+  background: var(--text-dim);
 }
 
 .plano-mini__aparelhos {
-  font-size: 0.88rem;
+  font-size: var(--fs-sm);
   color: var(--text-dim);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--line);
 }
 
 .planos-resumo__link {
   margin-top: var(--sp-6);
-}
-
-/* ---------- privacidade ---------- */
-.privacidade-curta {
-  position: relative;
-  padding-block: clamp(72px, 11vh, 120px);
-  background: var(--navy-deep);
-}
-
-.privacidade-curta__inner {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: clamp(24px, 4vw, 56px);
-  align-items: start;
-}
-
-.privacidade-curta__icone {
-  display: grid;
-  place-items: center;
-  width: 136px;
-  height: 120px;
-  border-radius: 28px;
-  background: rgba(63, 214, 194, 0.08);
-  border: 1px solid rgba(63, 214, 194, 0.3);
 }
 
 /* ---------- celular e tablet ---------- */
@@ -278,15 +271,13 @@
   }
   .planos-resumo__grade {
     grid-template-columns: minmax(0, 1fr);
-    max-width: 480px;
+    max-width: 520px;
+    border-top: 0;
   }
-}
-
-@media (max-width: 720px) {
-  .contraste__lados {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .privacidade-curta__inner {
-    grid-template-columns: minmax(0, 1fr);
+  .plano-mini,
+  .plano-mini + .plano-mini {
+    padding: var(--sp-5) 0;
+    border-left: 0;
+    border-top: 1px solid var(--line-strong);
   }
 }

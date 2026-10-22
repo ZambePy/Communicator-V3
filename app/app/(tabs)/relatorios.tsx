@@ -3,12 +3,12 @@ import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
-import { Card, EmptyState, ListRow, MetricTile, ProgressRing, Screen, ScreenHeader, SectionTitle, Shimmer, Text } from '@/components';
+import { Card, EmptyState, ListRow, Screen, ScreenHeader, SectionTitle, Shimmer, Text } from '@/components';
 import { useData } from '@/data/DataContext';
 import { hasFatigueData, Session } from '@/data/types';
 import { BloqueioDoPlano } from '@/features/BloqueioDoPlano';
 import { useApp } from '@/store/AppProvider';
-import { motion, opacity, radius, sizes, spacing, useTheme } from '@/theme';
+import { motion, opacity, sizes, spacing, useTheme } from '@/theme';
 import { mensagemDeErro } from '@/utils/errors';
 import { dateShort, durationMin, fatigueLabel, firstName, formatDuration } from '@/utils/format';
 
@@ -116,49 +116,45 @@ export default function Relatorios() {
         </Card>
       ) : (
         <>
-          <Card index={0}>
-            <View style={styles.summary}>
-              <View style={styles.flex}>
-                <Text variant="caption" tone="muted">
-                  Últimos 7 dias
-                </Text>
-                <Text variant="display" accessibilityLabel={`${totals.utterances} frases nos últimos 7 dias`}>
-                  {totals.utterances}
-                </Text>
-                <Text variant="bodySmall" tone="muted">
-                  frases · {formatDuration(totals.minutes)} de uso
-                </Text>
-              </View>
-              <ProgressRing value={totals.avgHit ?? 0} label={totals.avgHit != null ? `${Math.round(totals.avgHit * 100)}%` : '—'} caption="acerto" accessibilityLabel={totals.avgHit != null ? `Acerto médio de ${Math.round(totals.avgHit * 100)} por cento` : 'Acerto médio ainda sem dados'} />
+          {/* O único painel da tela: a semana, em números e no gráfico. */}
+          <Card index={0} style={styles.painel}>
+            <Text variant="caption" tone="muted">
+              Últimos 7 dias
+            </Text>
+            <Numero valor={String(totals.utterances)} rotulo={totals.utterances === 1 ? 'frase falada' : 'frases faladas'} grande />
+            <View style={styles.numeros}>
+              <Numero valor={formatDuration(totals.minutes)} rotulo="de uso" medio />
+              <Numero valor={totals.avgHit != null ? `${Math.round(totals.avgHit * 100)}%` : '—'} rotulo="de acerto" medio acessivel={totals.avgHit != null ? undefined : 'Acerto médio ainda sem dados'} />
             </View>
             <WeekChart days={week} />
           </Card>
 
-          <View style={styles.tiles}>
-            <MetricTile index={1} icon="locate-outline" label="erro médio de calibração" value={totals.avgErr != null ? `${totals.avgErr} px` : '—'} hint="referência: 57 px" tone="primary" />
-            <MetricTile index={2} icon="hand-left-outline" label="pedidos de ajuda" value={String(totals.help)} tone={totals.help > 2 ? 'warning' : 'accent'} />
+          <SectionTitle title="Na semana" />
+          <View style={styles.numeros}>
+            <Numero valor={totals.avgErr != null ? `${totals.avgErr} px` : '—'} rotulo="erro médio de calibração" nota="referência: 57 px" />
+            <Numero valor={String(totals.help)} rotulo={totals.help === 1 ? 'pedido de ajuda' : 'pedidos de ajuda'} alerta={totals.help > 2} />
           </View>
 
           {erro ? <Text variant="caption" tone="danger" style={styles.gapTop}>{erro}</Text> : null}
 
           <SectionTitle title="Sessões" />
-          <Card index={3} padding={0}>
+          <View style={[styles.lista, { borderTopColor: colors.border }]}>
             {sessions.map((s, i) => (
               <ListRow
                 key={s.id}
                 icon={orfa(s) ? 'help-circle-outline' : s.status === 'ended' ? 'time-outline' : 'radio-button-on'}
-                title={orfa(s) ? `${dateShort(s.started_at)} · interrompida` : `${dateShort(s.started_at)} · ${formatDuration(durationMin(s))}`}
-                subtitle={orfa(s) ? 'O computador parou sem encerrar — fora dos totais' : `${s.utterances} frases${s.calibration_error_px != null ? ` · ${Math.round(s.calibration_error_px)} px` : ''}${hasFatigueData(s) ? ` · ${fatigueLabel[s.fatigue]}` : ''}`}
+                title={orfa(s) ? `${dateShort(s.started_at)}, interrompida` : `${dateShort(s.started_at)}, ${formatDuration(durationMin(s))}`}
+                subtitle={orfa(s) ? 'O computador parou sem encerrar; fica fora dos totais.' : [`${s.utterances} ${s.utterances === 1 ? 'frase' : 'frases'}`, s.calibration_error_px != null ? `erro de ${Math.round(s.calibration_error_px)} px` : null, hasFatigueData(s) ? fatigueLabel[s.fatigue].toLowerCase() : null].filter(Boolean).join(', ')}
                 tone={orfa(s) ? 'muted' : s.status !== 'ended' ? 'accent' : s.fatigue === 'alta' || s.drift_kind === 'erratico' ? 'warning' : 'primary'}
                 onPress={() => router.push({ pathname: '/sessao/[id]', params: { id: s.id } })}
                 last={i === sessions.length - 1}
               />
             ))}
-          </Card>
+          </View>
           <View style={styles.privacy}>
             <Ionicons name="shield-checkmark-outline" size={sizes.icon.sm} color={colors.textMuted} />
             <Text variant="caption" tone="muted" style={styles.flexShrink}>
-              Só números agregados — nenhuma imagem sai do computador.
+              Só números agregados. Nenhuma imagem sai do computador.
             </Text>
           </View>
         </>
@@ -167,14 +163,52 @@ export default function Relatorios() {
   );
 }
 
+/**
+ * Número com rótulo, em texto corrido (19/10/2026: no lugar dos cartões com
+ * ícone e do anel de progresso, que repetiam o mesmo número em três enfeites).
+ */
+function Numero({ valor, rotulo, grande, medio, nota, alerta, acessivel }: { valor: string; rotulo: string; grande?: boolean; medio?: boolean; nota?: string; alerta?: boolean; acessivel?: string }) {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.numero} accessible accessibilityLabel={acessivel ?? [`${valor} ${rotulo}`, nota].filter(Boolean).join(', ')}>
+      <Text variant={grande ? 'display' : medio ? 'h2' : 'h1'} style={alerta ? { color: colors.warningText } : undefined}>
+        {valor}
+      </Text>
+      <Text variant="caption" tone="muted">
+        {rotulo}
+      </Text>
+      {nota ? (
+        <Text variant="caption" tone="primary">
+          {nota}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * Frases por dia. Barras finas com a ponta arredondada (a base fica reta, na
+ * linha do zero); número em cima só do dia de hoje e do maior dia — os outros
+ * estão no rótulo acessível e se leem pela altura. Hoje se destaca pela cor E
+ * pelo rótulo "hoje", nunca só pela cor.
+ */
 function WeekChart({ days }: { days: Dia[] }) {
+  const { colors } = useTheme();
   const max = Math.max(1, ...days.map((d) => d.utterances));
+  const iMax = days.reduce((m, d, i) => (d.utterances > days[m].utterances ? i : m), 0);
   const resumo = days.map((d) => `${d.nomeCompleto}: ${d.utterances} frases`).join('; ');
   return (
     <View style={styles.chartWrap} accessible accessibilityRole="image" accessibilityLabel={`Frases por dia. ${resumo}.`}>
-      <View style={styles.chart}>
+      <View style={[styles.chart, { borderBottomColor: colors.borderStrong }]}>
         {days.map((d, i) => (
-          <Bar key={i} index={i} ratio={d.utterances / max} label={d.label} value={d.utterances} today={d.isToday} />
+          <Bar key={i} index={i} ratio={d.utterances / max} label={d.isToday ? 'hoje' : d.label} value={d.utterances} today={d.isToday} mostrarValor={d.isToday || (i === iMax && d.utterances > 0)} />
+        ))}
+      </View>
+      <View style={styles.chartLabels}>
+        {days.map((d, i) => (
+          <Text key={i} variant="caption" tone={d.isToday ? 'primary' : 'muted'} weight={d.isToday ? 'bold' : 'medium'} center style={styles.flex} maxFontSizeMultiplier={1.2}>
+            {d.isToday ? 'hoje' : d.label}
+          </Text>
         ))}
       </View>
       <Text variant="caption" tone="muted" style={styles.chartCaption}>
@@ -184,9 +218,9 @@ function WeekChart({ days }: { days: Dia[] }) {
   );
 }
 
-function Bar({ ratio, label, value, today, index }: { ratio: number; label: string; value: number; today: boolean; index: number }) {
+function Bar({ ratio, value, today, index, mostrarValor }: { ratio: number; label: string; value: number; today: boolean; index: number; mostrarValor: boolean }) {
   const { colors, reduceMotion } = useTheme();
-  const alvo = Math.max(spacing.xs, ratio * sizes.chart);
+  const alvo = Math.max(value === 0 ? 2 : spacing.xs, ratio * sizes.chart);
   const h = useSharedValue(reduceMotion ? alvo : 0);
   useEffect(() => {
     h.value = reduceMotion ? alvo : withDelay(index * motion.stagger, withTiming(alvo, { duration: motion.duration.slow * 1.6, easing: Easing.out(Easing.cubic) }));
@@ -194,15 +228,12 @@ function Bar({ ratio, label, value, today, index }: { ratio: number; label: stri
   const st = useAnimatedStyle(() => ({ height: h.value }));
   return (
     <View style={styles.barCol}>
-      <Text variant="caption" tone="muted" maxFontSizeMultiplier={1.2}>
-        {value || ''}
+      <Text variant="caption" weight={today ? 'bold' : 'medium'} tone={today ? 'primary' : 'muted'} maxFontSizeMultiplier={1.2}>
+        {mostrarValor ? value : ' '}
       </Text>
       <View style={styles.barTrack}>
         <Animated.View style={[styles.bar, { backgroundColor: today ? colors.chartToday : colors.chartBar, opacity: value === 0 ? opacity.faint : 1 }, st]} />
       </View>
-      <Text variant="caption" tone={today ? 'accent' : 'muted'} weight={today ? 'bold' : 'medium'} maxFontSizeMultiplier={1.2}>
-        {label}
-      </Text>
     </View>
   );
 }
@@ -211,13 +242,18 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   flexShrink: { flexShrink: 1 },
   gapTop: { marginTop: spacing.md },
-  summary: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.md },
-  chartWrap: { marginTop: spacing.xl },
-  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
-  chartCaption: { marginTop: spacing.sm },
+  painel: { padding: spacing.xl },
+  // Lista sem moldura: as linhas encostam na margem da tela e o fio separa.
+  lista: { marginHorizontal: -spacing.lg, borderTopWidth: sizes.hairline },
+  numeros: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', columnGap: spacing.xxl, rowGap: spacing.md, marginTop: spacing.md },
+  numero: { minWidth: sizes.touch, maxWidth: '100%' },
+  chartWrap: { marginTop: spacing.xxl },
+  chart: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, borderBottomWidth: sizes.hairline },
+  chartLabels: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  chartCaption: { marginTop: spacing.md },
   barCol: { flex: 1, alignItems: 'center', gap: spacing.xs },
-  barTrack: { height: sizes.chart, justifyContent: 'flex-end', alignSelf: 'stretch' },
-  bar: { alignSelf: 'stretch', borderRadius: radius.xs },
+  barTrack: { height: sizes.chart, justifyContent: 'flex-end', alignItems: 'center', alignSelf: 'stretch' },
+  // Barra fina (≤ 18 dp), ponta de cima arredondada em 4, base reta na linha do zero.
+  bar: { width: '55%', maxWidth: 18, borderTopLeftRadius: 4, borderTopRightRadius: 4 },
   privacy: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.xl },
 });

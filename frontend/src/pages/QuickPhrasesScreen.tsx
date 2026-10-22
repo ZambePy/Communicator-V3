@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { emitirFalaDoPaciente } from '../cloud/eventos';
-import { falar } from '../services/voz';
+import { falarDoPaciente, falaSaiu } from '../services/voz/falaDoPaciente';
 import { MessageSquare, AlertCircle, Tv, Wind, Activity, ChevronRight, ChevronLeft, LayoutGrid, Heart } from 'lucide-react';
 import { GazePageLayout } from '../components/ui/GazePageLayout';
 import { GazeGrid } from '../components/ui/GazeGrid';
@@ -82,14 +82,16 @@ export const QuickPhrasesScreen: React.FC = () => {
   useAvisoDePrimeiroSucesso();
 
   const handleSpeak = (text: string) => {
-    void falar(text, { rate: 0.9 }).catch((e) => console.warn('[voz] falha ao falar:', e));
+    // Missão do tutorial, se houver uma em curso. O que o tutorial pediu foi
+    // "ouça o computador falar uma frase": ela só conta quando a frase SAIU em
+    // voz alta (relato de 18/10/2026, item 5) — antes contava no toque, com ou
+    // sem som. Se nada sair, a frase aparece em letra grande na tela.
+    // Silenciosa e idempotente quando não há tutorial rodando.
+    void falarDoPaciente(text, { rate: 0.9 }).then((r) => {
+      if (falaSaiu(r)) cumprirMissao('comunicacao');
+    });
     logSentence(text);
     emitirFalaDoPaciente(text, 'frase');
-    // Missão do tutorial, se houver uma em curso. Marcada AQUI e não no
-    // `onClick` do cartão: o que o tutorial pediu foi "ouça o computador falar
-    // uma frase", e é neste ponto que isso acontece. Silenciosa e idempotente
-    // quando não há tutorial rodando, que é o caso comum.
-    cumprirMissao('comunicacao');
   };
 
   const itemsPerPage = 5;

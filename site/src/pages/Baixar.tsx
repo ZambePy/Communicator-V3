@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { DownloadPanel } from '@/components/ui/DownloadPanel'
 import { LevarAoComputador } from '@/components/ui/LevarAoComputador'
 import { QrCode } from '@/components/ui/QrCode'
 import { SelosDasLojas } from '@/components/ui/SelosDasLojas'
+import { ApkDoRelease } from '@/components/ui/BaixarApk'
 import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { diaPorExtenso } from '@/lib/lancamento'
@@ -12,6 +12,7 @@ import { ehCelular } from '@/lib/aparelho'
 import { BETA, BETA_CTA, SITE_URL } from '@/data/content'
 import '@/components/home/home.css'
 import './baixar.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 /**
  * /baixar — os dois aplicativos, como nos produtos que distribuem app pelo
@@ -31,10 +32,11 @@ export default function Baixar() {
         <img src="/brand/irisflow-simbolo-negativo.svg" alt="" width={48} height={48} />
         <div>
           <h2 className="baixar-app__nome">IrisFlow Communicator</h2>
-          <p className="baixar-app__para">Para o computador do paciente</p>
+          <p className="baixar-app__para">Para o computador da pessoa</p>
         </div>
       </header>
-      {celular ? <LevarAoComputador /> : <DownloadPanel liberaEm={program.launchAt} />}
+      {/* O app do cuidador tem o cartão dele logo ao lado: o painel não o repete. */}
+      {celular ? <LevarAoComputador /> : <DownloadPanel liberaEm={program.launchAt} apk={false} />}
     </Reveal>
   )
 
@@ -49,6 +51,10 @@ export default function Baixar() {
       </header>
       <div className="baixar-app__lojas">
         <div>
+          {/* No Android, o APK da beta é o caminho de instalar hoje: vem antes
+              dos selos, que ainda dizem "em breve". O arquivo é o do último
+              release, como os instaladores do computador. */}
+          <ApkDoRelease lancou={lancou} liberaEm={program.launchAt} compacto={!celular} />
           <SelosDasLojas />
           <Link to="/cuidador" className="link-seta">
             O que o app faz
@@ -66,8 +72,8 @@ export default function Baixar() {
 
   return (
     <>
+      <FundoDaPagina />
       <section className="baixar-hero on-dark" aria-labelledby="baixar-titulo">
-        <AmbientBackground />
         <div className="container baixar-hero__inner">
           {BETA.ativo && (
             <p className="aviso-pilula anim-entrada">
@@ -89,8 +95,8 @@ export default function Baixar() {
           </h1>
           <p className="baixar-hero__lead anim-entrada anim-entrada--3">
             {lancou
-              ? 'Um app para o computador do paciente e outro para o celular de quem cuida. Os dois entram com a mesma conta.'
-              : 'Crie a conta agora e entre no primeiro dia. Os dois apps usam a mesma conta: a do computador do paciente e a do celular de quem cuida.'}
+              ? 'Um app para o computador da pessoa e outro para o celular de quem cuida. Os dois usam a mesma conta.'
+              : 'Crie a conta agora e entre no primeiro dia. Os dois apps usam a mesma conta: a do computador da pessoa e a do celular de quem cuida.'}
           </p>
         </div>
       </section>
@@ -113,7 +119,6 @@ export default function Baixar() {
       </section>
 
       <section className="baixar-passos on-dark" aria-labelledby="comecar-titulo">
-        <AmbientBackground variante="suave" />
         <div className="container baixar-passos__inner">
           <h2 id="comecar-titulo" className="titulo-capitulo">
             Para começar
@@ -135,7 +140,7 @@ export default function Baixar() {
             <li className="passo">
               <span className="passo__numero" aria-hidden="true">3</span>
               <h3 className="passo__titulo">Calibre</h3>
-              <p>A pessoa acompanha alguns pontos com o olhar. Leva cerca de meio minuto.</p>
+              <p>A pessoa acompanha alguns pontos com o olhar. Leva cerca de um minuto.</p>
             </li>
           </ol>
         </div>

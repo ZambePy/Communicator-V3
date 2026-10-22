@@ -138,6 +138,48 @@ describe('<Entrar />', () => {
   })
 })
 
+describe('<Entrar /> sem botão apagado (auditoria de 21/10/2026, P2-10)', () => {
+  it('o botão Entrar está ativo desde o começo e abre direto no título, sem rótulo "Acesso"', () => {
+    const { container } = montar()
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeEnabled()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Entrar na sua conta')
+    expect(container.querySelector('.eyebrow')).toBeNull()
+  })
+
+  it('apertar com os campos vazios diz o que falta e leva o foco ao e-mail, sem tentar entrar', () => {
+    montar()
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Para entrar, falta preencher: e-mail e senha.')
+    expect(screen.getByLabelText('E-mail')).toHaveFocus()
+    expect(screen.getByLabelText('E-mail')).toHaveAttribute('aria-invalid', 'true')
+    expect(signIn).not.toHaveBeenCalled()
+  })
+
+  it('com o e-mail certo e a senha em branco, o foco vai para a senha', () => {
+    montar()
+    fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'maria@exemplo.com.br' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Para entrar, falta preencher: senha.')
+    expect(screen.getByLabelText('Senha')).toHaveFocus()
+  })
+
+  it('a tela de login não ensina a regra de senha: conta antiga com senha curta entra', async () => {
+    signIn.mockResolvedValueOnce({ id: 'sub-1' })
+    montar()
+    expect(screen.queryByText(/Ao menos \d+ caracteres/)).toBeNull()
+    preencher('maria@exemplo.com.br', 'curta')
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByText('meu perfil')).toBeInTheDocument()
+    expect(signIn).toHaveBeenCalledWith('maria@exemplo.com.br', 'curta')
+  })
+
+  it('"Criar conta na beta" no lugar de "Entrar na beta gratuita", que repetia o sentido de "entrar"', () => {
+    montar()
+    expect(screen.getByRole('link', { name: 'Criar conta na beta' })).toHaveAttribute('href', '/beta')
+    expect(screen.queryByRole('link', { name: /Entrar na beta/ })).toBeNull()
+  })
+})
+
 describe('motivoDoLinkNaUrl', () => {
   it('lê o erro do fragmento ou da query e traduz os casos conhecidos', () => {
     expect(motivoDoLinkNaUrl({ hash: '', search: '' })).toBeNull()

@@ -1,3 +1,6 @@
+import { registrarFalhaDeGravacao, registrarGravacaoOk } from '../services/local/falhasDeGravacao';
+import { chavesDoAcompanhamentoDoPerfil } from '../services/evolucao/chaves';
+
 export interface SpokenSentence {
   id: string;
   text: string;
@@ -20,9 +23,30 @@ export interface CalibrationLog {
   herdado?: boolean;
 }
 
+/**
+ * Um relato do mapa da dor (19/10/2026): onde e quanto doía, na hora em que a
+ * pessoa disse. Guardado à parte das frases porque o relatório precisa do
+ * lugar e do nível como dados — "nível 7" dentro de uma frase não se ordena,
+ * não se filtra e não se compara com a semana anterior.
+ */
+export interface RegistroDeDor {
+  id: string;
+  /** Código do lugar (`braco-esquerdo`, `cabeca`): estável, para agrupar. */
+  local: string;
+  /** O lugar por extenso, como apareceu na tela ("Braço esquerdo"). */
+  lugar: string;
+  /** 0 a 10. */
+  nivel: number;
+  /** A frase falada e enviada ao cuidador. */
+  frase: string;
+  timestamp: string; // ISO string
+}
+
 export interface ClinicalData {
   sentences: SpokenSentence[];
   calibrations: CalibrationLog[];
+  /** Relatos do mapa da dor. Históricos gravados antes de 19/10/2026 não têm. */
+  dores: RegistroDeDor[];
 }
 
 /** Chave de antes da separação por paciente. Preservada — ver `migrar`. */
@@ -46,7 +70,17 @@ export const definirPerfilAtivo = (profileId: string | null): void => {
   perfilAtivo = profileId;
 };
 
-const VAZIO = (): ClinicalData => ({ sentences: [], calibrations: [] });
+/**
+ * O paciente cujo histórico está sendo gravado agora (21/10/2026).
+ *
+ * A evolução semanal e o diário da consulta guardam POR PACIENTE, como o
+ * histórico clínico, e quem registra uma tecla ou um aviso de fadiga não pode
+ * depender do `AuthContext` — o teclado, por exemplo, nem o conhece. Ler daqui
+ * mantém os dois no mesmo paciente.
+ */
+export const perfilAtivoDoHistorico = (): string | null => perfilAtivo;
+
+const VAZIO = (): ClinicalData => ({ sentences: [], calibrations: [], dores: [] });
 
 /**
  * Leva o histórico global para o perfil ativo, uma vez só.
@@ -103,24 +137,43 @@ export const getClinicalData = (): ClinicalData => {
     const saved = localStorage.getItem(chaveDoPerfil(perfilAtivo));
     if (!saved) return VAZIO();
     const d = JSON.parse(saved) as Partial<ClinicalData>;
-    return { sentences: d.sentences ?? [], calibrations: d.calibrations ?? [] };
+    return {
+      sentences: d.sentences ?? [],
+      calibrations: d.calibrations ?? [],
+      dores: Array.isArray(d.dores) ? d.dores : [],
+    };
   } catch {
     return VAZIO();
   }
 };
 
-const saveClinicalData = (data: ClinicalData): void => {
-  if (perfilAtivo === null) return;
+/**
+ * Grava o histórico do perfil ativo. Devolve `false` quando a gravação FALHOU
+ * — quota estourada não pode derrubar a UI, mas também não pode passar por
+ * salva (relato de 18/10/2026, item 15): a falha aparece na tela como "não foi
+ * possível salvar o histórico". Sem perfil não há onde gravar, e isso não é
+ * falha do disco.
+ */
+const saveClinicalData = (data: ClinicalData): boolean => {
+  if (perfilAtivo === null) return true;
   try {
     localStorage.setItem(chaveDoPerfil(perfilAtivo), JSON.stringify(data));
-  } catch {
-    /* quota estourada não pode derrubar a UI */
+    registrarGravacaoOk('historico');
+    return true;
+  } catch (e) {
+    registrarFalhaDeGravacao('historico', e);
+    return false;
   }
 };
 
 export const clearClinicalData = (): void => {
   if (perfilAtivo === null) return;
   localStorage.removeItem(chaveDoPerfil(perfilAtivo));
+  // 21/10/2026: a evolução semanal, o diário da consulta (dor, sono, humor,
+  // nota) e as perguntas ao médico são dado clínico deste paciente. Ao apagar —
+  // e ao retirar a autorização, que passa por aqui — "todos os dados clínicos
+  // locais" têm de ser TODOS, e não só as frases e as medições.
+  for (const chave of chavesDoAcompanhamentoDoPerfil(perfilAtivo)) localStorage.removeItem(chave);
 };
 
 /**
@@ -132,9 +185,12 @@ export const clearClinicalData = (): void => {
  */
 export const MAX_FRASES_NO_HISTORICO = 2000;
 export const MAX_CALIBRACOES_NO_HISTORICO = 300;
+/** Relatos de dor: os mais recentes. ~1000 cobre meses de vários relatos por dia. */
+export const MAX_DORES_NO_HISTORICO = 1000;
 
-export const logSentence = (text: string): void => {
-  if (!hasConsent() || !text.trim()) return;
+/** Registra uma frase. `false` = a gravação falhou (sem consentimento não há o que gravar: `true`). */
+export const logSentence = (text: string): boolean => {
+  if (!hasConsent() || !text.trim()) return true;
 
   const data = getClinicalData();
   data.sentences.push({
@@ -143,11 +199,12 @@ export const logSentence = (text: string): void => {
     timestamp: new Date().toISOString(),
   });
   if (data.sentences.length > MAX_FRASES_NO_HISTORICO) data.sentences = data.sentences.slice(-MAX_FRASES_NO_HISTORICO);
-  saveClinicalData(data);
+  return saveClinicalData(data);
 };
 
-export const logCalibrationAccuracy = (errorDeg: number): void => {
-  if (!hasConsent()) return;
+/** Registra o erro de uma calibração. `false` = a gravação falhou. */
+export const logCalibrationAccuracy = (errorDeg: number): boolean => {
+  if (!hasConsent()) return true;
 
   const data = getClinicalData();
   data.calibrations.push({
@@ -156,8 +213,46 @@ export const logCalibrationAccuracy = (errorDeg: number): void => {
     timestamp: new Date().toISOString(),
   });
   if (data.calibrations.length > MAX_CALIBRACOES_NO_HISTORICO) data.calibrations = data.calibrations.slice(-MAX_CALIBRACOES_NO_HISTORICO);
-  saveClinicalData(data);
+  return saveClinicalData(data);
 };
+
+/**
+ * Por que um relato de dor ficou (ou não) no histórico — a tela diz, em vez
+ * de dar por gravado:
+ *   - `gravado`;
+ *   - `sem_consentimento`: o cuidador não autorizou o histórico clínico (o
+ *     relato foi falado e enviado mesmo assim; só não fica guardado aqui);
+ *   - `sem_perfil`: nenhum paciente escolhido (modo de desenvolvimento);
+ *   - `falhou`: o armazenamento recusou (cheio ou bloqueado).
+ */
+export type ResultadoDoRegistro = 'gravado' | 'sem_consentimento' | 'sem_perfil' | 'falhou';
+
+export const logDor = (relato: Omit<RegistroDeDor, 'id' | 'timestamp'>): ResultadoDoRegistro => {
+  try {
+    if (!hasConsent()) return 'sem_consentimento';
+  } catch {
+    return 'falhou';
+  }
+  if (perfilAtivo === null) return 'sem_perfil';
+  const data = getClinicalData();
+  data.dores.push({
+    id: crypto.randomUUID(),
+    local: relato.local,
+    lugar: relato.lugar,
+    nivel: Number.isFinite(relato.nivel) ? Math.min(10, Math.max(0, Math.round(relato.nivel))) : 0,
+    frase: relato.frase,
+    timestamp: new Date().toISOString(),
+  });
+  if (data.dores.length > MAX_DORES_NO_HISTORICO) data.dores = data.dores.slice(-MAX_DORES_NO_HISTORICO);
+  return saveClinicalData(data) ? 'gravado' : 'falhou';
+};
+
+/** Relatos de dor, do mais recente para o mais antigo. */
+export const getRegistrosDeDor = (limite = Infinity): RegistroDeDor[] =>
+  [...getClinicalData().dores]
+    .filter((d) => d && typeof d.nivel === 'number' && typeof d.timestamp === 'string')
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, limite);
 
 // Estatísticas Agregadas
 export const getMostUsedPhrases = (limit = 5) => {

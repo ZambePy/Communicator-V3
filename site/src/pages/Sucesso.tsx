@@ -1,5 +1,4 @@
 import { Link, Navigate } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Card, CardIcon } from '@/components/ui/Card'
 import { DownloadPanel } from '@/components/ui/DownloadPanel'
@@ -11,6 +10,7 @@ import { brl, daysUntil, formatDate } from '@/utils/format'
 import { BRAND, TRIAL_DAYS } from '@/data/content'
 import './checkout.css'
 import './sucesso.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 /* A verificação de compatibilidade (`diagnosticar`) mora em
    src/utils/compat.ts e o bloco que a exibe em
@@ -31,7 +31,7 @@ export const NEXT_STEPS: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'alvo',
     title: 'Calibre e experimente',
-    text: 'Cerca de meio minuto olhando para alguns pontos na tela. Depois disso, comece pelo teclado e pelas frases rápidas, que são os módulos mais usados no primeiro dia.',
+    text: 'Cerca de um minuto olhando para alguns pontos na tela. Depois disso, comece pelo teclado e pelas frases rápidas, que são os módulos mais usados no primeiro dia.',
   },
 ]
 
@@ -42,8 +42,7 @@ export default function Sucesso() {
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
         <div className="success">
           <span className="success__badge" aria-hidden="true">
@@ -98,9 +97,9 @@ export default function Sucesso() {
                 <dd>
                   {brl(account.priceBRL)} em {formatDate(account.nextChargeAt)}
                   {account.payment?.cardLast4
-                    ? ` · ${account.payment.cardBrand} final ${account.payment.cardLast4}`
+                    ? `, ${account.payment.cardBrand} final ${account.payment.cardLast4}`
                     : account.payment
-                      ? ` · via ${account.payment.method}`
+                      ? `, via ${account.payment.method}`
                       : ''}
                 </dd>
               </div>
@@ -111,7 +110,8 @@ export default function Sucesso() {
         <Reveal anim="up" delay={460}>
           <div className="download">
             <h2 className="download__title">Baixe o {BRAND.product}</h2>
-            <DownloadPanel />
+            {/* O teste do computador vem logo abaixo: o link para ele sobraria. */}
+            <DownloadPanel teste={false} />
           </div>
         </Reveal>
 
@@ -133,10 +133,10 @@ export default function Sucesso() {
 
         <Reveal anim="fade" delay={900}>
           <p className="flow__foot">
-            <Link to="/conta" className="underline-grow" style={{ color: 'var(--ok)' }}>
+            <Link to="/conta" className="underline-grow">
               Ir para o painel da conta
-            </Link>{' '}
-            · Dúvidas na instalação?{' '}
+            </Link>
+            . Dúvidas na instalação?{' '}
             <Link to="/contato" className="underline-grow">
               Fale com a equipe
             </Link>

@@ -16,7 +16,9 @@
 import { decodeAngleWithConfidence, degToRad, modoDeDecodificacao, sinaisDaMeta, type ModoDeDecodificacao } from './decode';
 import { tamanhoDoTensor } from './crop';
 import { validarMeta } from './proveniencia';
-import type { L2CSModelMeta, L2CSWorkerRequest, L2CSWorkerResponse, VerificacaoDoModelo } from './types';
+import { conferirLadoAceito, conferirSaidas, formaDaEntradaDeTeste } from './conferenciaDoModelo';
+import { abrirSessaoComFallback } from './aberturaDaSessao';
+import type { EntradaDeTeste, L2CSModelMeta, L2CSWorkerRequest, L2CSWorkerResponse, VerificacaoDoModelo } from './types';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -66,6 +68,18 @@ async function webgpuDisponivel(): Promise<boolean> {
   }
 }
 
+/** Solta a sessão aberta (memória do ORT, da GPU no WebGPU) e a esquece. */
+async function liberarSessao(): Promise<void> {
+  const s = session;
+  session = null;
+  if (!s) return;
+  try {
+    await s.release?.();
+  } catch (e) {
+    console.warn(`${rotulo} não foi possível liberar a sessão anterior:`, e);
+  }
+}
+
 async function criarSessao(modelBuf: Uint8Array, provider: 'wasm' | 'webgpu'): Promise<void> {
   ortApi = await carregarOrt(provider);
   // Um provider só na lista: o ORT cai para o próximo em silêncio quando o
@@ -88,10 +102,56 @@ async function sha256Hex(buf: Uint8Array): Promise<string | null> {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Inferência de TESTE sobre um tensor de zeros, logo depois de a sessão subir
+ * (relato de 19/10/2026). Confere o que a meta promete — o lado do recorte que
+ * o ONNX aceita, os nomes das saídas e a grade de bins — ANTES do `ready`.
+ * Antes isso só era conferido na primeira inferência real: o status já estava
+ * `ready`, a calibração liberada, e cada inferência virava `infer_error` com o
+ * bloco angular zerado. A calibração terminava em "features mortas" e a tela
+ * culpava o reflexo dos óculos.
+ *
+ * Também aquece a sessão: no WebGPU a primeira execução compila os shaders, e
+ * ela deixa de cair sobre o primeiro quadro do paciente.
+ */
+async function testarSaida(teste: EntradaDeTeste, ativo: 'webgpu' | 'wasm', m: L2CSModelMeta): Promise<void> {
+  const forma = formaDaEntradaDeTeste(teste, ativo, m);
+  const n = forma[1] * forma[2] * forma[3];
+  const input = new ortApi.Tensor('float32', new Float32Array(n), forma);
+  let out: Record<string, { data: ArrayLike<number> }>;
+  try {
+    out = await session.run({ [m.inputTensorName]: input });
+  } catch (e) {
+    // Pode ser o provider (um operador que o WebGPU não tem) ou o modelo (um
+    // ONNX de entrada fixa noutro lado): quem chama decide se tenta o WASM.
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `a inferência de teste com a entrada ${forma.join('×')} falhou em '${ativo}': ${msg}`,
+      { cause: e },
+    );
+  }
+  conferirSaidas(out, m);
+}
+
+/** Cria a sessão no provider pedido e, com `teste`, roda a inferência de teste. */
+async function criarSessaoConferida(
+  modelBuf: Uint8Array,
+  provider: 'wasm' | 'webgpu',
+  m: L2CSModelMeta,
+  teste: EntradaDeTeste | undefined,
+): Promise<void> {
+  // O lado é conferido contra a meta ANTES de pagar a criação da sessão: é
+  // erro de configuração, e nenhum provider o resolve.
+  if (teste && 'porProvider' in teste) conferirLadoAceito(m, teste.porProvider[provider]);
+  await criarSessao(modelBuf, provider);
+  if (teste) await testarSaida(teste, provider, m);
+}
+
 async function init(
   modelUrl: string,
   metaUrl: string,
   pedido: 'auto' | 'webgpu' | 'wasm',
+  teste: EntradaDeTeste | undefined,
 ): Promise<void> {
   const [metaResp, modelResp] = await Promise.all([fetch(metaUrl), fetch(modelUrl)]);
   if (!metaResp.ok) throw new Error(`meta HTTP ${metaResp.status}`);
@@ -121,36 +181,27 @@ async function init(
     console.warn(`${rotulo} meta sem sha256; o arquivo carregado tem ${sha256Calculado}.`);
   }
 
-  let ativo: 'webgpu' | 'wasm';
-  let fallback = false;
-  if (pedido === 'auto') {
-    if (await webgpuDisponivel()) {
-      try {
-        await criarSessao(modelBuf, 'webgpu');
-        ativo = 'webgpu';
-      } catch (e) {
-        console.warn(`${rotulo} sessão WebGPU falhou, caindo para WASM:`, e);
-        await criarSessao(modelBuf, 'wasm');
-        ativo = 'wasm';
-        fallback = true;
-      }
-    } else {
-      await criarSessao(modelBuf, 'wasm');
-      ativo = 'wasm';
-      fallback = true;
-    }
-  } else {
-    await criarSessao(modelBuf, pedido);
-    ativo = pedido;
-  }
+  // A ordem (WebGPU, queda para WASM, o que soltar antes) está em
+  // `aberturaDaSessao.ts`, testada fora do worker. Revisão do pipeline de
+  // 19/10/2026: a sessão WebGPU que subia e falhava na inferência de teste não
+  // era liberada, e a WASM nascia por cima dela (~95 MB presos).
+  const { ativo, fallback } = await abrirSessaoComFallback(pedido, {
+    webgpuDisponivel,
+    abrir: (p) => criarSessaoConferida(modelBuf, p, rawMeta, teste),
+    liberar: liberarSessao,
+    avisar: (mensagem, e) => console.warn(`${rotulo} ${mensagem}`, e),
+  });
 
   meta = rawMeta;
   modo = modoDeDecodificacao(rawMeta);
   sinais = sinaisDaMeta(rawMeta);
-  saidaConferida = false;
+  // Com a inferência de teste, a forma da saída já foi conferida; sem ela
+  // (cliente antigo), a primeira inferência real confere, como antes.
+  saidaConferida = teste !== undefined;
   console.log(
     `${rotulo} sessão criada com executionProvider='${ativo}' (pedido: '${pedido}'), ` +
-    `${rawMeta.outputBins} bins × ${rawMeta.binWidth}° desde ${rawMeta.binOffset}°, decodificação ${modo}`,
+    `${rawMeta.outputBins} bins × ${rawMeta.binWidth}° desde ${rawMeta.binOffset}°, decodificação ${modo}` +
+    (teste ? ' — inferência de teste conferida' : ''),
   );
   post({ type: 'ready', meta: rawMeta, executionProvider: ativo, requested: pedido, fallback, verificacao });
 }
@@ -172,13 +223,7 @@ async function infer(id: number, tensor: Float32Array, dims?: [number, number]):
     const size = tamanhoDoTensor(tensor);
     // ONNX de entrada fixa (o do GazeGene só aceita 224): sem esta conferência o
     // erro do ONNX Runtime chega como uma mensagem críptica a cada inferência.
-    const lados = meta.supportedInputSizes;
-    if (Array.isArray(lados) && lados.length > 0 && !lados.includes(size)) {
-      throw new Error(
-        `o modelo aceita recorte de ${lados.join(' ou ')} px, mas recebeu ${size} px ` +
-        `(confira src/l2cs/modelos.ts e a flag l2csInputSize).`,
-      );
-    }
+    conferirLadoAceito(meta, size);
     shape = [1, 3, size, size];
   }
   const input = new ortApi.Tensor('float32', tensor, shape);
@@ -186,6 +231,13 @@ async function infer(id: number, tensor: Float32Array, dims?: [number, number]):
   const out = await session.run({ [meta.inputTensorName]: input });
   const dt = performance.now() - t0;
 
+  // Um modelo com outra grade de bins e uma meta antiga decodificariam ângulos
+  // errados com toda a confiança do mundo. Conferido uma vez por sessão — em
+  // geral já no `init`, pela inferência de teste.
+  if (!saidaConferida) {
+    conferirSaidas(out, meta);
+    saidaConferida = true;
+  }
   const yawOut = out[meta.outputTensorNames.yaw];
   const pitchOut = out[meta.outputTensorNames.pitch];
   if (!yawOut || !pitchOut) {
@@ -194,32 +246,27 @@ async function infer(id: number, tensor: Float32Array, dims?: [number, number]):
       `o modelo expõe [${Object.keys(out).join(', ')}].`,
     );
   }
-  // Um modelo com outra grade de bins e uma meta antiga decodificariam ângulos
-  // errados com toda a confiança do mundo. Conferir uma vez por sessão.
-  if (!saidaConferida) {
-    const nYaw = (yawOut.data as Float32Array).length;
-    const nPitch = (pitchOut.data as Float32Array).length;
-    if (nYaw !== meta.outputBins || nPitch !== meta.outputBins) {
-      throw new Error(
-        `a meta declara ${meta.outputBins} bins, mas o modelo devolveu ${nYaw} (yaw) e ${nPitch} (pitch). ` +
-        `Atualize a meta (.meta.json) do modelo carregado.`,
-      );
-    }
-    saidaConferida = true;
-  }
   const yaw = decodeAngleWithConfidence(yawOut.data as Float32Array, meta.binWidth, meta.binOffset, modo);
   const pitch = decodeAngleWithConfidence(pitchOut.data as Float32Array, meta.binWidth, meta.binOffset, modo);
 
-  post({
-    type: 'result',
-    id,
-    // `sinais` leva a saída à convenção do app (ver `sinaisDaMeta`).
-    yaw: degToRad(sinais.yaw * yaw.deg),
-    pitch: degToRad(sinais.pitch * pitch.deg),
-    // O eixo pior é o gargalo, por isso min e não média.
-    confidence: Math.min(yaw.confidence, pitch.confidence),
-    inferenceMs: dt,
-  });
+  // Devolve o buffer de entrada ao client (falha #13, 18/10/2026): depois do
+  // `run` o ONNX Runtime já copiou os dados (WASM) ou subiu para a GPU, e o
+  // buffer é só nosso. Transferido, sem cópia; o client o reaproveita no
+  // próximo recorte em vez de alocar outro.
+  post(
+    {
+      type: 'result',
+      id,
+      // `sinais` leva a saída à convenção do app (ver `sinaisDaMeta`).
+      yaw: degToRad(sinais.yaw * yaw.deg),
+      pitch: degToRad(sinais.pitch * pitch.deg),
+      // O eixo pior é o gargalo, por isso min e não média.
+      confidence: Math.min(yaw.confidence, pitch.confidence),
+      inferenceMs: dt,
+      devolvido: tensor,
+    },
+    [tensor.buffer],
+  );
 }
 
 ctx.addEventListener('message', async (ev: MessageEvent<L2CSWorkerRequest>) => {
@@ -228,13 +275,18 @@ ctx.addEventListener('message', async (ev: MessageEvent<L2CSWorkerRequest>) => {
     if (msg.type === 'init') {
       if (msg.ortBaseUrl) ortDir = msg.ortBaseUrl.endsWith('/') ? msg.ortBaseUrl : `${msg.ortBaseUrl}/`;
       if (msg.rotulo) rotulo = msg.rotulo;
-      await init(msg.modelUrl, msg.metaUrl, msg.provider);
+      await init(msg.modelUrl, msg.metaUrl, msg.provider, msg.teste);
     } else if (msg.type === 'infer') {
       await infer(msg.id, msg.tensor, msg.dims);
     }
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     if (msg.type === 'init') post({ type: 'init_error', error });
-    else if (msg.type === 'infer') post({ type: 'infer_error', id: msg.id, error });
+    else if (msg.type === 'infer') {
+      // O buffer volta também na falha, se ainda for nosso (não destacado).
+      const devolver = msg.tensor instanceof Float32Array && msg.tensor.byteLength > 0;
+      if (devolver) post({ type: 'infer_error', id: msg.id, error, devolvido: msg.tensor }, [msg.tensor.buffer]);
+      else post({ type: 'infer_error', id: msg.id, error });
+    }
   }
 });

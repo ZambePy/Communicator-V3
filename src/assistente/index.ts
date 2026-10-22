@@ -39,6 +39,15 @@ export {
   type PedidoDeFrases,
   type SugestaoDeFrase,
 } from './frases';
+export {
+  ehPerguntaDeSimNao,
+  falaDeDor,
+  intencaoDaPergunta,
+  MAXIMO_DE_RESPOSTAS,
+  sugerirRespostas,
+  type Intencao,
+  type OpcoesDeRespostas,
+} from './respostas';
 
 /**
  * Onde a sugestão é calculada. Só `'local'` está implementado; `'nuvem'` existe

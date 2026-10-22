@@ -129,8 +129,22 @@ export class EyeQualityAnalyzer {
   private lastLandmarks: Point3D[] | null = null;
   /** Máscara de brilho do quadro corrente. Reusada; só cresce. */
   private specularMask: Uint8Array | null = null;
-  /** Máscara do quadro anterior, para medir se a mancha se move. */
+  /**
+   * Luminância do recorte, reaproveitada entre quadros (falha #13 da auditoria
+   * de 18/10/2026: um `Float32Array` novo a cada quadro, 30 vezes por segundo,
+   * na thread do cursor). Só cresce; cada quadro escreve os N primeiros
+   * valores antes de ler qualquer um, então nada do quadro anterior vaza.
+   */
+  private lumBuffer: Float32Array | null = null;
+  /**
+   * Máscara do quadro anterior, para medir se a mancha se move. Só cresce: os
+   * `specularAnteriorN` primeiros bytes são a máscara. Antes era realocada a
+   * cada mudança de tamanho do recorte — e a bbox dos olhos varia alguns
+   * pixels quase todo quadro: até ~70 KB novos por quadro a 1080p (revisão
+   * final de 22/10/2026). A comparação é a mesma (tamanhos diferentes = 1).
+   */
   private specularMaskAnterior: Uint8Array | null = null;
+  private specularAnteriorN = 0;
 
   /**
    * Solta o canvas em resolução plena de vídeo.
@@ -268,7 +282,8 @@ export class EyeQualityAnalyzer {
         return { detectorConfidence };
       }
 
-      const lum = new Float32Array(N);
+      if (!this.lumBuffer || this.lumBuffer.length < N) this.lumBuffer = new Float32Array(N);
+      const lum = this.lumBuffer;
       let sum = 0;
       // Contagem de pixels quase-saturados feita no mesmo loop (custo zero).
       // specularRatio = fração acima de SPECULAR_LUMINANCE.
@@ -303,12 +318,16 @@ export class EyeQualityAnalyzer {
       // enxerga em volta dela); mancha que se move = reflexo entrando e saindo
       // do olho, que é o que estraga a borda da íris.
       const atual = mask.subarray(0, N);
-      const specularStability = estabilidadeEspecular(atual, this.specularMaskAnterior);
+      const anterior = this.specularMaskAnterior
+        ? this.specularMaskAnterior.subarray(0, this.specularAnteriorN)
+        : null;
+      const specularStability = estabilidadeEspecular(atual, anterior);
       // Cópia, e não referência: `mask` é reusada no próximo quadro.
-      if (!this.specularMaskAnterior || this.specularMaskAnterior.length !== N) {
+      if (!this.specularMaskAnterior || this.specularMaskAnterior.length < N) {
         this.specularMaskAnterior = new Uint8Array(N);
       }
       this.specularMaskAnterior.set(atual);
+      this.specularAnteriorN = N;
       let varSum = 0;
       for (let i = 0; i < N; i++) {
         const d = lum[i] - brightnessEstimate;

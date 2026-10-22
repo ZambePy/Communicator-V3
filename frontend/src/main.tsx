@@ -7,6 +7,7 @@ import './index.css';
 import { aplicarSessaoDaUrl } from './sessionFromUrl';
 import { descarregar as descarregarAssistente } from './services/assistente';
 import { instalarCapturaDeErros } from './services/diagnostico/relatorioDeSuporte';
+import { restaurarPedidoDeSocorro } from './services/emergencia/pedidoDeSocorro';
 
 // ANTES de renderizar: a configuração de sessão vinda da URL. `EXPERIMENT` é
 // resolvido no import do módulo, então aplicar depois não valeria para esta
@@ -19,6 +20,12 @@ if (aplicarSessaoDaUrl()) {
 // O relatório de suporte precisa dos erros desde o INÍCIO da sessão: instalado
 // aqui, antes de renderizar, ele pega inclusive as falhas de boot.
 instalarCapturaDeErros();
+
+// Um socorro em andamento sobrevive à recarga da página (o vigia do renderer
+// recarrega a página travada): volta antes de desenhar, com o alarme se ele
+// estava tocando. Sem socorro, desliga o alarme do sistema que a página
+// anterior tenha deixado ligado (revisão de segurança de 19/10/2026).
+restaurarPedidoDeSocorro();
 
 // A gravação do modelo do assistente é adiada 1,5 s para não escrever no disco
 // a cada letra digitada por fixação. `pagehide` é o último momento confiável

@@ -55,7 +55,7 @@ async function reduzirImagem(file: File): Promise<string> {
 
 export const ProfileSelect: React.FC = () => {
   const { t } = useTranslation();
-  const { profiles, selectProfile, createProfile, removeProfile } = useAuth();
+  const { profiles, selectProfile, createProfile, removeProfile, avisoDaRemocao, dispensarAvisoDaRemocao } = useAuth();
   const { confirmar, dialogo } = useConfirmacao();
 
   // Remover era UM clique, sem confirmação, num botão de 32 px dentro do
@@ -275,6 +275,31 @@ export const ProfileSelect: React.FC = () => {
           </div>
         ) : (
           <>
+            {/* A voz de quem foi removido não pôde ser apagada: o perfil saiu, mas a
+                gravação ficou no computador, e a pessoa precisa saber (M4). */}
+            {avisoDaRemocao && (
+              <div
+                role="alert"
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '0.55rem',
+                  background: 'var(--tint-danger-bg)',
+                  border: '1px solid var(--tint-danger-border)',
+                  padding: '0.8rem 1rem',
+                  borderRadius: '0.85rem',
+                  color: 'var(--tint-danger-text)',
+                  fontSize: '0.95rem',
+                }}
+              >
+                <AlertCircle size={17} color="var(--color-danger)" aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }} />
+                <span style={{ flex: 1 }}>{avisoDaRemocao}</span>
+                <PrimaryButton type="button" variant="ghost" onClick={dispensarAvisoDaRemocao}>
+                  <X size={16} aria-hidden="true" /> {t('profiles.removeNoticeDismiss')}
+                </PrimaryButton>
+              </div>
+            )}
+
             {profiles.length === 0 && (
               <EstadoVazio
                 titulo={t('profiles.empty')}

@@ -197,7 +197,7 @@
   z-index: 1;
   transform: scaleX(0);
   transform-origin: left;
-  background: linear-gradient(90deg, rgba(27, 84, 168, 0.75), rgba(0, 166, 147, 0.75));
+  background: rgba(27, 84, 168, 0.75);
   transition-property: transform;
   transition-timing-function: linear;
 }
@@ -228,10 +228,8 @@
 }
 
 .demo__settings-label {
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: var(--fs-sm);
+  font-weight: 600;
   color: var(--text-dim);
   margin-right: var(--sp-2);
 }

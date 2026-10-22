@@ -24,8 +24,10 @@
   break-inside: avoid;
 }
 
+/* Em bloco, e não em inline-block: o número do item se alinha à primeira linha
+   do texto, mesmo quando ele quebra em duas (auditoria de 21/10/2026, P3-1). */
 .legal__toc a {
-  display: inline-block;
+  display: block;
   padding-block: 0.55rem;
   color: var(--text-soft);
   text-decoration: underline;
@@ -57,7 +59,7 @@
 }
 
 .legal__other a {
-  color: var(--ok);
+  color: var(--accent);
   font-weight: 650;
   text-decoration: underline;
   text-underline-offset: 3px;

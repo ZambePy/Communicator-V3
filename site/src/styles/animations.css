@@ -1,25 +1,27 @@
 /* ============================================================
-   Animações do site: o movimento ambiente do fundo (gradiente,
-   manchas de luz, partículas e varredura), a entrada dos blocos ao
-   rolar, a subida do título, a transição de página, o carregamento e
-   os retornos de fixação. Tudo respeita prefers-reduced-motion (ver
-   global.css).
+   Movimento do site (redesenho de 19/10/2026).
+
+   Regra: o que se mexe sozinho é pouco e diz alguma coisa. Ficaram:
+   - a abertura da home, uma vez (o título e o teclado entram juntos);
+   - o aro de fixação dos botões principais, que fecha com o ponteiro parado
+     em cima — o gesto do produto, respondendo a um gesto da pessoa;
+   - as confirmações (código certo, mensagem enviada) e o carregamento.
+   Em 20/10/2026 entrou o movimento que é mecânica do próprio IrisFlow, e só
+   ele: o olhar escrevendo na abertura da home, a piscada entre páginas, os
+   13 pontos da calibração (Como funciona) e a frase que chega ao celular de
+   quem cuida (Cuidador) — cada um uma vez, ou em resposta à pessoa.
+   Saíram as partículas, as manchas de luz, a varredura, o título que sobe
+   palavra por palavra e a entrada de cada bloco ao rolar. Tudo respeita
+   prefers-reduced-motion (global.css).
+   Rodada 3 (21/10/2026): o v3 trouxe as partículas, a aurora da chamada final
+   e o anel que acompanha o ponteiro. O dono recusou o "efeito" no mesmo dia
+   ("parece feito por IA"): as partículas e a aurora saíram. Ficou o anel do
+   ponteiro (o gesto do produto) e UM movimento de abertura, o monitor que sobe
+   uma vez para o lugar (`monitor-sobe`, em components/home/capitulos.css).
+   O movimento reduzido para tudo.
    ============================================================ */
 
-/* ---------- gradiente que se desloca (fundo ambiente e checkout) ---------- */
-@keyframes gradient-drift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-/* ---------- anel que se expande (confirmação de sucesso e abertura) ---------- */
+/* ---------- anel que se expande (confirmação de sucesso) ---------- */
 @keyframes ring-expand {
   0% {
     transform: scale(0.6);
@@ -31,90 +33,23 @@
   }
 }
 
-/* ---------- movimento ambiente do fundo (AmbientBackground) ----------
-   Manchas de luz que mudam de forma devagar, partículas à deriva e a
-   linha de varredura que lembra a leitura contínua da webcam. */
-@keyframes blob-morph {
-  0%,
-  100% {
-    border-radius: 62% 38% 44% 56% / 48% 56% 44% 52%;
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
-  }
-  33% {
-    border-radius: 38% 62% 58% 42% / 62% 38% 62% 38%;
-    transform: translate3d(3%, -4%, 0) rotate(60deg) scale(1.06);
-  }
-  66% {
-    border-radius: 55% 45% 34% 66% / 40% 62% 38% 60%;
-    transform: translate3d(-3%, 3%, 0) rotate(120deg) scale(0.96);
-  }
-}
-
-@keyframes drift-particle {
-  0% {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0;
-  }
-  10% {
-    opacity: var(--p-opacity, 0.6);
-  }
-  90% {
-    opacity: var(--p-opacity, 0.6);
-  }
-  100% {
-    transform: translate3d(var(--p-dx, 30px), var(--p-dy, -120px), 0) scale(1.4);
-    opacity: 0;
-  }
-}
-
-@keyframes scan-line {
-  0% {
-    transform: translateY(-100%);
-    opacity: 0;
-  }
-  12% {
-    opacity: 0.55;
-  }
-  88% {
-    opacity: 0.55;
-  }
-  100% {
-    transform: translateY(100vh);
-    opacity: 0;
-  }
-}
-
-/* Flutuação lenta (o vídeo da abertura e a linha "role"). Usa a
-   propriedade `translate`, e não `transform`, para somar com qualquer
-   `transform` de quem flutua. */
+/* Flutuação lenta (mantida para quem ainda a usa). Usa `translate`, e não
+   `transform`, para somar com qualquer `transform` de quem flutua. */
 @keyframes float-slow {
   0%,
   100% {
     translate: 0 0;
   }
   50% {
-    translate: 0 -12px;
+    translate: 0 -8px;
   }
 }
 
-/* Halo que pulsa atrás do produto. */
-@keyframes iris-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 0.9;
-  }
-  50% {
-    transform: scale(1.08);
-    opacity: 1;
-  }
-}
-
-/* ---------- entrada dos blocos ao rolar ---------- */
+/* ---------- entradas curtas, para o que aparece por ação da pessoa ---------- */
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(26px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -134,7 +69,7 @@
 @keyframes zoom-in {
   from {
     opacity: 0;
-    transform: scale(0.94);
+    transform: scale(0.98);
   }
   to {
     opacity: 1;
@@ -145,7 +80,7 @@
 @keyframes slide-right {
   from {
     opacity: 0;
-    transform: translateX(-34px);
+    transform: translateX(-12px);
   }
   to {
     opacity: 1;
@@ -156,7 +91,7 @@
 @keyframes slide-left {
   from {
     opacity: 0;
-    transform: translateX(34px);
+    transform: translateX(12px);
   }
   to {
     opacity: 1;
@@ -164,11 +99,10 @@
   }
 }
 
-/* ---------- palavras do título ---------- */
 @keyframes word-rise {
   from {
     opacity: 0;
-    transform: translateY(0.7em);
+    transform: translateY(0.4em);
   }
   to {
     opacity: 1;
@@ -198,7 +132,7 @@
     opacity: 0;
   }
   60% {
-    transform: scale(1.15);
+    transform: scale(1.12);
     opacity: 1;
   }
   100% {
@@ -216,72 +150,99 @@
   }
 }
 
-/* ---------- transição de página ---------- */
-@keyframes page-enter {
+/* ---------- a piscada entre páginas (piscada.ts, 20/10/2026) ----------
+   No clique num link para outra página, duas pálpebras marinho, de borda
+   curva, descem e sobem até se encontrar um pouco abaixo do meio da tela (a
+   de cima anda mais que a de baixo, como no olho): 160 ms. Com elas fechadas
+   a rota troca; então voltam, em 220 ms, e a fresta entre as duas bordas
+   curvas é a de um olho abrindo. Só transform anima. A capa fica sob o
+   cabeçalho, que não se mexe, e sobre a página. A primeira página do site,
+   o voltar e o avançar chegam parados. */
+.palpebras {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+}
+
+/* Abrindo, a página nova já responde ao ponteiro. */
+.palpebras.is-abrindo {
+  pointer-events: none;
+}
+
+/* As pálpebras são da cor do fundo da página (a noite do v3, desde a rodada 3). */
+.palpebras svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: var(--v3-noite);
+}
+
+/* Cada uma parte de logo fora da tela (a de cima, com a borda logo abaixo
+   do cabeçalho, a 8 % da altura), para o movimento aparecer desde o
+   primeiro quadro. */
+.palpebras__cima {
+  animation: palpebra-desce 160ms cubic-bezier(0.35, 0, 0.65, 1) both;
+}
+
+.palpebras__baixo {
+  animation: palpebra-sobe 160ms cubic-bezier(0.35, 0, 0.65, 1) both;
+}
+
+/* Abrir é mais lento que fechar: já se mexe no primeiro quadro e
+   desacelera no fim, mas sem a cauda longa de um ease-out forte, que
+   escondia a segunda metade do movimento (a borda some sobre o marinho da
+   faixa de cima). A de cima termina escondida sob o cabeçalho; a de baixo,
+   fora da tela. */
+.palpebras.is-abrindo .palpebras__cima {
+  animation: palpebra-abre-cima 220ms cubic-bezier(0.3, 0.3, 0.5, 1) both;
+}
+
+.palpebras.is-abrindo .palpebras__baixo {
+  animation: palpebra-abre-baixo 220ms cubic-bezier(0.3, 0.3, 0.5, 1) both;
+}
+
+@keyframes palpebra-desce {
   from {
-    opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(-58%);
   }
   to {
-    opacity: 1;
     transform: none;
   }
 }
 
-/* ============================================================
-   Classes utilitarias construidas sobre os keyframes acima.
-   Todas leem os tokens, então funcionam igual em qualquer faixa.
-   ============================================================ */
-
-.anim-page {
-  animation: page-enter 520ms var(--ease-out) both;
-}
-
-/* ---------- transição de rota com a View Transitions API ----------
-   A classe .vt é posta no <html> pelo NavigationEnhancer quando o
-   navegador tem document.startViewTransition: o fade do .anim-page sai
-   de cena e o navegador cruza as duas páginas. O cabeçalho fixo fica de
-   fora da transição, para não "descer" junto com o conteúdo. */
-html.vt .anim-page {
-  animation: none;
-}
-
-.header {
-  view-transition-name: site-header;
-}
-
-::view-transition-old(root) {
-  animation: vt-out 200ms var(--ease-in-out) both;
-}
-
-::view-transition-new(root) {
-  animation: vt-in 320ms var(--ease-out) both;
-}
-
-::view-transition-old(site-header),
-::view-transition-new(site-header) {
-  animation: none;
-  mix-blend-mode: normal;
-}
-
-@keyframes vt-out {
-  to {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-}
-
-@keyframes vt-in {
+@keyframes palpebra-sobe {
   from {
-    opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(50%);
+  }
+  to {
+    transform: none;
   }
 }
 
+@keyframes palpebra-abre-cima {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(-67%);
+  }
+}
+
+@keyframes palpebra-abre-baixo {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(51%);
+  }
+}
+
+/* Com movimento reduzido nada é interceptado (NavigationEnhancer); se a
+   preferência mudar no meio de uma piscada, a capa some. */
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation: none;
+  .palpebras {
+    display: none;
   }
 }
 
@@ -289,74 +250,25 @@ html.vt .anim-page {
   animation: spin 900ms linear infinite;
 }
 
-.anim-blob {
-  animation: blob-morph 20s var(--ease-in-out) infinite;
-}
-
-.anim-float {
-  animation: float-slow 9s var(--ease-in-out) infinite;
-}
-
-/* Superfície elevada padrão: cartão sólido com sombra; dentro de
-   .on-dark vira um painel translúcido. */
+/* Superfície padrão: chapada, com borda. Sem vidro e sem sombra. */
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
 }
 
-.on-dark .panel {
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  box-shadow: var(--shadow-md);
+/* ---------- entradas das aberturas ----------
+   As páginas de dentro abrem paradas: o título já está lá quando a página
+   chega. A abertura da home tem a sua própria entrada (hero-produto.css). */
+.anim-entrada,
+.anim-entrada--2,
+.anim-entrada--3,
+.anim-entrada--4,
+.anim-entrada--5 {
+  animation: none;
 }
 
-/* Brilho que segue o ponteiro (--mx/--my definidos no componente). */
-.hover-glow {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.hover-glow::after {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  background: radial-gradient(
-    320px circle at var(--mx, 50%) var(--my, 50%),
-    var(--accent-soft),
-    transparent 62%
-  );
-  opacity: 0;
-  transition: opacity var(--dur) var(--ease-out);
-  pointer-events: none;
-  z-index: -1;
-}
-
-.hover-glow:hover::after,
-.hover-glow:focus-within::after {
-  opacity: 1;
-}
-
-/* Elevacao no hover. */
-.lift {
-  transition:
-    transform var(--dur) var(--ease-spring),
-    border-color var(--dur) var(--ease-out),
-    box-shadow var(--dur) var(--ease-out);
-  will-change: transform;
-}
-
-.lift:hover,
-.lift:focus-within {
-  transform: translateY(-5px);
-  border-color: var(--accent-line);
-  box-shadow: var(--shadow-lg);
-}
-
-/* Sublinhado que cresce a partir da esquerda. */
+/* Sublinhado que cresce a partir da esquerda (rodapé e links de texto). */
 .underline-grow {
   position: relative;
 }
@@ -366,7 +278,7 @@ html.vt .anim-page {
   position: absolute;
   left: 0;
   bottom: -4px;
-  height: 2px;
+  height: 1.5px;
   width: 100%;
   background: currentColor;
   transform: scaleX(0);
@@ -379,29 +291,10 @@ html.vt .anim-page {
   transform: scaleX(1);
 }
 
-/* ---------- entrada escalonada (aberturas das páginas) ----------
-   Usada pelo hero da home e pelo cabeçalho das páginas de dentro: por
-   isso mora aqui, e não no CSS de uma página só. */
-.anim-entrada {
-  animation: entrada 900ms var(--ease-out) both;
-}
-.anim-entrada--2 {
-  animation-delay: 70ms;
-}
-.anim-entrada--3 {
-  animation-delay: 140ms;
-}
-.anim-entrada--4 {
-  animation-delay: 210ms;
-}
-.anim-entrada--5 {
-  animation-delay: 280ms;
-}
-
 @keyframes entrada {
   from {
     opacity: 0;
-    transform: translateY(16px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;

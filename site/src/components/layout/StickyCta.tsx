@@ -18,6 +18,7 @@ const HIDDEN_ON = [
   '/conta',
   '/perfil',
   '/confirmar-email',
+  '/parear',
 ]
 
 const DISMISS_KEY = 'irisflow:sticky-cta-fechado'
@@ -40,9 +41,26 @@ function blockerInView(): boolean {
   return false
 }
 
-function typing(): boolean {
+/**
+ * Algo que a barra pode cobrir está com o foco? Campos de texto (o teclado
+ * virtual já ocupa a base) e, desde a auditoria de 21/10/2026 (P1-2), qualquer
+ * elemento do conteúdo com foco VISÍVEL, isto é, foco de teclado, de botão de
+ * acesso ou de comutador: a barra tem 75 px e escondia o contorno do elemento
+ * que a pessoa acabara de alcançar com Tab (WCAG 2.4.11). O toque e o clique
+ * não contam: não têm foco visível, e a barra não pisca a cada toque numa
+ * pergunta do FAQ. O foco na própria barra nunca a esconde.
+ */
+function focoSobAbarra(): boolean {
   const el = document.activeElement
-  return !!el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)
+  if (!el || el === document.body) return false
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return true
+  if (el.closest('.sticky-cta') || !el.closest('main, footer')) return false
+  try {
+    return el.matches(':focus-visible')
+  } catch {
+    // navegador sem :focus-visible: na dúvida, sai da frente
+    return true
+  }
 }
 
 /**
@@ -50,7 +68,7 @@ function typing(): boolean {
  *
  * Some sozinha quando não ajuda: enquanto o botão do hero, um formulário
  * ou o rodapé está visível (qualquer elemento com `data-sticky-hide`),
- * com o teclado aberto, nas rotas de fluxo e enquanto o aviso de cookies
+ * com o teclado aberto, com o foco visível no conteúdo (focoSobAbarra), nas rotas de fluxo e enquanto o aviso de cookies
  * ocupa a base da tela. Tem botão de fechar, lembrado até o fim da visita.
  * Depois do lançamento da beta, a chamada é "Baixar grátis", como no
  * cabeçalho, e a barra some em /baixar, que já é o destino.
@@ -69,7 +87,7 @@ export function StickyCta() {
     let frame = 0
     const check = () => {
       frame = 0
-      setBlocked(window.scrollY < 80 || blockerInView() || typing())
+      setBlocked(window.scrollY < 80 || blockerInView() || focoSobAbarra())
     }
     const schedule = () => {
       if (!frame) frame = window.requestAnimationFrame(check)

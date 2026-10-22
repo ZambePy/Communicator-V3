@@ -1,49 +1,23 @@
 /* Aparelhos das demonstrações: um monitor e um celular genéricos, desenhados
    em CSS — nenhum modelo de fabricante —, e a moldura da abertura, sem
-   aparelho nenhum. O conteúdo é sempre o vídeo real. */
+   aparelho nenhum. O conteúdo é sempre o vídeo (ou a tela) real. Chapados:
+   um fio claro na borda e uma sombra funda embaixo, sem reflexo de vidro. */
 
-/* ---------- vídeo em moldura (abertura da home) ----------
-   Um retângulo arredondado na proporção do vídeo. A borda de 2 px deixa ver,
-   por trás, um gradiente cônico da marca (azul e teal) que gira devagar: é o
-   brilho. Só `transform` anima, e com movimento reduzido a regra global o
-   deixa parado — a borda continua colorida, só não gira. */
+/* ---------- vídeo em moldura (abertura da home) ---------- */
 .video-moldura {
   position: relative;
   width: 100%;
-  padding: 2px;
   border-radius: var(--r-xl);
-  overflow: hidden;
-  isolation: isolate;
-  background: rgba(143, 180, 240, 0.18);
+  background: #05080f;
   box-shadow:
-    0 40px 90px -36px rgba(47, 102, 194, 0.7),
-    0 18px 50px -30px rgba(63, 214, 194, 0.45);
-}
-
-.video-moldura__brilho {
-  position: absolute;
-  inset: -60%;
-  z-index: -1;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg 190deg,
-    rgba(63, 214, 194, 0.95) 250deg,
-    rgba(77, 134, 224, 0.95) 300deg,
-    transparent 350deg
-  );
-  animation: moldura-girar 10s linear infinite paused;
-  pointer-events: none;
-}
-
-/* Fora da tela o brilho fica parado (IntersectionObserver, em Aparelhos.tsx). */
-.video-moldura.is-rodando .video-moldura__brilho {
-  animation-play-state: running;
+    0 0 0 1px rgba(169, 198, 247, 0.22),
+    0 40px 80px -40px rgba(0, 0, 0, 0.9);
 }
 
 .video-moldura__tela {
   position: relative;
   aspect-ratio: 16 / 9;
-  border-radius: calc(var(--r-xl) - 2px);
+  border-radius: var(--r-xl);
   overflow: hidden;
   background: #05080f;
 }
@@ -53,12 +27,6 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-@keyframes moldura-girar {
-  to {
-    transform: rotate(1turn);
-  }
 }
 
 /* ---------- monitor ---------- */
@@ -73,19 +41,16 @@
 .monitor__corpo {
   transform: rotateX(var(--inclinacao)) scale(var(--escala));
   transform-origin: 50% 100%;
-  will-change: transform;
 }
 
 .monitor__moldura {
   position: relative;
   padding: clamp(6px, 0.9vw, 12px);
   border-radius: clamp(10px, 1.2vw, 18px);
-  background: linear-gradient(180deg, #1b2230, #0d1118);
+  background: #10151e;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 50px 100px -30px rgba(0, 0, 0, 0.75),
-    0 30px 60px -40px rgba(27, 84, 168, 0.55);
+    0 40px 80px -40px rgba(0, 0, 0, 0.85);
 }
 
 .monitor__tela {
@@ -105,27 +70,19 @@
   object-fit: cover;
   object-position: 50% 0;
   opacity: 0;
-  transition: opacity 520ms var(--ease-out);
+  transition: opacity 360ms ease;
 }
 
 .monitor__imagem.is-ativa {
   opacity: 1;
 }
 
-/* Um reflexo discreto de vidro, só no terço de cima. */
-.monitor__reflexo {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(165deg, rgba(255, 255, 255, 0.07) 0%, transparent 32%);
-}
-
 .monitor__pescoco {
   display: block;
   width: 13%;
-  height: clamp(28px, 5.5vw, 70px);
+  height: clamp(24px, 4.5vw, 56px);
   margin-inline: auto;
-  background: linear-gradient(90deg, #121821, #242d3b 50%, #121821);
+  background: #161c27;
   clip-path: polygon(14% 0, 86% 0, 100% 100%, 0 100%);
 }
 
@@ -135,8 +92,7 @@
   height: clamp(6px, 0.8vw, 10px);
   margin-inline: auto;
   border-radius: 50% 50% 8px 8px / 100% 100% 8px 8px;
-  background: linear-gradient(180deg, #2a3342, #131922);
-  box-shadow: 0 18px 30px -8px rgba(0, 0, 0, 0.6);
+  background: #1d2533;
 }
 
 /* ---------- celular ---------- */
@@ -149,12 +105,10 @@
   position: relative;
   padding: 10px;
   border-radius: 46px;
-  background: linear-gradient(160deg, #262f3d, #0e131b 60%);
+  background: #10151e;
   box-shadow:
     inset 0 0 0 1.5px rgba(255, 255, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 40px 80px -30px rgba(0, 0, 0, 0.55),
-    0 20px 50px -30px rgba(27, 84, 168, 0.45);
+    0 40px 80px -40px rgba(0, 0, 0, 0.85);
 }
 
 .celular__tela {
@@ -162,7 +116,7 @@
   aspect-ratio: 392 / 772;
   border-radius: 36px;
   overflow: hidden;
-  background: #061223;
+  background: var(--navy-deep);
 }
 
 .celular__video {
@@ -182,26 +136,22 @@
   background: #05070b;
 }
 
-/* ---------- pausa das demonstrações ---------- */
+/* ---------- pausa das demonstrações ----------
+   Alvo de 44 px (era 36): é controle de verdade, não enfeite. */
 .demo-pausa {
   position: absolute;
   right: 12px;
   bottom: 12px;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 50%;
-  background: rgba(6, 18, 35, 0.62);
+  background: rgba(8, 21, 48, 0.78);
   color: #fff;
   cursor: pointer;
-  opacity: 0.72;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition:
-    opacity var(--dur-fast) ease,
-    transform var(--dur-fast) ease;
+  transition: background-color var(--dur-fast) ease;
 }
 
 .demo-pausa svg {
@@ -212,8 +162,7 @@
 
 .demo-pausa:hover,
 .demo-pausa:focus-visible {
-  opacity: 1;
-  transform: scale(1.06);
+  background: rgba(8, 21, 48, 0.95);
 }
 
 .celular .demo-pausa {

@@ -17,7 +17,7 @@ export type ButtonVariant =
   | 'light'
   /** Sobre o vermelho da emergência: fundo branco, texto vermelho. */
   | 'lightDanger'
-  /** Sobre gradiente escuro, ação secundária: vidro translúcido. */
+  /** Sobre fundo escuro ou vermelho, ação secundária: só o contorno. */
   | 'glass';
 
 interface Props {
@@ -51,7 +51,7 @@ export function Button({ title, onPress, variant = 'primary', icon, loading, dis
     dangerOutline: { bg: 'transparent', fg: colors.dangerText, border: colors.border },
     light: { bg: colors.onDark, fg: colors.primaryStrong },
     lightDanger: { bg: colors.onDark, fg: colors.dangerText },
-    glass: { bg: colors.onDarkFill, fg: colors.onDark, border: colors.onDarkBorder },
+    glass: { bg: 'transparent', fg: colors.onDark, border: colors.onDarkBorder },
   };
   // `lightDanger`/`light` ficam sobre fundo escuro: o texto usa as cores do tema
   // CLARO para manter o contraste também no modo escuro.

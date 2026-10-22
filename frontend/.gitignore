@@ -45,6 +45,10 @@ dist-ssr
 irisflow-suporte-*.json
 irisflow-recording-*.jsonl
 irisflow_backup.json
+# Backup completo (21/10/2026): pacientes, histórico e a voz da pessoa.
+irisflow-backup-*.json
+irisflow-copia-de-seguranca-*.json
+copia-de-seguranca-*.json
 relatorio-clinico-paciente-*.json
 
 # Áudio de referência da voz (biometria) e pesos de modelo.

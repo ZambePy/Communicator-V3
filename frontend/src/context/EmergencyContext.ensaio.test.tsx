@@ -4,6 +4,7 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import React from 'react';
 import { EmergencyProvider, PRAZO_DO_ENSAIO_MS, useEmergency } from './EmergencyContext';
 import { EmergencyEscalation } from '../pages/output/EmergencyEscalation';
+import { _reiniciarSocorroParaTestes } from '../services/emergencia/pedidoDeSocorro';
 
 // -----------------------------------------------------------------------------
 // O ensaio de emergência do tutorial.
@@ -13,12 +14,11 @@ import { EmergencyEscalation } from '../pages/output/EmergencyEscalation';
 // esperando. Depois de uma ou duas dessas, o alerta de verdade passa a ser
 // tratado como possível engano, e é aí que ele deixa de funcionar.
 //
-// O envio não mora neste contexto: `triggerEmergencyImmediately` navega para
-// `/emergency?autoTrigger=other`, e é o `EmergencyEscalation` que emite o
-// pedido de ajuda no barramento da nuvem. Por isso o teste que importa monta a
-// tela de emergência DE VERDADE nessa rota e espiona o ENVIO, e não a
-// navegação: uma asserção de "não navegou" passaria com o alerta saindo por
-// outro caminho.
+// Desde 19/10/2026 o envio sai deste contexto, ANTES da navegação
+// (`services/emergencia/pedidoDeSocorro.ts`): a tela de emergência só mostra.
+// O teste continua montando a tela de verdade na rota e espionando o ENVIO, e
+// não a navegação: uma asserção de "não navegou" passaria com o alerta saindo
+// por outro caminho.
 // -----------------------------------------------------------------------------
 
 const emitirPedidoDeAjuda = vi.fn();
@@ -39,6 +39,7 @@ vi.mock('../utils/emergencyAudio', () => ({
   playTickSound: vi.fn(),
   playCancelSound: vi.fn(),
   playTone: vi.fn(),
+  tocarSirene: vi.fn(),
   getSharedAudioContext: () => null,
 }));
 
@@ -89,6 +90,9 @@ const montar = (ensaio: boolean) =>
 beforeEach(() => {
   vi.clearAllMocks();
   rota = '';
+  // O pedido de socorro vive num módulo (fora do React): um teste que dispara
+  // de verdade não pode deixar o pedido ativo para o próximo.
+  _reiniciarSocorroParaTestes();
 });
 
 describe('modo de ensaio ligado', () => {
@@ -213,3 +217,59 @@ describe('o ensaio vale UMA vez e tem prazo', () => {
     }
   });
 });
+
+describe('o socorro não depende da tela de emergência (auditoria de 18/10/2026, item 6)', () => {
+  it('com a tela de emergência quebrada, o pedido sai do mesmo jeito — uma vez', () => {
+    const Quebrada: React.FC = () => {
+      throw new Error('o pedaço de código da tela não carregou');
+    };
+    class Fronteira extends React.Component<{ children: React.ReactNode }, { erro: boolean }> {
+      state = { erro: false };
+      static getDerivedStateFromError() { return { erro: true }; }
+      render() { return this.state.erro ? <p>tela quebrada</p> : this.props.children; }
+    }
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    render(
+      <MemoryRouter initialEntries={['/menu']}>
+        <EmergencyProvider>
+          <Routes>
+            <Route path="/menu" element={<Sonda ensaio={false} />} />
+            <Route path="/emergency" element={<Fronteira><Quebrada /></Fronteira>} />
+          </Routes>
+        </EmergencyProvider>
+      </MemoryRouter>
+    );
+    act(() => {
+      screen.getByTestId('disparar').click();
+    });
+    expect(screen.getByText('tela quebrada')).toBeInTheDocument();
+    expect(enviou()).toBe(1);
+  });
+
+  it('com o pedido em andamento, o botão flutuante vira "Socorro em andamento" e leva à tela sem nova contagem', () => {
+    const r = montar(false);
+    act(() => {
+      screen.getByTestId('disparar').click();
+    });
+    expect(enviou()).toBe(1);
+    r.unmount();
+    // Outra tela (o paciente saiu da emergência pelo menu, por exemplo).
+    render(
+      <MemoryRouter initialEntries={['/menu']}>
+        <EmergencyProvider>
+          <Routes>
+            <Route path="/menu" element={<Sonda ensaio={false} />} />
+            <Route path="/emergency" element={<EmergencyEscalation />} />
+          </Routes>
+        </EmergencyProvider>
+      </MemoryRouter>
+    );
+    const fab = screen.getByRole('button', { name: 'Ver o pedido de socorro em andamento' });
+    expect(fab.textContent).toContain('Socorro em andamento');
+    act(() => fab.click());
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(naTelaDeEmergencia()).toBe(true);
+    expect(enviou()).toBe(1);
+  });
+});
+

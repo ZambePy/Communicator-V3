@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Field } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
@@ -11,13 +10,16 @@ import { ApiError, reenviarConfirmacao, verificarLinkDoEmail } from '@/services/
 import { CodigoDeVerificacao } from '@/components/beta/CodigoDeVerificacao'
 import { isEmail } from '@/utils/format'
 import { motivoDoLinkNaUrl } from '@/utils/linkDeEmail'
-import { SENHA_MINIMA, validar } from '@/utils/validation'
+import { validar } from '@/utils/validation'
 import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
 import { Icon } from '@/components/ui/Icon'
 import { BETA, BETA_CTA } from '@/data/content'
 import './checkout.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 type Form = { email: string; password: string }
+
+const NOME_DO_CAMPO: Record<keyof Form, string> = { email: 'e-mail', password: 'senha' }
 
 const RULES: Rules<Form> = {
   email: validar.email,
@@ -50,6 +52,11 @@ export default function Entrar() {
   // Erro do servidor (senha errada, rede): fica acima do botão, não num campo.
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // O botão não fica apagado: apertar com campo vazio mostra o que falta e
+  // leva o foco ao primeiro campo (um botão desabilitado não recebe foco nem
+  // explica o motivo a quem usa leitor de tela; P2-10, 21/10/2026).
+  const [tentou, setTentou] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
   const [naoConfirmado, setNaoConfirmado] = useState(false)
   const { signIn, authenticated, account, loading: carregandoSessao, refresh } = useAccount()
   const navigate = useNavigate()
@@ -67,8 +74,13 @@ export default function Entrar() {
     e.preventDefault()
     setError(null)
     setNaoConfirmado(false)
+    setTentou(true)
     v.touch('email', 'password')
-    if (!v.isValid()) return
+    if (!v.isValid()) {
+      const primeiro = v.errors.email ? 'email' : 'password'
+      formRef.current?.querySelector<HTMLElement>(`[data-campo="${primeiro}"] input`)?.focus()
+      return
+    }
 
     setLoading(true)
     try {
@@ -85,15 +97,12 @@ export default function Entrar() {
   // Espera a sessão ser lida: quem chega pelo link do e-mail já está entrando.
   if (carregandoSessao) return <SessionLoading />
 
+  const faltando = (['email', 'password'] as const).filter((k) => v.errors[k])
+
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container flow__inner flow__inner--narrow">
-        <Reveal anim="fade">
-          <span className="eyebrow">Acesso</span>
-        </Reveal>
-
         <Reveal anim="up">
           <h1 className="flow__title">Entrar na sua conta</h1>
         </Reveal>
@@ -112,31 +121,34 @@ export default function Entrar() {
               </div>
             )}
 
-            <form onSubmit={submit} noValidate>
-              <Field
-                label="E-mail"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                {...v.bind('email')}
-                autoComplete="email"
-                inputMode="email"
-                placeholder="voce@exemplo.com.br"
-                valid={isEmail(email)}
-                hint="O mesmo e-mail usado na inscrição."
-                required
-              />
+            <form ref={formRef} onSubmit={submit} noValidate>
+              <div data-campo="email">
+                <Field
+                  label="E-mail"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  {...v.bind('email')}
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder="voce@exemplo.com.br"
+                  valid={isEmail(email)}
+                  hint="O mesmo e-mail usado na inscrição."
+                  required
+                />
+              </div>
 
-              <Field
-                label="Senha"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                {...v.bind('password')}
-                autoComplete="current-password"
-                hint={`Ao menos ${SENHA_MINIMA} caracteres.`}
-                required
-              />
+              <div data-campo="password">
+                <Field
+                  label="Senha"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  {...v.bind('password')}
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
 
               {error && (
                 <div className="notice notice--warn" role="alert">
@@ -169,28 +181,30 @@ export default function Entrar() {
                 </div>
               )}
 
-              <Button type="submit" full size="lg" loading={loading} disabled={!v.isValid() || loading}>
+              <Button type="submit" full size="lg" loading={loading} disabled={loading}>
                 {loading ? 'Entrando…' : 'Entrar'}
               </Button>
-              {!v.isValid() && (
-                <p className="form-hint">Preencha e-mail e senha para entrar.</p>
+              {tentou && faltando.length > 0 && (
+                <p className="form-hint" role="status" aria-live="polite">
+                  Para entrar, falta preencher: {faltando.map((k) => NOME_DO_CAMPO[k]).join(' e ')}.
+                </p>
               )}
             </form>
 
-            <p className="flow__foot" style={{ marginBottom: 0 }}>
+            <p className="flow__foot flow__foot--junto">
               <Link to="/recuperar-senha" className="underline-grow">
                 Esqueci minha senha
               </Link>
             </p>
 
-            <p className="flow__foot" style={{ marginBottom: 0 }}>
+            <p className="flow__foot flow__foot--junto">
               Ainda não tem conta?{' '}
               {BETA.ativo ? (
-                <Link to={BETA_CTA.to} className="underline-grow" style={{ color: 'var(--ok)' }}>
-                  {BETA_CTA.labelLong}
+                <Link to={BETA_CTA.to} className="underline-grow">
+                  Criar conta na beta
                 </Link>
               ) : (
-                <Link to="/cadastro" className="underline-grow" style={{ color: 'var(--ok)' }}>
+                <Link to="/cadastro" className="underline-grow">
                   Começar a avaliação gratuita
                 </Link>
               )}

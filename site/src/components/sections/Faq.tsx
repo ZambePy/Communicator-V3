@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Reveal } from '@/components/effects/Reveal'
 import { FAQ } from '@/data/content'
@@ -11,6 +11,43 @@ type Props = {
   verTodas?: string
 }
 
+/**
+ * A resposta abre e fecha com a altura animada (20/10/2026): a linha da grade
+ * vai de 0fr a 1fr, e as perguntas de baixo descem junto, em vez de pular.
+ * É a única animação do site que mexe no layout, e só no clique da pessoa.
+ * Fechada, a resposta fica `hidden` (fora do foco e do leitor de tela), mas só
+ * depois de terminar de fechar; ao abrir, sai do `hidden` um quadro antes de
+ * crescer, para a transição ter de onde partir. Com movimento reduzido, a
+ * regra global encurta a transição: abre e fecha na hora.
+ */
+const FECHAR_MS = 220
+
+function Resposta({ id, aberta, children }: { id: string; aberta: boolean; children: ReactNode }) {
+  const [presente, setPresente] = useState(aberta)
+  const [expandida, setExpandida] = useState(aberta)
+  useEffect(() => {
+    if (aberta) {
+      setPresente(true)
+      let q2 = 0
+      const q1 = window.requestAnimationFrame(() => {
+        q2 = window.requestAnimationFrame(() => setExpandida(true))
+      })
+      return () => {
+        window.cancelAnimationFrame(q1)
+        window.cancelAnimationFrame(q2)
+      }
+    }
+    setExpandida(false)
+    const t = window.setTimeout(() => setPresente(false), FECHAR_MS + 40)
+    return () => window.clearTimeout(t)
+  }, [aberta])
+  return (
+    <div id={id} className={`faq__a${expandida ? ' is-aberta' : ''}`} hidden={!presente}>
+      <div className="faq__a-dentro">{children}</div>
+    </div>
+  )
+}
+
 export function Faq({ perguntas, verTodas }: Props = {}) {
   const [open, setOpen] = useState<number | null>(0)
   const itens = perguntas
@@ -19,11 +56,20 @@ export function Faq({ perguntas, verTodas }: Props = {}) {
 
   return (
     <section className="faixa faq" id="perguntas">
-      <div className="container container--narrow">
-        <Reveal anim="up">
+      {/* No computador, o título fica à esquerda, parado, e as perguntas
+          correm à direita: a lista lê como um índice, não como uma pilha de
+          caixas. */}
+      <div className="container faq__grade">
+        <Reveal anim="up" className="faq__cabeca">
           <h2 className="titulo-capitulo faq__title">O que as famílias mais perguntam.</h2>
+          {verTodas && (
+            <Link to={verTodas} className="link-seta faq__todas faq__todas--topo">
+              Ver todas as perguntas
+            </Link>
+          )}
         </Reveal>
 
+        <div className="faq__corpo">
         <ul className="faq__list">
           {itens.map((item, i) => {
             const isOpen = open === i
@@ -44,9 +90,9 @@ export function Faq({ perguntas, verTodas }: Props = {}) {
                       </span>
                     </button>
                   </h3>
-                  <div id={`faq-${i}`} className="faq__a" hidden={!isOpen}>
+                  <Resposta id={`faq-${i}`} aberta={isOpen}>
                     <p>{item.a}</p>
-                  </div>
+                  </Resposta>
                 </div>
               </Reveal>
             )
@@ -54,10 +100,11 @@ export function Faq({ perguntas, verTodas }: Props = {}) {
         </ul>
 
         {verTodas && (
-          <Link to={verTodas} className="link-seta faq__todas">
+          <Link to={verTodas} className="link-seta faq__todas faq__todas--fim">
             Ver todas as perguntas
           </Link>
         )}
+        </div>
       </div>
     </section>
   )

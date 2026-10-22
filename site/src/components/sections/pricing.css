@@ -1,3 +1,8 @@
+/* Grade de planos (Pricing.tsx). Na beta: o plano Beta, o único disponível,
+   em destaque; embaixo, os pagos previstos, sem cara de "compre agora".
+   Situação dita em texto com um ponto da cor ("Disponível agora", "Em
+   breve"), sem pílula em caixa alta. */
+
 .pricing__title {
   margin-bottom: var(--sp-4);
 }
@@ -10,56 +15,34 @@
 /* --- grade de três planos --- */
 .plans {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--sp-5);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
   align-items: stretch;
-  margin-bottom: var(--sp-7);
+  margin-bottom: var(--sp-8);
+}
+
+.plans > .reveal {
+  display: flex;
 }
 
 .plan {
   position: relative;
   display: flex;
   flex-direction: column;
+  width: 100%;
   padding: var(--sp-6);
-  overflow: hidden;
-  transition:
-    transform var(--dur) var(--ease-spring),
-    border-color var(--dur) var(--ease-out);
-}
-
-.plan:hover {
-  transform: translateY(-4px);
-  border-color: var(--line-strong);
 }
 
 .plan--recommended {
-  border-color: var(--ok);
-  box-shadow: 0 12px 40px -18px rgba(0, 166, 147, 0.45);
-}
-
-.plan--recommended::before {
-  content: '';
-  position: absolute;
-  inset: -40% -10% auto -10%;
-  height: 70%;
-  background: radial-gradient(60% 100% at 50% 0%, rgba(0, 166, 147, 0.22), transparent 70%);
-  pointer-events: none;
+  box-shadow: inset 0 3px 0 var(--teal-300);
 }
 
 .plan__ribbon {
-  position: absolute;
-  top: var(--sp-4);
-  right: var(--sp-4);
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 14px;
-  border-radius: var(--r-pill);
-  background: linear-gradient(135deg, var(--ok), var(--teal));
-  color: #fff;
-  font-size: var(--fs-min);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  align-self: flex-start;
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
 }
 
 .plan__head {
@@ -70,14 +53,12 @@
 }
 
 .plan__name {
-  font-size: 1.4rem;
-  /* Sem esta folga o número do preco encosta no nome do plano em
-     corpos grandes. */
-  margin-bottom: var(--sp-3);
+  font-size: 1.5rem;
+  margin-bottom: var(--sp-2);
 }
 
 .plan__tagline {
-  font-size: 0.94rem;
+  font-size: var(--fs-sm);
   color: var(--text-dim);
   margin: 0 0 var(--sp-4);
   min-height: 2.8em;
@@ -93,34 +74,32 @@
 
 .plan__currency {
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: 1.125rem;
+  font-weight: 600;
   color: var(--text-soft);
 }
 
 .plan__amount {
   font-family: var(--font-display);
-  font-size: clamp(2.4rem, 4.4vw, 3.4rem);
+  font-size: clamp(2.75rem, 2rem + 2.4vw, 3.75rem);
+  font-weight: 600;
   line-height: 1;
+  letter-spacing: -0.045em;
   color: var(--text);
-}
-
-.plan__amount-skeleton {
-  display: inline-block;
-  font-size: clamp(2.4rem, 4.4vw, 3.4rem);
-  align-self: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .plan__period {
-  font-size: 0.94rem;
+  font-size: var(--fs-sm);
   color: var(--text-dim);
 }
 
 .plan__meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 8px;
+  flex-direction: column;
+  gap: 2px;
   margin: 0;
-  font-size: 0.86rem;
+  font-size: 0.875rem;
   color: var(--text-dim);
 }
 
@@ -136,9 +115,8 @@
   align-items: flex-start;
   gap: var(--sp-3);
   margin-bottom: var(--sp-3);
-  font-size: 0.95rem;
+  font-size: 1rem;
   color: var(--text-soft);
-  animation: slide-right 560ms var(--ease-out) both;
 }
 
 .plan__check {
@@ -147,92 +125,73 @@
   place-items: center;
   width: 22px;
   height: 22px;
-  margin-top: 2px;
+  margin-top: 1px;
   border-radius: 50%;
-  background: var(--ok-soft);
+  border: 1.5px solid var(--ok-line);
   color: var(--ok);
 }
 
 .plan__check svg {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
 }
 
 .plan__fine {
   margin: var(--sp-3) 0 0;
-  font-size: 0.86rem;
+  font-size: 0.875rem;
   color: var(--text-dim);
   text-align: center;
 }
 
-/* --- garantias abaixo da grade --- */
+/* --- garantias abaixo da grade: uma linha de três, separadas por fios --- */
 .pricing__guarantees {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--sp-4);
-  margin-bottom: var(--sp-6);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-5);
+  margin-bottom: var(--sp-7);
 }
 
 .guarantee {
   display: flex;
   gap: var(--sp-4);
-  padding: var(--sp-5);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  transition:
-    transform var(--dur) var(--ease-spring),
-    border-color var(--dur) var(--ease-out);
-}
-
-.guarantee:hover {
-  transform: translateY(-3px);
-  border-color: var(--line-strong);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line-strong);
 }
 
 .guarantee__icon {
   flex: none;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: var(--ok-soft);
-  border: 1px solid var(--ok-line);
   color: var(--ok);
 }
 
 .guarantee h3 {
-  font-size: 1.08rem;
+  font-size: 1.125rem;
   margin-bottom: 6px;
 }
 
 .guarantee p {
   margin: 0;
-  font-size: 0.94rem;
+  font-size: 1rem;
 }
 
 .pricing__note {
   margin: 0;
-  padding: var(--sp-5);
-  border-radius: var(--r-lg);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-line);
-  font-size: 0.94rem;
-  text-align: center;
+  max-width: 76ch;
+  padding-left: var(--sp-5);
+  border-left: 2px solid var(--accent-line);
+  font-size: 1rem;
 }
 
 .pricing__note a {
   color: var(--accent);
   font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 @media (max-width: 1024px) {
   .plans {
     grid-template-columns: 1fr;
-    max-width: 520px;
-    margin-left: auto;
-    margin-right: auto;
+    max-width: 560px;
   }
 
   .pricing__guarantees {
@@ -244,18 +203,18 @@
   }
 }
 
-/* Ressalva de disponibilidade: aparece só no plano que depende de um
-   módulo ainda em construção. Fica antes do botão, de propósito. */
+/* Ressalva de disponibilidade: só no plano que depende de um módulo ainda em
+   construção. Fica antes do botão, de propósito. */
 .plan__note {
   display: flex;
   gap: var(--sp-3);
   align-items: flex-start;
   margin: 0 0 var(--sp-4);
   padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--warn-line);
-  border-radius: var(--r-md);
+  border-left: 2px solid var(--warn);
   background: var(--warn-soft);
-  font-size: 0.88rem;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -266,28 +225,25 @@
   margin-top: 2px;
 }
 
-/* --- plano Beta em destaque (disponível agora) --- */
+/* --- o plano Beta, o único disponível agora --- */
 .plan--beta {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
   gap: var(--sp-7);
   align-items: center;
-  margin-bottom: var(--sp-7);
-  border-color: var(--ok-line);
-  box-shadow: 0 0 0 1px var(--ok-line), 0 24px 60px -24px rgba(0, 166, 147, 0.45);
-  background:
-    radial-gradient(520px 260px at 0% 0%, rgba(63, 214, 194, 0.14), transparent 70%),
-    var(--surface);
-}
-
-.plan--beta:hover {
-  transform: none;
+  margin-bottom: var(--sp-8);
+  padding: clamp(28px, 4vw, 48px);
+  box-shadow: inset 0 3px 0 var(--teal-300);
 }
 
 .plan-beta__main {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+}
+
+.plan--beta .plan__amount {
+  font-size: clamp(3.5rem, 2.4rem + 4vw, 5.5rem);
 }
 
 .plan--beta .plan__tagline {
@@ -303,49 +259,41 @@
   text-align: left;
 }
 
-/* Selo de situação: "Disponível agora" (teal) e "Em breve" (amarelo). */
+/* Situação: texto com um ponto da cor. */
 .plan__status {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: var(--sp-3);
-  padding: 4px 12px;
-  border-radius: var(--r-pill);
-  font-size: var(--fs-min);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--fs-sm);
+  font-weight: 600;
 }
 
-.plan__status--now {
-  background: var(--teal-300);
-  color: #04231f;
-}
-
-.plan__status--now::before {
+.plan__status::before {
   content: '';
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #04231f;
-  animation: pulse-dot 2s var(--ease-in-out) infinite;
+  background: currentColor;
 }
 
+.plan__status--now {
+  color: var(--ok);
+}
+
+/* "Em breve" não é aviso nem confirmação: cinza-azulado, como o resto do que ainda não existe. */
 .plan__status--soon {
-  border: 1px solid var(--warn-line);
-  color: var(--warn);
-  background: var(--warn-soft);
+  color: var(--text-dim);
 }
 
+/* "Preços previstos para depois da beta": um subtítulo de verdade, não letreiro. */
 .pricing__future-title {
-  font-family: var(--font-body);
-  font-size: 0.86rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin: 0 0 var(--sp-4);
+  font-size: clamp(1.5rem, 1.3rem + 0.8vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  margin: 0 0 var(--sp-5);
 }
 
 /* Planos futuros: mesma grade, sem cara de "compre agora". */
@@ -355,11 +303,9 @@
 
 .plan__forecast {
   margin: 0 0 4px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--warn);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-dim);
 }
 
 @media (max-width: 900px) {

@@ -1,18 +1,20 @@
 import { Link } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { SelosDasLojas } from '@/components/ui/SelosDasLojas'
 import { CUIDADOR_DESTAQUE, DEMO_CUIDADOR } from '@/data/home'
 import { CelularDemo } from './Aparelhos'
+import { MensagemQueChega } from './MensagemQueChega'
 
-/** O app de quem cuida, com a gravação real no celular. */
+/**
+ * O app de quem cuida, com a gravação real no celular. Quando a seção entra na
+ * tela, o que o paciente escreveu chega ao celular (MensagemQueChega), uma vez.
+ */
 export function CuidadorDestaque() {
   return (
-    <section className="cuidador-destaque on-raised com-fundo" aria-labelledby="cuidador-destaque-titulo">
-      <AmbientBackground variante="particulas" />
+    <section className="cuidador-destaque on-dark" aria-labelledby="cuidador-destaque-titulo">
       <div className="container cuidador-destaque__grade">
         <Reveal anim="up" className="cuidador-destaque__aparelho">
-          <CelularDemo demo={DEMO_CUIDADOR} />
+          <CelularDemo demo={DEMO_CUIDADOR} sobre={<MensagemQueChega nome="Carlos" iniciais="CS" frase="Quero água" />} />
         </Reveal>
 
         <div className="cuidador-destaque__texto">
@@ -37,7 +39,6 @@ export function CuidadorDestaque() {
                 <li key={p}>{p}</li>
               ))}
             </ul>
-            <p className="cuidador-destaque__ressalva">{CUIDADOR_DESTAQUE.ressalva}</p>
           </Reveal>
           <Reveal anim="up" delay={240}>
             <SelosDasLojas />

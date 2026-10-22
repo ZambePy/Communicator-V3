@@ -27,14 +27,17 @@ const removeChannel = vi.fn(async () => 'ok');
 vi.mock('./supabaseClient', () => ({
   supabase: () => ({ from, channel: () => canal, removeChannel }),
 }));
-const setFilterPreset = vi.fn();
-/** Preset que o engine diz estar em vigor (formato do engine, com sufixo -v2). */
-const diag = { preset: 'responsivo-v2' as string | null };
+/** O que o engine responde ao preset: por padrão, o One Euro governa e aplica. */
+const resultadoDoPreset: { aplicado: boolean; emVigor: string } = { aplicado: true, emVigor: 'oneEuro' };
+const setFilterPreset = vi.fn(() => ({ ...resultadoDoPreset }));
+/** Preset que o engine diz estar em vigor (formato do engine, com sufixo -v2),
+ *  e o filtro que governa o cursor. */
+const diag = { preset: 'responsivo-v2' as string | null, efetivo: 'oneEuro' as string };
 vi.mock('../context/GazeContext', () => ({
   useGaze: () => ({
     state: 'tracking', cameraError: null, getCameraStream: () => ({}), setFilterPreset,
     calibration: { isCalibrated: () => true },
-    getDiagnostics: () => ({ filtro: { preset: diag.preset } }),
+    getDiagnostics: () => ({ filtro: { preset: diag.preset, efetivo: diag.efetivo } }),
   }),
 }));
 const updateSettings = vi.fn();
@@ -96,6 +99,9 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     _limparOuvintes();
     realtime.handlers = {};
     diag.preset = 'responsivo-v2';
+    diag.efetivo = 'oneEuro';
+    resultadoDoPreset.aplicado = true;
+    resultadoDoPreset.emVigor = 'oneEuro';
     licencaMock.status = 'none';
     licencaMock.license = null;
     licencaMock.reverificar = vi.fn();
@@ -138,11 +144,39 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     expect(realtime.handlers.help_requests).toBeDefined();
   });
 
-  it('sem preset no engine (cadeia Kalman) a sessão abre com balanceado', async () => {
+  it('sem preset no engine (cadeia Kalman) a sessão abre SEM preset e diz o filtro em vigor (A2)', async () => {
+    // Antes ia 'balanceado': o relatório do cuidador dizia uma suavização que
+    // não governava nada. `filter_preset` só conhece os três presets do One
+    // Euro; o que vale vai em `capture_conditions.filtro`.
     diag.preset = null;
+    diag.efetivo = 'kalman';
     await montarComLicencaAtiva();
     const abertura = chamadas(fetchMock).find((c) => c.action === 'session.upsert');
-    expect(abertura.session.filter_preset).toBe('balanceado');
+    expect(abertura.session).not.toHaveProperty('filter_preset');
+    expect(abertura.session.capture_conditions).toEqual({ filtro: 'kalman' });
+  });
+
+  it('com o estimador de fixação (M9) governando, o ajuste remoto de suavização não é dado como aplicado (A2)', async () => {
+    diag.preset = null;
+    diag.efetivo = 'fixacao';
+    resultadoDoPreset.aplicado = false;
+    resultadoDoPreset.emVigor = 'fixacao';
+    await montarComLicencaAtiva();
+    const abertura = chamadas(fetchMock).find((c) => c.action === 'session.upsert');
+    expect(abertura.session).not.toHaveProperty('filter_preset');
+    expect(abertura.session.capture_conditions).toEqual({ filtro: 'fixacao' });
+    fetchMock.mockClear();
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await act(async () => {
+      realtime.handlers.patient_settings({ new: { beneficiary_id: 'ben-1', dwell_ms: 800, filter_preset: 'estavel', updated_at: 't9' } });
+    });
+    // O preset foi entregue ao engine (fica guardado no One Euro)...
+    expect(setFilterPreset).toHaveBeenCalledWith('estavel-v2');
+    // ...mas a sessão NÃO passa a dizer que a suavização é 'estavel': só o dwell muda.
+    await waitFor(() => expect(chamadas(fetchMock)).toContainEqual(expect.objectContaining({ action: 'session.upsert', session: { id: 'sess-1', dwell_ms: 800 } })));
+    expect(chamadas(fetchMock).some((c) => c.action === 'session.upsert' && 'filter_preset' in (c.session ?? {}))).toBe(false);
+    expect(aviso.mock.calls.some((a) => String(a[0]).includes('estimador de fixação'))).toBe(true);
+    aviso.mockRestore();
   });
 
   it('fala e socorro do paciente viram message.send e help.create com a sessão', async () => {
@@ -224,6 +258,24 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     expect(String(envio.id)).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
+  it('fala acompanhada (o mapa da dor): sai com o id da tela, e a entrega diz o que o servidor respondeu (revisão de UX de 20/10/2026, achado 3)', async () => {
+    const { ouvirEntregaDaMensagem, entregaDaMensagem } = await import('./eventos');
+    await montarComLicencaAtiva();
+    fetchMock.mockClear();
+    const ID_DA_TELA = '0b7f3c2e-5d1a-4e8b-9c3f-2a6d4e8b1c5f';
+    const vistos: string[] = [];
+    const soltar = ouvirEntregaDaMensagem((id, e) => { if (id === ID_DA_TELA) vistos.push(e); });
+    await act(async () => {
+      emitirFalaDoPaciente('Dor no peito, nível 3 de 10', 'frase', ID_DA_TELA);
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(entregaDaMensagem(ID_DA_TELA)).toBe('gravada'));
+    const envio = chamadas(fetchMock).find((c) => c.action === 'message.send') as Record<string, unknown>;
+    expect(envio.id).toBe(ID_DA_TELA);
+    expect(vistos).toEqual(['enviando', 'gravada']);
+    soltar();
+  });
+
   it('ajuste remoto: tempo de fixação em ms, preset -v2 e a sessão aberta é atualizada', async () => {
     await montarComLicencaAtiva();
     fetchMock.mockClear();
@@ -266,6 +318,57 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     expect(screen.getByTestId('reconhecimento').textContent).toBe('hr-7@2026-09-10T15:00:20Z');
   });
 
+  it('a confirmação do cuidador chega ao pedido de socorro em andamento (o alarme para sem a tela montada)', async () => {
+    const socorro = await import('../services/emergencia/pedidoDeSocorro');
+    socorro._reiniciarSocorroParaTestes();
+    await montarComLicencaAtiva();
+    const p = socorro.dispararPedidoDeSocorro('other', 'OUTRA');
+    await act(async () => {
+      realtime.handlers.help_requests({ new: {
+        id: p.id, beneficiary_id: 'ben-1', kind: 'emergencia', message: 'OUTRA',
+        created_at: new Date().toISOString(), acknowledged_at: new Date().toISOString(), acknowledged_by: 'u1', escalated_at: null, resolved_at: null,
+      } });
+    });
+    expect(socorro.pedidoAtual()?.fase).toBe('visto');
+    socorro._reiniciarSocorroParaTestes();
+  });
+
+  it('reserva do realtime: a confirmação que vem no heartbeat também para o alarme', async () => {
+    const socorro = await import('../services/emergencia/pedidoDeSocorro');
+    socorro._reiniciarSocorroParaTestes();
+    const p = socorro.dispararPedidoDeSocorro('other', 'OUTRA');
+    fetchMock.mockImplementation(async (_u: string, init?: RequestInit) => {
+      const corpo = JSON.parse(String(init?.body));
+      const resposta = corpo.action === 'heartbeat'
+        ? { ok: true, pending_messages: 0, reconhecimentos: [{ id: p.id, kind: 'emergencia', created_at: new Date().toISOString(), acknowledged_at: new Date().toISOString(), resolved_at: null }] }
+        : corpo.action === 'session.upsert' ? { ok: true, id: 'sess-1' }
+        : corpo.action === 'settings.get' ? { settings: null, phrases: [] }
+        : corpo.action === 'messages.pending' ? { messages: [] }
+        : { ok: true };
+      return { ok: true, status: 200, json: async () => resposta } as unknown as Response;
+    });
+    await montarComLicencaAtiva();
+    await waitFor(() => expect(socorro.pedidoAtual()?.fase).toBe('visto'));
+    socorro._reiniciarSocorroParaTestes();
+  });
+
+  it('o realtime é assinado antes de as mensagens pendentes serem faladas (auditoria de 18/10/2026, item 16)', async () => {
+    const ordem: string[] = [];
+    canal.subscribe.mockImplementationOnce((cb: (s: string) => void) => { ordem.push('realtime'); cb('SUBSCRIBED'); return canal; });
+    fetchMock.mockImplementation(async (_u: string, init?: RequestInit) => {
+      const corpo = JSON.parse(String(init?.body));
+      if (corpo.action === 'messages.pending') ordem.push('pendentes');
+      const resposta = corpo.action === 'session.upsert' ? { ok: true, id: 'sess-1' }
+        : corpo.action === 'settings.get' ? { settings: null, phrases: [] }
+        : corpo.action === 'messages.pending' ? { messages: [] }
+        : { ok: true };
+      return { ok: true, status: 200, json: async () => resposta } as unknown as Response;
+    });
+    await montarComLicencaAtiva();
+    await waitFor(() => expect(ordem).toContain('pendentes'));
+    expect(ordem.indexOf('realtime')).toBeLessThan(ordem.indexOf('pendentes'));
+  });
+
   it('só fala real conta em utterances/chars: "Estou bem" (kind sistema) não entra no session.end', async () => {
     const r = await montarComLicencaAtiva();
     await act(async () => {
@@ -292,6 +395,34 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     expect(removeChannel).toHaveBeenCalled();
   });
 
+  it('chave recusada com o cofre que rejeita ao apagar: avisa no log, sem rejeição solta (relato de 22/10/2026)', async () => {
+    // No Electron `secureRemove` é um `invoke` e pode rejeitar. Com `void` solto
+    // a falha virava "unhandled rejection" e ninguém sabia que o vínculo e a
+    // fila de envio (que não podem vazar para outra conta) ficaram no cofre.
+    const secureRemove = vi.fn(async () => { throw new Error('safeStorage indisponível'); });
+    (window as unknown as { irisflowCloud: unknown }).irisflowCloud = {
+      secureGet: vi.fn(async () => null),
+      secureSet: vi.fn(async () => true),
+      secureRemove,
+      appInfo: vi.fn(async () => ({ version: '0.0.0-teste', hostname: 'pc', platform: 'win32', encryptionAvailable: true })),
+    };
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await montarComLicencaAtiva();
+      fetchMock.mockImplementation(async () => ({ ok: false, status: 403, json: async () => ({ error: 'device_revoked' }) }) as unknown as Response);
+      await act(async () => {
+        emitirFalaDoPaciente('oi', 'texto');
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(screen.getByTestId('vinculo').textContent).toBe('-'));
+      await waitFor(() => expect(secureRemove).toHaveBeenCalledWith('irisflow.vinculo'));
+      await waitFor(() => expect(aviso.mock.calls.some((c) => String(c[0]).includes('o cofre não apagou irisflow.vinculo'))).toBe(true));
+    } finally {
+      aviso.mockRestore();
+      delete (window as unknown as { irisflowCloud?: unknown }).irisflowCloud;
+    }
+  });
+
   it('licença some (saiu / revogada): encerra a sessão e desliga', async () => {
     const r = await montarComLicencaAtiva();
     fetchMock.mockClear();
@@ -300,6 +431,37 @@ describe('CloudProvider — segue a licença e liga a conversa', () => {
     r.rerender(<CloudProvider><Sonda /></CloudProvider>);
     await waitFor(() => expect(screen.getByTestId('vinculo').textContent).toBe('-'));
     expect(chamadas(fetchMock)).toContainEqual(expect.objectContaining({ action: 'session.end', session_id: 'sess-1' }));
+  });
+
+  it('o heartbeat que não muda nada não re-desenha quem usa a nuvem (relato de 22/10/2026)', async () => {
+    // A cada 30 s o heartbeat grava o tamanho da fila. Com a fila igual, o
+    // `patch` devolvia um estado NOVO e todos os consumidores do contexto
+    // (teclado, mensagens, Emergência) re-desenhavam à toa, por horas.
+    const original = cloudConfig.heartbeatMs;
+    (cloudConfig as { heartbeatMs: number }).heartbeatMs = 40;
+    let desenhos = 0;
+    const Contadora: React.FC = () => {
+      useCloud();
+      desenhos++;
+      return null;
+    };
+    try {
+      licencaMock.status = 'active';
+      licencaMock.license = LICENCA_ATIVA;
+      render(<CloudProvider><Sonda /><Contadora /></CloudProvider>);
+      await waitFor(() => expect(screen.getByTestId('vinculo').textContent).toBe('Carlos'));
+      // Assentou: a sessão aberta e as primeiras batidas já passaram.
+      await waitFor(() => expect(chamadas(fetchMock).filter((c) => c.action === 'heartbeat').length).toBeGreaterThanOrEqual(2));
+      await new Promise((r) => setTimeout(r, 120));
+      const antes = desenhos;
+      const batidasAntes = chamadas(fetchMock).filter((c) => c.action === 'heartbeat').length;
+      await new Promise((r) => setTimeout(r, 400));
+      const batidas = chamadas(fetchMock).filter((c) => c.action === 'heartbeat').length - batidasAntes;
+      expect(batidas).toBeGreaterThanOrEqual(5);
+      expect(desenhos).toBe(antes);
+    } finally {
+      (cloudConfig as { heartbeatMs: number }).heartbeatMs = original;
+    }
   });
 
   it('o heartbeat leva a sessão; se o servidor diz que ela foi encerrada (sessão órfã), abre outra', async () => {

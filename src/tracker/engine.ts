@@ -17,7 +17,14 @@ import type { FilterPreset, FilterPresetV2 } from '../oneEuroFilter';
 import { extractFeatures } from '../featurePipeline';
 import { feedAccuracyRaw, feedAccuracyFiltered, getCurrentTargetPx as getAccuracyTargetPx } from '../accuracy';
 import { EyeQualityAnalyzer } from '../qualityAnalyzer';
-import { createL2CSClient, type L2CSClient } from '../l2cs/client';
+import {
+  createL2CSClient,
+  LATENCIA_MAXIMA_DO_LADO_FIXO_MS,
+  politicaPorProvider,
+  type L2CSClient,
+  type MotivoDaFalhaDoWorker,
+} from '../l2cs/client';
+import { reiniciarReusoDoBlocoOcular } from '../olho/bloco';
 import { resumoDaFicha, type FichaDoModelo } from '../l2cs/proveniencia';
 import { desfazerRollNoOlhar } from '../l2cs/roll';
 import { suavizarRoll, type EstadoDoRoll } from '../l2cs/rollSuave';
@@ -100,8 +107,85 @@ export interface GazeSample {
    * piscada, e o dwell (que media relógio de parede) completava sozinho: fechar
    * os olhos 2 s sobre um botão clicava ao reabrir. Com o estado explícito, o
    * dispatcher pausa em vez de continuar contando.
+   *
+   * `unknown`: o engine não sabe — o quadro foi descartado por outro motivo
+   * (contraluz forte) e nada foi medido sobre os olhos. Não é `closed`: dizer
+   * "olhos fechados" ali fazia a tela culpar os olhos pela luz da janela.
    */
-  eyeState?: 'open' | 'closed';
+  eyeState?: 'open' | 'closed' | 'unknown';
+  /**
+   * Por que a amostra saiu degradada, quando o engine sabe dizer (relato de
+   * 19/10/2026). Hoje só `'contraluz'`: a luz forte atrás da pessoa invalidou
+   * os quadros. A interface mostra a mensagem da luz em vez de "olhos
+   * fechados" e não alimenta o detector de olhos fechados com essas amostras.
+   * Ausente nas amostras normais.
+   */
+  motivo?: 'contraluz';
+  /**
+   * `false` quando a posição NÃO foi medida neste quadro: é a última válida,
+   * repetida (quadro descartado, predição que falhou). O dwell não pode contar
+   * tempo sobre ela — uma posição congelada é exatamente o que ele leria como
+   * "olhando firme", e completaria até a Emergência sob um ponto que ninguém
+   * mediu. Ausente nas amostras normais (= medida).
+   */
+  posicaoMedida?: boolean;
+}
+
+/**
+ * Contraluz forte (relato de 19/10/2026): passado este tempo com a luz ainda
+ * forte, o engine volta a emitir a PREDIÇÃO — marcada `degraded`, para o dwell
+ * só aceitar a Emergência e os botões de recuperação, com o dwell mais longo.
+ *
+ * Antes, enquanto a luz durasse, todo quadro saía com a última posição e
+ * `eyeState: 'closed'`, e nada completava — nem a Emergência. Dez segundos
+ * separam um soluço de luz (alguém abriu a cortina e fechou) de um posto que
+ * vai continuar assim; antes disso a predição sob contraluz é ruim demais para
+ * valer mesmo para a Emergência, depois disso não ter Emergência é pior.
+ */
+export const CONTRALUZ_ATE_PREDIZER_MS = 10_000;
+
+/**
+ * Reinício do worker de um modelo do olhar (L2CS-Net do rosto ou EyeNet) que
+ * morreu ou passou a falhar depois de pronto (relato de 19/10/2026): esperas
+ * antes de cada tentativa. A segunda tentativa em diante força o WASM — o caso
+ * típico é o dispositivo WebGPU perdido (sono e volta do notebook, reinício do
+ * driver), e uma GPU que caiu duas vezes tende a cair de novo.
+ */
+export const ESPERAS_DO_REINICIO_DO_MODELO_MS = [2000, 5000, 15_000, 30_000, 60_000] as const;
+/** Tentativas por episódio de falha; depois disso o modelo fica em erro, visível. */
+export const MAX_REINICIOS_DO_MODELO = ESPERAS_DO_REINICIO_DO_MODELO_MS.length;
+
+/**
+ * Por que o modelo do olhar está em erro.
+ *  - `carga`: não carregou (arquivo ausente, sessão que não sobe, meta que não
+ *    combina com o modelo). Recarregar não traz um arquivo que não existe.
+ *  - `saida_travada`: a saída ficou idêntica por segundos (imagem da câmera
+ *    parada ou preta); volta sozinha quando a imagem voltar.
+ *  - `falha_do_worker`: morreu ou passou a errar toda inferência depois de
+ *    pronto; o engine está reiniciando (`reinicio`).
+ */
+export type MotivoDoErroDoModelo = 'carga' | 'saida_travada' | 'falha_do_worker';
+
+/** Estado do reinício automático de um modelo do olhar. */
+export interface ReinicioDoModelo {
+  /** Tentativas feitas no episódio corrente. */
+  tentativas: number;
+  /** As tentativas acabaram: o modelo fica em erro até o app ser reaberto. */
+  desistiu: boolean;
+}
+
+/**
+ * Resultado de `setFilterPreset` (relato de 19/10/2026, auditoria A2).
+ *
+ * `aplicado: false` quando outro filtro governa o cursor — a cadeia Kalman
+ * (`filterMode`) ou o estimador de fixação (M9, o padrão do V3 depois da
+ * calibração). Antes, com o M9 em vigor, o preset era gravado num One Euro que
+ * estava fora do caminho do cursor, e o relatório à nuvem dizia que ele valia.
+ */
+export interface ResultadoDoPreset {
+  aplicado: boolean;
+  /** O filtro que governa o cursor agora. */
+  emVigor: 'oneEuro' | 'kalman' | 'kalmanEma' | 'fixacao';
 }
 
 // Estado 'degraded' distingue "sistema não sabe onde o olhar está" de
@@ -266,6 +350,23 @@ export interface CalibrationApi {
    * (sprint S7). Quem chama precisa pedir à pessoa que mude de posição antes.
    */
   iniciarRodadaDeSegundaPose(): { x: number; y: number }[];
+  /**
+   * Recoleta dos alvos ruins (M22, `recoletaDeAlvosRuins`; pedido de
+   * 19/10/2026). `alvosParaRecoletar` diz quais refazer (vazio = nada);
+   * `iniciarRecoletaDeAlvos` abre a rodada, a tela coleta cada alvo com
+   * `startCollectingPoint`, e `concluirRecoletaDeAlvos` troca as amostras e
+   * retreina — o modelo novo só fica se o LOTO médio não piorar.
+   */
+  podeRecoletarAlvos(): boolean;
+  alvosParaRecoletar(): import('../calibration').AlvoParaRecoletar[];
+  iniciarRecoletaDeAlvos(
+    alvos: readonly import('../calibration').AlvoParaRecoletar[],
+    opcoes?: { automatica?: boolean },
+  ): { x: number; y: number }[];
+  concluirRecoletaDeAlvos(
+    onComplete?: (r: import('../calibration').RelatorioDaRecoleta) => void,
+  ): import('../calibration').RelatorioDaRecoleta;
+  getUltimaRecoleta(): import('../calibration').RelatorioDaRecoleta | null;
   /** Coleta por perseguição suave (sprint S8). Ver `calibration/perseguicao`. */
   iniciarPerseguicao(): boolean;
   definirAlvoDaPerseguicao(x: number, y: number): void;
@@ -333,6 +434,19 @@ export interface EngineDiagnostics {
     /** Lado do recorte e cadência EM VIGOR (política por provider). */
     inputSize: number;
     cadenceMs: number;
+    /** Por que `status` é `error`; `null` fora de erro. */
+    motivoDoErro: MotivoDoErroDoModelo | null;
+    /** Reinício automático do worker (`null` = nunca precisou). */
+    reinicio: ReinicioDoModelo | null;
+    /**
+     * Há quanto tempo de rastreamento com rosto, com `status` em `ready`,
+     * nenhuma leitura do modelo vale — chegam vencidas ou não chegam (revisão
+     * do pipeline de 20/10/2026). 0 quando a última leitura valeu. É o que faz
+     * `avisoDoModeloDoOlhar` avisar de um modelo lento demais, que antes ficava
+     * em `ready` com o bloco angular zerado e nada na tela. Opcional só para
+     * dublês de teste antigos; o engine sempre preenche.
+     */
+    semLeituraValidaMs?: number;
   };
   /** Ramo ocular (V2): a EyeNet, um worker por olho. `ativo` segue a flag
    *  `eyeNet`; `status` diz se o modelo de fato carregou. */
@@ -348,6 +462,10 @@ export interface EngineDiagnostics {
      *  o bloco ocular passa boa parte do tempo zerado. */
     stalePct: number;
     modelo: FichaDoModelo | null;
+    /** Por que `status` é `erro`; `null` fora de erro. */
+    motivoDoErro: MotivoDoErroDoModelo | null;
+    /** Reinício automático dos workers do olho (`null` = nunca precisou). */
+    reinicio: ReinicioDoModelo | null;
   };
   gaze: {
     yaw: number;
@@ -517,7 +635,8 @@ export interface GazeEngine {
   // FILTER_PRESETS em oneEuroFilter.ts.
   // Presets v2 (sufixo '-v2') filtram em espaço normalizado [0,1]
   // antes de converter para pixel — desligado por default.
-  setFilterPreset(preset: FilterPreset | FilterPresetV2): void;
+  // Devolve se o preset passou a governar o cursor (ver `ResultadoDoPreset`).
+  setFilterPreset(preset: FilterPreset | FilterPresetV2): ResultadoDoPreset;
   /** Geometria física da tela (diagonal e distância), para as cadeias de
    *  filtragem que trabalham em graus. Chamado quando as configurações
    *  carregam e a cada mudança; sem isto o `kalmanEma` degrada para Kalman puro. */
@@ -716,6 +835,14 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   // intervalo próprio e não paga o custo de ler pixels 30 vezes por segundo.
   const medidorDeContraluz = new MedidorDeContraluz();
   let latestContraluz: MedidaDeContraluz | undefined;
+  /**
+   * Início do episódio de contraluz FORTE em curso (`performance.now()` do
+   * primeiro quadro com rosto em que a luz mediu forte); `null` fora dele.
+   * Atravessa as perdas de rosto de propósito: numa silhueta contra a janela o
+   * detector perde e acha o rosto o tempo todo, e zerar aqui impediria o
+   * episódio de chegar aos 10 s em que a Emergência volta (relato de 19/10/2026).
+   */
+  let inicioDaContraluzMs: number | null = null;
 
   /** Constrói (ou reconstrói) a cadeia. Chamada quando a geometria aparece. */
   function montarCadeia(): void {
@@ -733,6 +860,20 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     });
   }
   montarCadeia();
+
+  /**
+   * O filtro que governa o cursor AGORA. O estimador de fixação (M9) governa
+   * assim que a calibração em uso tem o ruído medido — ele nasce no próximo
+   * quadro filtrado, então a pergunta feita antes desse quadro (o ajuste
+   * remoto na abertura da sessão) já recebe a resposta certa.
+   */
+  function filtroEmVigor(): ResultadoDoPreset['emVigor'] {
+    if (cadeia) return cadeia.modoEfetivo;
+    if (estimadorDeFixacao || (EXPERIMENT.estimadorDeFixacao && calibration.getRuidoDaCalibracao() !== null)) {
+      return 'fixacao';
+    }
+    return 'oneEuro';
+  }
 
   function aplicarGeometria(screenDiagonalIn: number, viewingDistanceCm: number): void {
     if (!(screenDiagonalIn > 0) || !(viewingDistanceCm > 0)) return;
@@ -817,6 +958,47 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
   let contextoOlhoDir: CropContext | null = null;
   let l2csStatus: L2CSStatus = 'loading';
   const l2csStatusSubscribers = new Set<(s: L2CSStatus) => void>();
+  /** Por que o L2CS está em `error` (diagnóstico e texto da tela). */
+  let motivoDoErroDoL2cs: MotivoDoErroDoModelo | null = null;
+  /** Por que o ramo ocular está em `erro`. */
+  let motivoDoErroDoOlho: MotivoDoErroDoModelo | null = null;
+  /**
+   * Reinício automático de um modelo do olhar (relato de 19/10/2026). Antes, um
+   * worker que morria ou passava a errar toda inferência depois do `ready`
+   * deixava o bloco angular zerado pelo resto da sessão, com o status em
+   * `ready` — só o HUD do desenvolvedor mostrava "stale 100 %".
+   */
+  interface EstadoDoReinicio {
+    tentativas: number;
+    timer: ReturnType<typeof setTimeout> | null;
+    /** Quando o último reinício deu certo (falha logo depois é recaída). */
+    ultimoOkMs: number;
+    desistiu: boolean;
+    /** Já houve alguma falha nesta vida do engine (para o diagnóstico). */
+    houveFalha: boolean;
+  }
+  const novoReinicio = (): EstadoDoReinicio => ({
+    tentativas: 0, timer: null, ultimoOkMs: -Infinity, desistiu: false, houveFalha: false,
+  });
+  const reinicioDoL2cs = novoReinicio();
+  const reinicioDoOlho = novoReinicio();
+  /**
+   * Lado do recorte que o WASM desta máquina não deu conta de manter num
+   * reinício (`aoFicarLentoOLadoFixo`); `null` = nenhum medido lento. Vale pela
+   * vida do engine: a máquina não fica mais rápida de uma hora para outra.
+   */
+  let ladoLentoNoWasm: number | null = null;
+  /**
+   * Tempo de rastreamento COM ROSTO, com o modelo do rosto em `ready`, sem
+   * nenhuma leitura válida dele desde a última que valeu (revisão do pipeline
+   * de 20/10/2026). Antes, um modelo lento demais — toda resposta chegando
+   * vencida — deixava o bloco angular zerado com o status em `ready`, e nada
+   * na tela. Quadros sem rosto não somam nem zeram (sem rosto não há o que
+   * ler, e o problema é outro); só uma leitura válida zera.
+   */
+  let l2csSemLeituraValidaMs = 0;
+  /** Quando foi o último quadro com rosto que consultou o L2CS (`null` = nenhum). */
+  let ultimaLeituraDoL2csMs: number | null = null;
   let l2csFramesSubmitted = 0;
   let l2csFramesValid = 0;
   let l2csFramesStale = 0;
@@ -954,6 +1136,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     // Contraluz é do POSTO de uso: um `stop()`/`start()` pode ser o cuidador
     // levando o computador para outro cômodo.
     latestContraluz = undefined;
+    inicioDaContraluzMs = null;
     medidorDeContraluz.reiniciar();
     latestFaceCenter = { x: 0.5, y: 0.5 };
     latestOlhosNorm = null;
@@ -963,9 +1146,13 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     l2csFramesSubmitted = 0;
     l2csFramesValid = 0;
     l2csFramesStale = 0;
+    l2csSemLeituraValidaMs = 0;
+    ultimaLeituraDoL2csMs = null;
     l2csHealth.reset();
     suavizadorL2cs?.reiniciar();
     reiniciarReusoDoBloco();
+    // O reuso do bloco ocular (A4) também guarda ângulos de UM rosto.
+    reiniciarReusoDoBlocoOcular();
     vigiaDeRecalibracao.reiniciar();
     // A régua da íris mede UMA pessoa. Sem limpar, a segunda sessão (ou o
     // outro perfil) começa com a mediana de 240 amostras da primeira, e a
@@ -1136,34 +1323,129 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     if (ramoOcularAtivo || EXPERIMENT.eyeNet === 'off') return;
     contextoOlhoEsq = criarContextoDoOlho();
     contextoOlhoDir = criarContextoDoOlho();
-    ramoOcular = criarRamoOcularOnnx();
     ramoOcularAtivo = true;
-    statusDoRamoOcular = 'carregando';
     console.log('[olho] modelo dos olhos: EyeNet (models/eyenet/eyenet.onnx), um worker por olho.');
-    // Um `dispose()` no meio da carga troca o ramo pelo nulo: a resposta que
-    // chega depois é de um ramo que já não existe e não pode mexer no status.
-    const ramoDestaCarga = ramoOcular;
-    ramoOcular.start().then(
+    iniciarRamoOcular();
+  }
+
+  /**
+   * Cria e carrega os workers do olho. Usada na primeira carga e em cada
+   * reinício (`provider: 'wasm'` a partir da segunda tentativa).
+   */
+  function iniciarRamoOcular(provider?: 'wasm'): void {
+    const ramo = criarRamoOcularOnnx({
+      ...(provider ? { provider } : {}),
+      aoFalhar: (motivo, detalhe) => aoFalharORamoOcular(ramo, motivo, detalhe),
+    });
+    ramoOcular = ramo;
+    // No reinício o status continua `erro` até o ramo novo responder: a tela
+    // diz que está reiniciando, não que está "carregando" como no boot.
+    if (reinicioDoOlho.tentativas === 0) statusDoRamoOcular = 'carregando';
+    // Um `dispose()` (ou outro reinício) no meio da carga troca o ramo: a
+    // resposta que chega depois é de um ramo que já não existe e não pode
+    // mexer no status.
+    ramo.start().then(
       () => {
-        if (ramoOcular !== ramoDestaCarga) return;
+        if (ramoOcular !== ramo) return;
+        motivoDoErroDoOlho = null;
         statusDoRamoOcular = 'pronto';
-        const ficha = ramoOcular.ficha();
+        const ficha = ramo.ficha();
         console.log(
-          `[olho] ramo ocular pronto: EyeNet nos dois olhos, provider ${ramoOcular.executionProvider() ?? '?'}` +
-          (ficha ? ` · ${resumoDaFicha(ficha)}` : ''),
+          `[olho] ramo ocular pronto: EyeNet nos dois olhos, provider ${ramo.executionProvider() ?? '?'}` +
+          (ficha ? ` · ${resumoDaFicha(ficha)}` : '') +
+          (reinicioDoOlho.tentativas > 0 ? ` (reiniciado, tentativa ${reinicioDoOlho.tentativas})` : ''),
         );
+        if (reinicioDoOlho.tentativas > 0) reinicioDoOlho.ultimoOkMs = performance.now();
       },
       (err) => {
-        if (ramoOcular !== ramoDestaCarga) return;
-        statusDoRamoOcular = 'erro';
-        // Falhou: volta ao nulo. O vetor do conjunto ativo continua exigindo o
-        // bloco ocular, que sai zerado com motivo 'stale' — visível no
-        // diagnóstico, e a S1 tira o peso dessas amostras.
-        console.error('[olho] ramo ocular não iniciou — bloco ocular fica zerado. Motivo:', err);
-        ramoOcular.stop();
+        if (ramoOcular !== ramo) return;
+        ramo.stop();
+        if (reinicioDoOlho.tentativas === 0) {
+          // A PRIMEIRA carga falhou (arquivo ausente, meta que não combina):
+          // volta ao nulo. O vetor do conjunto ativo continua exigindo o bloco
+          // ocular, que sai zerado com motivo 'stale' — visível no
+          // diagnóstico, e a S1 tira o peso dessas amostras.
+          motivoDoErroDoOlho = 'carga';
+          statusDoRamoOcular = 'erro';
+          console.error('[olho] ramo ocular não iniciou — bloco ocular fica zerado. Motivo:', err);
+          ramoOcular = ramoOcularNulo;
+          return;
+        }
+        console.error(`[olho] o reinício ${reinicioDoOlho.tentativas} da EyeNet falhou:`, err);
         ramoOcular = ramoOcularNulo;
+        agendarReinicio(reinicioDoOlho, '[olho]', 'da EyeNet', (forcarWasm) => iniciarRamoOcular(forcarWasm ? 'wasm' : undefined));
       },
     );
+  }
+
+  /** Um worker do olho, já pronto, deixou de servir: erro visível e reinício. */
+  function aoFalharORamoOcular(ramo: RamoOcular, motivo: MotivoDaFalhaDoWorker, detalhe: string): void {
+    if (disposed || ramoOcular !== ramo) return;
+    motivoDoErroDoOlho = 'falha_do_worker';
+    statusDoRamoOcular = 'erro';
+    console.error(
+      `[olho] a EyeNet ${DESCRICAO_DA_FALHA[motivo]} — o bloco ocular fica zerado até ela voltar; reiniciando. (${detalhe})`,
+    );
+    ramo.stop();
+    ramoOcular = ramoOcularNulo;
+    novoEpisodioSeForOCaso(reinicioDoOlho);
+    agendarReinicio(reinicioDoOlho, '[olho]', 'da EyeNet', (forcarWasm) => iniciarRamoOcular(forcarWasm ? 'wasm' : undefined));
+  }
+
+  /** Como cada falha de worker aparece no console. */
+  const DESCRICAO_DA_FALHA: Record<MotivoDaFalhaDoWorker, string> = {
+    inferencia: 'passou a falhar em toda inferência',
+    worker_morreu: 'parou (o worker encerrou com erro)',
+    sem_resposta: 'parou de responder',
+  };
+
+  /**
+   * Falha longe de um reinício bem-sucedido é episódio novo: as tentativas
+   * recomeçam do zero. Perto dele (`JANELA_DE_RECAIDA_MS`) é recaída, e a
+   * sequência de esperas continua de onde parou — sem martelar o worker.
+   */
+  function novoEpisodioSeForOCaso(r: EstadoDoReinicio): void {
+    r.houveFalha = true;
+    if (performance.now() - r.ultimoOkMs > JANELA_DE_RECAIDA_MS) {
+      r.tentativas = 0;
+      r.desistiu = false;
+    }
+  }
+
+  /**
+   * Agenda a próxima tentativa de reinício, com espera crescente. A partir da
+   * segunda o provider é forçado para WASM. Acabadas as tentativas, o modelo
+   * fica em erro, visível, e o console diz uma vez o que fazer.
+   */
+  function agendarReinicio(
+    r: EstadoDoReinicio,
+    rotulo: string,
+    nome: string,
+    reiniciar: (forcarWasm: boolean) => void,
+  ): void {
+    if (disposed || r.timer !== null) return;
+    if (r.tentativas >= MAX_REINICIOS_DO_MODELO) {
+      if (!r.desistiu) {
+        r.desistiu = true;
+        console.error(
+          `${rotulo} ${MAX_REINICIOS_DO_MODELO} tentativas de reiniciar o modelo ${nome} falharam; ` +
+          'ele fica desligado até o IrisFlow ser fechado e aberto de novo. O cursor segue com a íris.',
+        );
+      }
+      return;
+    }
+    const espera = ESPERAS_DO_REINICIO_DO_MODELO_MS[Math.min(r.tentativas, ESPERAS_DO_REINICIO_DO_MODELO_MS.length - 1)];
+    r.timer = setTimeout(() => {
+      r.timer = null;
+      if (disposed) return;
+      r.tentativas++;
+      const forcarWasm = r.tentativas >= 2;
+      console.warn(
+        `${rotulo} reiniciando o modelo ${nome} (tentativa ${r.tentativas} de ${MAX_REINICIOS_DO_MODELO}` +
+        `${forcarWasm ? ', forçando WASM' : ''}).`,
+      );
+      reiniciar(forcarWasm);
+    }, espera);
   }
 
   /**
@@ -1203,44 +1485,188 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       );
       return;
     }
+    console.log(`[L2CS] modelo do rosto: ${descricaoDoModelo(EXPERIMENT.modeloDoRosto).nome} ` +
+      `(${descricaoDoModelo(EXPERIMENT.modeloDoRosto).modelo})`);
+    iniciarClienteDoRosto();
+  }
+
+  /** Muda o status do L2CS junto com o motivo — o motivo ANTES, para quem
+   *  ouve `onL2CSStatusChange` já ler o certo em `getDiagnostics()`. */
+  function definirStatusDoL2cs(status: L2CSStatus, motivo: MotivoDoErroDoModelo | null): void {
+    motivoDoErroDoL2cs = status === 'error' ? motivo : null;
+    setL2CSStatus(status);
+  }
+
+  /**
+   * Cria e carrega o worker da rede do rosto. Usada na primeira carga e em
+   * cada reinício (`provider: 'wasm'` a partir da segunda tentativa).
+   */
+  function iniciarClienteDoRosto(provider?: 'wasm'): void {
     // O canvas nasce do tamanho configurado e é a fonte única do lado do crop:
     // `cropFaceToTensor` lê o canvas, e o worker deduz o lado do tensor. O lado
     // já sai da lista do modelo do rosto (o GazeGene só aceita 224).
     const modeloDoRosto = descricaoDoModelo(EXPERIMENT.modeloDoRosto);
     let ladoDoRecorte: number = ladoAceito(modeloDoRosto.lados, EXPERIMENT.l2csInputSize);
+    // REINÍCIO com calibração em uso (ou uma coleta em curso): o worker novo
+    // fica no lado do modelo, qualquer que seja o provider que subir (revisão
+    // do pipeline de 19/10/2026). Antes a política trocava para 224² quando o
+    // worker voltava em WASM — o `auto` cai sozinho para WASM já na 1ª
+    // tentativa, e a 2ª força o WASM —, e a calibração de 448² era apagada:
+    // sem calibração nada aciona pelo olhar, nem a Emergência.
+    //
+    // O custo é a latência. Medido em 20/10/2026 num contêiner (Chromium com
+    // câmera falsa, 2 CPUs compartilhadas, ResNet-50 do Gaze360 em WASM de uma
+    // thread, duas rodadas alternadas): 224² levou 735–959 ms por inferência
+    // (~1,0–1,4 Hz) e 448², 2,74–2,75 s (~0,36 Hz) — 3,2× mais lento, perto
+    // dos 4× de pixels. O contêiner é muito mais lento que um PC (a tela
+    // pintava a ~1,3 fps): vale a razão, não o número. Num PC em que o WASM
+    // rode 224² a 6 Hz, 448² fica perto de 2 Hz, abaixo dos ~3 Hz; e acima de
+    // `MAX_STALE_MS` (2,5 s) toda leitura chega vencida e o bloco angular
+    // zera. É o preço de não apagar a calibração: sem ela, nem a Emergência
+    // aciona pelo olhar. Na primeira carga nada muda: o lado segue a política
+    // (numa máquina sem WebGPU, 224²), e um perfil de outro lado fica suspenso
+    // até a calibração nova (`setL2csInputSizeEfetivo`).
+    //
+    // Revisão do pipeline de 20/10/2026: esse preço tem limite. Com o lado
+    // fixo, a vigia do cliente mede as primeiras respostas; se o WASM não der
+    // conta do lado (`aoFicarLentoOLadoFixo`), o worker é refeito pela política
+    // e a calibração fica suspensa. Medido lento uma vez, o mesmo lado não é
+    // mais fixado nesta vida do engine (`ladoLentoNoWasm`): a máquina não fica
+    // mais rápida, e fixá-lo de novo devolveria o olhar inteiro com o bloco
+    // angular zerado até a vigia decidir outra vez.
+    const preservar = reinicioDoL2cs.tentativas > 0 ? calibration.ladoDoRecorteAPreservar() : null;
+    const ladoFixo = preservar !== null && preservar === ladoLentoNoWasm ? null : preservar;
+    if (ladoFixo !== null) ladoDoRecorte = ladoAceito(modeloDoRosto.lados, ladoFixo);
     cropCtx = createCropContext(ladoDoRecorte);
-    console.log(`[L2CS] modelo do rosto: ${modeloDoRosto.nome} (${modeloDoRosto.modelo})`);
-    l2csClient = createL2CSClient();
-    l2csClient.start().then(
+    // O worker novo começa sem leitura nenhuma: a contagem de leituras
+    // vencidas é dele, não da do anterior.
+    l2csSemLeituraValidaMs = 0;
+    ultimaLeituraDoL2csMs = null;
+    const cliente: L2CSClient = createL2CSClient({
+      ...(provider ? { provider } : {}),
+      ...(ladoFixo !== null
+        ? {
+            ladoFixo,
+            vigiaDaLatencia: {
+              limiteMs: LATENCIA_MAXIMA_DO_LADO_FIXO_MS,
+              aoPassar: (latenciaMs: number) => aoFicarLentoOLadoFixo(cliente, latenciaMs),
+            },
+          }
+        : {}),
+      aoFalhar: (motivo, detalhe) => aoFalharOWorkerDoRosto(cliente, motivo, detalhe),
+    });
+    l2csClient = cliente;
+    cliente.start().then(
       () => {
+        // Descartado no meio da carga (`dispose`, outro reinício).
+        if (l2csClient !== cliente) return;
         // Política por provider (WebGPU 448²/100 ms, WASM 224²/160 ms): o
         // canvas do recorte é refeito no lado em vigor e a calibração passa a
         // usar esse lado na chave do perfil — ANTES do status, para quem ouve
         // `onL2CSStatusChange` já ler o valor efetivo em `getDiagnostics()`.
-        const politica = l2csClient?.getPolitica();
-        if (politica && politica.inputSize !== ladoDoRecorte) {
+        const politica = cliente.getPolitica();
+        if (politica.inputSize !== ladoDoRecorte) {
           ladoDoRecorte = politica.inputSize;
           cropCtx = createCropContext(politica.inputSize);
         }
-        if (politica) calibration.setL2csInputSizeEfetivo(politica.inputSize);
-        setL2CSStatus('ready');
+        calibration.setL2csInputSizeEfetivo(politica.inputSize);
+        // A saída do worker anterior não descreve o novo: o vigia de saída
+        // travada recomeça do zero.
+        l2csHealth.reset();
+        definirStatusDoL2cs('ready', null);
         console.log(
-          `[L2CS] worker ready — provider ${l2csClient?.getExecutionProvider()}, ` +
-          `recorte ${politica?.inputSize}², cadência ${politica?.cadenceMs} ms`,
+          `[L2CS] worker ready — provider ${cliente.getExecutionProvider()}, ` +
+          `recorte ${politica.inputSize}², cadência ${politica.cadenceMs} ms` +
+          (reinicioDoL2cs.tentativas > 0 ? ` (reiniciado, tentativa ${reinicioDoL2cs.tentativas})` : '') +
+          (ladoFixo !== null ? ` — recorte mantido no lado da calibração em uso` : ''),
         );
+        if (reinicioDoL2cs.tentativas > 0) reinicioDoL2cs.ultimoOkMs = performance.now();
       },
       (err) => {
-        setL2CSStatus('error');
-        console.error('[L2CS] worker init FAILED — o bloco angular fica zerado. Motivo:', err);
-        if (!modeloDoRosto.vaiNoInstalador) {
-          console.error(
-            `[L2CS] o modelo '${modeloDoRosto.id}' é só de pesquisa e não vem no repositório: ` +
-            `ponha o ONNX em frontend/public/${modeloDoRosto.modelo} (README, "Modelos: como escolher") ` +
-            `ou volte ao padrão com ?rosto=gaze360.`,
-          );
+        if (l2csClient !== cliente) return;
+        if (reinicioDoL2cs.tentativas === 0) {
+          // A PRIMEIRA carga falhou: arquivo ausente, sessão que não sobe ou —
+          // desde a inferência de teste — meta que não combina com o modelo.
+          // Recarregar não traz de volta um arquivo que não existe: sem
+          // reinício. A tela de calibração oferece "calibrar só com a íris".
+          definirStatusDoL2cs('error', 'carga');
+          console.error('[L2CS] worker init FAILED — o bloco angular fica zerado. Motivo:', err);
+          if (!modeloDoRosto.vaiNoInstalador) {
+            console.error(
+              `[L2CS] o modelo '${modeloDoRosto.id}' é só de pesquisa e não vem no repositório: ` +
+              `ponha o ONNX em frontend/public/${modeloDoRosto.modelo} (README, "Modelos: como escolher") ` +
+              `ou volte ao padrão com ?rosto=gaze360.`,
+            );
+          }
+          return;
         }
+        // Um REINÍCIO que não subiu: continua em erro e tenta de novo.
+        definirStatusDoL2cs('error', 'falha_do_worker');
+        console.error(`[L2CS] o reinício ${reinicioDoL2cs.tentativas} da rede do rosto falhou:`, err);
+        agendarReinicio(reinicioDoL2cs, '[L2CS]', 'do rosto', (forcarWasm) => {
+          try { l2csClient?.stop(); } catch { /* já encerrado */ }
+          iniciarClienteDoRosto(forcarWasm ? 'wasm' : undefined);
+        });
       },
     );
+  }
+
+  /**
+   * O worker da rede do rosto, já pronto, deixou de servir (relato de
+   * 19/10/2026). Antes nada chegava aqui: o status seguia `ready` e o modelo
+   * calibrado com o bloco angular passava a receber zeros, com a mira piorando
+   * de vez e nada na tela.
+   */
+  function aoFalharOWorkerDoRosto(cliente: L2CSClient, motivo: MotivoDaFalhaDoWorker, detalhe: string): void {
+    if (disposed || l2csClient !== cliente) return;
+    definirStatusDoL2cs('error', 'falha_do_worker');
+    console.error(
+      `[L2CS] a rede do rosto ${DESCRICAO_DA_FALHA[motivo]} — o bloco angular fica zerado até ela voltar; ` +
+      `reiniciando. (${detalhe})`,
+    );
+    novoEpisodioSeForOCaso(reinicioDoL2cs);
+    agendarReinicio(reinicioDoL2cs, '[L2CS]', 'do rosto', (forcarWasm) => {
+      try { l2csClient?.stop(); } catch { /* já encerrado */ }
+      iniciarClienteDoRosto(forcarWasm ? 'wasm' : undefined);
+    });
+  }
+
+  /**
+   * O reinício manteve o lado da calibração (`ladoFixo`), o worker subiu em
+   * WASM e as primeiras respostas passaram de `LATENCIA_MAXIMA_DO_LADO_FIXO_MS`
+   * (revisão do pipeline de 20/10/2026). Antes nada acontecia: a 448² o WASM
+   * leva ~2,7 s por resposta, toda leitura chegava vencida, o bloco angular ia
+   * zerado com o status em `ready` e o modelo calibrado COM ele punha o olhar
+   * ~480 px fora do canto (no olho sintético dos testes) — a Emergência podia
+   * ficar fora de alcance, sem faixa e sem aviso ao cuidador.
+   *
+   * Agora o worker é refeito pela política (em WASM, 224²) e a troca de lado
+   * suspende a calibração JÁ, antes do worker novo subir: é o estado seguro
+   * que já existe — só a Emergência e a recuperação aceitam o olhar, a faixa
+   * diz o que houve e o cuidador recebe o aviso `olhar_reduzido`. Um perfil do
+   * disco para o lado novo, se houver, toma o lugar (`setL2csInputSizeEfetivo`).
+   * Não conta como tentativa de reinício: o worker não falhou.
+   */
+  function aoFicarLentoOLadoFixo(cliente: L2CSClient, latenciaMs: number): void {
+    if (disposed || l2csClient !== cliente) return;
+    // Com WebGPU a política já é 448²: trocar não ajudaria.
+    if (cliente.getExecutionProvider() !== 'wasm') return;
+    const ladoAtual = cliente.getPolitica().inputSize;
+    const daPolitica = politicaPorProvider('wasm', EXPERIMENT, descricaoDoModelo(EXPERIMENT.modeloDoRosto).lados).inputSize;
+    // O operador forçou este lado (`?l2cs=448&ep=wasm`, condição de medição):
+    // a política devolveria o mesmo, e o relatório precisa do que ele pediu.
+    if (daPolitica === ladoAtual) return;
+    ladoLentoNoWasm = ladoAtual;
+    console.warn(
+      `[L2CS] o recorte de ${ladoAtual}² em WASM está levando ${(latenciaMs / 1000).toFixed(1)} s por resposta ` +
+      `(o limite é ${(LATENCIA_MAXIMA_DO_LADO_FIXO_MS / 1000).toFixed(2)} s): as leituras chegariam vencidas. ` +
+      `Voltando para ${daPolitica}²; a calibração em uso, se houver, fica suspensa (só a Emergência e a ` +
+      'recuperação pelo olhar) até uma calibração nova ou o recorte voltar.',
+    );
+    try { cliente.stop(); } catch { /* já encerrado */ }
+    calibration.setL2csInputSizeEfetivo(daPolitica);
+    definirStatusDoL2cs('loading', null);
+    iniciarClienteDoRosto('wasm');
   }
 
   // O corpo real é `loopBody()`; o reagendamento vive no `finally` de
@@ -1531,9 +1957,29 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         calibration.setContraluzAtual(latestContraluz?.nivel ?? null);
         // Contraluz FORTE invalida o quadro, como o L2CS implausível: a amostra
         // não entra no Ridge nem na calibração. O quadro ainda é medido (o
-        // medidor precisa dele para dizer quando a luz melhorou), só não vira
-        // predição. O lock de exposição do `cameraTuner` fica como está.
-        const quadroInvalidoPorLuz = latestContraluz?.nivel === 'forte';
+        // medidor precisa dele para dizer quando a luz melhorou). O lock de
+        // exposição do `cameraTuner` fica como está.
+        //
+        // Três fases por episódio (relato de 19/10/2026). Antes havia uma só, e
+        // durava o quanto a luz durasse: a última posição, `eyeState: 'closed'`
+        // e nenhum dwell — nem a Emergência —, com a tela culpando os olhos.
+        //  1. até a degradação se confirmar (~500 ms): pausa, como antes;
+        //  2. até `CONTRALUZ_ATE_PREDIZER_MS`: posição repetida e NÃO medida,
+        //     olhos `unknown`, degradada, com o motivo `contraluz`;
+        //  3. depois disso: a predição volta, marcada degradada e com o motivo —
+        //     só a Emergência e os botões de recuperação aceitam, com o dwell
+        //     mais longo. O quadro continua fora da calibração, do teste de
+        //     precisão, das referências lentas e do vigia de recalibração.
+        const luzForte = latestContraluz?.nivel === 'forte';
+        if (!luzForte) inicioDaContraluzMs = null;
+        else if (inicioDaContraluzMs === null) inicioDaContraluzMs = startTimeMs;
+        const idadeDaContraluzMs = inicioDaContraluzMs === null ? 0 : startTimeMs - inicioDaContraluzMs;
+        const predizSobContraluz = luzForte && idadeDaContraluzMs >= CONTRALUZ_ATE_PREDIZER_MS;
+        const quadroInvalidoPorLuz = luzForte && !predizSobContraluz;
+        // O episódio já passou da pausa curta: as amostras dizem que a causa é
+        // a luz (também nas de piscada — sob contraluz o EAR mente, e a tela
+        // não pode ler "olhos fechados" ali).
+        const contraluzConfirmada = luzForte && idadeDaContraluzMs >= DEGRADED_THRESHOLD_MS;
 
         const rawMatrix = results.facialTransformationMatrixes?.[0]?.data;
         const faceMatrix = rawMatrix ? new Float32Array(rawMatrix) : undefined;
@@ -1568,10 +2014,15 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           if (l2csClient.canSubmit(startTimeMs)) {
             try {
               stageTimer.begin(STAGE.l2csCrop);
+              // Buffer que o worker devolveu com o resultado anterior (falha
+              // #13, 18/10/2026): o recorte escreve nele em vez de alocar
+              // 0,6 MB (224²) ou 2,4 MB (448²) por inferência.
+              const ladoDoRecorte = cropCtx.canvas.width;
               const tensor = cropFaceToTensor(videoEl, {
                 landmarks,
                 isMirrored: IS_VIDEO_MIRRORED,
                 context: cropCtx,
+                destino: l2csClient.emprestarTensor?.(3 * ladoDoRecorte * ladoDoRecorte),
                 expandFactor: EXPERIMENT.expandFactor,
                 // Roll do quadro ANTERIOR: o recorte é montado antes de o
                 // extractor rodar, então o roll deste quadro ainda não existe.
@@ -1663,6 +2114,16 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           };
 
           if (g.valid) l2csFramesValid++; else l2csFramesStale++;
+          // Leituras vencidas com o modelo `ready` (revisão do pipeline de
+          // 20/10/2026; ver `l2csSemLeituraValidaMs`). Soma o tempo entre
+          // quadros com rosto, com teto de 1 s por passo: a volta de uma perda
+          // de rosto ou de uma câmera parada não conta o buraco inteiro.
+          if (g.valid || l2csStatus !== 'ready') {
+            l2csSemLeituraValidaMs = 0;
+          } else if (ultimaLeituraDoL2csMs !== null) {
+            l2csSemLeituraValidaMs += Math.min(Math.max(0, startTimeMs - ultimaLeituraDoL2csMs), 1000);
+          }
+          ultimaLeituraDoL2csMs = startTimeMs;
           // Conta inferências, não leituras: o timestamp é a hora da captura e
           // só muda quando chega resultado novo.
           if (g.valid && g.timestamp !== ultimoL2csTimestamp) {
@@ -1672,14 +2133,15 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           // Saída idêntica por segundos é pipeline quebrado (crop preto ou
           // congelado), não fisiologia.
           if (l2csHealth.observe(g.yaw, g.valid, startTimeMs)) {
-            setL2CSStatus('error');
+            definirStatusDoL2cs('error', 'saida_travada');
             console.error(
               `[L2CS] SAÍDA TRAVADA — yaw constante em ${g.yaw.toFixed(4)} rad ` +
               `(${((g.yaw * 180) / Math.PI).toFixed(1)}°) por mais de 6 s. ` +
               `O modelo está inferindo sobre imagem inútil (crop preto ou congelado).`,
             );
-          } else if (l2csHealth.recuperou) {
-            setL2CSStatus('ready');
+          } else if (l2csHealth.recuperou && motivoDoErroDoL2cs === 'saida_travada') {
+            // Só desfaz o erro que ELE causou: um worker em reinício continua em erro.
+            definirStatusDoL2cs('ready', null);
             console.log('[L2CS] saída voltou a variar — status restaurado para ready.');
           }
           diagL2csYaw = gVideo.yaw;
@@ -1696,14 +2158,16 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           if (vw > 0 && vh > 0 && contextoOlhoEsq && contextoOlhoDir && ramoOcular.podeSubmeter(startTimeMs)) {
             try {
               const px = (i: number) => ({ x: landmarks[i].x * vw, y: landmarks[i].y * vh });
+              // Buffers devolvidos pelos workers dos olhos (falha #13).
+              const floatsDoOlho = (c: CropContext) => 3 * c.canvas.width * c.canvas.height;
               const esq = recortarOlhoParaTensor(videoEl, vw, vh, {
                 cantoInterno: px(OLHO_ESQUERDO.interno), cantoExterno: px(OLHO_ESQUERDO.externo),
                 olho: 'esquerdo', isMirrored: IS_VIDEO_MIRRORED,
-              }, contextoOlhoEsq);
+              }, contextoOlhoEsq, ramoOcular.emprestar?.('esquerdo', floatsDoOlho(contextoOlhoEsq)));
               const dir = recortarOlhoParaTensor(videoEl, vw, vh, {
                 cantoInterno: px(OLHO_DIREITO.interno), cantoExterno: px(OLHO_DIREITO.externo),
                 olho: 'direito', isMirrored: IS_VIDEO_MIRRORED,
-              }, contextoOlhoDir);
+              }, contextoOlhoDir, ramoOcular.emprestar?.('direito', floatsDoOlho(contextoOlhoDir)));
               ramoOcular.submeter(esq, dir);
             } catch (e) {
               console.warn('[olho] recorte falhou:', e);
@@ -1821,8 +2285,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           calibration.setCurrentFramePose(poseDoQuadro);
           // Quadro VÁLIDO para a referência lenta e para a reancoragem: rosto
           // presente, sem piscada (já garantido neste ramo), L2CS não
-          // implausível e sem contraluz forte (idem).
-          const quadroValido = ultimoDiagnosticoDoBloco().motivo !== 'implausivel';
+          // implausível e sem contraluz forte. Na fase 3 da contraluz o quadro
+          // chega aqui só para virar a predição da Emergência: não é evidência
+          // de pose, de centro nem de olhar para nenhum aprendizado.
+          const quadroValido = !predizSobContraluz && ultimoDiagnosticoDoBloco().motivo !== 'implausivel';
           calibration.alimentarReferenciaLenta(startTimeMs, quadroValido);
           if (reancoragem && quadroValido) {
             reancoragem.acumulador.adicionar({
@@ -1832,7 +2298,8 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             });
           }
 
-          calibration.feedRawData(featuresLeft, featuresRight, quality);
+          // Sob contraluz o quadro não entra na calibração (regra de sempre).
+          if (!predizSobContraluz) calibration.feedRawData(featuresLeft, featuresRight, quality);
           latestFeatureDims = featuresLeft.length;
 
           // Peso por olho para a fusão binocular. EAR "aberto" de referência
@@ -1850,12 +2317,15 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
                 }
               : undefined;
 
-          feedAccuracyRaw(
-            featuresLeft,
-            featuresRight,
-            perEyeWeight,
-            poseDoQuadro ?? undefined,
-          );
+          // Nem no teste de precisão: um quadro sob contraluz mediria a luz.
+          if (!predizSobContraluz) {
+            feedAccuracyRaw(
+              featuresLeft,
+              featuresRight,
+              perEyeWeight,
+              poseDoQuadro ?? undefined,
+            );
+          }
 
           stageTimer.begin(STAGE.predict);
           const calibrated = calibration.mapGaze(featuresLeft, featuresRight, perEyeWeight);
@@ -1869,7 +2339,8 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             targetX = calibrated.x;
             targetY = calibrated.y;
             // Predição PRÉ-filtro: é o modelo que o vigia mede, não o filtro.
-            vigiaDeRecalibracao.registrarPredicao(calibrated.x, calibrated.y, startTimeMs);
+            // Sob contraluz, não: a BCEA da luz acusaria "a mira piorou".
+            if (!predizSobContraluz) vigiaDeRecalibracao.registrarPredicao(calibrated.x, calibrated.y, startTimeMs);
           } else if (!calibration.isCalibrated()) {
             // SEM calibração: ponteiro pela cabeça. É o modo em que a pessoa
             // move o cursor com o nariz antes de calibrar, e aí o nariz É a
@@ -1905,7 +2376,15 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             now: performance.now(),
           });
           mapGazeNullSinceMs = degradedUpdate.newNullSinceMs;
-          const isDegraded = degradedUpdate.isDegraded;
+          // Fase 3 da contraluz: a predição existe, mas é sabidamente ruim — a
+          // amostra sai degradada, e o dwell só aceita Emergência e recuperação.
+          const isDegraded = degradedUpdate.isDegraded || (predizSobContraluz && calibration.isCalibrated());
+          // CALIBRADO e a predição falhou: a posição abaixo é a anterior,
+          // filtrada de novo — não uma medida. O dwell não conta sobre ela
+          // (antes, 500 ms de quadros nulos davam tempo de completar um dwell
+          // começado, e depois disso a Emergência completava sob o ponto
+          // congelado).
+          const posicaoNaoMedida = calibrated === null && calibration.isCalibrated();
 
           const now = performance.now() / 1000.0;
           // Com filterInNormalizedSpace, filtra em [0,1] antes de converter
@@ -1973,7 +2452,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             smoothed = { x: e.x, y: e.y };
           }
           stageTimer.end(STAGE.filter);
-          feedAccuracyFiltered(smoothed.x, smoothed.y, recordedPreFilter);
+          if (!predizSobContraluz) feedAccuracyFiltered(smoothed.x, smoothed.y, recordedPreFilter);
 
           // Decide entre 'calibrating' | 'degraded' | 'tracking' | 'uncalibrated'.
           // 'degraded' entra quando mapGaze devolveu null por >500ms seguidos
@@ -2004,6 +2483,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             degraded: isDegraded,
             uncalibrated: semCalibracao,
             eyeState: 'open',
+            // Campos só nos quadros que precisam deles: o quadro normal sai
+            // exatamente como antes (`engine.saidaNormal.test.ts`).
+            ...(predizSobContraluz ? { motivo: 'contraluz' as const } : {}),
+            ...(posicaoNaoMedida ? { posicaoMedida: false } : {}),
           });
           framesEmitted++;
 
@@ -2087,6 +2570,9 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             degraded: !semCalibracaoBlink && (degradadoNaPiscada || holdExpirou),
             uncalibrated: semCalibracaoBlink,
             eyeState: 'closed',
+            // Sob contraluz confirmada o "olho fechado" do EAR não é confiável:
+            // a amostra diz que a causa é a luz, e a tela não acusa os olhos.
+            ...(contraluzConfirmada ? { motivo: 'contraluz' as const } : {}),
           });
           if (hold.posicao) {
             lastEmittedX = ancoraX;
@@ -2107,17 +2593,16 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             now: performance.now(),
           });
           mapGazeNullSinceMs = degradadoLuz.newNullSinceMs;
+          // A luz forte se CONFIRMOU: o timer de degradação virou, ou — na
+          // calibração e sem modelo, em que ele não corre — o episódio já tem
+          // o mesmo meio segundo.
+          const luzConfirmada = degradadoLuz.isDegraded || contraluzConfirmada;
           if (calibration.isCalibrating) setState('calibrating');
           else if (semCalibracaoLuz) setState('uncalibrated');
-          else if (degradadoLuz.isDegraded) setState('degraded');
-          emit({
-            x: lastEmittedX,
-            y: lastEmittedY,
-            timestamp: performance.now(),
-            hasFace: true,
-            degraded: !semCalibracaoLuz && degradadoLuz.isDegraded,
-            uncalibrated: semCalibracaoLuz,
-            // `closed`, como no ramo da piscada, e NÃO `open`.
+          else if (luzConfirmada) setState('degraded');
+          if (!luzConfirmada) {
+            // FASE 1 (até ~500 ms): igual a antes. `closed`, como no ramo da
+            // piscada, e NÃO `open`.
             //
             // A posição emitida aqui é a última válida, repetida quadro após
             // quadro: perfeitamente imóvel, que é exatamente a condição que o
@@ -2126,8 +2611,34 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             // os 500 ms que o timer de degradação leva para virar — olhando
             // para outro lugar. O `closed` pausa o dwell no primeiro quadro
             // ruim, sem zerar o progresso.
-            eyeState: 'closed',
-          });
+            emit({
+              x: lastEmittedX,
+              y: lastEmittedY,
+              timestamp: performance.now(),
+              hasFace: true,
+              degraded: false,
+              uncalibrated: semCalibracaoLuz,
+              eyeState: 'closed',
+            });
+          } else {
+            // FASE 2 (até `CONTRALUZ_ATE_PREDIZER_MS`): a causa é a LUZ, não os
+            // olhos (relato de 19/10/2026). Os olhos ficam `unknown` — nada foi
+            // medido sobre eles —, a posição vai marcada como não medida (o
+            // dwell não conta sobre ela: a mesma proteção que o `closed` dava,
+            // sem acusar os olhos) e o motivo vai junto, para a tela dizer
+            // "luz forte atrás de você" em vez de "olhos fechados".
+            emit({
+              x: lastEmittedX,
+              y: lastEmittedY,
+              timestamp: performance.now(),
+              hasFace: true,
+              degraded: !semCalibracaoLuz,
+              uncalibrated: semCalibracaoLuz,
+              eyeState: 'unknown',
+              motivo: 'contraluz',
+              posicaoMedida: false,
+            });
+          }
         } else {
           // Features VAZIAS sem piscada (landmarks parciais, modelo sem
           // refinamento de íris). Sem este ramo o frame não emitia nada, nunca
@@ -2167,6 +2678,13 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             // `eyeState` OMITIDO de propósito: sem features não há como saber
             // se o olho está aberto ou fechado. Declarar 'open' seria fabricar
             // medição; o dispatcher trata a ausência como desconhecido.
+            //
+            // E a posição é a última, repetida: NÃO medida. Sem esta marca o
+            // dwell lia o olho "desconhecido" como livre e contava sobre o ponto
+            // congelado — 500 ms em qualquer botão, e depois na Emergência
+            // (relato de 19/10/2026).
+            posicaoMedida: false,
+            ...(contraluzConfirmada ? { motivo: 'contraluz' as const } : {}),
           });
         }
 
@@ -2230,6 +2748,8 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         blinkHold.update(false, startTimeMs, { predict: () => ({ x: 0, y: 0 }), ready: false });
         calibration.alimentarReferenciaLenta(startTimeMs, false);
         calibration.setContraluzAtual(null);
+        // A imagem parou: um episódio de contraluz recomeça quando ela voltar.
+        inicioDaContraluzMs = null;
       }
       // Amostra de "sem rosto" na cadência de câmera: o dwell pausa e depois
       // zera (500 ms), o fallback esconde o cursor, e quem assina sabe que não
@@ -2376,6 +2896,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
     dispose(): void {
       disposed = true;
       this.stop();
+      // Um reinício agendado de modelo pertence ao engine que acabou.
+      for (const r of [reinicioDoL2cs, reinicioDoOlho]) {
+        if (r.timer !== null) clearTimeout(r.timer);
+        r.timer = null;
+      }
       if (faceLandmarker) {
         try {
           faceLandmarker.close();
@@ -2403,10 +2928,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         contextoOlhoDir = null;
       }
       statusDoRamoOcular = 'desligado';
+      motivoDoErroDoOlho = null;
       qualityAnalyzer.dispose?.();
       medidorDeContraluz.dispose();
       calibration.dispose();
-      setL2CSStatus('disabled');
+      definirStatusDoL2cs('disabled', null);
     },
 
     subscribe(cb: (sample: GazeSample) => void): () => void {
@@ -2432,7 +2958,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       aplicarGeometria(screenDiagonalIn, viewingDistanceCm);
     },
 
-    setFilterPreset(preset: FilterPreset | FilterPresetV2): void {
+    setFilterPreset(preset: FilterPreset | FilterPresetV2): ResultadoDoPreset {
       if (cadeia) {
         // Os presets são parâmetros do One Euro. Não existe tradução deles
         // para o Kalman, e aceitar a chamada em silêncio faria a UI mostrar um
@@ -2441,7 +2967,7 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           `[engine] setFilterPreset('${preset}') ignorado: filterMode é ` +
           `'${EXPERIMENT.filterMode}', e os presets só parametrizam o One Euro.`,
         );
-        return;
+        return { aplicado: false, emVigor: cadeia.modoEfetivo };
       }
       // Atribuído DEPOIS da guarda: antes, uma troca recusada já tinha gravado
       // `activePreset` e voltava sem tocar em `activeConfig` — os dois ficavam
@@ -2458,7 +2984,22 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       if (oldConfig && oldConfig.filterInNormalizedSpace !== activeConfig.filterInNormalizedSpace) {
         oneEuro.reset();
       }
-      console.log(`[IrisFlow] filtro → ${preset} (mincutoff=${activeConfig.mincutoff}, beta=${activeConfig.beta}, dcutoff=${activeConfig.dcutoff ?? 1.0}, normalized=${activeConfig.filterInNormalizedSpace})`);
+      // O One Euro recebe o preset como sempre — nenhum filtro muda com isto
+      // (relato de 19/10/2026, auditoria A2). O que muda é dizer a verdade:
+      // com o estimador de fixação (M9) governando, o One Euro está fora do
+      // caminho do cursor, o preset fica guardado para quando ele voltar, e
+      // quem pediu (Configurações, ajuste remoto do cuidador) fica sabendo.
+      const emVigor = filtroEmVigor();
+      if (emVigor === 'fixacao') {
+        console.warn(
+          `[IrisFlow] preset '${preset}' guardado no One Euro, mas quem suaviza o cursor agora é o ` +
+          'estimador de fixação (M9, ajustado pelo ruído medido na calibração): o preset não muda o ' +
+          'cursor enquanto ele governar.',
+        );
+      } else {
+        console.log(`[IrisFlow] filtro → ${preset} (mincutoff=${activeConfig.mincutoff}, beta=${activeConfig.beta}, dcutoff=${activeConfig.dcutoff ?? 1.0}, normalized=${activeConfig.filterInNormalizedSpace})`);
+      }
+      return { aplicado: emVigor === 'oneEuro', emVigor };
     },
 
     getL2CSStatus(): L2CSStatus {
@@ -2561,7 +3102,9 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           viesPx,
           fracaoDoTeto: fracaoDoTetoDaCorrecao(),
         },
-        lerReferenciaDePrecisao(),
+        // Só o teste que mediu ESTE modelo é linha de base (revisão do
+        // pipeline de 19/10/2026: a recoleta aceita troca o modelo).
+        lerReferenciaDePrecisao(undefined, calibration.getCalibrationTimestampMs()),
       );
     },
 
@@ -2597,6 +3140,11 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           modelo: l2csClient?.getFicha() ?? null,
           inputSize: l2csClient?.getPolitica().inputSize ?? EXPERIMENT.l2csInputSize,
           cadenceMs: l2csClient?.getPolitica().cadenceMs ?? EXPERIMENT.l2csCadenceMs,
+          motivoDoErro: l2csStatus === 'error' ? motivoDoErroDoL2cs : null,
+          reinicio: reinicioDoL2cs.houveFalha
+            ? { tentativas: reinicioDoL2cs.tentativas, desistiu: reinicioDoL2cs.desistiu }
+            : null,
+          semLeituraValidaMs: l2csSemLeituraValidaMs,
         },
         olho: {
           ativo: ramoOcularAtivo,
@@ -2606,6 +3154,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
           latencyMs: ramoOcular.latenciaMediaMs(),
           stalePct: diagOlhoStalePct,
           modelo: ramoOcular.ficha(),
+          motivoDoErro: statusDoRamoOcular === 'erro' ? motivoDoErroDoOlho : null,
+          reinicio: reinicioDoOlho.houveFalha
+            ? { tentativas: reinicioDoOlho.tentativas, desistiu: reinicioDoOlho.desistiu }
+            : null,
         },
         gaze: {
           yaw: diagL2csYaw,
@@ -2615,10 +3167,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         // degrada para Kalman puro, e o relatório precisa saber.
         filtro: {
           pedido: EXPERIMENT.filterMode,
-          efetivo: cadeia ? cadeia.modoEfetivo : estimadorDeFixacao ? 'fixacao' : 'oneEuro',
+          efetivo: filtroEmVigor(),
           degradado: cadeia?.degradado ?? false,
           geometriaConhecida: geometriaDeTela !== null,
-          preset: cadeia || estimadorDeFixacao ? null : activePreset,
+          preset: filtroEmVigor() === 'oneEuro' ? activePreset : null,
           fixacao: estimadorDeFixacao
             ? { janelaMs: estimadorDeFixacao.janela, escala: estimadorDeFixacao.escala }
             : null,
@@ -2789,6 +3341,29 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       },
       iniciarRodadaDeSegundaPose() {
         return calibration.iniciarRodadaDeSegundaPose();
+      },
+      podeRecoletarAlvos() {
+        return calibration.podeRecoletarAlvos();
+      },
+      alvosParaRecoletar() {
+        return calibration.alvosParaRecoletar();
+      },
+      iniciarRecoletaDeAlvos(alvos, opcoes) {
+        // A mesma ordem do `startCalibrationMode`: uma reancoragem em voo foi
+        // colhida contra a referência que o retreino pode trocar.
+        abandonarReancoragem();
+        return calibration.iniciarRecoletaDeAlvos(alvos, opcoes);
+      },
+      concluirRecoletaDeAlvos(onComplete) {
+        return calibration.concluirRecoletaDeAlvos((r) => {
+          // Modelo novo em uso: a BCEA acumulada descrevia o de antes. Recusado,
+          // o modelo é o mesmo objeto e o histórico continua valendo.
+          if (r.aceito) vigiaDeRecalibracao.reiniciar();
+          onComplete?.(r);
+        });
+      },
+      getUltimaRecoleta() {
+        return calibration.getUltimaRecoleta();
       },
       iniciarPerseguicao() {
         return calibration.iniciarPerseguicao();

@@ -27,6 +27,10 @@ export const SENTRY_DSN = (process.env.EXPO_PUBLIC_SENTRY_DSN ?? '').trim();
 export const sentryEnabled = /^https:\/\/[^@\s]+@[^\s]+\/\d+$/.test(SENTRY_DSN);
 
 const PADROES: [RegExp, string][] = [
+  // O código QR do computador num link (`irisflow://parear?t=…`, `/parear#t=…`)
+  // abre a conta da família por 3 minutos (19/10/2026). Primeiro da lista: os
+  // outros padrões poderiam picotá-lo e deixar o resto passar.
+  [/([?#&]t=)[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, '$1[codigo]'],
   [/eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, '[jwt]'],
   [/Bearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [token]'],
   [/ExponentPushToken\[[^\]]+\]/g, 'ExponentPushToken[…]'],

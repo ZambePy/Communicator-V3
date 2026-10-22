@@ -1,6 +1,5 @@
-import { useId, useRef } from 'react'
+import { useId, useRef, type ReactNode } from 'react'
 import { useInclinacaoAoRolar, useVideoNaTela } from '@/hooks/useDemo'
-import { useInView } from '@/hooks/useInView'
 import type { Demo } from '@/data/home'
 import './aparelhos.css'
 
@@ -62,15 +61,14 @@ function VideoDeDemonstracao({ demo, className, foco, preload = 'metadata' }: Pr
 
 /**
  * A gravação real do IrisFlow Communicator sem aparelho em volta: um
- * retângulo arredondado na proporção do vídeo (16:9), com o brilho da marca
- * na borda. O vídeo é o produto; a moldura de monitor só disputava com ele.
- * O brilho só gira com a moldura na tela, como as ilustrações da home.
+ * retângulo arredondado na proporção do vídeo (16:9), com um fio claro na
+ * borda. O vídeo é o produto; a moldura de monitor só disputava com ele. O
+ * brilho que girava na borda saiu no redesenho de 19/10/2026: era decoração
+ * em movimento contínuo do lado do produto, que já se mexe sozinho.
  */
 export function VideoEmMoldura({ demo }: { demo: Demo }) {
-  const { ref, inView } = useInView<HTMLDivElement>({ once: false, threshold: 0.1, rootMargin: '0px' })
   return (
-    <div ref={ref} className={`video-moldura${inView ? ' is-rodando' : ''}`}>
-      <span className="video-moldura__brilho" aria-hidden="true" />
+    <div className="video-moldura">
       <div className="video-moldura__tela">
         <VideoDeDemonstracao demo={demo} className="video-moldura__video" preload="none" />
       </div>
@@ -78,13 +76,18 @@ export function VideoEmMoldura({ demo }: { demo: Demo }) {
   )
 }
 
-/** Um celular genérico com a gravação real do IrisFlow Cuidador. */
-export function CelularDemo({ demo }: { demo: Demo }) {
+/**
+ * Um celular genérico com a gravação real do IrisFlow Cuidador. `sobre` é o
+ * que fica por cima da gravação, dentro da tela (a home põe aqui o cartão da
+ * frase que chega: MensagemQueChega).
+ */
+export function CelularDemo({ demo, sobre }: { demo: Demo; sobre?: ReactNode }) {
   return (
     <div className="celular">
       <div className="celular__moldura">
         <div className="celular__tela">
           <VideoDeDemonstracao demo={demo} className="celular__video" foco="50% 0%" />
+          {sobre}
         </div>
         <span className="celular__camera" aria-hidden="true" />
       </div>
@@ -158,7 +161,6 @@ export function MonitorTelas({
                 decoding="async"
               />
             ))}
-            <span className="monitor__reflexo" aria-hidden="true" />
           </div>
         </div>
         <span className="monitor__pescoco" aria-hidden="true" />

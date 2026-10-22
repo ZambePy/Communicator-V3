@@ -3,15 +3,47 @@ import { definirEmergenciaAtiva } from '../services/estadoDeEmergencia';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertOctagon } from 'lucide-react';
 import { GazeButton } from '../components/ui/GazeButton';
-import { Z_DO_REAJUSTE } from '../components/ReancoragemOverlay';
+import { Z_DO_REAJUSTE, ID_DA_EMERGENCIA } from '../components/ReancoragemOverlay';
 import { useGaze } from './GazeContext';
 import { useAuth } from './AuthContext';
+import { useTranslation } from 'react-i18next';
 import { playTickSound, playCancelSound } from '../utils/emergencyAudio';
+import { dispararPedidoDeSocorro, definirVolumeMaximoDoAlarme } from '../services/emergencia/pedidoDeSocorro';
+import { CONTAGEM_PADRAO_S, limitarContagemDaEmergencia } from '../services/emergencia/contagemDaEmergencia';
+import { usePedidoDeSocorro } from '../services/emergencia/usePedidoDeSocorro';
+import { useSettings } from './SettingsContext';
+import { degToPx, GAZE_TOKENS } from '../design/gazeMetrics';
+import { FaixaLateralDaEmergencia, CancelarPelaLateral, useColunaDaContagem } from '../components/FaixaLateralDaEmergencia';
+
+/**
+ * O alvo mínimo de 5° como o token do design system (`--gaze-target-min`, o
+ * mesmo valor que `alvoMinimoPx()` lê), como em `EmergencyEscalation`: a
+ * geometria do usuário chega depois do primeiro desenho, e o token acompanha.
+ */
+const ALVO_MINIMO = `var(--gaze-target-min, ${Math.round(degToPx(GAZE_TOKENS.targetMinDeg))}px)`;
+
+/**
+ * O que o pedido vai dizer quando a contagem chegar ao fim — tipo da grade
+ * de emergência e o rótulo falado no alarme e enviado ao celular.
+ */
+export interface MotivoDoSocorro {
+  tipo: string;
+  rotulo: string;
+}
 
 interface EmergencyContextValue {
   isConfirming: boolean;
   cancelEmergency: () => void;
   triggerEmergencyImmediately: () => void;
+  /**
+   * Abre a MESMA confirmação do botão de Emergência (contagem com CANCELAR:
+   * de 3 a 10 s, 5 s por padrão — ajuste do cuidador) a partir de outra tela —
+   * hoje o mapa da dor, nos níveis 8 a 10 (19/10/2026). Nada é enviado sem a
+   * contagem terminar; com um pedido já em andamento, leva à tela dele, como o
+   * botão. `motivo` diz o que o pedido vai dizer ("DOR MUITO FORTE — braço
+   * esquerdo, 9 de 10"); sem ele, vale o pedido genérico do botão.
+   */
+  iniciarContagemDeEmergencia: (motivo?: MotivoDoSocorro) => void;
   /**
    * Ensaio do tutorial: o acionamento acontece na tela e NADA sai daqui.
    *
@@ -75,10 +107,42 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const fabRef = useRef<HTMLDivElement>(null);
 
   const [isConfirming, setIsConfirming] = useState(false);
-  const [countdown, setCountdown] = useState(5);
+  const [countdown, setCountdown] = useState(CONTAGEM_PADRAO_S);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Fora do AuthProvider (testes de tela) vem `{}`: sem cuidador conectado.
   const { isCaregiver } = useAuth();
+  const { t } = useTranslation();
+  const pedido = usePedidoDeSocorro();
+  const pedidoAtivo = pedido !== null && pedido.fase !== 'encerrado';
+  const { settings } = useSettings();
+  const volumeMaximo = settings?.alarmeComVolumeMaximo !== false;
+  useEffect(() => {
+    definirVolumeMaximoDoAlarme(volumeMaximo);
+  }, [volumeMaximo]);
+  // Quantos segundos a contagem dura (decisão 5 da rodada 3, 21/10/2026): o
+  // ajuste do cuidador, sempre dentro de 3–10 s — um valor ruim nunca chega a 0,
+  // que mandaria o socorro na hora, sem CANCELAR. É lido na hora de abrir a
+  // confirmação (estas funções são refeitas a cada desenho): mudar o ajuste
+  // não mexe numa contagem que já está andando.
+  const contagemInicialS = limitarContagemDaEmergencia(settings?.contagemDaEmergenciaS);
+
+  /** Motivo da contagem em curso; `null` = o pedido genérico do botão. */
+  const motivoDaContagemRef = useRef<MotivoDoSocorro | null>(null);
+
+  /**
+   * O ENVIO. Mora aqui (e não na tela `/emergency`) desde 19/10/2026: o pedido
+   * sai e o alarme passa a ser vigiado antes de qualquer navegação, então um
+   * erro ao desenhar a tela de emergência não impede mais o socorro (auditoria
+   * de 18/10/2026, item 6). A tela só mostra o estado.
+   */
+  const enviarSocorro = () => {
+    // O motivo vale só para a contagem que o definiu (ver
+    // `iniciarContagemDeEmergencia`); é consumido aqui.
+    const motivo = motivoDaContagemRef.current;
+    motivoDaContagemRef.current = null;
+    dispararPedidoDeSocorro(motivo?.tipo ?? 'other', motivo?.rotulo ?? t('emergency.items.other'));
+    navigate('/emergency');
+  };
 
   // o som vem de `utils/emergencyAudio`, que mantém UM `AudioContext`
   // para a sessão inteira.
@@ -100,12 +164,32 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const startEmergencyCountdown = () => {
     if (isConfirming) return;
+    // Pedido já em andamento: o botão leva à tela dele, sem nova contagem nem
+    // segundo pedido.
+    if (pedidoAtivo) {
+      navigate('/emergency');
+      return;
+    }
     interromperReajuste();
+    // Contagem aberta pelo botão: o pedido é o genérico. Quem abre com motivo
+    // (`iniciarContagemDeEmergencia`) o define logo depois desta linha.
+    motivoDaContagemRef.current = null;
     ensaioNestaConfirmacaoRef.current = modoEnsaioRef.current;
     setConfirmacaoDeEnsaio(modoEnsaioRef.current);
     setIsConfirming(true);
-    setCountdown(5);
+    setCountdown(contagemInicialS);
     playTickSound();
+  };
+
+  const iniciarContagemDeEmergencia = (motivo?: MotivoDoSocorro) => {
+    // Mesmas guardas do botão: confirmação já aberta não reinicia; pedido em
+    // andamento leva à tela dele (sem nova contagem nem segundo pedido).
+    if (isConfirming || pedidoAtivo) {
+      startEmergencyCountdown();
+      return;
+    }
+    startEmergencyCountdown();
+    motivoDaContagemRef.current = motivo ?? null;
   };
 
   const cancelEmergency = () => {
@@ -114,9 +198,10 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       countdownIntervalRef.current = null;
     }
     setIsConfirming(false);
-    setCountdown(5);
+    setCountdown(contagemInicialS);
     ensaioNestaConfirmacaoRef.current = false;
     setConfirmacaoDeEnsaio(false);
+    motivoDaContagemRef.current = null;
 
     // Som de cancelamento (bip duplo rápido de confirmação de recuo).
     // reutiliza o contexto compartilhado; ver o comentário acima.
@@ -164,6 +249,7 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   /** Um ensaio só: depois do primeiro acionamento, o próximo é de verdade. */
   const concluirEnsaio = () => {
     limparPrazoDoEnsaio();
+    motivoDaContagemRef.current = null;
     modoEnsaioRef.current = false;
     ensaioNestaConfirmacaoRef.current = false;
     setConfirmacaoDeEnsaio(false);
@@ -178,9 +264,7 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
     setIsConfirming(false);
 
-    // O ENSAIO PARA AQUI. O envio não mora neste contexto — a navegação para
-    // `/emergency?autoTrigger=other` é o que faz o `EmergencyEscalation`
-    // emitir o pedido de ajuda (`emitirPedidoDeAjuda`). Não navegar é não enviar.
+    // O ENSAIO PARA AQUI: nada é enviado e nenhum alarme é armado.
     const ehEnsaio = isConfirming ? ensaioNestaConfirmacaoRef.current : modoEnsaioRef.current;
     if (ehEnsaio) {
       concluirEnsaio();
@@ -189,14 +273,14 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     ensaioNestaConfirmacaoRef.current = false;
     setConfirmacaoDeEnsaio(false);
 
-    navigate('/emergency?autoTrigger=other');
+    enviarSocorro();
   };
 
   // Espelha o alarme num sinal de módulo, para o dispatcher de dwell poder
   // consultá-lo sem depender deste contexto (ver `estadoDeEmergencia.ts`).
   useEffect(() => {
-    definirEmergenciaAtiva(isConfirming);
-    return () => definirEmergenciaAtiva(false);
+    definirEmergenciaAtiva(isConfirming, 'confirmacao');
+    return () => definirEmergenciaAtiva(false, 'confirmacao');
   }, [isConfirming]);
 
   useEffect(() => {
@@ -237,7 +321,7 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       setConfirmacaoDeEnsaio(false);
 
-      navigate('/emergency?autoTrigger=other');
+      enviarSocorro();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConfirming, countdown, navigate]);
@@ -331,8 +415,15 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // React, porque quem precisa ler são folhas de estilo de telas que nem
   // sabem que o provider existe — e porque a reserva tem de valer no primeiro
   // quadro, sem um render a mais de cada tela.
-  const posicaoDoBotao: 'topo' | 'canto' | null =
-    showEmergencyButton && !isConfirming ? (medindo ? 'canto' : 'topo') : null;
+  // Modo só horizontal (21/10/2026): fora da medição, a Emergência é uma faixa
+  // na borda direita, acionada pela coluna do olhar. Na medição vale o botão do
+  // canto, sem dwell, como sempre: a faixa cobriria os alvos da direita.
+  const faixaLateral = settings?.modoHorizontal === true && !medindo;
+  // O texto da contagem só ocupa a coluna do meio no modo só horizontal (revisão
+  // final, rodada 1, I1): as faixas das duas bordas são alvos do olhar.
+  const coluna = useColunaDaContagem(settings?.modoHorizontal === true && isConfirming);
+  const posicaoDoBotao: 'topo' | 'canto' | 'faixa' | null =
+    showEmergencyButton && !isConfirming ? (medindo ? 'canto' : faixaLateral ? 'faixa' : 'topo') : null;
   useEffect(() => {
     const html = document.documentElement;
     if (posicaoDoBotao) html.setAttribute('data-emergencia', posicaoDoBotao);
@@ -353,6 +444,7 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         isConfirming,
         cancelEmergency,
         triggerEmergencyImmediately,
+        iniciarContagemDeEmergencia,
         setModoEnsaio,
         ensaioDisparado,
       }}
@@ -407,8 +499,19 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         </div>
       )}
 
+      {/* Modo só horizontal: a faixa da borda direita no lugar do botão do topo. */}
+      {showEmergencyButton && !isConfirming && faixaLateral && (
+        <FaixaLateralDaEmergencia
+          ref={fabRef}
+          aoAcionar={startEmergencyCountdown}
+          degradado={isDegraded}
+          pedidoAtivo={pedidoAtivo}
+          zIndex={reancorando ? Z_EMERGENCIA_NO_REAJUSTE : Z_EMERGENCIA}
+        />
+      )}
+
       {/* Botão de Emergência Fixo Canônico */}
-      {showEmergencyButton && !isConfirming && (
+      {showEmergencyButton && !isConfirming && !faixaLateral && (
         <div
           ref={fabRef}
           // No topo, a zona de acerto vai até as bordas de cima e da direita
@@ -433,6 +536,9 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         >
           <GazeButton
             emergency
+            // O diálogo do reajuste rápido (modal) adota este botão pelo
+            // `aria-owns`: o leitor de tela continua achando a Emergência.
+            id={ID_DA_EMERGENCIA}
             /* 132 px não cabiam o conteúdo: "Emergência" em 1,25rem/700
                mede ~132 px SOZINHA, e com o ícone de 24 px mais o gap o
                texto vazava ~18 px para cada lado da borda arredondada —
@@ -444,15 +550,28 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             // No topo, a altura vem do CSS (`--emergencia-altura`): até 96 px,
             // menos em janela baixa. As telas reservam o espaço pela mesma
             // variável.
-            style={medindo ? undefined : { height: 'var(--emergencia-altura)' }}
+            style={medindo ? { opacity: 0.72 } : { height: 'var(--emergencia-altura)' }}
             onClick={startEmergencyCountdown}
             data-dwell-ms={isDegraded ? 3600 : 2000}
             // Nunca mais fácil de acionar que uma tecla comum: para quem usa
             // dwell longo, pelo menos 1,3× o dele (FE-13). O CANCELAR fica curto.
             data-dwell-mult={1.3}
-            aria-label="Disparar Emergência Médica"
+            // Durante a calibração e o teste de precisão o olhar fica parado em
+            // alvos, inclusive nos cantos, e o tremor em volta do alvo do canto
+            // enchia o dwell deste botão sem a pessoa querer (relato de
+            // 18/10/2026). Na medição ele continua visível e acionável pelo
+            // mouse e pelo teclado — quem conduz a medição está ao lado —, mas
+            // não pelo olhar. Fora da medição, nada muda.
+            data-no-dwell={medindo ? 'true' : undefined}
+            aria-label={
+              pedidoAtivo
+                ? 'Ver o pedido de socorro em andamento'
+                : medindo
+                  ? 'Disparar Emergência Médica (durante a medição, pelo mouse ou teclado)'
+                  : 'Disparar Emergência Médica'
+            }
           >
-            <AlertOctagon size={24} /> Emergência
+            <AlertOctagon size={24} /> {pedidoAtivo ? 'Socorro em andamento' : 'Emergência'}
           </GazeButton>
         </div>
       )}
@@ -478,6 +597,10 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             color: 'white',
             fontFamily: "'Inter', sans-serif",
             animation: 'flashBg 0.5s infinite alternate',
+            // Modo só horizontal: o conteúdo fica entre as duas faixas, longe
+            // delas (ver `useColunaDaContagem`). O CANCELAR da esquerda é
+            // absoluto, e o `padding` não o desloca.
+            ...(coluna ? { boxSizing: 'border-box' as const, paddingLeft: `${coluna.margemPx}px`, paddingRight: `${coluna.margemPx}px` } : {}),
           }}
         >
           <style>{`
@@ -487,19 +610,30 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             }
           `}</style>
 
+          {/* Ícone, título e textos encolhem com a altura da janela (revisão
+              de UX de 20/10/2026, achado 5): com o CANCELAR no alvo mínimo, a
+              coluna de tamanhos fixos passava de 640 px de altura. */}
           <AlertOctagon
-            size={120}
-            style={{ marginBottom: '2rem', filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.3))' }}
+            aria-hidden="true"
+            style={{
+              width: 'clamp(48px, 14vh, 120px)',
+              height: 'clamp(48px, 14vh, 120px)',
+              flexShrink: 0,
+              marginBottom: 'clamp(0.5rem, 3vh, 2rem)',
+              filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.3))',
+            }}
           />
 
           <h1
             id="emerg-confirm-title"
             style={{
-              fontSize: '4.5rem',
+              fontSize: coluna ? `${coluna.tituloPx}px` : 'clamp(2.25rem, 8vh, 4.5rem)',
+              lineHeight: 1.15,
               fontWeight: 900,
-              margin: '0 0 1rem 0',
+              margin: '0 0 clamp(0.25rem, 1.5vh, 1rem) 0',
               textAlign: 'center',
               textShadow: '0 4px 10px rgba(0,0,0,0.3)',
+              ...(coluna ? { overflowWrap: 'anywhere' as const } : {}),
             }}
           >
             {/* Durante o ensaio do tutorial a confirmação é IDÊNTICA à real.
@@ -510,15 +644,17 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
           <p
             style={{
-              fontSize: '2rem',
+              fontSize: 'clamp(1.25rem, 3.5vh, 2rem)',
+              lineHeight: 1.3,
               fontWeight: 700,
-              margin: '0 0 4rem 0',
+              margin: '0 0 clamp(1rem, 6vh, 4rem) 0',
               textAlign: 'center',
               opacity: 0.9,
+              ...(coluna ? { overflowWrap: 'anywhere' as const } : {}),
             }}
           >
             Enviando alerta de socorro em{' '}
-            <strong style={{ fontSize: '3rem', color: '#fde047' }}>{countdown}</strong> segundos...
+            <strong style={{ fontSize: 'clamp(1.75rem, 5.5vh, 3rem)', color: '#fde047' }}>{countdown}</strong> segundos...
           </p>
 
           <GazeButton
@@ -528,18 +664,35 @@ export const EmergencyProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             // rastreamento degradado (GazeContext): um acionamento acidental
             // nesses momentos precisa poder ser desfeito antes da contagem acabar.
             data-cancelar-emergencia="true"
+            // Modo só horizontal (revisão de 21/10/2026): o cancelar do olhar é
+            // a faixa da esquerda. Este, no meio e logo abaixo do texto da
+            // contagem, cancelava o socorro de quem só lia, num y que caísse
+            // nele. Mouse e teclado continuam aqui; o acionador, pela faixa.
+            data-no-dwell={settings?.modoHorizontal === true ? 'true' : undefined}
+            // O alvo mínimo (5°) nos dois eixos (revisão de UX de 20/10/2026,
+            // achado 5): era 320×84 px, ~2,7° de altura — o botão que desfaz um
+            // alarme falso era um dos menores do app. A largura de antes fica
+            // como piso, e o botão não passa da largura da janela.
             style={{
-              width: '320px',
-              height: '84px',
+              width: `max(320px, ${ALVO_MINIMO})`,
+              // No modo só horizontal, também não passa da coluna do meio.
+              maxWidth: coluna ? `${coluna.colunaPx}px` : '90vw',
+              height: ALVO_MINIMO,
+              flexShrink: 0,
               background: '#ffffff',
               border: 'none',
               borderRadius: '2rem',
               color: '#dc2626',
               boxShadow: '0 15px 30px rgba(0,0,0,0.3)',
+              // Sem dwell não é desabilitado: o CSS comum do `data-no-dwell`
+              // apagaria o botão e tiraria o ponteiro do mouse.
+              ...(settings?.modoHorizontal === true ? { pointerEvents: 'auto' as const, opacity: 1, cursor: 'pointer' } : {}),
             }}
           >
             <span style={{ fontSize: '1.8rem', fontWeight: 900 }}>CANCELAR</span>
           </GazeButton>
+          {/* Modo só horizontal: o CANCELAR também pela coluna, na borda esquerda. */}
+          {settings?.modoHorizontal === true && <CancelarPelaLateral aoCancelar={cancelEmergency} />}
         </div>
       )}
     </EmergencyContext.Provider>

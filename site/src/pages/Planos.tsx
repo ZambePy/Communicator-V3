@@ -7,6 +7,7 @@ import { BETA } from '@/data/content'
 import { usePlans } from '@/hooks/usePlans'
 import '@/components/home/home.css'
 import './planos.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 /**
  * /planos — o preço, sem rodeio. A abertura diz o essencial (grátis na beta,
@@ -19,8 +20,8 @@ export default function Planos() {
 
   return (
     <>
+      <FundoDaPagina />
       <PageHead
-        eyebrow="Planos"
         title={
           BETA.ativo
             ? `Grátis na beta. Depois, a partir de R$ ${cheapest.price} por mês.`
@@ -29,7 +30,7 @@ export default function Planos() {
         highlight={BETA.ativo ? ['Grátis'] : []}
         lead={
           BETA.ativo
-            ? 'Sem aparelho para comprar, sem taxa de adesão e sem fidelidade. Durante a beta, tudo é liberado, sem cartão; os planos pagos só começam depois.'
+            ? 'Sem aparelho para comprar, sem taxa de adesão e sem fidelidade. Na beta, tudo é liberado e não pede cartão. Os planos pagos só começam depois.'
             : 'Sem aparelho para comprar, sem taxa de adesão e sem fidelidade. A família testa antes e só paga se a pessoa conseguir usar.'
         }
       />
@@ -44,7 +45,14 @@ export default function Planos() {
         <Faq />
       </div>
 
-      <CallToAction />
+      <CallToAction
+        titulo="Comece de graça, sem cartão."
+        texto={
+          BETA.ativo
+            ? 'Na beta, tudo é liberado. Teste com a pessoa que vai usar antes de pensar em plano.'
+            : 'A família testa antes e só paga se a pessoa conseguir usar.'
+        }
+      />
     </>
   )
 }

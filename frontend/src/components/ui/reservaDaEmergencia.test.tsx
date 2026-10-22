@@ -125,6 +125,39 @@ describe('reserva do botão de Emergência', () => {
     expect(css).toMatch(/\.gaze-header__emergencia \{[^}]*var\(--emergencia-largura\)/);
   });
 
+  // Revisão final, rodada 1 (M3, 21/10/2026): no modo só horizontal a Emergência é uma faixa de
+  // pelo menos 5° (≥ 198 px) na borda direita, da altura toda. Só o `.gaze-pagina` e as classes de
+  // cabeçalho reservavam a faixa: a coluna centralizada das telas do cuidador (Consulta, Evolução,
+  // Relatório, Conta) e o corpo do `CaregiverPageLayout` passavam por baixo dela, e o clique do
+  // cuidador nessa borda abria a contagem.
+  it('no modo só horizontal a coluna centralizada desconta a faixa dos DOIS lados', () => {
+    const regra = css.match(/html\[data-emergencia='faixa'\] \.coluna-livre-da-emergencia \{([^}]*)\}/)?.[1] ?? '';
+    expect(regra).toMatch(/max-width:\s*min\(/);
+    expect(regra).toContain('var(--coluna-largura');
+    expect(regra).toMatch(/100vw - 2 \* \(var\(--faixa-da-emergencia-largura\) \+ var\(--emergencia-folga\)\)/);
+  });
+
+  it('no modo só horizontal o corpo das telas do cuidador para antes da faixa, sem apertar a janela larga', () => {
+    const regra = css.match(/html\[data-emergencia='faixa'\] \.reserva-da-faixa \{([^}]*)\}/)?.[1] ?? '';
+    // A faixa e a folga, menos o que a coluna já deixa livre à direita (janela mais larga que a coluna).
+    expect(regra).toMatch(/padding-right:\s*max\(/);
+    expect(regra).toContain('var(--faixa-da-emergencia-largura)');
+    expect(regra).toContain('var(--emergencia-folga)');
+    expect(regra).toMatch(/100vw - 1200px/);
+    expect(regra).toContain('!important');
+    // Sem o modo (topo ou sem botão) a classe não faz nada: nenhuma regra solta a aplica.
+    expect(css).not.toMatch(/(^|\n)\.reserva-da-faixa\s*\{/);
+    expect(css).not.toMatch(/data-emergencia='topo'\] \.reserva-da-faixa/);
+  });
+
+  it('o corpo do CaregiverPageLayout leva a reserva da faixa, e o cabeçalho continua com a do topo', () => {
+    const codigo = ler('components/ui/CaregiverPageLayout.tsx');
+    expect(codigo).toContain('reserva-da-faixa');
+    expect(codigo).toContain('reserva-emergencia');
+    // O corpo é de 1200 px no máximo: a regra do CSS desconta essa mesma medida.
+    expect(codigo).toContain("maxWidth: '1200px'");
+  });
+
   it.each([
     ['pages/GamesMenu.tsx', 'reserva-emergencia'],
     ['pages/KeyboardScreen.tsx', 'reserva-emergencia--caixa'],

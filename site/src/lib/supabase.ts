@@ -1,12 +1,21 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { APELIDO_MINIMO, CONTATO } from '@/utils/validation'
 
 /* ============================================================
-   Cliente do Supabase.
+   Cliente do Supabase, carregado sob demanda.
 
    A URL e a chave anônima vêm do .env.local (ver .env.example).
    As duas são públicas e vão embutidas no bundle: quem protege os
    dados é a Row Level Security definida nas migrações de supabase/migrations/.
+
+   O supabase-js pesa 216 KB (57 KB comprimido) e antes ia no pedaço de
+   entrada, pago por toda página, inclusive as que só têm texto (auditoria de
+   21/10/2026, P2-3). Agora ele mora em clienteSupabase.ts e só chega quando
+   alguma coisa precisa dele: entrar, criar conta, enviar contato, ler a
+   conta de quem já tem sessão. As leituras públicas (programa beta e planos)
+   vão direto ao endpoint REST (leituraPublica.ts) e não precisam do cliente.
+   Este arquivo só importa o TIPO do supabase-js: o import de verdade é o
+   dinâmico, em obterCliente().
 
    Quando as variáveis não estão preenchidas, o cliente não é criado.
    Preferimos isso a criar um cliente inválido, porque assim a falha
@@ -29,23 +38,106 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
 /** Falso enquanto o .env.local não tiver URL e chave. */
 export const isSupabaseConfigured = Boolean(url && anonKey)
 
-export const supabase: SupabaseClient | null = isSupabaseConfigured
-  ? createClient(url as string, anonKey as string, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    })
-  : null
+let cliente: SupabaseClient | null = null
+let carregando: Promise<SupabaseClient | null> | null = null
+const aoChegar = new Set<(sb: SupabaseClient) => void>()
+
+/** Já existe cliente criado nesta aba? (Não carrega nada.) */
+export function clienteCarregado(): SupabaseClient | null {
+  return cliente
+}
+
+/**
+ * Chama `fn` quando o cliente existir: já, se ele já foi criado, ou assim que
+ * alguém o pedir. Devolve a função que desfaz o pedido. Serve a quem precisa
+ * ouvir o cliente (o AccountContext, para os eventos de login e logout) sem
+ * ser quem o carrega.
+ */
+export function aoCarregarCliente(fn: (sb: SupabaseClient) => void): () => void {
+  if (cliente) {
+    fn(cliente)
+    return () => {}
+  }
+  aoChegar.add(fn)
+  return () => {
+    aoChegar.delete(fn)
+  }
+}
+
+/**
+ * O cliente do Supabase, carregando o supabase-js na primeira chamada. Nulo
+ * quando o build não tem URL e chave. Se o pedaço não chegar (sem rede, ou
+ * sumiu num deploy), rejeita e a próxima chamada tenta de novo.
+ */
+export function obterCliente(): Promise<SupabaseClient | null> {
+  if (!isSupabaseConfigured) return Promise.resolve(null)
+  if (cliente) return Promise.resolve(cliente)
+  if (!carregando) {
+    carregando = import('./clienteSupabase')
+      .then(({ criarCliente }) => {
+        const novo = criarCliente(url as string, anonKey as string)
+        cliente = novo
+        aoChegar.forEach((fn) => fn(novo))
+        aoChegar.clear()
+        return novo
+      })
+      .catch((e) => {
+        carregando = null
+        throw e
+      })
+  }
+  return carregando
+}
+
+/**
+ * Nome com que o supabase-js guarda a sessão no localStorage:
+ * `sb-<primeira parte do endereço do projeto>-auth-token`.
+ */
+export function chaveDaSessao(): string | null {
+  if (!url) return null
+  try {
+    return `sb-${new URL(url).hostname.split('.')[0]}-auth-token`
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Esta aba tem motivo para abrir o cliente? Há uma sessão guardada pelo
+ * supabase-js, ou o endereço traz os tokens de um link de e-mail
+ * (recuperação de senha, convite). Sem nenhum dos dois não há o que
+ * restaurar: a página de um visitante não carrega o supabase-js só para
+ * descobrir que ele não entrou.
+ */
+export function haSessaoGuardada(): boolean {
+  if (!isSupabaseConfigured || typeof window === 'undefined') return false
+  try {
+    const chave = chaveDaSessao()
+    if (chave && window.localStorage.getItem(chave) !== null) return true
+  } catch {
+    // armazenamento bloqueado: o supabase-js também não guardaria sessão
+  }
+  return /(?:^|[#&])access_token=/.test(window.location.hash)
+}
+
+/**
+ * O cliente, mas só se houver sessão para ele cuidar (ou se já foi criado).
+ * É o que o contexto de conta usa ao abrir a página.
+ */
+export function clienteSeHouverSessao(): Promise<SupabaseClient | null> {
+  if (cliente) return Promise.resolve(cliente)
+  return haSessaoGuardada() ? obterCliente() : Promise.resolve(null)
+}
 
 export const MSG_INDISPONIVEL =
   'O serviço está temporariamente indisponível. Tente de novo em alguns minutos ou escreva para irisflowteam@gmail.com.'
 
-/** Devolve o cliente ou explica o que falta. Use em toda chamada. */
+/** Devolve o cliente (carregando-o se preciso) ou explica o que falta. Use em toda chamada. */
 let avisou = false
 
-export function client(): SupabaseClient {
-  if (!supabase) {
+export async function client(): Promise<SupabaseClient> {
+  const sb = await obterCliente()
+  if (!sb) {
     if (!avisou) {
       avisou = true
       // A instrução de configuração é para quem desenvolve e só existe no
@@ -65,7 +157,7 @@ export function client(): SupabaseClient {
     }
     throw new Error(MSG_INDISPONIVEL)
   }
-  return supabase
+  return sb
 }
 
 /* ------------------------------------------------------------

@@ -145,6 +145,11 @@ export const VozScreen: React.FC = () => {
       // segundo plano: senão a primeira vez de cada uma sairia na voz do
       // sistema, porque a geração em CPU passa do prazo de espera.
       void aquecer(true);
+    } catch (e) {
+      // Relato de 22/10/2026: o `invoke` do Electron REJEITA quando o processo
+      // principal lança; sem o `catch` a importação acabava sem uma palavra.
+      console.warn('[voz] a importação da voz falhou:', e);
+      toast.error('Não foi possível importar a voz agora. Tente de novo; se repetir, feche e abra o IrisFlow.');
     } finally {
       setOcupado(null);
     }
@@ -170,9 +175,10 @@ export const VozScreen: React.FC = () => {
     if (!emSegundoPlano) setOcupado('aquecendo');
     else toast.info('Preparando as frases rápidas e os pictogramas na voz nova… isso leva alguns minutos em CPU.');
     try {
-      const [{ TEXTOS_DAS_FRASES_RAPIDAS }, { TEXTOS_DOS_PICTOGRAMAS }] = await Promise.all([
+      const [{ TEXTOS_DAS_FRASES_RAPIDAS }, { TEXTOS_DOS_PICTOGRAMAS }, { TEXTOS_DO_HOSPITAL }] = await Promise.all([
         import('../QuickPhrasesScreen'),
         import('../core/PictogramScreen'),
+        import('../core/hospital/frasesDoHospital'),
       ]);
       // O que o paciente REALMENTE diz entra no cache junto com os textos de
       // fábrica. Sem isto, a voz clonada saía nos pictogramas e falhava
@@ -188,12 +194,20 @@ export const VozScreen: React.FC = () => {
       const n = await aquecerCache([
         ...TEXTOS_DOS_PICTOGRAMAS,
         ...TEXTOS_DAS_FRASES_RAPIDAS,
+        // As do quarto (modo hospital, 21/10/2026): "Preciso de aspiração" não
+        // pode esperar os 4 s de uma frase nova.
+        ...TEXTOS_DO_HOSPITAL,
         ...doPaciente,
         ...FRASES_DE_PARTIDA,
         'Sim',
         'Não',
       ]);
       toast.success(n > 0 ? `${n} frases preparadas no cache.` : 'Nenhuma frase nova para preparar.');
+    } catch (e) {
+      // Em segundo plano (depois de importar) nada mais dizia como terminou: o
+      // aviso "Preparando…" ficava sem desfecho e a rejeição saía solta (22/10/2026).
+      console.warn('[voz] a preparação das frases no cache falhou:', e);
+      toast.error('Não foi possível preparar as frases na voz nova agora. Elas saem na voz do sistema até serem geradas.');
     } finally {
       if (!emSegundoPlano) setOcupado(null);
     }
@@ -213,6 +227,10 @@ export const VozScreen: React.FC = () => {
       await ponte.remover();
       setUltimoResultado(null);
       toast.success('Voz removida.');
+    } catch (e) {
+      // A voz é dado biométrico: quem pediu para removê-la precisa saber que NÃO saiu (22/10/2026).
+      console.warn('[voz] a remoção da voz falhou:', e);
+      toast.error('Não foi possível remover a voz agora. Ela continua guardada neste computador; tente de novo.');
     } finally {
       setOcupado(null);
     }
@@ -220,8 +238,13 @@ export const VozScreen: React.FC = () => {
 
   const baixar = async () => {
     if (!ponte) return;
-    const r = await ponte.baixarModelo();
-    if (!r.ok) toast.error(r.erro ?? 'O download falhou.');
+    try {
+      const r = await ponte.baixarModelo();
+      if (!r.ok) toast.error(r.erro ?? 'O download falhou.');
+    } catch (e) {
+      console.warn('[voz] o download do modelo falhou:', e);
+      toast.error('Não foi possível baixar o modelo agora. Confira a internet e tente de novo.');
+    }
   };
 
   return (

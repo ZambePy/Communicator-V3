@@ -1,17 +1,20 @@
 /* Passos com tela e estágios do rastreamento (Passos.tsx). */
 
 /* ---------- passos com a tela de cada um ---------- */
+/* Sangra até a borda da tela: a margem negativa e o recuo seguem o --gutter
+   do .container (relato de 19/10/2026: com o recuo fixo de 24 px e o
+   contêiner de 16 px no celular, a lista passava 8 px da tela). */
 .passos-tela {
   list-style: none;
-  margin: 0 calc(-1 * var(--sp-5));
-  padding: 0 var(--sp-5) var(--sp-3);
+  margin: 0 calc(-1 * var(--gutter));
+  padding: 0 var(--gutter) var(--sp-3);
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: min(82%, 320px);
   gap: var(--sp-5);
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  scroll-padding-inline: var(--sp-5);
+  scroll-padding-inline: var(--gutter);
 }
 
 .passos-tela__item {
@@ -21,13 +24,11 @@
 
 .passos-tela__figura {
   margin: 0 0 var(--sp-5);
-  border-radius: 14px;
+  border-radius: var(--r-md);
   overflow: hidden;
   aspect-ratio: 16 / 10;
   background: #05080f;
-  box-shadow:
-    0 0 0 1px var(--line),
-    var(--shadow-md);
+  box-shadow: 0 0 0 1px var(--line-strong);
 }
 
 .passos-tela__figura img {
@@ -35,25 +36,18 @@
   height: 100%;
   object-fit: cover;
   object-position: 50% 0;
-  transition: transform 700ms var(--ease-out);
-}
-
-.passos-tela__item:hover .passos-tela__figura img {
-  transform: scale(1.03);
 }
 
 .passos-tela__numero {
-  display: inline-grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  margin-bottom: var(--sp-3);
-  border-radius: 50%;
-  background: var(--blue);
-  color: #fff;
+  display: block;
+  margin-bottom: var(--sp-2);
   font-family: var(--font-display);
-  font-size: 0.9rem;
-  font-weight: 700;
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
 }
 
 .passos-tela__titulo {
@@ -134,7 +128,7 @@
   color: var(--accent);
   background: var(--bg);
   box-shadow:
-    0 0 0 1px var(--accent-line),
+    0 0 0 1.5px var(--accent-line),
     0 0 0 6px var(--bg);
 }
 

@@ -1,9 +1,85 @@
-import React from 'react';
-import { Bell } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Bell, Check } from 'lucide-react';
 import { BackButton, BACK_BUTTON_SIZE_PX } from './BackButton';
 import { GazeButton } from './GazeButton';
-import { useReminders } from '../../context/ReminderContext';
+import { EscolhaLateral } from './EscolhaLateral';
+import { useReminders, type Reminder } from '../../context/ReminderContext';
+import { avisarConteudoNovoSobOOlhar } from '../../context/GazeContext';
+import { useSettings } from '../../context/SettingsContext';
 import { SessaoChip } from './SessaoChip';
+
+/**
+ * O lembrete no modo só horizontal (revisão de 21/10/2026, Important 3).
+ *
+ * O cartão de sempre tem um "Confirmar" centrado, pelo ponto, e o lembrete não
+ * some sozinho: sobre uma tela lateral, quem só olha para os lados ficava sem
+ * nada que o olhar acionasse até alguém clicar. Aqui o "Confirmar" é a metade
+ * esquerda de uma `EscolhaLateral`; a direita fica vazia (descanso), e a faixa
+ * da Emergência, livre. Ao aparecer, avisa o despachante: o olhar parado à
+ * esquerda (no NÃO do Sim · Não, numa metade do teclado) não confirma sozinho.
+ * E ao sair também — fechado pelo mouse do cuidador, a metade de baixo volta
+ * sob o olhar parado e não pode acionar sozinha.
+ */
+const LembreteLateral: React.FC<{ lembrete: Reminder; aoConfirmar: () => void }> = ({ lembrete, aoConfirmar }) => {
+  useEffect(() => {
+    avisarConteudoNovoSobOOlhar();
+    return () => avisarConteudoNovoSobOOlhar();
+  }, [lembrete.id]);
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lembrete-de-rotina-titulo"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        bottom: 0,
+        right: 'calc(var(--faixa-da-emergencia-largura) + var(--emergencia-folga, 28px))',
+        background: 'rgba(2, 6, 23, 0.94)',
+        backdropFilter: 'blur(4px)',
+        // O mesmo andar do cartão de sempre: abaixo da Emergência (99990).
+        zIndex: 99980,
+        display: 'flex',
+        padding: 'clamp(1rem, 3vh, 2rem) clamp(1rem, 2vw, 2rem)',
+        boxSizing: 'border-box',
+        fontFamily: 'var(--font-body)',
+        color: 'var(--color-text-base)',
+      }}
+    >
+      <EscolhaLateral
+        larguraDoMeio={40}
+        esquerda={{
+          nome: 'Confirmar o lembrete',
+          rotulo: (
+            <>
+              <Check size={96} strokeWidth={2.5} aria-hidden="true" />
+              <span style={{ fontSize: 'clamp(2rem, 6vh, 3.5rem)', fontWeight: 900 }}>Confirmar</span>
+            </>
+          ),
+          aoEscolher: aoConfirmar,
+          estilo: { background: 'var(--color-primary)', color: '#ffffff', border: 'none' },
+        }}
+        direita={null}
+        centro={
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.25rem' }}>
+            <Bell size={56} aria-hidden="true" style={{ color: 'var(--color-primary)' }} />
+            <span className="t-overline">Lembrete de Rotina</span>
+            <h2 id="lembrete-de-rotina-titulo" className="t-display" style={{ margin: 0, color: 'var(--color-text-base)', wordBreak: 'break-word' }}>
+              {lembrete.title}
+            </h2>
+            <span style={{ fontSize: '1.25rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+              Horário agendado: {lembrete.time}
+            </span>
+            <p style={{ margin: 0, fontSize: 'clamp(1.1rem, 2.8vh, 1.5rem)', fontWeight: 700, lineHeight: 1.35 }}>
+              Para confirmar, olhe para a esquerda.
+            </p>
+          </div>
+        }
+      />
+    </div>
+  );
+};
 
 /**
  * Não existe `showEmergency` aqui, e é de propósito.
@@ -46,9 +122,14 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
   subtitulo,
 }) => {
   const { activeReminder, dismissActiveReminder } = useReminders();
+  const { settings } = useSettings();
+  const horizontal = settings?.modoHorizontal === true;
 
   return (
     <div
+      // `gaze-pagina`: no modo só horizontal o CSS tira a tela de baixo da faixa
+      // da Emergência (`html[data-emergencia='faixa']`, index.css).
+      className="gaze-pagina"
       style={{
         position: 'relative',
         // `100%`, não `100vw`: com barra de rolagem vertical, `100vw` inclui a
@@ -125,7 +206,8 @@ export const GazePageLayout: React.FC<GazePageLayoutProps> = ({
       </div>
 
       {/* Lembretes e Rotina */}
-      {activeReminder && (
+      {activeReminder && horizontal && <LembreteLateral lembrete={activeReminder} aoConfirmar={dismissActiveReminder} />}
+      {activeReminder && !horizontal && (
         <div
           style={{
             // Véu do modal: `inset: 0` cobre a janela inteira sem depender de

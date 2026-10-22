@@ -136,7 +136,9 @@ export default function Frases() {
           />
         ) : null}
 
-        <View style={styles.list}>
+        {/* A lista não tem moldura: linhas na margem da tela, um fio entre elas
+            (19/10/2026; antes, um cartão por frase). */}
+        <View style={[styles.list, phrases && phrases.length > 0 ? { borderTopWidth: sizes.hairline, borderTopColor: colors.border } : null]}>
           {phrases === null ? (
             <>
               <Shimmer height={sizes.row} style={styles.round} />
@@ -146,11 +148,10 @@ export default function Frases() {
             <EmptyState icon="albums-outline" title="Nenhuma frase ainda" body="Frases curtas e concretas, como “Estou com sede”, são as mais fáceis de acionar com o olhar." />
           ) : (
             phrases.map((p, i) => (
-              <Animated.View key={p.id} entering={entrada.cascata(i)} exiting={entrada.saida()} layout={entrada.reduzir ? undefined : LinearTransition}>
-                <Card padding={spacing.md}>
+              <Animated.View key={p.id} entering={entrada.cascata(i)} exiting={entrada.saida()} layout={entrada.reduzir ? undefined : LinearTransition} style={[styles.linha, { borderBottomColor: colors.border }]}>
                   <View style={styles.row}>
-                    <View style={[styles.icon, { backgroundColor: colors.primaryTint }]}>
-                      <Ionicons name={catIcon[p.category]} size={sizes.icon.sm} color={colors.primary} />
+                    <View style={styles.icon}>
+                      <Ionicons name={catIcon[p.category]} size={sizes.icon.md} color={colors.primary} />
                     </View>
                     <View style={styles.flex} accessible accessibilityLabel={`${p.text}. ${NOME_CAT[p.category] ?? 'Outra'}.`}>
                       <Text variant="body" weight="medium">
@@ -163,7 +164,6 @@ export default function Frases() {
                     <IconButton icon="volume-high-outline" variant="primary" accessibilityLabel={`Falar “${p.text}” agora`} onPress={() => falar(p)} />
                     <IconButton icon="trash-outline" accessibilityLabel={`Remover “${p.text}”`} disabled={removendo === p.id} onPress={() => confirmarRemocao(p)} />
                   </View>
-                </Card>
               </Animated.View>
             ))
           )}
@@ -178,8 +178,9 @@ const styles = StyleSheet.create({
   gapTop: { marginTop: spacing.md },
   catLabel: { marginTop: spacing.lg, marginBottom: spacing.xs },
   add: { marginTop: spacing.lg },
-  list: { marginTop: spacing.xl, gap: spacing.sm },
+  list: { marginTop: spacing.xl, marginHorizontal: -spacing.lg },
+  linha: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: sizes.hairline },
   round: { borderRadius: radius.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  icon: { width: sizes.tile.md, height: sizes.tile.md, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginRight: spacing.xs },
+  icon: { width: sizes.icon.lg, alignItems: 'center', justifyContent: 'center', marginRight: spacing.xs },
 });

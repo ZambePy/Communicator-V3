@@ -78,6 +78,15 @@ export function playTone(freq: number, atrasoSec = 0, duracaoSec = 0.1, volume =
   }
 }
 
+/**
+ * "Som ao selecionar" (Configurações e Acessibilidade): um toque curto e baixo
+ * quando o olhar, a piscada ou o acionador escolhem um botão. O ajuste existia
+ * desde a primeira versão e não tocava nada (achado de 19/10/2026).
+ */
+export function tocarSomDaSelecao(): void {
+  playTone(740, 0, 0.07, 0.1);
+}
+
 /** Bipe de tick da contagem regressiva. */
 export function playTickSound(): void {
   playTone(600, 0, 0.1, 0.2);
@@ -107,6 +116,81 @@ export function playAlarmSound(ciclos = 3): void {
   }
 }
 
+/** Compressor da sirene, ligado ao contexto compartilhado (um por contexto). */
+let compressorDaSirene: DynamicsCompressorNode | null = null;
+
+/**
+ * Saída alta e sem distorção para a sirene: um compressor entre a sirene e os
+ * alto-falantes. Com ganho perto de 1 a onda quadrada estoura (clipping) e o
+ * som fica áspero e mais baixo do que deveria; o compressor segura os picos e
+ * deixa o volume médio subir.
+ */
+function saidaDaSirene(ctx: AudioContext): AudioNode {
+  if (compressorDaSirene && compressorDaSirene.context === ctx) return compressorDaSirene;
+  try {
+    const c = ctx.createDynamicsCompressor();
+    c.threshold.value = -12;
+    c.knee.value = 6;
+    c.ratio.value = 8;
+    c.attack.value = 0.003;
+    c.release.value = 0.12;
+    c.connect(ctx.destination);
+    compressorDaSirene = c;
+    return c;
+  } catch {
+    return ctx.destination;
+  }
+}
+
+/**
+ * Sirene do alarme de emergência (pedido de 18/10/2026: "alarme alto no
+ * computador").
+ *
+ * Antes eram dois bipes senoidais de 0,25 s com ganho 0,35 — audíveis ao lado
+ * do computador, não do outro cômodo à noite. Agora é uma varredura de onda
+ * quadrada entre 650 e 1450 Hz (sobe e desce duas vezes), a faixa em que o
+ * ouvido é mais sensível e que atravessa portas, com ganho 0,7 pelo
+ * compressor. O volume do sistema é outra coisa: no Electron, quem o sobe é o
+ * processo principal (`electron/alarme.ts`), se o ajuste permitir.
+ *
+ * Nunca lança, como o resto deste módulo.
+ */
+export function tocarSirene(duracaoSec = 3): void {
+  const ctx = getSharedAudioContext();
+  if (!ctx) return;
+  try {
+    if (ctx.state === 'suspended') void ctx.resume();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'square';
+    const t0 = ctx.currentTime;
+    const d = Math.max(0.4, duracaoSec);
+    osc.frequency.setValueAtTime(650, t0);
+    osc.frequency.linearRampToValueAtTime(1450, t0 + d * 0.25);
+    osc.frequency.linearRampToValueAtTime(650, t0 + d * 0.5);
+    osc.frequency.linearRampToValueAtTime(1450, t0 + d * 0.75);
+    osc.frequency.linearRampToValueAtTime(650, t0 + d);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(0.7, t0 + 0.02);
+    gain.gain.setValueAtTime(0.7, t0 + d - 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+    osc.connect(gain);
+    gain.connect(saidaDaSirene(ctx));
+    osc.start(t0);
+    osc.stop(t0 + d);
+    osc.onended = () => {
+      try {
+        osc.disconnect();
+        gain.disconnect();
+      } catch {
+        /* já desconectado */
+      }
+    };
+  } catch {
+    // som é aviso, não pode quebrar o fluxo da emergência
+  }
+}
+
 /**
  * Fecha o contexto compartilhado.
  *
@@ -123,4 +207,5 @@ export function disposeSharedAudioContext(): void {
     }
   }
   ctxCompartilhado = null;
+  compressorDaSirene = null;
 }

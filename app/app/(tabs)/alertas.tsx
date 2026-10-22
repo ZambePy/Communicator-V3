@@ -2,13 +2,14 @@ import React, { useCallback, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { LinearTransition } from 'react-native-reanimated';
-import { AlertListSkeleton, Button, Card, EmptyState, Notice, Screen, ScreenHeader, SegmentedControl, StatusPill, Text } from '@/components';
+import { AlertListSkeleton, Button, EmptyState, Notice, Screen, ScreenHeader, SegmentedControl, StatusPill, Text } from '@/components';
 import { HelpRequest } from '@/data/types';
 import { abrirAjustesDoCanal, pushIndisponivel, useCanalDeEmergencia } from '@/hooks/usePushNotifications';
+import { useTravaDosBotoes } from '@/hooks/useTravaDosBotoes';
 import { useApp } from '@/store/AppProvider';
 import { radius, sizes, spacing, useEntrada, useTheme } from '@/theme';
 import { mensagemDeErro } from '@/utils/errors';
-import { firstName, helpKindLabel, hm, timeAgo } from '@/utils/format';
+import { firstName, helpKindLabel, hm, textoLegivel, timeAgo } from '@/utils/format';
 
 type Filter = 'abertos' | 'todos';
 
@@ -117,14 +118,23 @@ function AlertCard({ h, index, onAck, onResolve }: { h: HelpRequest; index: numb
   const resolved = Boolean(h.resolved_at);
   const tone = resolved ? 'muted' : urgent ? 'danger' : 'warning';
   const cor = tone === 'danger' ? colors.dangerText : tone === 'warning' ? colors.warningText : colors.textMuted;
-  const bg = tone === 'danger' ? colors.dangerTint : tone === 'warning' ? colors.warningTint : colors.surfaceAlt;
-  const barra = tone === 'danger' ? colors.danger : tone === 'warning' ? colors.warning : 'transparent';
-  const icon: keyof typeof Ionicons.glyphMap = urgent ? 'hand-left' : h.kind === 'postura' ? 'body' : h.kind === 'fadiga' ? 'moon' : h.kind === 'dispositivo' ? 'desktop' : 'refresh';
+  // Aberto: o bloco ganha o tom do estado e um fio à esquerda; resolvido fica
+  // no fundo da tela, só com o texto (19/10/2026).
+  const bg = tone === 'danger' ? colors.dangerTint : tone === 'warning' ? colors.warningTint : 'transparent';
+  const barra = tone === 'danger' ? colors.danger : tone === 'warning' ? colors.warning : colors.border;
+  // O motivo curto do socorro ("FALTA DE AR") é o título; o tipo vai embaixo.
+  const motivo = urgent && h.message?.trim() && h.message.trim().length <= 40 ? textoLegivel(h.message) : null;
+  const titulo = motivo ?? helpKindLabel[h.kind];
+  const detalhe = motivo ? null : h.message;
+  // Revisão de UX de 19/10/2026 (achado 12): depois de "Estou ciente",
+  // "Resolvido" ocupa o lugar dele e um toque duplo resolvia o socorro. A
+  // mesma trava do alerta em tela cheia (`useTravaDosBotoes`).
+  const trava = useTravaDosBotoes(h.id, Boolean(h.acknowledged_at));
 
   // acknowledgeAlert/resolveAlert gravam no banco e rejeitam quando a escrita
   // falha. A falha aparece no cartão — ninguém sai achando que o paciente foi avisado.
   const executar = async (acao: 'ack' | 'resolve') => {
-    if (busy) return;
+    if (busy || (acao === 'resolve' && trava.resolver)) return;
     setBusy(acao);
     setFalha(null);
     try {
@@ -139,49 +149,42 @@ function AlertCard({ h, index, onAck, onResolve }: { h: HelpRequest; index: numb
   const estado = resolved ? 'Resolvido' : h.acknowledged_at ? 'Você já viu' : 'Aguardando resposta';
 
   return (
-    <Animated.View entering={entrada.cascata(index)} layout={entrada.reduzir ? undefined : LinearTransition}>
-      <Card padding={0} style={styles.alertCard}>
-        <View style={[styles.bar, { backgroundColor: barra }]} />
-        <View style={styles.alertBody}>
-          <View style={styles.alertTop} accessible accessibilityLabel={`${helpKindLabel[h.kind]}, ${timeAgo(h.created_at)}. ${h.message}. ${estado}.`}>
-            <View style={[styles.icon, { backgroundColor: bg }]}>
-              <Ionicons name={icon} size={sizes.icon.md} color={cor} />
-            </View>
-            <View style={styles.flex}>
-              <View style={styles.rowBetween}>
-                <Text variant="body" weight="semibold" style={styles.flex}>
-                  {helpKindLabel[h.kind]}
-                </Text>
-                <Text variant="caption" tone="muted">
-                  {timeAgo(h.created_at)}
-                </Text>
-              </View>
-              {h.message ? (
-                <Text variant="bodySmall" tone="muted" style={styles.msg}>
-                  {h.message}
-                </Text>
-              ) : null}
-              <View style={styles.pills}>
-                <StatusPill label={estado} tone={resolved ? 'accent' : h.acknowledged_at ? 'primary' : urgent ? 'danger' : 'warning'} live={!resolved && !h.acknowledged_at && urgent} />
-                {/* `escalated_at` vem do servidor (função agendada): o prazo passou
-                    sem confirmação e o alerta foi reenviado a todos os celulares. */}
-                {h.escalated_at ? <StatusPill label={`Reenviado às ${hm(h.escalated_at)}`} tone="danger" /> : null}
-              </View>
-            </View>
-          </View>
-
-          {falha ? <Notice tone="danger" title="Nada foi registrado" text={`${falha} Toque de novo para tentar outra vez.`} style={styles.falha} /> : null}
-
-          {!resolved && (
-            <View style={styles.actions}>
-              {!h.acknowledged_at && (
-                <Button title={falha && busy === null ? 'Tentar de novo' : 'Estou ciente'} variant="secondary" icon="eye-outline" loading={busy === 'ack'} disabled={busy !== null} onPress={() => void executar('ack')} style={styles.flex} />
-              )}
-              <Button title="Resolvido" variant="accent" icon="checkmark-done" loading={busy === 'resolve'} disabled={busy !== null} onPress={() => void executar('resolve')} style={styles.flex} />
-            </View>
-          )}
+    <Animated.View entering={entrada.cascata(index)} layout={entrada.reduzir ? undefined : LinearTransition} style={[styles.alerta, { backgroundColor: bg, borderLeftColor: barra }]}>
+      <View accessible accessibilityLabel={`${helpKindLabel[h.kind]}${motivo ? `: ${motivo}` : ''}, ${timeAgo(h.created_at)}.${detalhe ? ` ${detalhe}.` : ''} ${estado}.`}>
+        <View style={styles.rowBetween}>
+          <Text variant="h3" style={[styles.flex, !resolved && { color: cor }]}>
+            {titulo}
+          </Text>
+          <Text variant="caption" tone="muted">
+            {timeAgo(h.created_at)}
+          </Text>
         </View>
-      </Card>
+        <Text variant="caption" tone="muted">
+          {motivo ? `${helpKindLabel[h.kind]}, às ${hm(h.created_at)}` : `Às ${hm(h.created_at)}`}
+        </Text>
+        {detalhe ? (
+          <Text variant="bodySmall" style={styles.msg}>
+            {detalhe}
+          </Text>
+        ) : null}
+        <View style={styles.pills}>
+          <StatusPill label={estado} tone={resolved ? 'accent' : h.acknowledged_at ? 'primary' : urgent ? 'danger' : 'warning'} live={!resolved && !h.acknowledged_at && urgent} />
+          {/* `escalated_at` vem do servidor (função agendada): o prazo passou
+              sem confirmação e o alerta foi reenviado a todos os celulares. */}
+          {h.escalated_at ? <StatusPill label={`Reenviado às ${hm(h.escalated_at)}`} tone="danger" /> : null}
+        </View>
+      </View>
+
+      {falha ? <Notice tone="danger" title="Nada foi registrado" text={`${falha} Toque de novo para tentar outra vez.`} style={styles.falha} /> : null}
+
+      {!resolved && (
+        <View style={styles.actions}>
+          {!h.acknowledged_at && (
+            <Button title={falha && busy === null ? 'Tentar de novo' : 'Estou ciente'} variant="secondary" loading={busy === 'ack'} disabled={busy !== null} onPress={() => void executar('ack')} style={styles.flex} />
+          )}
+          <Button title="Resolvido" variant="accent" icon="checkmark-done" loading={busy === 'resolve'} disabled={busy !== null || trava.resolver} onPress={() => void executar('resolve')} style={styles.flex} />
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -190,15 +193,11 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   info: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
   notice: { marginTop: spacing.md },
-  list: { marginTop: spacing.lg, gap: spacing.md },
-  alertCard: { flexDirection: 'row', overflow: 'hidden' },
-  bar: { width: sizes.accentBar },
-  alertBody: { flex: 1, padding: spacing.lg },
-  alertTop: { flexDirection: 'row', gap: spacing.md },
-  icon: { width: sizes.tile.md, height: sizes.tile.md, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  list: { marginTop: spacing.xl, gap: spacing.md },
+  alerta: { padding: spacing.lg, borderRadius: radius.md, borderLeftWidth: sizes.accentBar },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.sm },
-  msg: { marginTop: spacing.xxs },
-  pills: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, flexWrap: 'wrap' },
+  msg: { marginTop: spacing.sm },
+  pills: { flexDirection: 'row', columnGap: spacing.lg, rowGap: spacing.xs, marginTop: spacing.sm, flexWrap: 'wrap' },
   falha: { marginTop: spacing.md },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg },
 });

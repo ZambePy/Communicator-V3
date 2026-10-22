@@ -1,3 +1,6 @@
+/* Painel de download (DownloadPanel.tsx): os sistemas lado a lado, o teste
+   do computador, o app do cuidador e as notas. Situação dita em texto com um
+   ponto da cor ("Seu sistema", "Em breve"), sem pílula em caixa alta. */
 .dl {
   width: 100%;
   text-align: left;
@@ -8,8 +11,10 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--sp-4);
+  /* 260 px: o botão "Baixar para Windows", com o ícone, cabe numa linha. Com
+     230 px, no painel de /baixar, saíam três colunas e o rótulo quebrava. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--sp-3);
 }
 
 .dl__card {
@@ -23,44 +28,49 @@
   background: var(--surface);
 }
 
+/* O sistema de quem visita: o traço azul da marca no topo. O teal é só do que se
+   confirma, e o vermelho, da emergência (revisão final, 22/10/2026). */
 .dl__card.is-mine {
-  border-color: var(--ok-line);
-  box-shadow: 0 0 0 1px var(--ok-line), var(--shadow-md);
+  box-shadow: inset 0 3px 0 var(--accent);
 }
 
 .dl__head {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--sp-2);
+  gap: var(--sp-2) var(--sp-3);
 }
 
 .dl__name {
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   margin: 0;
 }
 
 .dl__badge {
-  padding: 2px 10px;
-  border-radius: var(--r-pill);
-  background: var(--teal-300);
-  color: #04231f;
-  font-size: var(--fs-min);
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
 }
 
-/* "Em breve": amarelo claro sobre marinho, 10:1. */
+.dl__badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* "Em breve" não é aviso nem confirmação: neutro. */
 .dl__badge--soon {
-  background: transparent;
-  color: var(--warn);
-  border: 1px solid var(--warn-line);
+  color: var(--text-dim);
 }
 
 .dl__req {
-  margin: 0 0 var(--sp-2);
-  font-size: 0.92rem;
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-sm);
   color: var(--text-dim);
 }
 
@@ -70,7 +80,7 @@
 
 .dl__detail {
   margin: 0;
-  font-size: 0.86rem;
+  font-size: 0.875rem;
   color: var(--text-dim);
   text-align: center;
 }
@@ -82,9 +92,9 @@
   justify-content: center;
   gap: 4px;
   min-height: 44px;
-  color: var(--ok);
-  font-weight: 650;
-  font-size: 0.94rem;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: var(--fs-sm);
   text-align: center;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -96,6 +106,72 @@
   text-decoration: none;
 }
 
+/* ---------- "Meu computador funciona?" ---------- */
+.dl__teste {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.dl__teste .icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+/* ---------- o app do cuidador ---------- */
+.dl__celular {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line);
+}
+
+.dl__celular-icone {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+}
+
+.dl__celular-texto .dl__req {
+  margin-bottom: var(--sp-4);
+}
+
+.dl__celular-qr {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.dl__celular-qr .qr {
+  flex: none;
+  border-radius: 8px;
+}
+
+@media (min-width: 720px) {
+  .dl__celular {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  .dl__celular-qr {
+    grid-column: auto;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    max-width: 140px;
+  }
+}
+
+/* ---------- pé do painel ---------- */
 .dl__foot {
   display: grid;
   gap: var(--sp-3);
@@ -107,8 +183,8 @@
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  color: var(--ok);
-  font-weight: 700;
+  color: var(--accent);
+  font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -118,29 +194,39 @@
   gap: var(--sp-3);
   align-items: flex-start;
   margin: 0;
-  padding: var(--sp-3) var(--sp-4);
+  padding: var(--sp-4);
   border-radius: var(--r-md);
-  border: 1px solid var(--line);
-  background: var(--surface-2);
-  font-size: 0.94rem;
+  background: var(--bg-soft);
+  font-size: var(--fs-sm);
   line-height: 1.55;
   color: var(--text-soft);
 }
 
 .dl__note .icon {
   flex: none;
-  margin-top: 3px;
+  margin-top: 2px;
   color: var(--accent);
 }
 
-/* Travado até o lançamento da beta: o sistema está publicado, mas o
-   download só abre no dia da etiqueta vermelha. */
-.dl__card.is-locked {
-  border-color: rgba(214, 41, 58, 0.45);
+.dl__note-texto {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
 }
 
-.dl__card.is-locked.is-mine {
-  box-shadow: 0 0 0 1px rgba(214, 41, 58, 0.45), var(--shadow-md);
+.dl__note-texto p {
+  margin: 0;
+}
+
+/* O aviso do Windows vem na hora de instalar: é a frase que a pessoa precisa achar. */
+.dl__smartscreen {
+  color: var(--text);
+}
+
+/* Travado até o lançamento da beta: o sistema está publicado, mas o
+   download só abre no dia do selo da beta. */
+.dl__card.is-locked {
+  border-color: var(--accent-line);
 }
 
 .dl__card.is-locked .dl__main:disabled {
@@ -157,5 +243,5 @@
   gap: var(--sp-2);
   margin-top: auto;
   color: var(--ok);
-  font-weight: 650;
+  font-weight: 600;
 }

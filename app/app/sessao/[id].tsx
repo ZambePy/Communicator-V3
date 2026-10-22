@@ -37,7 +37,7 @@ export default function SessaoDetalhe() {
   }, [data, id, tentativa, permitido]);
 
   const titulo = s ? capitalizar(dateLong(s.started_at)) : 'Relatório de sessão';
-  const periodo = s ? `${hm(s.started_at)}${s.ended_at ? ` – ${hm(s.ended_at)}` : ' · em andamento'} · ${formatDuration(durationMin(s))}` : undefined;
+  const periodo = s ? `${s.ended_at ? `Das ${hm(s.started_at)} às ${hm(s.ended_at)}` : `Desde as ${hm(s.started_at)}, em andamento`}, ${formatDuration(durationMin(s))}` : undefined;
 
   return (
     <Screen>
@@ -74,7 +74,7 @@ export default function SessaoDetalhe() {
                 <Text variant="display">{s.calibration_error_px != null ? `${Math.round(s.calibration_error_px)} px` : '—'}</Text>
                 <Text variant="caption" tone="muted">
                   {s.calibration_error_deg != null ? `${decimal(s.calibration_error_deg, 2)}°` : '—'}
-                  {s.calibration_seconds != null ? ` · calibrada em ${s.calibration_seconds} s` : ''}
+                  {s.calibration_seconds != null ? `, calibrada em ${s.calibration_seconds} s` : ''}
                 </Text>
                 {/* Postura e fadiga só quando medidas: o banco tem default (0 / 'nenhum' / 'ok'). */}
                 {hasPostureData(s) || hasFatigueData(s) ? (
@@ -113,7 +113,7 @@ export default function SessaoDetalhe() {
                 <ListRow
                   icon="checkmark-done-outline"
                   title="Pontos medidos"
-                  subtitle={s.accuracy_report ? `${s.accuracy_report.pointsMeasured} de ${s.accuracy_report.pointsTotal} · ${s.accuracy_report.score}` : '—'}
+                  subtitle={s.accuracy_report ? `${s.accuracy_report.pointsMeasured} de ${s.accuracy_report.pointsTotal} pontos, ${s.accuracy_report.score}` : '—'}
                   tone={s.accuracy_report && s.accuracy_report.pointsMeasured < s.accuracy_report.pointsTotal ? 'warning' : 'accent'}
                   last={!s.accuracy_report?.conditions}
                 />
@@ -152,7 +152,7 @@ function fmtPxDeg(px: number | null | undefined, deg: number | null | undefined)
   if (px == null && deg == null) return '—';
   const a = px != null ? `${Math.round(px)} px` : '';
   const b = deg != null ? `${decimal(deg, 2)}°` : '';
-  return [a, b].filter(Boolean).join(' · ');
+  return [a, b].filter(Boolean).join(' / ');
 }
 
 function pct(v: number | null) {
@@ -167,7 +167,7 @@ function condicoes(c: NonNullable<Session['accuracy_report']>['conditions']) {
   if (c.headMovement) partes.push(`cabeça ${c.headMovement}`);
   if (c.distanceCm) partes.push(`${c.distanceCm} cm da tela`);
   if (c.screenInches) partes.push(`tela de ${decimal(c.screenInches, 1)}"`);
-  return partes.join(' · ') || '—';
+  return partes.join(', ') || '—';
 }
 
 const styles = StyleSheet.create({

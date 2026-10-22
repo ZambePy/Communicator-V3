@@ -9,7 +9,9 @@
 #
 # Precisa de um PostgreSQL 15+ acessível com um superusuário (Docker serve:
 #   docker run --rm -d -p 5432:5432 -e POSTGRES_HOST_AUTH_METHOD=trust --name pg postgres:16
-# ) e do cliente `psql`. O script apaga e recria o banco `irisflow_beta_test`.
+# ) e do cliente `psql`. O script apaga e recria o banco `irisflow_beta_test`
+# (ou o de BANCO_DE_TESTE, para duas execuções no mesmo servidor não apagarem
+# o banco uma da outra).
 #
 # O que o shim imita do Supabase:
 #   - schema `auth`: `users` com as colunas que o GoTrue e o seed usam,
@@ -30,7 +32,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PGURL="${PGURL:-postgresql://postgres@localhost:5432/postgres}"
-DB="irisflow_beta_test"
+DB="${BANCO_DE_TESTE:-irisflow_beta_test}"
 ADMIN="${PGURL%/*}/postgres"
 
 psql -q -v ON_ERROR_STOP=1 "$ADMIN" -c "drop database if exists $DB" -c "create database $DB"
@@ -160,6 +162,115 @@ done
 
 echo "== cenário (beta, 22/09, 23/09 e código de confirmação, 26/09)"
 psql -v ON_ERROR_STOP=1 "$URL" -f scripts/db-local-test.sql
+
+echo "== rodada 3: search_path fixo também nas security definer que vierem (21/10/2026)"
+# A migração 20261021120000 conserta TODA security definer do public sem
+# pg_temp no fim do search_path, e mantém os outros esquemas da lista
+# (pair_device e confirmar_codigo precisam de `extensions`). Três funções de
+# mentira, uma de cada jeito, e um procedimento (ALTER FUNCTION recusaria e
+# derrubaria a migração inteira); a migração aplicada de novo por cima deles.
+psql -q -v ON_ERROR_STOP=1 "$URL" <<'SQL'
+create function public.teste_sem_caminho() returns int language sql security definer as 'select 1';
+create function public.teste_com_extensions() returns int language sql security definer
+  set search_path = public, extensions as 'select 1';
+create function public.teste_pg_temp_primeiro() returns int language sql security definer
+  set search_path = pg_temp, public as 'select 1';
+create procedure public.teste_procedimento(p_n int) language sql security definer as 'select 1';
+SQL
+aplicar supabase/migrations/20261021120000_endurecimento_rodada3.sql
+psql -q -v ON_ERROR_STOP=1 "$URL" <<'SQL'
+do $$
+declare v text;
+begin
+  select string_agg(format('%s: %s', p.proname, array_to_string(p.proconfig, '; ')), ' | ' order by p.proname)
+    into v
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and p.proname like 'teste\_%';
+  if v is distinct from 'teste_com_extensions: search_path=public, extensions, pg_temp'
+                        || ' | teste_pg_temp_primeiro: search_path=public, pg_temp'
+                        || ' | teste_procedimento: search_path=public, pg_temp'
+                        || ' | teste_sem_caminho: search_path=public, pg_temp' then
+    raise exception 'search_path consertado errado: %', v;
+  end if;
+end $$;
+drop function public.teste_sem_caminho();
+drop function public.teste_com_extensions();
+drop function public.teste_pg_temp_primeiro();
+drop procedure public.teste_procedimento(int);
+SQL
+
+echo "== rodada 3: dois avisos ao mesmo tempo no limite — só um passa (21/10/2026)"
+# Precisa de duas sessões. A sessão A grava o aviso que enche o limite e
+# segura a transação aberta (pg_sleep) antes do commit; a B só começa quando
+# A já gravou. Com o pg_advisory_xact_lock por computador, B espera A terminar
+# e encontra o limite cheio; sem ele, B não enxerga a linha ainda não
+# confirmada de A, conta uma a menos e passa também.
+psql -q -v ON_ERROR_STOP=1 "$URL" <<'SQL'
+insert into auth.users (id, email, email_confirmed_at)
+values ('a6a6a6a6-0000-4000-8000-000000000001', 'familia-corrida@exemplo.com', now());
+insert into public.beneficiaries (id, profile_id, user_name, relation, condition, os)
+values ('a6a6a6a6-0000-4000-8000-0000000000b1', 'a6a6a6a6-0000-4000-8000-000000000001', 'Ana Corrida', 'filho', 'ela', 'windows');
+insert into public.devices (id, beneficiary_id, name, device_key_hash) values
+  ('a6a6a6a6-0000-4000-8000-0000000000d1', 'a6a6a6a6-0000-4000-8000-0000000000b1', 'PC da ajuda', repeat('c1', 32)),
+  ('a6a6a6a6-0000-4000-8000-0000000000d2', 'a6a6a6a6-0000-4000-8000-0000000000b1', 'PC do aviso', repeat('c2', 32));
+-- Cinco ajudas nos últimos 10 minutos: falta uma para o limite (6).
+do $$
+begin
+  for i in 1..5 loop
+    perform public.registrar_aviso_com_limite('a6a6a6a6-0000-4000-8000-0000000000d1', 'ajuda', 'antes ' || i, null, now());
+  end loop;
+end $$;
+SQL
+
+corrida() {
+  local computador="$1" tipo="$2" texto="$3"
+  local saida_a saida_b pid_a passaram n=0
+  saida_a="$(mktemp)"
+  saida_b="$(mktemp)"
+  PGAPPNAME=corrida_a psql -X -q -At -v ON_ERROR_STOP=1 "$URL" >"$saida_a" <<SQL &
+begin;
+select public.registrar_aviso_com_limite('$computador', '$tipo', '$texto', null, now());
+select pg_sleep(2);
+commit;
+SQL
+  pid_a=$!
+  # B só sai quando A já gravou e está segurando a transação.
+  until [ "$(psql -X -At "$URL" -c "select count(*) from pg_stat_activity where application_name = 'corrida_a' and wait_event = 'PgSleep'")" = 1 ]; do
+    n=$((n + 1))
+    if [ "$n" -gt 100 ]; then
+      echo "corrida ($tipo): a sessão A não chegou a gravar o aviso" >&2
+      exit 1
+    fi
+    sleep 0.1
+  done
+  PGAPPNAME=corrida_b psql -X -q -At -v ON_ERROR_STOP=1 "$URL" >"$saida_b" \
+    -c "select public.registrar_aviso_com_limite('$computador', '$tipo', '$texto', null, now())"
+  wait "$pid_a"
+  passaram="$(cat "$saida_a" "$saida_b" | grep -c '"ok": true' || true)"
+  rm -f "$saida_a" "$saida_b"
+  if [ "$passaram" != 1 ]; then
+    echo "corrida ($tipo): duas chamadas ao mesmo tempo no limite — esperava 1 aceita, passaram $passaram" >&2
+    exit 1
+  fi
+}
+# Ajuda: a sexta, pedida duas vezes ao mesmo tempo.
+corrida a6a6a6a6-0000-4000-8000-0000000000d1 ajuda 'a sexta, duas vezes'
+# Aviso de dispositivo: o mesmo texto duas vezes ao mesmo tempo.
+corrida a6a6a6a6-0000-4000-8000-0000000000d2 dispositivo 'A câmera parou'
+psql -q -v ON_ERROR_STOP=1 "$URL" <<'SQL'
+do $$
+declare n_ajuda int; n_aviso int;
+begin
+  select count(*) into n_ajuda from public.help_requests
+   where device_id = 'a6a6a6a6-0000-4000-8000-0000000000d1' and kind = 'ajuda';
+  select count(*) into n_aviso from public.help_requests
+   where device_id = 'a6a6a6a6-0000-4000-8000-0000000000d2' and kind = 'dispositivo';
+  if n_ajuda <> 6 or n_aviso <> 1 then
+    raise exception 'corrida: o banco deveria ter 6 ajudas e 1 aviso de dispositivo, tem % e %', n_ajuda, n_aviso;
+  end if;
+end $$;
+SQL
+echo "corrida: das duas chamadas ao mesmo tempo, só uma passou (ajuda e dispositivo)"
 
 echo "== seed (duas vezes: tem de ser idempotente)"
 psql -q -v ON_ERROR_STOP=1 "$URL" -f supabase/seed.sql

@@ -99,12 +99,14 @@ describe('perda longa: esconde e avisa', () => {
     expect(r.posicao).toBeNull();
   });
 
-  it('a mensagem diz o que FAZER, não o que quebrou', () => {
-    // Quem lê isto pode não ter como pedir ajuda para interpretar a tela.
+  it('a mensagem é calma: diz o que acontece e que o programa segue tentando', () => {
+    // Pedido do dono (19/10/2026): sem bronca — "Posicione o rosto" soava como
+    // ordem para quem não consegue se mexer. O que ajuda vai no detalhe do banner.
     const f = new GazeFallback();
     f.step(P(800, 400, 1000));
     expect(f.step(PERDIDO(4000)).mensagem).toBe(MENSAGEM_SEM_ROSTO);
-    expect(MENSAGEM_SEM_ROSTO.toLowerCase()).toContain('posicione');
+    expect(MENSAGEM_SEM_ROSTO.toLowerCase()).toContain('não estou vendo seu rosto');
+    expect(MENSAGEM_SEM_ROSTO.toLowerCase()).toContain('tentando de novo');
   });
 
   it('recuperar depois do teto volta ao normal e limpa a mensagem', () => {

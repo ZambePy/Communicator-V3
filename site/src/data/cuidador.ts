@@ -3,15 +3,18 @@
 
 /**
  * A ressalva dos alertas no celular, a MESMA onde quer que a promessa apareça
- * (home, /solucao, /cuidador). Sem o push das lojas configurado, o socorro
- * chega ao celular com o app aberto. Tirar daqui quando o push estiver ativo.
+ * (home, /solucao, /cuidador), e uma vez só por página. Sem o push das lojas
+ * configurado, o socorro chega ao celular com o app aberto. Tirar daqui
+ * quando o push estiver ativo. Texto reescrito em 21/10/2026: a frase antiga
+ * ("com ele fechado, junto com a publicação nas lojas") não dizia o que
+ * acontece com o app fechado.
  */
 export const RESSALVA_DOS_ALERTAS =
-  'Na beta, os alertas chegam com o app aberto; com ele fechado, junto com a publicação nas lojas.'
+  'Na beta, o alerta só aparece com o app do cuidador aberto. Com o app fechado, só depois que ele chegar às lojas.'
 
 export const CUIDADOR = {
   titulo: 'O IrisFlow no celular de quem cuida.',
-  lead: 'Veja o que o paciente escreve, responda de onde estiver e receba os pedidos de ajuda na hora.',
+  lead: 'Veja o que a pessoa escreve, responda de onde estiver e receba os pedidos de ajuda na hora.',
 }
 
 export type RecursoDoCuidador = {
@@ -29,16 +32,16 @@ export const RECURSOS_DO_CUIDADOR: RecursoDoCuidador[] = [
   {
     id: 'conversa',
     titulo: 'Converse em tempo real',
-    texto: 'O que você escreve é falado na tela do paciente, e a resposta dele chega no seu celular.',
+    texto: 'O que você escreve é falado na tela da pessoa, e a resposta dela chega no seu celular.',
     tela: {
       src: '/media/cuidador/conversa.webp',
-      alt: 'Tela de conversa: o paciente escreve "Estou com sede", a resposta da família é falada na tela dele e ele responde "Sim"; embaixo, as respostas rápidas.',
+      alt: 'Tela de conversa: a pessoa escreve "Estou com sede", a resposta da família é falada na tela dela e ela responde "Sim"; embaixo, as respostas rápidas.',
     },
   },
   {
     id: 'alertas',
     titulo: 'Socorro sem demora',
-    texto: 'O pedido de ajuda ocupa a tela e vibra. Se ninguém confirmar no prazo, ele é reenviado para todos os celulares da conta.',
+    texto: 'O pedido de ajuda ocupa a tela e vibra. Se ninguém confirmar no prazo, ele é enviado de novo para todos os celulares da conta.',
     tela: {
       src: '/media/cuidador/alertas.webp',
       alt: 'Alerta em tela cheia: "Pedido de socorro. Carlos precisa de você agora", com o motivo (dor muito forte), o prazo para alguém confirmar e o botão "Estou indo!".',

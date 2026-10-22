@@ -144,8 +144,10 @@ describe('`setFilterPreset` recusado não dessincroniza o estado', () => {
     // A chave no fim ancora a IMPLEMENTAÇÃO. Sem ela o `indexOf` casava a
     // declaração da interface (que termina em `;`), e a busca acontecia num
     // trecho sem guarda nenhuma — o teste falhava sem que houvesse defeito.
+    // Desde 19/10/2026 (auditoria A2) a implementação devolve se o preset
+    // passou a governar o cursor (`ResultadoDoPreset`), em vez de `void`.
     const iGuarda = src.indexOf(
-      'setFilterPreset(preset: FilterPreset | FilterPresetV2): void {',
+      'setFilterPreset(preset: FilterPreset | FilterPresetV2): ResultadoDoPreset {',
     );
     expect(iGuarda, 'implementação de setFilterPreset não encontrada').toBeGreaterThan(-1);
     const trecho = src.slice(iGuarda, iGuarda + 2000);

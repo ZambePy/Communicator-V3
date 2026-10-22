@@ -5,19 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- Tema único (azul-marinho). Não há modo claro nem alternador. -->
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#061223" />
+    <meta name="theme-color" content="#0b1b3a" />
 
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
 
-    <!-- Fonte de display (Sora, OFL) self-hosted em /fonts, só para títulos;
-         o corpo usa a pilha do sistema. Nenhuma requisição a terceiros:
-         num site de tecnologia assistiva, privacidade começa no CSS. -->
+    <!-- Fontes da marca (Sora nos títulos, Inter no texto; as duas OFL),
+         servidas daqui, de /fonts. Nenhuma requisição a terceiros: num site
+         de tecnologia assistiva, privacidade começa no CSS.
+         Pré-carregadas só as três da primeira dobra (o título em Sora 700, o
+         texto em Inter 400 e os botões em Inter 600), no subconjunto latino;
+         os outros pesos e o latin-ext chegam quando a página pede, com
+         font-display: swap (tokens.css). -->
     <link
       rel="preload"
       href="/fonts/sora-latin-700-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/inter-latin-400-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/inter-latin-600-normal.woff2"
       as="font"
       type="font/woff2"
       crossorigin
@@ -48,7 +66,7 @@
     <meta property="og:image" content="__SITE_URL__/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="IrisFlow — comunicação pelo olhar com a webcam comum" />
+    <meta property="og:image:alt" content="IrisFlow: comunicação pelo olhar com a webcam comum" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Comunicador por olhar para ELA, AVC e tetraplegia | IrisFlow" />
     <meta

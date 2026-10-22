@@ -98,9 +98,16 @@ export interface VeredictoDeRecalibracao {
 /**
  * Lê a referência gravada pelo último teste de precisão. `null` quando não há
  * teste salvo ou o registro é anterior aos campos de BCEA/viés.
+ *
+ * `calibradoEmMs`: o instante do treino do modelo em uso. Um teste de ANTES
+ * dele mediu outro modelo e não é linha de base deste (revisão do pipeline de
+ * 19/10/2026 — a recoleta aceita troca o modelo, e o vigia seguia comparando o
+ * uso com o teste do modelo anterior). É a mesma regra do alvo mínimo medido
+ * (M18, `requisitoMedidoPx`). Ausente, como antes: qualquer teste vale.
  */
 export function lerReferenciaDePrecisao(
   storage: Pick<Storage, 'getItem'> | null = typeof localStorage === 'undefined' ? null : localStorage,
+  calibradoEmMs: number | null = null,
 ): ReferenciaDePrecisao | null {
   if (!storage) return null;
   try {
@@ -110,10 +117,12 @@ export function lerReferenciaDePrecisao(
     const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
     const bx = num(r.biasX);
     const by = num(r.biasY);
+    const timestamp = num(r.timestamp);
+    if (calibradoEmMs !== null && (timestamp === null || timestamp < calibradoEmMs)) return null;
     return {
       bceaPx2: num(r.bceaPx2),
       viesPx: bx !== null && by !== null ? Math.hypot(bx, by) : null,
-      timestamp: num(r.timestamp),
+      timestamp,
     };
   } catch {
     return null;

@@ -13,7 +13,18 @@ import { AppState, Platform } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import { esperaDoRegistro, isExpoGo, obterTokenDoAparelho, pushIndisponivel, usePushNotifications } from './usePushNotifications';
+import {
+  _esquecerAlarmesLocais,
+  esperaDoRegistro,
+  isExpoGo,
+  obterTokenDoAparelho,
+  pushIndisponivel,
+  REPETIR_ALARME_MS,
+  sincronizarAlarmesLocais,
+  TETO_DO_ALARME_MS,
+  tocarAlarmeLocal,
+  usePushNotifications,
+} from './usePushNotifications';
 
 // Objetos simples e mutáveis: cada teste ajusta só o campo que quer testar e
 // devolve o cenário base no `beforeEach`. O hook lê os valores na hora da
@@ -40,7 +51,14 @@ const mockNotifications = {
   getLastNotificationResponseAsync: jest.fn(async () => null),
   addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
   addPushTokenListener: jest.fn((_cb: (t: unknown) => void) => ({ remove: jest.fn() })),
+  getPresentedNotificationsAsync: jest.fn(async (): Promise<unknown[]> => []),
+  scheduleNotificationAsync: jest.fn(async (_c: unknown) => 'id-local'),
+  dismissNotificationAsync: jest.fn(async (_id: string) => undefined),
+  cancelScheduledNotificationAsync: jest.fn(async (_id: string) => undefined),
+  getAllScheduledNotificationsAsync: jest.fn(async (): Promise<unknown[]> => []),
   AndroidImportance: { MAX: 5, DEFAULT: 3 },
+  AndroidNotificationPriority: { MAX: 'max' },
+  SchedulableTriggerInputTypes: { TIME_INTERVAL: 'timeInterval' },
 };
 jest.mock('expo-notifications', () => mockNotifications);
 
@@ -273,3 +291,213 @@ describe('usePushNotifications', () => {
     });
   });
 });
+
+describe('tocarAlarmeLocal (pedido que chegou com o app aberto)', () => {
+  beforeEach(() => {
+    _esquecerAlarmesLocais();
+    mockNotifications.getPresentedNotificationsAsync.mockResolvedValue([]);
+    mockNotifications.getLastNotificationResponseAsync.mockResolvedValue(null);
+  });
+  // A série de repetição deixa um timer pendente: cada teste começa do zero.
+  afterEach(() => _esquecerAlarmesLocais());
+
+  it('agenda UMA notificação local no canal de emergência (o som do canal toca)', async () => {
+    Platform.OS = 'android';
+    expect(await tocarAlarmeLocal({ id: 'hr-1', titulo: 'Socorro — Ana', corpo: 'DOR' })).toBe(true);
+    expect(mockNotifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    const arg = mockNotifications.scheduleNotificationAsync.mock.calls[0][0] as { content: { sound: string; data: { help_request_id: string } }; trigger: { channelId: string } };
+    expect(arg.trigger).toEqual({ channelId: 'emergencia' });
+    expect(arg.content.sound).toBe('default');
+    expect(arg.content.data.help_request_id).toBe('hr-1');
+    // O mesmo pedido não toca de novo (re-render, minimizar e reabrir).
+    expect(await tocarAlarmeLocal({ id: 'hr-1', titulo: 'x', corpo: 'y' })).toBe(false);
+    expect(mockNotifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('não duplica o push que já está na bandeja, nem o que abriu o app', async () => {
+    mockNotifications.getPresentedNotificationsAsync.mockResolvedValue([{ request: { content: { data: { help_request_id: 'hr-2' } } } }]);
+    expect(await tocarAlarmeLocal({ id: 'hr-2', titulo: 'x', corpo: 'y' })).toBe(false);
+    mockNotifications.getLastNotificationResponseAsync.mockResolvedValue({ notification: { request: { content: { data: { help_request_id: 'hr-3' } } } } } as never);
+    expect(await tocarAlarmeLocal({ id: 'hr-3', titulo: 'x', corpo: 'y' })).toBe(false);
+    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it('sem permissão de notificação, não tenta (e não lança)', async () => {
+    mockNotifications.getPermissionsAsync.mockResolvedValue({ status: 'denied' });
+    expect(await tocarAlarmeLocal({ id: 'hr-4', titulo: 'x', corpo: 'y' })).toBe(false);
+    expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it('erro do sistema ao agendar vira aviso no console, nunca exceção', async () => {
+    mockNotifications.scheduleNotificationAsync.mockRejectedValueOnce(new Error('canal ausente'));
+    await expect(tocarAlarmeLocal({ id: 'hr-5', titulo: 'x', corpo: 'y' })).resolves.toBe(false);
+  });
+});
+
+// Revisão de UX de 19/10/2026 (achado 11): o alarme local tocava uma vez só
+// por pedido — um toque curto, sem repetir enquanto ninguém confirmava nem
+// quando o servidor escalava. Justamente quando ele é o único som (push quebrado).
+describe('alarme local que repete até alguém confirmar (achado 11)', () => {
+  const socorro = { id: 'hr-1', titulo: 'Pedido de socorro — Ana', corpo: 'Falta de ar', beneficiaryId: 'b1' };
+  const agendar = mockNotifications.scheduleNotificationAsync;
+  type Agendamento = { identifier: string; content: { sound: string; data: { help_request_id: string } }; trigger: Record<string, unknown> | null };
+  const agendamento = (i: number) => agendar.mock.calls[i][0] as Agendamento;
+  const ouvinteDoApp = () => {
+    const chamadas = (AppState.addEventListener as jest.Mock).mock.calls.filter((c) => c[0] === 'change');
+    return chamadas[chamadas.length - 1][1] as (estado: string) => void;
+  };
+  const andar = (ms: number) => jest.advanceTimersByTimeAsync(ms);
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    _esquecerAlarmesLocais();
+    Platform.OS = 'android';
+    mockNotifications.getPresentedNotificationsAsync.mockResolvedValue([]);
+    mockNotifications.getLastNotificationResponseAsync.mockResolvedValue(null);
+    mockNotifications.getAllScheduledNotificationsAsync.mockResolvedValue([]);
+  });
+  afterEach(() => {
+    _esquecerAlarmesLocais();
+    jest.useRealTimers();
+  });
+
+  it('repete a cada REPETIR_ALARME_MS enquanto ninguém confirma, e para no teto', async () => {
+    expect(await tocarAlarmeLocal(socorro)).toBe(true);
+    expect(agendar).toHaveBeenCalledTimes(1);
+
+    await andar(REPETIR_ALARME_MS);
+    expect(agendar).toHaveBeenCalledTimes(2);
+
+    await andar(TETO_DO_ALARME_MS);
+    const total = 1 + Math.floor(TETO_DO_ALARME_MS / REPETIR_ALARME_MS);
+    expect(agendar).toHaveBeenCalledTimes(total);
+    await andar(10 * REPETIR_ALARME_MS);
+    expect(agendar).toHaveBeenCalledTimes(total);
+
+    // Todo toque vai pelo canal de emergência, com o som do canal.
+    for (let i = 0; i < total; i++) {
+      expect(agendamento(i).trigger).toEqual({ channelId: 'emergencia' });
+      expect(agendamento(i).content.sound).toBe('default');
+      expect(agendamento(i).content.data.help_request_id).toBe('hr-1');
+    }
+  });
+
+  it('cada toque tira o anterior da bandeja: fica uma notificação do pedido, não vinte', async () => {
+    await tocarAlarmeLocal(socorro);
+    await andar(REPETIR_ALARME_MS);
+    expect(mockNotifications.dismissNotificationAsync).toHaveBeenCalledWith(agendamento(0).identifier);
+    expect(agendamento(1).identifier).not.toBe(agendamento(0).identifier);
+  });
+
+  it('confirmado ou resolvido (sai da lista): para de tocar e sai da bandeja', async () => {
+    await sincronizarAlarmesLocais([socorro]);
+    expect(agendar).toHaveBeenCalledTimes(1);
+
+    await sincronizarAlarmesLocais([]);
+    expect(mockNotifications.dismissNotificationAsync).toHaveBeenCalledWith(agendamento(0).identifier);
+    await andar(5 * REPETIR_ALARME_MS);
+    expect(agendar).toHaveBeenCalledTimes(1);
+  });
+
+  it('o mesmo pedido de novo na lista (outra atualização) não toca outra vez nem recomeça', async () => {
+    await sincronizarAlarmesLocais([socorro]);
+    await sincronizarAlarmesLocais([{ ...socorro, corpo: 'Falta de ar (atualizado)' }]);
+    expect(agendar).toHaveBeenCalledTimes(1);
+  });
+
+  it('escalonamento do servidor: toca de novo na hora e recomeça a contagem do teto', async () => {
+    await sincronizarAlarmesLocais([socorro]);
+    await andar(TETO_DO_ALARME_MS + REPETIR_ALARME_MS);
+    const esgotado = agendar.mock.calls.length;
+    await andar(5 * REPETIR_ALARME_MS);
+    expect(agendar).toHaveBeenCalledTimes(esgotado);
+
+    const escalado = { ...socorro, escalado: new Date().toISOString() };
+    await sincronizarAlarmesLocais([escalado]);
+    expect(agendar).toHaveBeenCalledTimes(esgotado + 1);
+    await andar(REPETIR_ALARME_MS);
+    expect(agendar).toHaveBeenCalledTimes(esgotado + 2);
+    // A mesma fase de novo não toca outra vez.
+    await sincronizarAlarmesLocais([escalado]);
+    expect(agendar).toHaveBeenCalledTimes(esgotado + 2);
+  });
+
+  it('o push do escalonamento já na bandeja: o primeiro toque não dobra o som, mas a repetição segue', async () => {
+    await sincronizarAlarmesLocais([socorro]);
+    mockNotifications.getPresentedNotificationsAsync.mockResolvedValue([{ request: { identifier: 'push', content: { data: { help_request_id: 'hr-1', escalated: true } } } }]);
+    await sincronizarAlarmesLocais([{ ...socorro, escalado: new Date().toISOString() }]);
+    expect(agendar).toHaveBeenCalledTimes(1);
+    await andar(REPETIR_ALARME_MS);
+    expect(agendar).toHaveBeenCalledTimes(2);
+  });
+
+  it('app em segundo plano (os timers do JS param): os toques que faltam vão para o sistema; de volta à frente, saem dele', async () => {
+    await tocarAlarmeLocal(socorro);
+    expect(agendar).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      ouvinteDoApp()('background');
+      await Promise.resolve();
+    });
+    await andar(0);
+    const noSistema = agendar.mock.calls.slice(1).map(([a]) => a as Agendamento);
+    expect(noSistema).toHaveLength(Math.floor(TETO_DO_ALARME_MS / REPETIR_ALARME_MS));
+    expect(noSistema[0].trigger).toEqual({ type: 'timeInterval', seconds: REPETIR_ALARME_MS / 1000, channelId: 'emergencia' });
+    expect(noSistema[noSistema.length - 1].trigger).toMatchObject({ seconds: TETO_DO_ALARME_MS / 1000 });
+    // Com o app em segundo plano o timer do JS não toca por cima do sistema.
+    await andar(REPETIR_ALARME_MS);
+    expect(agendar).toHaveBeenCalledTimes(1 + noSistema.length);
+
+    await act(async () => {
+      ouvinteDoApp()('active');
+      await Promise.resolve();
+    });
+    await andar(0);
+    for (const a of noSistema) expect(mockNotifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(a.identifier);
+    // De volta à frente, a repetição continua pelo timer.
+    await andar(REPETIR_ALARME_MS);
+    expect(agendar).toHaveBeenCalledTimes(2 + noSistema.length);
+  });
+
+  it('confirmado com o app em segundo plano: os toques entregues ao sistema são cancelados', async () => {
+    await sincronizarAlarmesLocais([socorro]);
+    await act(async () => {
+      ouvinteDoApp()('background');
+      await Promise.resolve();
+    });
+    await andar(0);
+    const noSistema = agendar.mock.calls.slice(1).map(([a]) => (a as Agendamento).identifier);
+    expect(noSistema.length).toBeGreaterThan(0);
+
+    await sincronizarAlarmesLocais([]);
+    for (const id of noSistema) expect(mockNotifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(id);
+  });
+
+  it('toques que uma execução anterior deixou agendados saem na sincronização (o app foi fechado no meio)', async () => {
+    await sincronizarAlarmesLocais([socorro]);
+    await act(async () => {
+      ouvinteDoApp()('background');
+      await Promise.resolve();
+    });
+    await andar(0);
+    const deixados = agendar.mock.calls.slice(1).map(([a]) => ({ identifier: (a as Agendamento).identifier }));
+    // O app morre aqui. Na próxima execução o sistema ainda guarda os agendamentos.
+    _esquecerAlarmesLocais();
+    mockNotifications.cancelScheduledNotificationAsync.mockClear();
+    mockNotifications.getAllScheduledNotificationsAsync.mockResolvedValue([...deixados, { identifier: 'lembrete-de-outra-coisa' }]);
+
+    // O socorro foi confirmado nesse meio-tempo: a lista chega vazia.
+    await sincronizarAlarmesLocais([]);
+    for (const d of deixados) expect(mockNotifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith(d.identifier);
+    expect(mockNotifications.cancelScheduledNotificationAsync).not.toHaveBeenCalledWith('lembrete-de-outra-coisa');
+  });
+
+  it('no Expo Go não faz nada (nem carrega o módulo de notificações)', async () => {
+    constants.executionEnvironment = 'storeClient';
+    await sincronizarAlarmesLocais([socorro]);
+    await andar(REPETIR_ALARME_MS);
+    expect(agendar).not.toHaveBeenCalled();
+    expect(mockNotifications.setNotificationHandler).not.toHaveBeenCalled();
+  });
+});
+

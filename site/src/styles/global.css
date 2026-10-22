@@ -20,10 +20,17 @@ body {
   color: var(--text);
   font-family: var(--font-body);
   font-size: var(--fs-body);
-  line-height: 1.65;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  overflow-x: hidden;
+  /* O "l" com cauda (cv05) separa l, I e 1 — num site sobre escrever letra
+     por letra, a diferença conta. Números tabulares onde há tabela. */
+  font-feature-settings: 'cv05' 1;
+  /* Sem `overflow-x: hidden` aqui (auditoria P3-5, 21/10/2026): ele escondia
+     estouros em vez de resolvê-los e atrapalha `position: sticky`. Quem pode
+     passar da largura (o campo de pontos da abertura, as faixas `.v3-modulos` e
+     `.arco`) se contém sozinho com `overflow: clip`. */
 }
 
 img,
@@ -33,17 +40,16 @@ video {
   display: block;
 }
 
-/* A pilha de display e de sistema (ver tokens.css). Sem a face pesada da
-   antiga webfont, o peso 700 e o que devolve presença ao título; a
-   entrelinha continua mais generosa do que o usual para display. */
+/* Títulos em Sora: entrelinha curta e o espaço entre letras fechado nos
+   tamanhos grandes, onde a Sora fica larga demais com o espaçamento de texto. */
 h1,
 h2,
 h3,
 h4 {
   font-family: var(--font-display);
-  font-weight: 700;
-  line-height: 1.22;
-  letter-spacing: -0.015em;
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
   color: var(--text);
   margin: 0 0 var(--sp-4);
   text-wrap: balance;
@@ -51,9 +57,14 @@ h4 {
 
 h1 {
   font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
 }
 h2 {
   font-size: var(--fs-h2);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
 }
 h3 {
   font-size: var(--fs-h3);
@@ -83,7 +94,7 @@ li {
 
 strong {
   color: var(--text);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 code {
@@ -101,10 +112,20 @@ hr {
   margin: var(--sp-6) 0;
 }
 
+/* ---------- a home (rodada 3, 21/10/2026) ----------
+   A home mora num .v3: o marinho da marca por baixo de tudo, chapado. */
+.v3 {
+  position: relative;
+  background: var(--v3-noite-2);
+}
+
 /* ---------- foco visível: requisito de acessibilidade, não enfeite ----------
-   Teal claro: o azul institucional some sobre o fundo marinho. */
+   Papel, o branco do texto: 16,7:1 sobre o marinho fundo, 15,7:1 sobre o
+   marinho e 6,7:1 sobre o azul do cartão ativo. Era menta, mas o teal é só da
+   confirmação (auditoria de 21/10/2026, P2-12). O aro que fecha nas chamadas
+   (button.css) segue menta: esse é o clique pelo olhar, e confirma. */
 :focus-visible {
-  outline: 3px solid var(--teal-300);
+  outline: 3px solid var(--papel);
   outline-offset: 3px;
   border-radius: 6px;
 }
@@ -119,40 +140,30 @@ hr {
   scroll-margin-top: calc(var(--header-h) + 16px);
 }
 
-/* ---------- utilitarios de layout ---------- */
+/* ---------- utilitários de layout ---------- */
 .container {
   width: 100%;
-  max-width: var(--container);
+  max-width: calc(var(--container) + 2 * var(--gutter));
   margin-inline: auto;
-  padding-inline: var(--sp-5);
+  padding-inline: var(--gutter);
 }
 
 .container--narrow {
-  max-width: var(--container-narrow);
+  max-width: calc(var(--container-narrow) + 2 * var(--gutter));
 }
 
 .section {
-  padding-block: var(--sp-9);
+  padding-block: var(--faixa);
   position: relative;
 }
 
-.section--tight {
-  padding-block: var(--sp-8);
-}
-
-/* Faixa de fundo alternado, para separar seções sem linha divisória. */
-.section--soft {
-  background: var(--bg-soft);
-  border-block: 1px solid var(--line);
-}
-
-/* Título grande de capítulo: poucas palavras, muito espaço. */
+/* Título de capítulo: poucas palavras, bastante espaço. */
 .titulo-capitulo {
   font-size: var(--fs-h2);
-  line-height: 1.08;
-  letter-spacing: -0.028em;
+  line-height: 1.06;
+  letter-spacing: -0.032em;
   max-width: var(--title-w, 18ch);
-  margin-bottom: var(--sp-4);
+  margin-bottom: var(--sp-5);
 }
 
 .texto-capitulo {
@@ -165,8 +176,7 @@ hr {
 /* ---------- seção padrão das páginas de dentro ---------- */
 .faixa {
   position: relative;
-  overflow: hidden;
-  padding-block: clamp(72px, 11vh, 128px);
+  padding-block: var(--faixa);
 }
 
 .faixa > .container {
@@ -174,12 +184,31 @@ hr {
   z-index: 1;
 }
 
+/* Cabeçalho de capítulo: no computador, o título à esquerda e a frase à
+   direita, alinhada pela base — a frase completa o título em vez de ficar
+   empilhada embaixo dele como legenda. */
 .capitulo {
-  margin-bottom: clamp(32px, 6vh, 56px);
+  margin-bottom: clamp(40px, 7vh, 72px);
+}
+
+.capitulo .titulo-capitulo {
+  margin-bottom: var(--sp-4);
 }
 
 .capitulo .texto-capitulo {
   margin-bottom: 0;
+}
+
+@media (min-width: 1000px) {
+  .capitulo:has(.texto-capitulo):not(.capitulo--centro) {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: var(--sp-7);
+    align-items: end;
+  }
+  .capitulo:has(.texto-capitulo):not(.capitulo--centro) .titulo-capitulo {
+    margin-bottom: 0;
+  }
 }
 
 .capitulo--centro {
@@ -191,20 +220,13 @@ hr {
   margin-inline: auto;
 }
 
-
 .grid {
   display: grid;
   gap: var(--sp-5);
 }
 
-.grid--2 {
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-}
 .grid--3 {
-  grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
-}
-.grid--4 {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 268px), 1fr));
 }
 
 .center {
@@ -214,44 +236,37 @@ hr {
 .lead {
   font-size: var(--fs-lead);
   color: var(--text-soft);
-  line-height: 1.62;
+  line-height: 1.6;
 }
 
-/* Rótulo curto acima de um título: só o texto, na cor de acento. */
+/* Rótulo curto acima de um título: em caixa normal, na cor de acento, sem
+   espaçamento de letreiro. Só onde ele diz algo que o título não diz. */
 .eyebrow {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
-  font-size: 0.82rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-weight: 700;
+  font-size: var(--fs-sm);
+  font-weight: 600;
   color: var(--accent);
   margin-bottom: var(--sp-3);
 }
 
-/* Pílula de aviso acima do título das aberturas (home e /baixar): a
-   etiqueta do lançamento e uma frase curta. Mora aqui porque as duas
-   páginas carregam separadas — no CSS da home ela faltava em /baixar. */
+/* Aviso acima do título das aberturas (home e /baixar): a etiqueta vermelha
+   do lançamento e uma frase curta. Sem caixa em volta: a etiqueta já é a
+   marca visual, a frase vem do lado dela. Mora aqui porque as duas páginas
+   carregam separadas. */
 .aviso-pilula {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-2) var(--sp-3);
   margin: 0 0 var(--sp-5);
-  padding: 6px 16px 6px 6px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 0.92rem;
+  font-size: var(--fs-sm);
+  font-weight: 500;
   color: var(--text-soft);
 }
 
-.aviso-pilula > span:only-child {
-  padding-left: 10px;
-}
-
-
-/* ---------- lista com check e link com seta ---------- */
+/* ---------- lista com check (o que está incluído) ---------- */
 .lista-check {
   list-style: none;
   padding: 0;
@@ -263,83 +278,80 @@ hr {
 .lista-check li {
   position: relative;
   margin: 0;
-  padding-left: 32px;
+  padding-left: 34px;
   color: var(--text);
-  font-size: 1.02rem;
+  font-size: 1.0625rem;
   line-height: 1.5;
 }
 
+/* O check da confirmação: menta sobre o marinho, sem círculo preenchido. */
 .lista-check li::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 2px;
+  top: 1px;
   width: 22px;
   height: 22px;
   border-radius: 50%;
+  border: 1.5px solid var(--ok-line);
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E")
-      center / 13px no-repeat,
-    var(--ok);
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2343d6c3' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 12.5l3.6 3.6 7.4-8.2'/%3E%3C/svg%3E")
+      center / 13px no-repeat;
 }
 
+/* Link de texto: sublinhado sempre (nada só por cor), na cor de acento. A
+   seta que vinha depois dele saiu: o sublinhado já diz que é link. */
 .link-seta {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-top: var(--sp-5);
-  font-weight: 650;
+  min-height: 44px;
+  margin-top: var(--sp-4);
+  font-weight: 600;
   color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 5px;
+  text-decoration-color: var(--accent-line);
+  transition:
+    text-decoration-color var(--dur-fast) ease,
+    color var(--dur-fast) ease;
 }
 
-.link-seta::after {
-  content: '→';
-  transition: transform var(--dur-fast) var(--ease-out);
+.link-seta:hover {
+  color: var(--text);
+  text-decoration-color: currentColor;
 }
 
-.link-seta:hover::after,
-.link-seta:focus-visible::after {
-  transform: translateX(4px);
-}
-
-/* ---------- padrões de seção repetidos em várias páginas ----------
-   Substituem os estilos inline que se acumulavam nas páginas: título
-   com largura de leitura, lead com margem inferior, nota lateral e
-   número grande de destaque. */
-.section-title {
-  max-width: var(--title-w, 26ch);
-  margin-bottom: var(--sp-4);
-}
-
-.section-lead {
-  max-width: var(--lead-w, 70ch);
-  margin-bottom: var(--sp-7);
-}
-
-.section-lead--tight {
-  margin-bottom: var(--sp-6);
+/* Link que está sozinho numa linha (ex.: "Esqueci minha senha", um e-mail de
+   contato): alvo de toque de 44 px, para quem tem tremor ou cansaço. Os links
+   dentro de uma frase seguem o tamanho do texto (WCAG 2.5.8 os dispensa).
+   Auditoria P3-3, 21/10/2026. */
+.link-alvo {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 
 .aside-note {
   margin: var(--sp-6) 0 0;
-  max-width: 88ch;
-  font-size: 0.96rem;
+  max-width: 72ch;
+  font-size: var(--fs-sm);
   color: var(--text-dim);
   padding-left: var(--sp-5);
-  border-left: 2px solid var(--line);
-}
-
-.big-number {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 2.6rem;
-  line-height: 1;
-  color: var(--ok);
+  border-left: 2px solid var(--line-strong);
 }
 
 .link-ok {
-  color: var(--ok);
+  color: var(--accent);
   font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.link-ok:hover {
+  color: var(--text);
 }
 
 .stack {
@@ -355,18 +367,10 @@ hr {
   margin-top: var(--sp-5);
 }
 
-/* Palavra destacada dentro de um título: só a cor de acento, sem
-   degradê — o destaque é a palavra, não o efeito. */
-.gradient-text,
-.accent-text {
-  color: var(--accent);
-}
-
-/* Dica sob o botão de enviar enquanto ele está desabilitado: diz o que
-   falta, em vez de deixar a pessoa adivinhando. */
+/* Dica sob o botão de enviar: diz o que falta. */
 .form-hint {
   margin: var(--sp-2) 0 0;
-  font-size: 0.88rem;
+  font-size: var(--fs-sm);
   color: var(--text-dim);
   text-align: center;
 }
@@ -393,9 +397,9 @@ hr {
   left: var(--sp-4);
   top: -100px;
   z-index: 999;
-  background: var(--blue);
-  color: #fff;
-  font-weight: 700;
+  background: var(--papel);
+  color: var(--navy);
+  font-weight: 600;
   padding: var(--sp-3) var(--sp-5);
   border-radius: var(--r-md);
   transition: top var(--dur) var(--ease-out);
@@ -407,15 +411,12 @@ hr {
 
 .rule {
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+  background: var(--line);
   border: 0;
   margin: 0;
 }
 
-/* ---------- ícones ----------
-   Todo <svg> do conjunto de ícones entra como bloco: assim ele não herda
-   o espaço extra que a linha de texto reservaria embaixo, e a cor vem do
-   contexto por currentColor. */
+/* ---------- ícones ---------- */
 .icon {
   display: block;
   flex: none;
@@ -437,9 +438,7 @@ hr {
 }
 
 /* ---------- impressão (política, termos e qualquer página) ----------
-   Papel branco e texto escuro — o navegador não imprime o fundo marinho —,
-   tudo o que entra em cena ao rolar já visível e nada fixo por cima do
-   texto (cabeçalho, avisos, barra de chamada, fundo animado). */
+   Papel branco e texto escuro, tudo visível e nada fixo por cima do texto. */
 @media print {
   :root,
   .on-dark,
@@ -463,8 +462,7 @@ hr {
     background: #fff !important;
     color: #000;
   }
-  .reveal,
-  .headline__word {
+  .reveal {
     opacity: 1 !important;
     animation: none !important;
     transform: none !important;
@@ -473,7 +471,6 @@ hr {
   .drawer,
   .cookie-notice,
   .sticky-cta,
-  .ambient,
   .skip-link {
     display: none !important;
   }

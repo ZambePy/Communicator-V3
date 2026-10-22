@@ -81,6 +81,24 @@ describe('/baixar', () => {
     expect(screen.queryByText(/Download a partir de/)).not.toBeInTheDocument()
   })
 
+  it('o passo da calibração diz quanto tempo leva: cerca de um minuto', () => {
+    // A auditoria de 19/10/2026 mediu ~40 s de coleta (até ~50 s com as esperas);
+    // o texto anterior dizia "meio minuto".
+    montar()
+    expect(screen.getByText(/Leva cerca de um minuto\./)).toBeInTheDocument()
+    expect(screen.queryByText(/meio minuto/)).not.toBeInTheDocument()
+  })
+
+  it('no computador, o painel do Communicator não repete o app do cuidador, que tem o card dele', () => {
+    montar()
+    // O card do Cuidador é o único lugar da página com o app de Android.
+    expect(screen.queryByRole('region', { name: 'IrisFlow Cuidador para Android' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'veja se o seu computador funciona' })).toHaveAttribute(
+      'href',
+      '/meu-computador',
+    )
+  })
+
   it('sem o app publicado nas lojas, os dois selos ficam "em breve" e levam à disponibilidade', () => {
     montar()
     expect(screen.getByRole('link', { name: 'Google Play, para Android: em breve' })).toHaveAttribute(

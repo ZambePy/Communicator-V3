@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { CodigoDeVerificacao } from '@/components/beta/CodigoDeVerificacao'
 import { FormularioPesquisa } from '@/components/beta/FormularioPesquisa'
@@ -8,6 +7,7 @@ import { CompatCheck } from '@/components/sections/CompatCheck'
 import { Button } from '@/components/ui/Button'
 import { Card, CardIcon } from '@/components/ui/Card'
 import { DownloadPanel } from '@/components/ui/DownloadPanel'
+import { ApkDoRelease } from '@/components/ui/BaixarApk'
 import { LevarAoComputador } from '@/components/ui/LevarAoComputador'
 import { SelosDasLojas } from '@/components/ui/SelosDasLojas'
 import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
@@ -30,7 +30,6 @@ import {
   lerInscricaoPendente,
 } from '@/lib/inscricaoPendente'
 import {
-  APP_CUIDADOR_URL,
   fetchPerfilBasico,
   markBetaDownload,
   ApiError,
@@ -44,6 +43,7 @@ import { SENHA_MINIMA, validar } from '@/utils/validation'
 import './checkout.css'
 import './sucesso.css'
 import './beta.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 /* ============================================================
    Página /beta — a inscrição inteira, em quatro etapas com a trilha
@@ -75,7 +75,7 @@ const O_QUE_RECEBE: { icon: IconName; title: string; text: string }[] = [
   {
     icon: 'pessoas',
     title: 'O app do cuidador no celular',
-    text: 'O que o paciente escreve com os olhos chega ao celular da família; o que a família responde é falado na tela. Opcional.',
+    text: 'O que a pessoa escreve com os olhos chega ao celular da família. O que a família responde é falado na tela dela. É opcional.',
   },
   {
     icon: 'conversa',
@@ -236,18 +236,13 @@ function CriarConta({ program }: { program: BetaProgram }) {
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container flow__inner beta">
         <div className="beta__abertura">
           <div className="beta__pitch">
-            <Reveal anim="fade">
-              <span className="eyebrow">Programa beta · gratuito</span>
-            </Reveal>
-
             <Reveal anim="up">
               <h1 className="flow__title beta__titulo">
-                Use o {BRAND.product} de graça durante a beta.
+                Use o {BRAND.product} de graça na beta.
               </h1>
             </Reveal>
 
@@ -261,8 +256,8 @@ function CriarConta({ program }: { program: BetaProgram }) {
                     </span>
                   </p>
                   <p className="lead flow__lead">
-                    Crie sua conta, responda uma pesquisa rápida e baixe o aplicativo. Sem cartão e
-                    sem cobrança. {PRIVACY_LINE}
+                    Crie a conta, responda a uma pesquisa rápida e baixe o aplicativo. Sem cartão.{' '}
+                    {PRIVACY_LINE}
                   </p>
                 </>
               ) : (
@@ -275,9 +270,8 @@ function CriarConta({ program }: { program: BetaProgram }) {
                     </span>
                   </p>
                   <p className="lead flow__lead">
-                    Crie sua conta agora e responda uma pesquisa rápida: no dia do lançamento, o
-                    download aparece para você aqui e no seu perfil. Sem cartão e sem cobrança.{' '}
-                    {PRIVACY_LINE}
+                    Crie a conta agora e responda a uma pesquisa rápida. No dia do lançamento, o
+                    download aparece aqui e no seu perfil. Sem cartão. {PRIVACY_LINE}
                   </p>
                 </>
               )}
@@ -465,7 +459,7 @@ function ConfirmeOCodigo({
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
+      <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel beta__codigo">
           <Stepper steps={ETAPAS_DA_BETA} current={1} />
@@ -548,7 +542,7 @@ function Pesquisa({ program }: { program: BetaProgram }) {
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
+      <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel">
           <Stepper steps={ETAPAS_DA_BETA} current={2} />
@@ -602,7 +596,7 @@ function Download({ account, program }: { account: Account; program: BetaProgram
       { dt: 'Computador', dd: osLabel(account.profile.os) || '—' },
       {
         dt: 'Situação',
-        dd: naBeta ? `Inscrição completa · acesso gratuito até ${acessoAte}` : 'Conta ativa',
+        dd: naBeta ? `Inscrição completa, com acesso gratuito até ${acessoAte}` : 'Conta ativa',
       },
     ],
     [account, naBeta, acessoAte],
@@ -610,8 +604,7 @@ function Download({ account, program }: { account: Account; program: BetaProgram
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel beta__trilha-final">
           <Stepper steps={ETAPAS_DA_BETA} current={lancou ? 4 : 3} />
@@ -706,12 +699,11 @@ function Download({ account, program }: { account: Account; program: BetaProgram
             </div>
           </div>
           <div className="beta__cuidador-acoes">
+            {/* No celular, o APK é o que dá para instalar ali mesmo. No
+                computador ele já está no painel acima, com o código QR que
+                leva o celular de quem cuida até ele (relato de 19/10/2026). */}
+            {ehCelular() && <ApkDoRelease lancou={lancou} liberaEm={program.launchAt} />}
             <SelosDasLojas />
-            {lancou && APP_CUIDADOR_URL && (
-              <a className="link-seta" href={APP_CUIDADOR_URL}>
-                Baixar o APK da beta
-              </a>
-            )}
             <Link to="/cuidador" className="link-seta">
               O que o app faz
             </Link>
@@ -753,13 +745,13 @@ function Download({ account, program }: { account: Account; program: BetaProgram
 function InscricoesFechadas({ program }: { program: BetaProgram }) {
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
+      <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
         <span className="eyebrow">Programa beta</span>
         <h1 className="flow__title">As inscrições da beta estão fechadas no momento.</h1>
         <p className="lead flow__lead">
           A turma atual vai até {formatDate(program.endsAt)}. Deixe seu contato e avisamos quando
-          abrir de novo — quem já se inscreveu continua entrando normalmente.
+          abrir de novo. Quem já se inscreveu continua entrando normalmente.
         </p>
         <div className="beta__closed-actions">
           <Button to="/contato">Deixar meu contato</Button>
@@ -786,6 +778,7 @@ export default function Beta() {
   if (authenticated && sessionError) {
     return (
       <div className="flow">
+        <FundoDaPagina variante="calmo" />
         <div className="container container--narrow flow__inner">
           <div className="notice notice--warn" role="alert">
             <span className="notice__icon">
@@ -793,7 +786,7 @@ export default function Beta() {
             </span>
             <p>
               Não foi possível carregar os dados da sua conta ({sessionError}). Você continua
-              conectado — isto é uma falha de conexão com o servidor, não um problema na inscrição.
+              conectado. Isto é uma falha de conexão com o servidor, não um problema na inscrição.
             </p>
           </div>
           <Button onClick={() => void refresh()}>Tentar de novo</Button>

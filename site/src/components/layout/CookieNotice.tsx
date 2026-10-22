@@ -70,19 +70,21 @@ export function CookieNotice() {
           </p>
         </div>
         <div className="cookie-notice__actions">
+          {/* Os dois com o mesmo peso e cada um dizendo o que faz (auditoria P2-11,
+              21/10/2026): antes o destaque era "Entendi", que aceitava sem dizer. */}
           <button
             type="button"
             className="btn btn--secondary btn--md cookie-notice__btn"
             onClick={() => saveConsent('refused')}
           >
-            <span className="btn__content">Recusar estatísticas</span>
+            <span className="btn__content">Só o essencial</span>
           </button>
           <button
             type="button"
-            className="btn btn--primary btn--md cookie-notice__btn"
+            className="btn btn--secondary btn--md cookie-notice__btn"
             onClick={() => saveConsent('accepted')}
           >
-            <span className="btn__content">Entendi</span>
+            <span className="btn__content">Aceitar estatísticas</span>
           </button>
         </div>
       </div>

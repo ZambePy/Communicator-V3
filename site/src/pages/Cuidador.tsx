@@ -1,18 +1,19 @@
 import { Link } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { CelularDemo, CelularTela } from '@/components/home/Aparelhos'
 import { QrCode } from '@/components/ui/QrCode'
 import { SelosDasLojas } from '@/components/ui/SelosDasLojas'
+import { ApkDoRelease } from '@/components/ui/BaixarApk'
 import { Icon } from '@/components/ui/Icon'
+import { FraseQueChega } from '@/components/cuidador/FraseQueChega'
 import { CUIDADOR, PASSOS_DO_CUIDADOR, RECURSOS_DO_CUIDADOR } from '@/data/cuidador'
 import { SITE_URL, BETA, BETA_CTA } from '@/data/content'
 import { DEMO_CUIDADOR } from '@/data/home'
 import { LOJAS } from '@/lib/lojas'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
-import { diaEMes } from '@/lib/lancamento'
 import '@/components/home/home.css'
 import './cuidador.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 /**
  * O IrisFlow Cuidador: a página do app de celular. Pensada primeiro para o
@@ -24,8 +25,8 @@ export default function Cuidador() {
   const lancou = useJaLancou(program.launchAt)
   return (
     <>
+      <FundoDaPagina />
       <section className="cuidador-hero on-dark" aria-labelledby="cuidador-titulo">
-        <AmbientBackground />
         <div className="container cuidador-hero__grade">
           <div className="cuidador-hero__texto">
             <img
@@ -61,7 +62,7 @@ export default function Cuidador() {
         <div className="container">
           <Reveal anim="up">
             <h2 id="recursos-titulo" className="titulo-capitulo">
-              Tudo o que importa, no bolso.
+              O que você precisa, no celular.
             </h2>
           </Reveal>
           {/* No celular a lista rola na horizontal: focável, para rolar pelo teclado. */}
@@ -82,17 +83,21 @@ export default function Cuidador() {
       </section>
 
       <section className="cuidador-passos on-dark" aria-labelledby="passos-titulo">
-        <AmbientBackground variante="suave" />
         <div className="container">
-          <Reveal anim="up">
-            <h2 id="passos-titulo" className="titulo-capitulo">
-              Uma conta, três lugares.
-            </h2>
-            <p className="texto-capitulo">
-              O site, o computador do paciente e o celular de quem cuida usam a mesma conta. Não
-              existe código de pareamento para digitar.
-            </p>
-          </Reveal>
+          {/* A frase indo do computador ao celular: o que a mesma conta faz
+              (o único trecho da página que se mexe sozinho, uma vez). */}
+          <div className="cuidador-passos__cabeca">
+            <Reveal anim="up">
+              <h2 id="passos-titulo" className="titulo-capitulo">
+                Uma conta, três lugares.
+              </h2>
+              <p className="texto-capitulo">
+                O site, o computador da pessoa e o celular de quem cuida usam a mesma conta. Não
+                existe código de pareamento para digitar.
+              </p>
+            </Reveal>
+            <FraseQueChega />
+          </div>
           <ol className="passos">
             {PASSOS_DO_CUIDADOR.map((p, i) => (
               <Reveal key={p.titulo} as="li" anim="up" delay={90 * i} className="passo">
@@ -123,18 +128,11 @@ export default function Cuidador() {
                 <strong>Android</strong>
                 <span>
                   {LOJAS.googlePlay ? 'Google Play.' : 'Chega ao Google Play em breve.'}
-                  {/* A mesma trava dos instaladores do computador: o arquivo sai
-                      no dia do lançamento da beta. */}
-                  {LOJAS.apk &&
-                    (lancou ? (
-                      <>
-                        {' '}
-                        Na beta, como <a href={LOJAS.apk}>arquivo APK</a>, para quem testa antes da loja.
-                      </>
-                    ) : (
-                      <> Na beta, o arquivo APK sai no dia do lançamento, {diaEMes(program.launchAt)}.</>
-                    ))}
+                  {LOJAS.apk && ' Na beta, instale pelo arquivo APK:'}
                 </span>
+                {/* A mesma trava dos instaladores do computador: o arquivo sai
+                    no dia do lançamento da beta. */}
+                <ApkDoRelease lancou={lancou} liberaEm={program.launchAt} />
               </li>
               <li>
                 <strong>iPhone</strong>
@@ -146,7 +144,7 @@ export default function Cuidador() {
           <p className="cuidador-disponivel__privacidade">
             <Icon name="cadeado" size={22} />
             <span>
-              O app recebe só o que o paciente escolheu dizer, os alertas e os números de uso. Nenhuma
+              O app recebe só o que a pessoa escolheu dizer, os alertas e os números de uso. Nenhuma
               imagem da câmera sai do computador.
             </span>
           </p>

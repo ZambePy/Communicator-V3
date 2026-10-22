@@ -29,6 +29,12 @@ export interface DwellSample {
   /** Nunca calibrado: o ponto é o fallback do nariz, não olhar. Bloqueia tudo. */
   uncalibrated: boolean;
   eyeState: EyeState;
+  /**
+   * `false` = a posição não foi medida neste quadro (a última, repetida: quadro
+   * descartado por contraluz, predição que falhou, coordenada não finita).
+   * Ausente = medida. Ver o ramo `sem-medida` em `stepDwell`.
+   */
+  posicaoMedida?: boolean;
 }
 
 /** O alvo sob o olhar, já resolvido pelo chamador (que é quem fala com o DOM). */
@@ -184,6 +190,7 @@ export interface DwellOutcome {
     | null
     | 'uncalibrated'
     | 'no-face'
+    | 'sem-medida'
     | 'eyes-closed'
     | 'refractory'
     | 'degraded'
@@ -252,6 +259,17 @@ export function stepDwell(
   if (!sample.hasFace) {
     const perdidoHa = state.lastValidTs === null ? Infinity : now - state.lastValidTs;
     return parar('no-face', { preservarProgresso: perdidoHa < config.lostResetMs });
+  }
+
+  // Posição NÃO medida (relato de 19/10/2026): é a última válida, repetida —
+  // perfeitamente imóvel, exatamente o que o dwell leria como "olhando firme".
+  // Contar sobre ela completava qualquer botão debaixo do ponto congelado e,
+  // em degradado, a Emergência — disparada por ninguém. Tratada como o rosto
+  // perdido, e não como olho fechado: não se sabe para onde o olhar foi, então
+  // pausa curta e, passado o `lostResetMs`, zera.
+  if (sample.posicaoMedida === false) {
+    const semMedidaHa = state.lastValidTs === null ? Infinity : now - state.lastValidTs;
+    return parar('sem-medida', { preservarProgresso: semMedidaHa < config.lostResetMs });
   }
 
   // Olhos fechados PAUSAM. Nunca completam um dwell, e nunca zeram:

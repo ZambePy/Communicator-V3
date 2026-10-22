@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { PasswordStrength } from '@/components/ui/PasswordStrength'
 import { validar } from '@/utils/validation'
 import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Field } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
@@ -13,6 +12,7 @@ import { useAccount } from '@/context/AccountContext'
 import { emailDaSessao, updatePassword, verificarLinkDoEmail } from '@/services/api'
 import { motivoDoLinkNaUrl } from '@/utils/linkDeEmail'
 import './checkout.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 type Form = { password: string; confirm: string }
 
@@ -84,12 +84,22 @@ export default function NovaSenha() {
 
   const values = useMemo(() => ({ password, confirm }), [password, confirm])
   const v = useFormValidation(values, RULES)
+  // O botão não fica apagado: apertar com o que falta diz o motivo e leva o
+  // foco ao primeiro campo com problema (P2-10, como no /entrar).
+  const [tentou, setTentou] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setTentou(true)
     v.touch('password', 'confirm')
-    if (!v.isValid()) return
+    if (!v.isValid()) {
+      // Os dois campos de senha, na ordem da tela.
+      const campos = formRef.current?.querySelectorAll<HTMLElement>('input[type="password"]')
+      campos?.[v.errors.password ? 0 : 1]?.focus()
+      return
+    }
 
     setLoading(true)
     try {
@@ -109,6 +119,11 @@ export default function NovaSenha() {
     }
   }
 
+  const faltando = [
+    ...(v.errors.password ? ['nova senha'] : []),
+    ...(v.errors.confirm ? ['confirmação da senha'] : []),
+  ]
+
   /* A sessão de recuperação é aberta pelo próprio supabase-js ao ler o
      token da URL; o AccountContext espera isso terminar antes de dizer se
      há sessão. Sem esta espera, a tela diria "link inválido" por um instante
@@ -117,8 +132,7 @@ export default function NovaSenha() {
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container flow__inner" style={{ maxWidth: 520 }}>
         <Reveal anim="fade">
           <span className="eyebrow">Acesso</span>
@@ -152,7 +166,7 @@ export default function NovaSenha() {
                 </Button>
               </>
             ) : (
-              <form onSubmit={submit} noValidate>
+              <form ref={formRef} onSubmit={submit} noValidate>
                 {emailDaConta && (
                   <p className="flow__lead nova-senha__conta">
                     Senha da conta <strong>{emailDaConta}</strong>.
@@ -192,20 +206,19 @@ export default function NovaSenha() {
                   </div>
                 )}
 
-                <Button
-                  type="submit"
-                  full
-                  size="lg"
-                  loading={loading}
-                  disabled={!v.isValid() || loading}
-                >
+                <Button type="submit" full size="lg" loading={loading} disabled={loading}>
                   {loading ? 'Salvando…' : 'Salvar nova senha'}
                 </Button>
+                {tentou && faltando.length > 0 && (
+                  <p className="form-hint" role="status" aria-live="polite">
+                    Para salvar, falta preencher ou corrigir: {faltando.join(' e ')}.
+                  </p>
+                )}
               </form>
             )}
 
-            <p className="flow__foot" style={{ marginBottom: 0 }}>
-              <Link to="/entrar" className="underline-grow" style={{ color: 'var(--ok)' }}>
+            <p className="flow__foot flow__foot--junto">
+              <Link to="/entrar" className="underline-grow">
                 Voltar para o acesso
               </Link>
             </p>

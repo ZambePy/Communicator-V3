@@ -226,7 +226,20 @@ export const LicenseProvider: React.FC<{
     const vigente = () => geracao.current === minhaGeracao;
     // Sem licença gravada, a resposta sai na hora — sem esperar o cofre —, e a
     // tela de login não pisca um "Carregando…" à toa.
-    const gravada = temLicencaGravada(lerMetadados()) ? await ler() : null;
+    //
+    // Relato de 18/10/2026 (auditoria de falhas silenciosas, item 7): uma
+    // exceção em qualquer ponto daqui deixava o status em `checking` para
+    // sempre — todas as telas protegidas em "Carregando…", em todo boot,
+    // porque a falha se repetia. Agora ler a licença gravada não lança (sem
+    // leitura não há licença: login), e a verificação que lança vale como
+    // "sem conexão": a carência offline decide.
+    let gravada: LicenceGravada | null = null;
+    try {
+      gravada = temLicencaGravada(lerMetadados()) ? await ler() : null;
+    } catch (e) {
+      console.warn('[licenca] não foi possível ler a licença gravada; pedindo login:', e);
+      gravada = null;
+    }
     // Ler o token do cofre é assíncrono: um login no meio do caminho vale mais.
     if (!vigente()) return;
     if (!gravada) {
@@ -236,7 +249,13 @@ export const LicenseProvider: React.FC<{
     }
 
     const device = getDeviceBinding();
-    const r = await service.verify(gravada.token, getDeviceId());
+    let r: Awaited<ReturnType<LicenseService['verify']>>;
+    try {
+      r = await service.verify(gravada.token, getDeviceId());
+    } catch (e) {
+      console.warn('[licenca] a verificação lançou uma exceção; tratando como sem conexão (carência offline):', e);
+      r = { ok: false, reason: 'unreachable' };
+    }
     // Houve login, transferência ou logout enquanto a rede respondia: a
     // resposta é sobre um estado que já não existe. Descarta em silêncio.
     if (!vigente()) return;
@@ -288,7 +307,9 @@ export const LicenseProvider: React.FC<{
   }, [service]);
 
   useEffect(() => {
-    void verificar();
+    // `verificar` não lança; o `catch` é a última rede, para uma promessa
+    // rejeitada nunca passar calada.
+    verificar().catch((e) => console.error('[licenca] verificação falhou fora do previsto:', e));
   }, [verificar]);
 
   // Bloqueado só por falta de internet: tenta de novo quando a conexão volta e,
@@ -298,7 +319,9 @@ export const LicenseProvider: React.FC<{
   // não é apagada nesse bloqueio, então a verificação tem o que conferir.
   useEffect(() => {
     if (status !== 'blocked' || blockedReason !== 'grace-expired') return;
-    const tentar = () => void verificar();
+    const tentar = () => {
+      verificar().catch((e) => console.error('[licenca] nova verificação falhou fora do previsto:', e));
+    };
     window.addEventListener('online', tentar);
     const id = setInterval(tentar, REVERIFICACAO_SEM_INTERNET_MS);
     return () => {

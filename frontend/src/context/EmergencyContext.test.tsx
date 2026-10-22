@@ -3,6 +3,7 @@ import { render, screen, act, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { EmergencyProvider } from './EmergencyContext';
+import { _reiniciarSocorroParaTestes } from '../services/emergencia/pedidoDeSocorro';
 
 let testIsDegraded = false;
 vi.mock('./GazeContext', () => ({
@@ -24,6 +25,7 @@ describe('EmergencyContext — Sistema de Emergência Canônica', () => {
     vi.restoreAllMocks();
     testIsDegraded = false;
     testIsCaregiver = false;
+    _reiniciarSocorroParaTestes();
   });
 
   it.each(['/menu', '/settings', '/caregiver', '/conta', '/login', '/', '/profiles'])(
@@ -221,5 +223,68 @@ describe('EmergencyContext — Sistema de Emergência Canônica', () => {
     fireEvent.click(banner);
 
     expect(screen.getByText('Tela de Calibração')).toBeInTheDocument();
+  });
+});
+
+describe('EmergencyContext — durante a medição o olhar não aciona a Emergência', () => {
+  // Relato de 18/10/2026: no teste de precisão, o tremor do olhar em volta do
+  // alvo do canto enchia o dwell do botão de Emergência sem querer. Na medição
+  // o botão fica acionável só pelo mouse e pelo teclado.
+  beforeEach(() => _reiniciarSocorroParaTestes());
+  it('com o ponto do teste de precisão na tela, o botão sai do dwell mas o clique continua valendo', async () => {
+    vi.useFakeTimers();
+    try {
+      const ponto = document.createElement('div');
+      ponto.id = 'accuracy-dot';
+      document.body.appendChild(ponto);
+      render(
+        <MemoryRouter initialEntries={['/calibration-check']}>
+          <EmergencyProvider>
+            <div>Teste</div>
+          </EmergencyProvider>
+        </MemoryRouter>
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(350);
+      });
+      const botao = screen.getByRole('button', { name: /Emergência/i });
+      expect(botao.getAttribute('data-no-dwell')).toBe('true');
+      fireEvent.click(botao);
+      expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+      ponto.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fora da medição o dwell continua ligado', () => {
+    render(
+      <MemoryRouter initialEntries={['/menu']}>
+        <EmergencyProvider>
+          <div>Menu</div>
+        </EmergencyProvider>
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('button', { name: /Emergência/i }).getAttribute('data-no-dwell')).toBeNull();
+  });
+
+  it('o CANCELAR da contagem tem o alvo mínimo (5°) nos dois eixos (revisão de UX de 20/10/2026, achado 5)', () => {
+    render(
+      <MemoryRouter initialEntries={['/menu']}>
+        <EmergencyProvider>
+          <div>Conteúdo</div>
+        </EmergencyProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Emergência/i }));
+    const cancelar = screen.getByRole('button', { name: /CANCELAR/i });
+    // Era 320×84 px (~2,7° de altura). O token é o mesmo que `alvoMinimoPx()` lê.
+    expect(cancelar.style.height).toMatch(/^var\(--gaze-target-min, \d+px\)$/);
+    expect(cancelar.style.width).toContain('--gaze-target-min');
+    expect(cancelar.style.width).toContain('320px');
+    // Nunca mais largo que a janela. (Que a coluna cabe em 1024×640 o jsdom não
+    // mede — ele nem guarda `clamp()` —: conferir na janela pequena do Windows.)
+    expect(cancelar.style.maxWidth).toBe('90vw');
+    fireEvent.click(cancelar);
   });
 });

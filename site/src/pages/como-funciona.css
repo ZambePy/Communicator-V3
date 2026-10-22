@@ -9,6 +9,26 @@
   max-width: 70ch;
 }
 
+/* ---------- o teclado escrevendo com o olhar (rodada 3, 21/10/2026) ----------
+   Veio da abertura da home: o texto à esquerda, o teclado à direita; no
+   celular, um embaixo do outro. */
+.como__escrita-grade {
+  display: grid;
+  gap: var(--sp-7);
+  align-items: center;
+}
+
+.como__teclado {
+  margin: 0;
+}
+
+@media (min-width: 1000px) {
+  .como__escrita-grade {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(40px, 6vw, 96px);
+  }
+}
+
 /* A demonstração interativa entra numa faixa escura, como o app. */
 .como__demo .demo {
   background: var(--bg);
@@ -20,20 +40,17 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: var(--sp-4);
+  gap: var(--sp-7) var(--sp-6);
 }
 
 .condicoes__item {
   margin: 0;
-  padding: var(--sp-5);
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line);
-  background: var(--surface);
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line-strong);
 }
 
 .condicoes__item--outra {
-  background: transparent;
-  border-style: dashed;
+  border-top-style: dashed;
 }
 
 .condicoes__item--outra .link-seta {
@@ -41,18 +58,13 @@
 }
 
 .condicoes__icone {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
+  display: block;
   margin-bottom: var(--sp-4);
-  border-radius: 12px;
   color: var(--accent);
-  background: var(--accent-soft);
 }
 
 .condicoes__titulo {
-  font-size: 1.15rem;
+  font-size: 1.3125rem;
   margin-bottom: var(--sp-2);
 }
 
@@ -66,9 +78,7 @@
   gap: 8px;
   align-items: flex-start;
   margin: var(--sp-4) 0 0;
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--line);
-  font-size: 0.92rem;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   color: var(--text-dim);
 }
@@ -107,16 +117,18 @@
   margin-top: 0;
 }
 
-/* No celular, as condições deslizam de lado em vez de empilhar seis cartões. */
+/* No celular, as condições deslizam de lado em vez de empilhar seis cartões,
+   de borda a borda da tela (a margem e o recuo seguem o --gutter do
+   .container; relato de 19/10/2026). */
 @media (max-width: 719px) {
   .condicoes {
-    margin-inline: calc(-1 * var(--sp-5));
-    padding: 0 var(--sp-5) var(--sp-3);
+    margin-inline: calc(-1 * var(--gutter));
+    padding: 0 var(--gutter) var(--sp-3);
     grid-auto-flow: column;
     grid-auto-columns: min(84%, 320px);
     overflow-x: auto;
     scroll-snap-type: x mandatory;
-    scroll-padding-inline: var(--sp-5);
+    scroll-padding-inline: var(--gutter);
   }
   .condicoes__item {
     scroll-snap-align: start;

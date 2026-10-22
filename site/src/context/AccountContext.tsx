@@ -7,7 +7,14 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { mensagemDeErro, supabase } from '@/lib/supabase'
+import {
+  aoCarregarCliente,
+  chaveDaSessao,
+  clienteCarregado,
+  clienteSeHouverSessao,
+  haSessaoGuardada,
+  mensagemDeErro,
+} from '@/lib/supabase'
 import * as api from '@/services/api'
 import type { PlanId } from '@/data/content'
 
@@ -20,6 +27,14 @@ import type { PlanId } from '@/data/content'
 
    Nada aqui grava em localStorage. Quem persiste a sessão é o próprio
    supabase-js; a conta é sempre relida do banco.
+
+   O supabase-js é carregado sob demanda (lib/supabase.ts): quem abre o site
+   sem sessão guardada não o baixa, e a sessão inicial se resolve na hora
+   (`authenticated` falso, `loading` falso). Com sessão guardada, ou com os
+   tokens de um link de e-mail no endereço, o cliente é carregado aqui, no
+   primeiro quadro, como antes. Quem entra depois (api.signIn carrega o
+   cliente) é ouvido por aoCarregarCliente, e o login feito em outra aba
+   chega pelo evento `storage`.
 
    Na beta, "sessão aberta" e "conta" são coisas diferentes: a conta
    (`account`, da view my_account) só existe depois da pesquisa rápida, que
@@ -191,9 +206,17 @@ export function AccountProvider({ children }: { children: ReactNode }) {
     // uso só porque o Wi-Fi oscilou.
     let temSessao = false
     try {
-      const { data } = (await supabase?.auth.getSession()) ?? { data: { session: null } }
+      const sb = await clienteSeHouverSessao()
+      const { data } = (await sb?.auth.getSession()) ?? { data: { session: null } }
       temSessao = Boolean(data.session)
-    } catch {
+    } catch (e) {
+      if (haSessaoGuardada()) {
+        // Há sessão guardada, mas o pedaço do supabase-js não chegou (sem
+        // rede, ou sumiu num deploy): não é "saiu da conta". O estado fica
+        // como estava e o aviso diz o que houve.
+        setSessionError(mensagemDeErro(e))
+        return
+      }
       // Sem cliente configurado, ou storage do navegador bloqueado: não existe
       // sessão utilizável, e aqui deslogar é o comportamento correto.
       setAuthenticated(false)
@@ -223,32 +246,50 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       if (vivo) setLoading(false)
     })
 
-    const { data: sub } = supabase?.auth.onAuthStateChange((evento) => {
+    // Os eventos do supabase-js só existem depois de o cliente existir: ou já
+    // existe (sessão guardada), ou vem quando alguém o pedir (entrar, contato).
+    let assinatura: { unsubscribe: () => void } | null = null
+    const largar = aoCarregarCliente((sb) => {
       if (!vivo) return
-      if (evento === 'SIGNED_OUT') {
-        setAccount(null)
-        setAuthenticated(false)
-        setSessionError(null)
-        setRecuperandoSenha(false)
-        return
-      }
-      // PASSWORD_RECOVERY: o usuário chegou pelo link do e-mail de
-      // redefinição e o supabase-js abriu a sessão a partir da URL. Sem
-      // reler aqui, /nova-senha veria `authenticated` falso e diria que o
-      // link não vale. A marca faz qualquer página encaminhar para lá.
-      if (evento === 'PASSWORD_RECOVERY') setRecuperandoSenha(true)
-      if (
-        evento === 'SIGNED_IN' ||
-        evento === 'TOKEN_REFRESHED' ||
-        evento === 'PASSWORD_RECOVERY'
-      ) {
-        void refresh()
-      }
-    }) ?? { data: { subscription: null } }
+      const { data: sub } = sb.auth.onAuthStateChange((evento) => {
+        if (!vivo) return
+        if (evento === 'SIGNED_OUT') {
+          setAccount(null)
+          setAuthenticated(false)
+          setSessionError(null)
+          setRecuperandoSenha(false)
+          return
+        }
+        // PASSWORD_RECOVERY: o usuário chegou pelo link do e-mail de
+        // redefinição e o supabase-js abriu a sessão a partir da URL. Sem
+        // reler aqui, /nova-senha veria `authenticated` falso e diria que o
+        // link não vale. A marca faz qualquer página encaminhar para lá.
+        if (evento === 'PASSWORD_RECOVERY') setRecuperandoSenha(true)
+        if (
+          evento === 'SIGNED_IN' ||
+          evento === 'TOKEN_REFRESHED' ||
+          evento === 'PASSWORD_RECOVERY'
+        ) {
+          void refresh()
+        }
+      })
+      assinatura = sub.subscription
+    })
+
+    // Login ou logout em OUTRA aba, com o cliente ainda não carregado nesta:
+    // o supabase-js avisa as abas que já o carregaram; as demais ficam
+    // sabendo pela mudança da chave da sessão no armazenamento.
+    const aoMudarOArmazenamento = (e: StorageEvent) => {
+      if (e.key !== chaveDaSessao() || clienteCarregado()) return
+      void refresh()
+    }
+    window.addEventListener('storage', aoMudarOArmazenamento)
 
     return () => {
       vivo = false
-      sub.subscription?.unsubscribe()
+      largar()
+      assinatura?.unsubscribe()
+      window.removeEventListener('storage', aoMudarOArmazenamento)
     }
   }, [refresh])
 

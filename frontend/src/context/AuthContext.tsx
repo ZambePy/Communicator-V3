@@ -1,6 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { env } from '../config/env';
-import { definirPerfilAtivo } from '../utils/clinicalLogger';
+import { chaveDoPerfil, definirPerfilAtivo } from '../utils/clinicalLogger';
+import { chavesDoAcompanhamentoDoPerfil } from '../services/evolucao/chaves';
+import { chavesLocaisDoPaciente } from '../services/backup/chaves';
+import { armazemDaVozGuardada } from '../services/voz/vozGuardada/armazem';
+import { removerVozClonadaDoPerfil } from '../services/voz/removerVozDoPerfil';
 import { apagarModeloDoPerfil, definirPerfilDoAssistente } from '../services/assistente/armazenamento';
 import { definirPacienteDaCalibracao, removerCalibracoesDoPaciente } from '@tracker/calibration';
 import { migrarDonoLegadoDaCalibracao } from '../services/local/donoDaCalibracao';
@@ -29,7 +33,16 @@ interface AuthContextData {
   authToken: string | null;
   selectProfile: (p: Profile) => void;
   createProfile: (dados: NovoPerfil) => Profile;
+  /**
+   * Remove o paciente e TUDO o que é dele neste computador. O perfil e o
+   * `localStorage` saem na hora; a voz guardada (gravações e termo) e a voz
+   * clonada importada (só se o termo dela for deste paciente), que moram no
+   * processo principal, saem logo depois — se não puderem sair, `avisoDaRemocao` diz.
+   */
   removeProfile: (id: string) => void;
+  /** Uma frase pronta quando a remoção deixou algo para trás (a voz guardada ou a clonada); `null` quando saiu tudo. */
+  avisoDaRemocao: string | null;
+  dispensarAvisoDaRemocao: () => void;
   loginCaregiver: (pin: string) => boolean;
   /**
    * Fecha SÓ a área do cuidador; o paciente continua escolhido. É o "Encerrar
@@ -39,6 +52,18 @@ interface AuthContextData {
   /** Sai de tudo: área do cuidador E paciente escolhido. */
   logout: () => void;
 }
+
+/** A remoção tirou o perfil e os dados locais, mas as gravações da voz dele ficaram no computador. */
+export const AVISO_DA_VOZ_NAO_APAGADA =
+  'O perfil foi removido, mas não foi possível apagar as gravações da voz dele deste computador agora. Elas continuam guardadas; feche o IrisFlow e tente remover de novo, ou peça ajuda ao suporte.';
+
+/** O perfil saiu, mas a voz personalizada (clonada) importada dele ficou: a pessoa precisa saber onde removê-la. */
+export const AVISO_DA_VOZ_CLONADA_NAO_APAGADA =
+  'O perfil foi removido, mas não foi possível apagar a voz personalizada dele deste computador agora. Ela continua guardada: abra Configurações, Voz personalizada, e use “Remover voz”, ou peça ajuda ao suporte.';
+
+/** As duas coisas ficaram: as gravações e a voz personalizada. Um aviso só, para não empilhar dois. */
+export const AVISO_DAS_DUAS_VOZES_NAO_APAGADAS =
+  'O perfil foi removido, mas não foi possível apagar as gravações da voz dele nem a voz personalizada deste computador agora. Elas continuam guardadas: a voz personalizada sai em Configurações, Voz personalizada, “Remover voz”; para as gravações, peça ajuda ao suporte.';
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
@@ -158,6 +183,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return criado;
   }, []);
 
+  const [avisoDaRemocao, setAvisoDaRemocao] = useState<string | null>(null);
+  const dispensarAvisoDaRemocao = useCallback(() => setAvisoDaRemocao(null), []);
+
   const removeProfile = useCallback((id: string) => {
     removerPerfil(id);
     // O que o assistente aprendeu com esse paciente sai junto: frases faladas
@@ -165,10 +193,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     apagarModeloDoPerfil(id);
     // As calibrações dele também (o mapeamento do olhar de uma pessoa).
     removerCalibracoesDoPaciente(id);
+    // E tudo o mais que é DELE no `localStorage` (revisão final, rodada 1, M4,
+    // 21/10/2026): o histórico clínico, o diário (sono, humor, nota), as perguntas
+    // ao médico, o uso da evolução, o painel do cuidador (diário e tarefas), os
+    // favoritos, o progresso do tutorial, as frases próprias da voz e o Preparo.
+    // Depois que o perfil some não há como ver nem apagar isto pela interface —
+    // tem de sair agora, e o backup "Tudo" não pode levá-lo a outro computador.
+    // Só as chaves DESTE id: as dos outros pacientes ficam como estão.
+    for (const chave of new Set([...chavesLocaisDoPaciente(id), ...chavesDoAcompanhamentoDoPerfil(id), chaveDoPerfil(id)])) {
+      try {
+        localStorage.removeItem(chave);
+      } catch (e) {
+        console.warn('[perfil] não foi possível apagar um dado local do paciente removido', chave, e);
+      }
+    }
     setProfiles((antes) => antes.filter((p) => p.id !== id));
     // Um perfil removido não pode continuar selecionado: a calibração
     // carregada ficaria sem dono e o app apontaria para algo que não existe.
     setCurrentProfile((atual) => (atual?.id === id ? null : atual));
+
+    // A voz guardada (gravações e termo) e a voz clonada importada moram no processo principal.
+    // Não impedem a remoção, mas a falha não é calada: vai para o console (uma vez por voz) e para
+    // a tela. A clonada é única por computador: só sai se o termo dela for DESTE paciente — quem
+    // confere é o processo principal (revisão final, rodada 2, N1, 21/10/2026).
+    const falhou = async (qual: string, apagar: () => Promise<{ ok: boolean; erro?: string }>): Promise<boolean> => {
+      let motivo: unknown;
+      try {
+        const r = await apagar();
+        if (r.ok) return false;
+        motivo = r.erro;
+      } catch (e) {
+        motivo = e;
+      }
+      console.warn(`[perfil] ${qual} do paciente removido não pôde ser apagada:`, motivo);
+      return true;
+    };
+    void Promise.all([
+      falhou('a voz guardada', () => armazemDaVozGuardada().apagarDoPerfil(id)),
+      falhou('a voz personalizada', () => removerVozClonadaDoPerfil(id)),
+    ]).then(([guardada, clonada]) => {
+      if (guardada && clonada) setAvisoDaRemocao(AVISO_DAS_DUAS_VOZES_NAO_APAGADAS);
+      else if (clonada) setAvisoDaRemocao(AVISO_DA_VOZ_CLONADA_NAO_APAGADA);
+      else if (guardada) setAvisoDaRemocao(AVISO_DA_VOZ_NAO_APAGADA);
+    });
   }, []);
 
   const loginCaregiver = (pin: string) => {
@@ -201,6 +268,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         selectProfile,
         createProfile,
         removeProfile,
+        avisoDaRemocao,
+        dispensarAvisoDaRemocao,
         loginCaregiver,
         encerrarAcessoDoCuidador,
         logout,

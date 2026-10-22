@@ -1,0 +1,375 @@
+/* "Teste com o seu olhar" (TesteAoVivo.tsx). Na página, o convite (ou a
+   frase do celular, ou o vídeo quando algo falha). No teste, a "sala": a
+   tela inteira, porque o olhar precisa de alvo grande — cada metade fica a
+   uns 9° do meio num notebook. O que chama a atenção são as duas palavras e
+   o anel que fecha com o olhar; o resto fica quieto. Só os tokens do site
+   (tokens.css), nada global. */
+
+/* ---------- na página ---------- */
+
+.ao-vivo__titulo {
+  margin: 0 0 var(--sp-4);
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  line-height: 1.25;
+}
+
+.ao-vivo__passos {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-5);
+  padding-left: 1.4em;
+  color: var(--text-soft);
+  max-width: 60ch;
+}
+
+.ao-vivo__privacidade {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-5);
+  max-width: 60ch;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+.ao-vivo__privacidade .icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ok);
+}
+
+.ao-vivo__versao-simples {
+  margin: 0 0 var(--sp-4);
+  max-width: 60ch;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+/* A câmera desligou porque a aba ficou escondida: um recado calmo, junto do botão. */
+.ao-vivo__aviso-da-aba {
+  margin: 0 0 var(--sp-4);
+  max-width: 60ch;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text);
+}
+
+.ao-vivo__dica {
+  margin: var(--sp-4) 0 0;
+  max-width: 60ch;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.ao-vivo__so-no-computador {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--text-soft);
+}
+
+.ao-vivo__alternativa {
+  display: grid;
+  justify-items: start;
+  gap: var(--sp-4);
+}
+
+.ao-vivo__falha {
+  margin: 0;
+  max-width: 64ch;
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+  color: var(--text);
+}
+
+/* Recebe o foco depois de uma falha (para o leitor de tela e o teclado), mas não é um controle. */
+.ao-vivo__falha:focus {
+  outline: none;
+}
+
+.ao-vivo__legenda {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.ao-vivo__video {
+  display: block;
+  width: 100%;
+  max-width: 760px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r-xl);
+  background: #000;
+  box-shadow: var(--shadow-lg);
+}
+
+/* ---------- a sala ---------- */
+
+.ao-vivo-sala {
+  position: fixed;
+  inset: 0;
+  /* Acima do cabeçalho (100), do aviso de cookies (120) e do menu (125). */
+  z-index: 1000;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--navy-deep);
+  color: var(--text);
+}
+
+/* O foco vai para a sala ao abrir só para o leitor de tela anunciar o
+   título; ela não é um controle, e o contorno ficaria em volta da tela. */
+.ao-vivo-sala:focus {
+  outline: none;
+}
+
+.ao-vivo-sala__topo {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-5);
+  padding: var(--sp-4) var(--sp-5);
+}
+
+.ao-vivo-sala__titulo {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+}
+
+.ao-vivo-sala__privacidade {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 auto 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+.ao-vivo-sala__privacidade .icon {
+  color: var(--ok);
+}
+
+.ao-vivo-sala__palco {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(220px, 24vw, 340px) minmax(0, 1fr);
+  gap: var(--sp-4);
+  min-height: 0;
+  padding: 0 var(--sp-5) var(--sp-5);
+}
+
+/* ---------- as duas metades ---------- */
+
+.ao-vivo-metade {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  border: 2px solid var(--line);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  /* Apagadas enquanto o teste mede o meio: lá, o olhar vai para o ponto. */
+  opacity: 0.35;
+  transition:
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    opacity var(--dur) ease;
+}
+
+.ao-vivo-sala__palco.is-no-teste .ao-vivo-metade {
+  opacity: 1;
+}
+
+/* O teste acha que a pessoa está olhando para cá: o contorno acende e o anel começa. */
+.ao-vivo-metade.is-olhando {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+/* O anel fechou: a confirmação, no teal da marca. */
+.ao-vivo-metade.is-respondida {
+  border-color: var(--ok);
+  background: var(--ok-soft);
+}
+
+.ao-vivo-metade__alvo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(78%, 48vh, 360px);
+  aspect-ratio: 1;
+}
+
+.ao-vivo-metade__anel {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ao-vivo-metade__trilho {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 2.5;
+}
+
+.ao-vivo-metade__progresso {
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+
+.ao-vivo-metade__conteudo {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
+}
+
+.ao-vivo-metade__simbolo {
+  width: clamp(44px, 6vw, 80px);
+  height: auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Forma e cor dizem a mesma coisa (nada só por cor). */
+.ao-vivo-metade--direita .ao-vivo-metade__simbolo {
+  color: var(--ok);
+}
+
+.ao-vivo-metade--esquerda .ao-vivo-metade__simbolo {
+  color: var(--danger);
+}
+
+.ao-vivo-metade__palavra {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 7.5vw, 6.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+/* ---------- a coluna do meio ---------- */
+
+.ao-vivo-sala__meio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  min-height: 0;
+  text-align: center;
+}
+
+/* Espelhada: a pessoa se vê como num espelho. A imagem fica só aqui. */
+.ao-vivo-sala__camera {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: #000;
+  transform: scaleX(-1);
+}
+
+.ao-vivo-alvo {
+  width: 96px;
+  height: 96px;
+  flex: none;
+  transform: rotate(-90deg);
+}
+
+.ao-vivo-alvo__trilho {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 3;
+}
+
+.ao-vivo-alvo__progresso {
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.ao-vivo-alvo__ponto {
+  fill: var(--papel);
+}
+
+.ao-vivo-sala__instrucao {
+  margin: 0;
+  font-size: var(--fs-lead);
+  line-height: 1.4;
+}
+
+.ao-vivo-sala__aviso {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+}
+
+.ao-vivo-sala__aviso p {
+  margin: 0;
+}
+
+.ao-vivo-sala__resposta {
+  min-height: 1.3em;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  color: var(--ok);
+}
+
+.ao-vivo-sala__nota {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+/* A régua: para onde o teste acha que a pessoa olha, só na horizontal. A
+   faixa do meio é a zona neutra (não responde nada). */
+.ao-vivo-regua {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.ao-vivo-regua__trilho {
+  position: relative;
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+}
+
+.ao-vivo-regua__meio {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+}
+
+.ao-vivo-regua__ponto {
+  position: absolute;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--navy-deep);
+}

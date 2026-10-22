@@ -15,12 +15,14 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useCloud } from '../cloud/CloudContext';
+import { useSettings } from '../context/SettingsContext';
 import { GazePageLayout } from '../components/ui/GazePageLayout';
 import { GazeGrid } from '../components/ui/GazeGrid';
 import { GazeButton } from '../components/ui/GazeButton';
 import { EstadoDaSessao } from '../components/ui/EstadoDaSessao';
 import { ParticulasDeFundo } from '../components/ui/ParticulasDeFundo';
 import { aoMudarMissao, passoGuardado } from './tutorial/missao';
+import { modoHospitalEmVigor } from './core/hospital/modoHospitalEmVigor';
 import {
   PASSOS_DO_TUTORIAL,
   ehPassoDoTutorial,
@@ -74,7 +76,8 @@ const FAIXA_DO_TUTORIAL = 'calc(84px + 1rem)';
 // Título e descrição vêm do i18n (`menu.modulos.<id>`): o menu ficava em
 // português fixo enquanto o resto do app trocava de idioma.
 const MODULES: AppModule[] = [
-  { id: 'communication', icon: <MessageSquare size={ICONE} />, badge: '#FF8A8A', route: '/phrases' },
+  // Comunicação abre o hub (frases, sim/não, pictogramas, opções) — 19/10/2026.
+  { id: 'communication', icon: <MessageSquare size={ICONE} />, badge: '#FF8A8A', route: '/comunicacao' },
   { id: 'keyboard', icon: <Keyboard size={ICONE} />, badge: '#6EE7A0', route: '/keyboard' },
   { id: 'computer', icon: <Monitor size={ICONE} />, badge: '#C4A5F5', route: '/virtual-mouse' },
   { id: 'settings', icon: <Settings size={ICONE} />, badge: '#FBBF5B', route: '/settings' },
@@ -102,6 +105,7 @@ export const MainMenu: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { naoFaladas } = useCloud();
+  const { settings } = useSettings();
 
   // Volta ao tutorial pelo olhar. As missões mandam a pessoa para as telas
   // reais, e as saídas próprias dessas telas levam ao menu — sem este cartão,
@@ -127,7 +131,10 @@ export const MainMenu: React.FC = () => {
   const larguraDaColuna = `min(1600px, 92%, calc(3 * ${larguraDoCartao} + ${2 * GAP}px))`;
 
   return (
-    <GazePageLayout showBack={false}>
+    // Este menu é a tela inicial — sem Voltar —, exceto no modo hospital (rodada
+    // 3, 21/10/2026): ali a tela de onde se parte é a do quarto, e este menu é o
+    // "Mais opções" dela, com a volta a um olhar.
+    <GazePageLayout showBack={modoHospitalEmVigor(settings)} backRoute="/hospital">
       <ParticulasDeFundo />
       <div
         style={{

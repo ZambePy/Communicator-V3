@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Coffee } from 'lucide-react';
 import { GazeButton } from './ui/GazeButton';
 import { useGaze } from '../context/GazeContext';
+import { registrarAvisoDeFadiga } from '../services/evolucao/registroDeUso';
 
 // Indicador de fadiga não-bloqueante.
 //
@@ -73,6 +74,14 @@ export const FatigueIndicator: React.FC = () => {
         if (consecutiveAbove >= MIN_CONSECUTIVE_ABOVE && !isShowing) {
           isShowing = true;
           setShowFatigue(true);
+          // Evolução semanal (21/10/2026): conta UM aviso por vez que ele
+          // aparece. Contar nunca pode derrubar o aviso, e a falha do registro
+          // já é dita pelo próprio registro (aviso de gravação + console).
+          try {
+            registrarAvisoDeFadiga(Date.now());
+          } catch (e) {
+            console.warn('[fadiga] não foi possível contar o aviso na evolução', e);
+          }
         }
       } else if (rate < FATIGUE_BLINK_RATE_THRESHOLD - FATIGUE_BLINK_RATE_HYSTERESIS) {
         // Só reseta e esconde quando cai abaixo do threshold - histerese.

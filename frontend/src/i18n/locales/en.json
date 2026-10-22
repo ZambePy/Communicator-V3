@@ -13,7 +13,7 @@
     "modulos": {
       "communication": {
         "title": "Communication",
-        "description": "Quick phrases and pictograms"
+        "description": "Phrases, yes and no, pictograms"
       },
       "keyboard": {
         "title": "Virtual Keyboard",
@@ -143,10 +143,6 @@
       "onlyDesktop": "Available in the installed app",
       "lgpd": "LGPD/GDPR: voice is sensitive biometric data. The reference audio, the model and the generated phrases stay exclusively on this computer, for the patient's assistive use, and can be deleted at any time."
     },
-    "backup": {
-      "title": "Settings Backup",
-      "export": "Export Backup (JSON)"
-    },
     "dashboardLink": {
       "button": "Open Care Dashboard"
     },
@@ -156,13 +152,19 @@
       "title": "Language",
       "pt-BR": "Português (Brasil)",
       "en": "English"
+    },
+    "linguagem": {
+      "titulo": "Calibration result",
+      "descricao": "How the results of the calibration and of the accuracy test are shown.",
+      "simples": "In plain words",
+      "tecnica": "With the numbers"
     }
   },
   "emergency": {
     "title": "MEDICAL EMERGENCY",
     "alertSent": "ALERT SENT!",
     "waiting": "Signal for {{label}} triggered. Please wait.",
-    "cancelAndReturn": "Stop the alarm and go back",
+    "cancelAndReturn": "Stop the alarm",
     "chooseType": "Select the type of emergency",
     "items": {
       "pain": "SEVERE PAIN",
@@ -182,7 +184,7 @@
       },
       "na_fila": {
         "titulo": "NO INTERNET",
-        "detalhe": "The alarm is ringing here. The caregiver’s phone will be notified as soon as the internet is back."
+        "detalhe": "No internet right now. The alarm rings here, and the caregiver’s phone is notified as soon as the internet is back."
       },
       "sem_nuvem": {
         "titulo": "LOCAL ALARM",
@@ -190,12 +192,48 @@
       },
       "falhou": {
         "titulo": "LOCAL ALARM",
-        "detalhe": "The caregiver’s phone could not be notified. The alarm is ringing here."
+        "detalhe": "The caregiver’s phone could not be notified. The alarm rings here."
       },
       "ensaio": {
         "titulo": "PRESENTATION MODE",
         "detalhe": "Nothing was sent to the caregiver’s phone: presentation mode is on."
+      },
+      "sem_push": {
+        "titulo": "LOCAL ALARM",
+        "detalhe": "The request reached the server, but no caregiver phone was notified. The alarm rings here."
+      },
+      "limitado": {
+        "titulo": "LOCAL ALARM",
+        "detalhe": "The server did not notify the caregiver’s phone because there were too many calls in a row. The alarm rings here."
+      },
+      "push_incerto": {
+        "titulo": "LOCAL ALARM",
+        "detalhe": "The request reached the server, but we could not confirm whether the caregiver’s phone got the alert. The alarm rings here."
+      },
+      "sem_resposta": {
+        "titulo": "NO ANSWER FROM THE SERVER",
+        "detalhe": "Sending to the caregiver’s phone was not confirmed. The alarm rings here."
       }
+    },
+    "escalado": {
+      "titulo": "ALERT ESCALATED",
+      "detalhe": "Nobody has confirmed yet. The alarm is ringing on this computer."
+    },
+    "visto": {
+      "titulo": "YOUR CAREGIVER SAW IT",
+      "detalhe": "Your caregiver saw the request at {{hora}}. Help is on the way."
+    },
+    "voltarAoMenu": "Back to the menu",
+    "voltar": "Go back",
+    "horizontal": {
+      "parar": "To stop the alarm, look to the left.",
+      "pergunta": "Look to the left to keep asking for help, or to the right to stop the alarm.",
+      "voltar": "To go back, look to the left."
+    },
+    "pararAlarme": {
+      "pergunta": "Stop the alarm? Your caregiver has not confirmed seeing it yet.",
+      "sim": "Yes, stop the alarm",
+      "nao": "No, keep asking for help"
     }
   },
   "onboarding": {
@@ -287,7 +325,8 @@
     "start": "Start session",
     "remove": "Remove",
     "removeConfirmTitle": "Remove {{name}}'s profile?",
-    "removeConfirmBody": "The profile and the phrases the assistant learned from this person are removed from this computer, and this can't be undone. To use IrisFlow Communicator with this person again, you'll need to create a new profile and calibrate again.",
+    "removeConfirmBody": "The profile is removed from this computer, and this can't be undone. Everything goes with it: the phrases the assistant learned, the calibration, the diary and the questions for the doctor, the caregiver's notes, the favorites, the tutorial progress, the recordings of their voice and the consent they accepted. The custom voice imported on this computer also goes, but only if it was created with their consent; if it belongs to another patient, it stays on the computer. To use IrisFlow Communicator with this person again, you'll need to create a new profile and calibrate again.",
+    "removeNoticeDismiss": "Got it",
     "removeConfirm": "Remove profile",
     "form": {
       "title": "New patient",
@@ -559,12 +598,6 @@
     },
     "resultado": {
       "title": "Calibration result",
-      "bom": "Good calibration.",
-      "aceitavel": "Acceptable calibration.",
-      "refazer": "Worth redoing.",
-      "bomBody": "The system learned your gaze well. You can carry on.",
-      "aceitavelBody": "Usable. Redoing may improve it, if you have the time.",
-      "refazerBody": "The result came out below what is achievable.",
       "motivo": {
         "sessaoRuim": "The reading was unstable across the whole screen — usually light or distance.",
         "alvoInaprendivel": "One of the points was not learned, and that harms the others.",
@@ -579,8 +612,58 @@
       "refazerBtn": "Redo calibration",
       "semObrigacao": "Redoing is always optional — it is your call.",
       "tituloPaciente": "Your gaze is set up.",
-      "qualidade": "Tracking quality: {{n}} of {{total}}",
-      "qualidadeAria": "Tracking quality: level {{n}} of {{total}}"
+      "palavra": {
+        "otima": "Great",
+        "boa": "Good",
+        "refazerCantos": "Redo the corners",
+        "refazerBordas": "Redo the edges",
+        "refazerPontos": "Redo a few points",
+        "refazerTudo": "Worth redoing the calibration"
+      },
+      "frase": {
+        "otima": "The system understood your gaze well. You can start.",
+        "boa": "It works. For more precision, redo the calibration calmly another time.",
+        "refazerCantos": "The middle of the screen is good; the corners came out imprecise. You can redo just the corners.",
+        "refazerBordas": "The middle of the screen is good; the edges came out imprecise. You can redo just those points.",
+        "refazerPontos": "A few points came out imprecise. You can redo just those points.",
+        "refazerCantosSemBotao": "The middle of the screen is good; the corners came out imprecise. You can use it like this; to improve the corners, redo the calibration.",
+        "refazerBordasSemBotao": "The middle of the screen is good; the edges came out imprecise. You can use it like this; to improve the edges, redo the calibration.",
+        "refazerTudo": "The gaze was imprecise in the middle of the screen. Redo the calibration calmly, with good light on the face.",
+        "refazerTudoDeriva": "The head moved during the calibration. Rest the head well and redo it.",
+        "refazerTudoLuz": "The reading was unstable across the whole screen. Improve the light on the face and redo the calibration.",
+        "refazerTudoPonto": "One of the points was not learned and got in the way of the others. It is worth redoing the calibration calmly.",
+        "refazerTudoDistancia": "The corners asked for more eye rotation than can be measured. Sit a little farther from the screen and redo it."
+      },
+      "refazerCantosBtn": "Redo just the corners",
+      "refazerPontosBtn": "Redo just the imprecise points",
+      "loto": "Out-of-sample error of all points (LOTO): {{px}} px",
+      "precisao": "Fixation jitter (median of the points): {{px}} px · {{g}}°",
+      "pontoRuim": "{{lugar}}: out-of-sample error {{erro}} px, jitter {{tremor}} px, {{n}} samples",
+      "lugar": {
+        "cima": {
+          "esquerda": "Top left",
+          "centro": "Top middle",
+          "direita": "Top right"
+        },
+        "meio": {
+          "esquerda": "Middle left",
+          "centro": "Center",
+          "direita": "Middle right"
+        },
+        "baixo": {
+          "esquerda": "Bottom left",
+          "centro": "Bottom middle",
+          "direita": "Bottom right"
+        }
+      },
+      "recoleta": {
+        "aceita": "The redone points came out better, and the calibration was updated.",
+        "recusada": "The redone points did not come out better. The previous calibration is still in use.",
+        "semAmostras": "The points could not be measured again now. The previous calibration is still in use.",
+        "tecnica": "Redo of {{n}} point(s): LOTO {{antes}} → {{depois}} px — {{decisao}}",
+        "decisaoAceita": "new model in use",
+        "decisaoRecusada": "kept the previous calibration"
+      }
     },
     "relatorio": {
       "title": "Session report",
@@ -609,6 +692,22 @@
       "sem": "No calibration in use — gaze selects nothing until you calibrate.",
       "why": "Calibrate again when the cursor stops following the gaze, or after moving the patient, the camera or the monitor.",
       "button": "Calibrate gaze"
+    },
+    "linguagem": {
+      "titulo": "Before we start",
+      "pergunta": "When the calibration ends, how would you like to see the result?",
+      "simples": "In plain words",
+      "simplesDica": "\"Great\", \"Good\" or what to redo, and one sentence on what to do.",
+      "tecnica": "With the numbers",
+      "tecnicaDica": "Error in pixels and degrees, for whoever follows closely.",
+      "nota": "Only this once. You can change it later in Settings."
+    },
+    "recoleta": {
+      "avisoUm": "Let's redo 1 point that came out imprecise. It's quick.",
+      "avisoVarios": "Let's redo {{n}} points that came out imprecise. It's quick.",
+      "nenhum": "There are no points to redo now. If you want, redo the whole calibration.",
+      "atualizando": "Updating the calibration",
+      "atualizandoDica": "Just a moment: the redone points are being checked."
     }
   },
   "sessao": {

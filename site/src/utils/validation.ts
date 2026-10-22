@@ -75,11 +75,13 @@ export const validar = {
     if (v.length < SENHA_MINIMA) return `A senha precisa ter ao menos ${SENHA_MINIMA} caracteres (faltam ${SENHA_MINIMA - v.length}).`
     return undefined
   },
-  /** Para o login: só exige algo digitado com o tamanho mínimo da conta. */
+  /**
+   * Para o login: só exige que algo tenha sido digitado. A regra do tamanho
+   * mínimo vale para criar a senha, não para entrar: ela barrava, sem motivo,
+   * contas criadas com uma regra antiga (auditoria de 21/10/2026, P2-10).
+   */
   senhaAtual(v: string) {
-    if (!v) return 'Informe a senha.'
-    if (v.length < SENHA_MINIMA) return `A senha da conta tem ao menos ${SENHA_MINIMA} caracteres.`
-    return undefined
+    return v ? undefined : 'Informe a senha.'
   },
   confirmacao(v: string, senha: string) {
     if (!v) return 'Repita a senha.'

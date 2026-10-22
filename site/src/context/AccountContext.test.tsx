@@ -36,7 +36,19 @@ const { supabaseFake, fetchAccount, criarContaBeta, responderPesquisa, apiSignIn
 vi.mock('../lib/supabase', async (importOriginal) => {
   // só o cliente é trocado; a tradução de erro é a real
   const real = await importOriginal<typeof import('../lib/supabase')>()
-  return { ...real, isSupabaseConfigured: true, supabase: supabaseFake, client: () => supabaseFake }
+  // o cliente é carregado sob demanda (lib/supabase.ts): aqui já "chegou"
+  return {
+    ...real,
+    isSupabaseConfigured: true,
+    client: async () => supabaseFake,
+    clienteCarregado: () => supabaseFake,
+    clienteSeHouverSessao: async () => supabaseFake,
+    haSessaoGuardada: () => true,
+    aoCarregarCliente: (fn: (sb: typeof supabaseFake) => void) => {
+      fn(supabaseFake)
+      return () => {}
+    },
+  }
 })
 
 vi.mock('../services/api', async (importOriginal) => {

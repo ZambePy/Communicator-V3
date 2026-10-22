@@ -14,7 +14,12 @@
 //      para (−90°, 90°], porque "interno→externo" aponta para lados opostos
 //      nos dois olhos e girar por ele poria um olho de cabeça para baixo);
 //   4. espelha horizontalmente para que TODO olho pareça um olho DIREITO da
-//      pessoa numa imagem não espelhada — uma rede só para os dois lados;
+//      pessoa numa imagem não espelhada (canto externo à ESQUERDA do
+//      recorte) — uma rede só para os dois lados. Quem decide o espelho é a
+//      GEOMETRIA (de que lado o canto externo cai depois de nivelar), não o
+//      rótulo do olho: é a mesma regra do treino (`precisa_espelhar` em
+//      treino_olho_unityeyes.py), e não depende de como cada arquivo nomeia os
+//      olhos nem de o vídeo estar espelhado;
 //   5. escala para 96×64 e centraliza.
 //
 // Mesma forma de matriz que `matrizDoRecorte` (l2cs/crop.ts), e o mesmo
@@ -39,21 +44,42 @@ export function anguloDaLinhaDosCantos(interno: Point2D, externo: Point2D): numb
 }
 
 /**
- * O recorte deve ser espelhado para ficar canônico?
+ * O recorte deve ser espelhado para ficar canônico, pelo RÓTULO do olho?
  *
  * Canônico = olho direito da pessoa numa imagem não espelhada (canto externo
  * à esquerda no quadro). Num vídeo espelhado o olho direito aparece como um
  * esquerdo, e vice-versa — daí o ou-exclusivo.
+ *
+ * Vale só quando o rótulo é o lado DA PESSOA. `matrizDoRecorteDoOlho` não usa
+ * mais esta função: decide pela geometria (`espelhaPelosCantos`). A troca veio
+ * de um defeito real (19/10/2026): o engine passava os cantos 33/133 — o olho
+ * DIREITO da pessoa no MediaPipe, à esquerda da imagem — com o rótulo
+ * 'esquerdo', e os dois recortes saíam com o canto externo à DIREITA, o
+ * espelho do que a EyeNet viu no treino.
  */
 export function precisaEspelhar(olho: LadoDoOlho, isMirrored: boolean): boolean {
   return isMirrored !== (olho === 'esquerdo');
+}
+
+/**
+ * O recorte deve ser espelhado, pela GEOMETRIA? Sim quando, depois de nivelar
+ * a linha dos cantos, o canto externo cai à DIREITA do centro. Mesma regra do
+ * treino (`precisa_espelhar`), e por isso independente de rótulo e de espelho.
+ */
+export function espelhaPelosCantos(interno: Point2D, externo: Point2D): boolean {
+  const theta = -anguloDaLinhaDosCantos(interno, externo);
+  const dx = externo.x - interno.x;
+  const dy = externo.y - interno.y;
+  return Math.cos(theta) * dx - Math.sin(theta) * dy > 0;
 }
 
 export interface OpcoesDoRecorteDoOlho {
   /** Cantos em PIXELS da imagem de origem. */
   cantoInterno: Point2D;
   cantoExterno: Point2D;
+  /** Informativo (logs, diagnóstico): o espelho sai da geometria dos cantos. */
   olho: LadoDoOlho;
+  /** Informativo, pelo mesmo motivo de `olho`. */
   isMirrored: boolean;
   largura?: number;
   altura?: number;
@@ -81,7 +107,7 @@ export function matrizDoRecorteDoOlho(o: OpcoesDoRecorteDoOlho): RecorteDoOlho {
   }
   const k = W / larguraNaImagem;
   const theta = -anguloDaLinhaDosCantos(o.cantoInterno, o.cantoExterno);
-  const flip = precisaEspelhar(o.olho, o.isMirrored);
+  const flip = espelhaPelosCantos(o.cantoInterno, o.cantoExterno);
   const sx = flip ? -1 : 1;
 
   const cos = Math.cos(theta);
@@ -103,12 +129,14 @@ export function preprocessarOlho(
   rgba: Uint8Array | Uint8ClampedArray,
   largura: number = LARGURA_DO_OLHO,
   altura: number = ALTURA_DO_OLHO,
+  destino?: Float32Array,
 ): Float32Array {
   const px = largura * altura;
   if (rgba.length !== px * 4) {
     throw new Error(`[olho] esperava ${px * 4} bytes RGBA, recebeu ${rgba.length}`);
   }
-  const out = new Float32Array(3 * px);
+  // Buffer reaproveitado do pool do client quando vem (falha #13, 18/10/2026).
+  const out = destino && destino.length === 3 * px ? destino : new Float32Array(3 * px);
   for (let i = 0; i < px; i++) {
     const j = i * 4;
     out[i] = (rgba[j] / 255 - IMAGENET_MEAN[0]) / IMAGENET_STD[0];
@@ -143,6 +171,7 @@ export function recortarOlhoParaTensor(
   alturaFonte: number,
   o: OpcoesDoRecorteDoOlho,
   contexto: CropContext,
+  destino?: Float32Array,
 ): Float32Array {
   const g = contexto.ctx;
   const W = contexto.canvas.width;
@@ -159,5 +188,5 @@ export function recortarOlhoParaTensor(
   g.setTransform(1, 0, 0, 1, 0, 0);
 
   const img = (g as CanvasRenderingContext2D).getImageData(0, 0, W, H);
-  return preprocessarOlho(img.data, W, H);
+  return preprocessarOlho(img.data, W, H, destino);
 }

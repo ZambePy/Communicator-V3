@@ -3,7 +3,7 @@
 // junto do relatório. `EXPERIMENT` é resolvido uma vez no import, então a
 // página recarrega — só quando algum valor mudou de fato.
 
-import { VALORES_ACEITOS, VALORES_DA_BASE } from '@tracker/config/experiment';
+import { FLAGS_DE_MEDICAO_NA_URL, VALORES_ACEITOS, VALORES_DA_BASE } from '@tracker/config/experiment';
 
 const MODELOS_DO_ROSTO_ACEITOS = VALORES_ACEITOS.modeloDoRosto;
 
@@ -176,6 +176,13 @@ export function aplicarSessaoDaUrl(
   for (const [param, valor] of p.entries()) {
     if (!param.startsWith('exp.')) continue;
     const chave = param.slice(4);
+    // Condição de medição fora do V3 (o estímulo de antes de 19/10, revisão do
+    // pipeline de 19/10/2026): mesma sintaxe, mesma validação.
+    if ((FLAGS_DE_MEDICAO_NA_URL as readonly string[]).includes(chave)) {
+      if (valor === '1' || valor === '0') exp[chave] = valor === '1';
+      else console.warn(`[sessão] ?${param}=${valor} inválido — aceitos: 1, 0.`);
+      continue;
+    }
     if (!Object.hasOwn(VALORES_DA_BASE, chave)) {
       console.warn(`[sessão] ?${param} não é uma flag do V3 — ignorado.`);
       continue;

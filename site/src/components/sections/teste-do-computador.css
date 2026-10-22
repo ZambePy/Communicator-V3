@@ -1,0 +1,268 @@
+/* "Meu computador funciona?" (CompatCheck.tsx): a câmera à esquerda, o
+   veredito e as linhas do que foi medido à direita. O sinal de cada linha
+   tem forma E cor (check, exclamação, x, interrogação, reticências), e o
+   estado também vai por extenso para o leitor de tela. */
+
+.teste {
+  --sinal: var(--text-dim);
+}
+
+.teste__titulo {
+  font-size: var(--fs-h2);
+  margin-bottom: var(--sp-3);
+}
+
+.teste__privacidade {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-6);
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+  max-width: 64ch;
+}
+
+.teste__privacidade .icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ok);
+}
+
+.teste__grade {
+  display: grid;
+  gap: var(--sp-6);
+  align-items: start;
+}
+
+/* ---------- a câmera ---------- */
+.teste__tela {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  background: #05080f;
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.teste__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Espelhado: quem se vê na câmera espera um espelho. */
+  transform: scaleX(-1);
+  opacity: 0;
+}
+
+.teste__tela.is-ligada .teste__video {
+  opacity: 1;
+}
+
+.teste__convite {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  text-align: center;
+  color: var(--text-soft);
+}
+
+.teste__convite .icon {
+  color: var(--accent);
+}
+
+.teste__convite p {
+  max-width: 40ch;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.teste__medindo {
+  position: absolute;
+  left: var(--sp-4);
+  bottom: var(--sp-4);
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: var(--r-sm);
+  background: rgba(8, 21, 48, 0.85);
+  color: #fff;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.teste__camera-pe {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.teste__camera-resumo {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- o veredito ---------- */
+.teste__veredito {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-4);
+  font-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.teste__veredito .teste__sinal svg {
+  width: 36px;
+  height: 36px;
+}
+
+.teste--funciona .teste__veredito {
+  color: var(--ok);
+}
+
+.teste--lento .teste__veredito {
+  color: var(--warn);
+}
+
+.teste--nao-funciona .teste__veredito {
+  color: var(--danger);
+}
+
+.teste__explicacao,
+.teste__porque {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-lead);
+  line-height: 1.5;
+  color: var(--text);
+  max-width: 52ch;
+}
+
+.teste__porque p {
+  margin: 0 0 var(--sp-2);
+  color: var(--text);
+}
+
+.teste__porque ul,
+.teste__lentidao {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text);
+}
+
+.teste__lentidao {
+  margin: 0 0 var(--sp-4);
+  font-size: 1rem;
+  color: var(--text-soft);
+}
+
+.teste__fazer {
+  margin: var(--sp-5) 0 var(--sp-6);
+  padding: var(--sp-4) var(--sp-5);
+  border-radius: var(--r-md);
+  background: var(--bg-soft);
+}
+
+.teste__fazer-titulo {
+  margin: 0 0 var(--sp-2);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.teste__fazer ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.teste__fazer li:last-child {
+  margin-bottom: 0;
+}
+
+/* ---------- as linhas do que foi medido ---------- */
+.teste__linhas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line-strong);
+}
+
+.teste__linha {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--sp-3);
+  margin: 0;
+  padding: var(--sp-4) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.teste__linha p {
+  margin: 0;
+}
+
+.teste__linha-rotulo {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.teste__linha-valor {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.teste__linha-detalhe {
+  margin-top: 4px !important;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+.teste__sinal {
+  display: block;
+  flex: none;
+  color: var(--sinal);
+}
+
+.teste__sinal svg {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.teste__sinal--ok {
+  --sinal: var(--ok);
+}
+.teste__sinal--atencao {
+  --sinal: var(--warn);
+}
+.teste__sinal--problema {
+  --sinal: var(--danger);
+}
+.teste__sinal--desconhecido,
+.teste__sinal--pendente {
+  --sinal: var(--text-dim);
+}
+
+.teste__ressalvas {
+  margin: var(--sp-4) 0 0;
+  padding-left: 1.25rem;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+@media (min-width: 960px) {
+  .teste__grade {
+    grid-template-columns: minmax(0, 6fr) minmax(0, 6fr);
+    gap: var(--sp-8);
+  }
+}

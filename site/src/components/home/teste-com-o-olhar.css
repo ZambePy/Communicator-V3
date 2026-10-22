@@ -1,0 +1,62 @@
+/* "Testar com o meu olhar" (TesteComOOlhar.tsx): a chamada logo abaixo da
+   gravação e o painel onde o teste ao vivo (Task 3) abre, na largura toda. */
+
+.teste-olhar {
+  display: grid;
+  gap: var(--sp-5);
+}
+
+.teste-olhar__chamada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+}
+
+.teste-olhar__nota,
+.teste-olhar__nota-celular {
+  margin: 0;
+  max-width: 44ch;
+  font-size: var(--fs-sm);
+  color: var(--v3-texto-2);
+}
+
+.teste-olhar__nota-celular {
+  display: none;
+}
+
+.teste-olhar__painel {
+  border: 1px solid var(--v3-fio);
+  border-radius: var(--r-xl);
+  background: var(--v3-noite-2);
+  padding: clamp(16px, 2.5vw, 32px);
+}
+
+.teste-olhar__painel[hidden] {
+  display: none;
+}
+
+.teste-olhar__carregando,
+.teste-olhar__falha p {
+  margin: 0;
+  color: var(--v3-texto-2);
+}
+
+.teste-olhar__falha {
+  display: grid;
+  justify-items: start;
+  gap: var(--sp-4);
+}
+
+/* O teste pede computador com mouse (largura ≥ 900 px e ponteiro fino): fora
+   disso, só a frase que diz que ele existe. */
+@media not all and (min-width: 900px) and (pointer: fine) {
+  .teste-olhar__botao,
+  .teste-olhar__nota,
+  .teste-olhar__painel {
+    display: none;
+  }
+  .teste-olhar__nota-celular {
+    display: block;
+  }
+}

@@ -5,9 +5,12 @@ import { Header } from './Header'
 import { esquecerBetaProgram } from '@/hooks/useBetaProgram'
 import { BETA_PROGRAM_RESERVA, type BetaProgram } from '@/services/api'
 
-/* O menu: a aba Beta leva a etiqueta vermelha nos dois estados — o dia até o
-   lançamento e "Liberada" depois; quem tem sessão vê "Meu perfil" — também
-   antes de responder a pesquisa, quando ainda não há conta completa. */
+/* O menu: Produto, Como funciona, Cuidador e Planos, com "Entrar" na mesma
+   pílula e UMA chamada ao lado (a da beta antes do lançamento, "Baixar grátis"
+   depois). A aba "Beta", com o selo vermelho, saiu em 21/10/2026 (auditoria
+   P2-6 e P2-16): era um segundo caminho para o mesmo download. Quem tem sessão
+   vê "Meu perfil" — também antes de responder a pesquisa, quando ainda não há
+   conta completa. */
 
 const { sessao, apiFake } = vi.hoisted(() => ({
   sessao: { authenticated: false, loading: false, account: null as unknown },
@@ -40,42 +43,35 @@ beforeEach(() => {
 })
 
 describe('<Header />', () => {
-  it('antes do lançamento: a aba Beta leva a etiqueta vermelha com o dia, lida por extenso', async () => {
+  it('não há aba "Beta" nem selo no menu: o programa beta é a chamada ao lado, e só ela', async () => {
     montar()
     const nav = screen.getByRole('navigation', { name: 'Navegação principal' })
-    const beta = within(nav).getByRole('link', { name: /Beta/ })
-    await within(beta).findByText('10/11')
-    expect(beta.querySelector('.etiqueta-lancamento')).not.toBeNull()
-    expect(within(beta).getByText('Lançamento em 10 de novembro')).toHaveClass('sr-only')
-    expect(within(beta).queryByText('novo')).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('link', { name: /Beta/ })).not.toBeInTheDocument()
+    expect(document.querySelector('.header .etiqueta-lancamento')).toBeNull()
+    expect((await screen.findAllByRole('link', { name: 'Entrar na beta' }))[0]).toHaveAttribute('href', '/beta')
   })
 
-  it('depois do lançamento: a etiqueta vermelha diz "Liberada" e a chamada vira "Baixar grátis"', async () => {
+  it('depois do lançamento a chamada vira "Baixar grátis", e o menu continua sem selo', async () => {
     apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: '2020-11-10T03:00:00Z' }
     montar()
-    const nav = screen.getByRole('navigation', { name: 'Navegação principal' })
-    // A pílula da navegação tem uma cópia visual dos rótulos, fora do leitor de
-    // tela: a busca vai dentro do link de verdade.
-    const beta = within(nav).getByRole('link', { name: /Beta/ })
-    expect(await within(beta).findByText('Liberada')).toBeInTheDocument()
-    expect(beta.querySelector('.etiqueta-lancamento--liberada')).not.toBeNull()
-    expect(within(beta).getByText('Beta liberada: o download está aberto')).toHaveClass('sr-only')
-    expect(within(beta).queryByText('10/11')).not.toBeInTheDocument()
     expect((await screen.findAllByRole('link', { name: 'Baixar grátis' }))[0]).toHaveAttribute('href', '/baixar')
+    expect(document.querySelector('.header .etiqueta-lancamento')).toBeNull()
+    expect(screen.queryByText('Liberada')).not.toBeInTheDocument()
   })
 
-  it('a cópia visual da pílula fica fora do leitor de tela', () => {
+  it('cada destino aparece uma vez só, e o traço que corre sob os links é decoração', () => {
+    // Até 19/10/2026 havia uma segunda cópia dos rótulos, acesa sob a pílula de
+    // vidro, que o leitor de tela tinha de ignorar. O traço não repete texto.
     montar()
     const nav = screen.getByRole('navigation', { name: 'Navegação principal' })
-    const copia = nav.querySelector('.nav-pilula__links--aceso')
-    expect(copia).not.toBeNull()
-    expect(copia).toHaveAttribute('aria-hidden', 'true')
+    expect(nav.querySelector('.nav-pilula__links--aceso')).toBeNull()
+    expect(nav.querySelector('.nav-pilula__traco')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(nav).getAllByText('Produto')).toHaveLength(1)
     expect(within(nav).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
       '/solucao',
       '/como-funciona',
       '/cuidador',
       '/planos',
-      '/beta',
       '/entrar',
     ])
   })
@@ -91,7 +87,7 @@ describe('<Header />', () => {
     expect(screen.queryByRole('link', { name: 'Meu perfil' })).not.toBeInTheDocument()
   })
 
-  it('o vidro da pílula aparece ao passar o mouse no "Entrar", como nas abas', () => {
+  it('o traço aparece ao passar o mouse no "Entrar", como nas abas', () => {
     montar()
     const nav = screen.getByRole('navigation', { name: 'Navegação principal' })
     expect(nav.style.getPropertyValue('--pilula-visivel')).toBe('0')
@@ -145,7 +141,7 @@ describe('<Header />', () => {
       const gaveta = abrir()
       expect(await within(gaveta).findByRole('link', { name: 'Baixar grátis' })).toHaveAttribute('href', '/baixar')
       expect(within(gaveta).queryByRole('link', { name: 'Entrar na beta gratuita' })).not.toBeInTheDocument()
-      expect(within(gaveta).getByText('Liberada')).toBeInTheDocument()
+      expect(within(gaveta).queryByText('Liberada')).not.toBeInTheDocument()
     })
 
     it('um toque no destino da página atual também fecha (a rota não muda)', () => {

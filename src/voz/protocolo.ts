@@ -20,6 +20,9 @@ export const CANAIS_VOZ = {
   estadoMudou: 'irisflow:voz-estado-mudou',
   importar: 'irisflow:voz-importar',
   remover: 'irisflow:voz-remover',
+  // Remover o paciente (revisão final, rodada 2, N1, 21/10/2026): apaga a voz clonada importada SÓ se o
+  // termo dela for deste perfil. Pelo id do perfil, nunca por caminho.
+  removerDoPerfil: 'irisflow:voz-remover-do-perfil',
   baixarModelo: 'irisflow:voz-baixar-modelo',
   sintetizar: 'irisflow:voz-sintetizar',
   ativar: 'irisflow:voz-ativar',
@@ -61,6 +64,12 @@ export interface EstadoDoMotorDeVoz {
   /** Ocupado sintetizando agora. */
   sintetizando: boolean;
 }
+
+/**
+ * Resposta de `removerDoPerfil`. `removida: false` = não havia voz clonada deste perfil (não havia voz
+ * nenhuma, ou o termo dela é de outro paciente ou de ninguém): nada foi apagado, e está certo.
+ */
+export type ResultadoDaRemocaoDoPerfil = { ok: true; removida: boolean } | { ok: false; erro: string };
 
 export type ResultadoDaImportacao =
   | { ok: true; duracaoS: number; qualidade: QualidadeDaReferencia; avisos: string[] }

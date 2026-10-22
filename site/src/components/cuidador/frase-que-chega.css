@@ -1,0 +1,441 @@
+/* A frase que chega ao celular (FraseQueChega.tsx).
+
+   Um computador e um celular genéricos, chapados, nos marinhos do site — os
+   mesmos materiais dos aparelhos das gravações (aparelhos.css): moldura
+   escura, um fio claro na borda. Dentro, o teclado do IrisFlow e a Conversa do
+   IrisFlow Cuidador, em miniatura.
+
+   A cena tem três estados: espera (antes de entrar na tela), tocando (uma vez,
+   com os atrasos abaixo) e final (o fim, parado — também o de movimento
+   reduzido). Só transform e opacity animam; o caminho do voo chega medido em
+   variáveis (--dx, --dy, --pico, --escala), postas na figura pelo componente.
+
+   Linha do tempo, em ms:  250 a frase sai do computador
+                          1150 chega: o balão aparece no celular
+                          1200 o celular vibra duas vezes
+                          1850 quem cuida toca em "Já estou indo"
+                          2050 a resposta aparece, e depois o "falado na tela" */
+
+.chega {
+  margin: 0;
+  container-type: inline-size;
+}
+
+.chega__cena {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 6cqw;
+  padding: 6cqw 2cqw 2cqw;
+}
+
+/* ---------- o computador ---------- */
+.chega__notebook {
+  flex: 0 1 60%;
+  min-width: 0;
+}
+
+.chega__tela {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 1.6cqw;
+  aspect-ratio: 16 / 10;
+  padding: 2.2cqw;
+  border-radius: 2.4cqw 2.4cqw 0.8cqw 0.8cqw;
+  background: var(--navy);
+  box-shadow:
+    0 0 0 1.2cqw #10151e,
+    0 0 0 calc(1.2cqw + 1px) rgba(169, 198, 247, 0.22);
+}
+
+.chega__base {
+  display: block;
+  height: 2.2cqw;
+  margin: 1.2cqw -4% 0;
+  border-radius: 0.6cqw 0.6cqw 2cqw 2cqw;
+  background: #1d2533;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.chega__linha {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6cqw;
+  min-height: 7.4cqw;
+  padding: 0 2cqw;
+  border-radius: 1.4cqw;
+  background: #12284a;
+  box-shadow: inset 0 0 0 1px rgba(169, 198, 247, 0.16);
+}
+
+.chega__frase {
+  font-family: var(--font-display);
+  font-size: clamp(0.75rem, 3cqw, 1.0625rem);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.chega__cursor {
+  width: 2px;
+  height: 1.1em;
+  font-size: clamp(0.75rem, 3cqw, 1.0625rem);
+  background: var(--teal-300);
+}
+
+.chega__teclas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 1.2cqw;
+  min-height: 0;
+}
+
+.chega__teclas > span {
+  display: grid;
+  place-items: center;
+  border-radius: 1cqw;
+  background: #12284a;
+  box-shadow: inset 0 0 0 1px rgba(169, 198, 247, 0.12);
+  font-family: var(--font-display);
+  font-size: clamp(0.5rem, 1.7cqw, 0.75rem);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* ---------- o celular ---------- */
+.chega__celular {
+  flex: 0 0 33%;
+  min-width: 0;
+}
+
+.chega__aparelho {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  aspect-ratio: 9 / 18.5;
+  padding: 2.2cqw 1.6cqw 1.8cqw;
+  border-radius: 4.6cqw;
+  background: var(--navy-deep);
+  box-shadow:
+    0 0 0 1.1cqw #10151e,
+    0 0 0 calc(1.1cqw + 1px) rgba(169, 198, 247, 0.22),
+    0 30px 60px -30px rgba(0, 0, 0, 0.9);
+  font-size: clamp(0.6875rem, 2.4cqw, 0.875rem);
+  line-height: 1.3;
+  overflow: hidden;
+}
+
+.chega__topo {
+  display: flex;
+  align-items: center;
+  gap: 1.2cqw;
+  padding-bottom: 1.6cqw;
+  border-bottom: 1px solid var(--line);
+}
+
+.chega__avatar {
+  display: grid;
+  place-items: center;
+  width: 5.4cqw;
+  height: 5.4cqw;
+  border-radius: 50%;
+  background: #1d3966;
+  color: var(--blue-300);
+  font-size: 0.82em;
+  font-weight: 700;
+}
+
+.chega__nome {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.chega__conversa {
+  display: grid;
+  align-content: start;
+  gap: 1.4cqw;
+  padding-top: 2.4cqw;
+}
+
+.chega__bolha {
+  max-width: 90%;
+  margin: 0;
+  padding: 1.1cqw 1.6cqw;
+  border-radius: 1.8cqw;
+  opacity: 0;
+}
+
+/* Como na Conversa do app: o que o paciente diz à esquerda, na superfície;
+   o que quem cuida responde à direita, no azul. */
+.chega__bolha--dele {
+  justify-self: start;
+  background: #12284a;
+  box-shadow: inset 0 0 0 1px rgba(169, 198, 247, 0.18);
+  color: var(--text);
+}
+
+.chega__bolha--sua {
+  justify-self: end;
+  background: var(--blue-500);
+  color: #fff;
+}
+
+.chega__status {
+  justify-self: end;
+  margin: -0.6cqw 0 0;
+  font-size: 0.86em;
+  color: var(--ok);
+  opacity: 0;
+}
+
+.chega__respostas {
+  display: flex;
+  gap: 1cqw;
+  overflow: hidden;
+  padding-top: 1.4cqw;
+}
+
+.chega__respostas > span {
+  flex: none;
+  padding: 0.9cqw 1.5cqw;
+  border-radius: 99px;
+  background: #17305a;
+  color: var(--blue-300);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* No celular estreito as duas respostas não cabem lado a lado (no app a
+   fileira rola para o lado): fica só a que quem cuida toca, inteira, em vez
+   de "Já estou indo" cortado na borda (capturas de 20/10/2026, 360–430 px). */
+@container (max-width: 460px) {
+  .chega__respostas > span:not(.chega__escolhida) {
+    display: none;
+  }
+}
+
+/* ---------- a frase em voo ---------- */
+.chega__voo {
+  position: absolute;
+  left: var(--x0, 0);
+  top: var(--y0, 0);
+  width: var(--largura, 0);
+  height: var(--altura, 0);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.chega__voo-y {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.chega__voo-bolha {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 1.4cqw;
+  background: #12284a;
+  box-shadow:
+    inset 0 0 0 1px var(--ok-line),
+    0 10px 24px -12px rgba(0, 0, 0, 0.8);
+  font-family: var(--font-display);
+  font-size: clamp(0.75rem, 3cqw, 1.0625rem);
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+/* ---------- tocando: uma vez ---------- */
+.chega__cena.is-tocando .chega__voo {
+  animation:
+    chega-voo-x 900ms cubic-bezier(0.45, 0, 0.55, 1) 250ms both,
+    chega-voo-luz 940ms linear 230ms both;
+}
+
+.chega__cena.is-tocando .chega__voo-y {
+  animation: chega-voo-y 900ms linear 250ms both;
+}
+
+.chega__cena.is-tocando .chega__voo-bolha {
+  animation: chega-voo-escala 900ms cubic-bezier(0.45, 0, 0.55, 1) 250ms both;
+}
+
+.chega__cena.is-tocando .chega__bolha--dele {
+  animation: chega-aparece 220ms var(--ease-out) 1120ms both;
+}
+
+.chega__cena.is-tocando .chega__aparelho {
+  animation: chega-vibra 460ms linear 1200ms both;
+}
+
+.chega__cena.is-tocando .chega__escolhida {
+  animation: chega-toque 260ms ease-out 1850ms both;
+}
+
+.chega__cena.is-tocando .chega__bolha--sua {
+  animation: chega-aparece 240ms var(--ease-out) 2050ms both;
+}
+
+.chega__cena.is-tocando .chega__status {
+  animation: chega-esmaece 240ms ease-out 2250ms both;
+}
+
+/* ---------- o final, parado ---------- */
+.chega__cena.is-final .chega__bolha,
+.chega__cena.is-final .chega__status {
+  opacity: 1;
+}
+
+@keyframes chega-voo-x {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateX(var(--dx, 0));
+  }
+}
+
+/* O arco: sobe até o pico freando e desce acelerando — uma parábola no tempo. */
+@keyframes chega-voo-y {
+  0% {
+    transform: none;
+    animation-timing-function: cubic-bezier(0.33, 0.66, 0.66, 1);
+  }
+  45% {
+    transform: translateY(var(--pico, 0));
+    animation-timing-function: cubic-bezier(0.33, 0, 0.66, 0.33);
+  }
+  100% {
+    transform: translateY(var(--dy, 0));
+  }
+}
+
+@keyframes chega-voo-escala {
+  from {
+    transform: none;
+  }
+  to {
+    transform: scale(var(--escala, 1));
+  }
+}
+
+@keyframes chega-voo-luz {
+  0% {
+    opacity: 0;
+  }
+  4%,
+  94% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes chega-aparece {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes chega-esmaece {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Duas vibrações curtas, de leve. */
+@keyframes chega-vibra {
+  0%,
+  32%,
+  56%,
+  88%,
+  100% {
+    transform: none;
+  }
+  8%,
+  64% {
+    transform: translateX(-1.5px) rotate(-0.7deg);
+  }
+  16%,
+  72% {
+    transform: translateX(1.5px) rotate(0.7deg);
+  }
+  24%,
+  80% {
+    transform: translateX(-1px) rotate(-0.4deg);
+  }
+}
+
+@keyframes chega-toque {
+  0% {
+    transform: none;
+    opacity: 1;
+  }
+  40% {
+    transform: scale(0.94);
+    opacity: 0.7;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.chega__legenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-3);
+  font-size: 0.875rem;
+  color: var(--text-dim);
+}
+
+.chega__legenda > span {
+  max-width: 52ch;
+}
+
+.chega__controle {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-soft);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chega__controle:hover {
+  border-color: var(--papel);
+  color: var(--text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chega__cena.is-tocando * {
+    animation: none !important;
+  }
+}

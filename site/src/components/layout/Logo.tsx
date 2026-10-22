@@ -15,10 +15,15 @@ type Props = {
   className?: string
 }
 
+/* O logo horizontal em negativo, o único em uso (cabeçalho a 142 px e rodapé a
+   217 px), vai numa versão de 434 x 104 px: 4,9 KB, o dobro da maior largura em
+   que aparece (auditoria de 21/10/2026, P2-4: o PNG de 1200 x 287 pesava 66 KB
+   e era o maior arquivo de várias páginas). O original continua em
+   /brand/irisflow-logo-negativo.png para quem precisar do arquivo grande. */
 const FILES = {
   full: {
     positivo: '/brand/irisflow-logo.png',
-    negativo: '/brand/irisflow-logo-negativo.png',
+    negativo: '/brand/irisflow-logo-negativo-434.png',
   },
   symbol: {
     positivo: '/brand/irisflow-symbol.png',
@@ -46,8 +51,8 @@ export function Logo({
       alt={decorative || link ? '' : 'IrisFlow'}
       aria-hidden={decorative || undefined}
       className={`logo__img logo__img--${variant}`}
-      width={variant === 'full' ? 1200 : 512}
-      height={variant === 'full' ? 287 : 512}
+      width={variant === 'full' ? (tone === 'negativo' ? 434 : 1200) : 512}
+      height={variant === 'full' ? (tone === 'negativo' ? 104 : 287) : 512}
     />
   )
 

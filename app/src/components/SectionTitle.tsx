@@ -1,9 +1,8 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { Text } from './Text';
 import { PressableScale } from './PressableScale';
-import { sizes, spacing, useTheme } from '@/theme';
+import { sizes, spacing } from '@/theme';
 
 interface Props {
   title: string;
@@ -13,9 +12,8 @@ interface Props {
   first?: boolean;
 }
 
-/** Título de seção com atalho opcional ("Ver todos ›"), alvo de 48 dp. */
+/** Título de seção com atalho opcional ("Ver todos"), alvo de 48 dp. */
 export function SectionTitle({ title, action, onAction, first }: Props) {
-  const { colors } = useTheme();
   return (
     <View style={[styles.row, first && styles.first]}>
       <Text variant="h3" accessibilityRole="header" style={styles.title}>
@@ -26,7 +24,6 @@ export function SectionTitle({ title, action, onAction, first }: Props) {
           <Text variant="bodySmall" tone="primary" weight="semibold">
             {action}
           </Text>
-          <Ionicons name="chevron-forward" size={sizes.icon.xs} color={colors.primary} />
         </PressableScale>
       )}
     </View>

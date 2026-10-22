@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
-  "homepage": "https://irisflow-communicator.pages.dev",
+  "homepage": "https://irisflow.ia.br",
   "desktopName": "irisflow-communicator.desktop",
   "engines": {
     "node": ">=22.12.0"
@@ -22,7 +22,8 @@
     "electron:build:win": "npm run build && node electron/build.mjs && node electron/package-app.mjs --win",
     "electron:build:mac": "npm run build && node electron/build.mjs && node electron/package-app.mjs --mac",
     "electron:build:linux": "npm run build && node electron/build.mjs && node electron/package-app.mjs --linux",
-    "verificar": "node scripts/verificar-tudo.mjs"
+    "verificar": "node scripts/verificar-tudo.mjs",
+    "publicar": "node scripts/publicar.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

@@ -2,7 +2,7 @@ import React from 'react';
 import { AccessibilityRole, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { PressableScale } from './PressableScale';
-import { motion, radius, shadows, sizes, spacing, useEntrada, useTheme } from '@/theme';
+import { motion, radius, sizes, spacing, useEntrada, useTheme } from '@/theme';
 
 export type CardTone = 'surface' | 'primary' | 'accent' | 'danger' | 'warning' | 'muted' | 'outline';
 
@@ -24,7 +24,12 @@ interface Props {
   testID?: string;
 }
 
-/** Superfície de conteúdo. Cartões coloridos (`tone`) ficam sem sombra — só a cor. */
+/**
+ * Superfície de conteúdo, chapada (19/10/2026): sem sombra em nenhum tema. No
+ * escuro, o painel se separa do fundo pelo tom; no claro, por um fio de borda.
+ * Use pouco — uma superfície por tela é a regra; o resto se organiza por espaço
+ * e títulos de seção.
+ */
 export function Card({ children, style, index, tone = 'surface', padding = spacing.lg, onPress, accessibilityLabel, accessibilityHint, accessibilityRole, testID }: Props) {
   const { colors, mode } = useTheme();
   const entrada = useEntrada();
@@ -43,9 +48,10 @@ export function Card({ children, style, index, tone = 'surface', padding = spaci
       backgroundColor: bg[tone],
       padding,
       borderColor: colors.border,
-      borderWidth: tone === 'surface' || tone === 'outline' ? sizes.border : 0,
+      // No escuro, o painel já se separa do fundo pelo tom; a borda fica para o
+      // claro (branco sobre cinza-azulado) e para o `outline`.
+      borderWidth: tone === 'outline' || (tone === 'surface' && mode === 'light') ? sizes.border : 0,
     },
-    tone === 'surface' && mode === 'light' && shadows.card(colors.shadow),
     style,
   ];
   const entering = index === undefined ? undefined : entrada.cascata(index);

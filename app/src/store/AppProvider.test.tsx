@@ -12,6 +12,10 @@
  *    mensagem atrasada ia para o fim da conversa.
  *  - APP-12: o erro da conta anterior aparecia na tela de login.
  *  - APP-1: o alerta minimizado volta sozinho quando o servidor o reenvia.
+ *
+ * E o que a revisão de UX de 19/10/2026 achou (achados 6 e 11): um socorro
+ * novo ficava escondido atrás de um "Chamar atenção" aberto ou minimizado, e o
+ * alarme local só tocava para o alerta da tela.
  */
 import React from 'react';
 import { Text, AppState } from 'react-native';
@@ -21,16 +25,26 @@ import {
   ajustesMaisRecentes,
   chaveDoAlerta,
   comNovasTentativas,
+  derivePendingAlert,
+  escolherAlerta,
   escolherSessao,
   esperaDaTentativa,
   inserirMensagem,
+  JANELA_DO_ALERTA_MS,
   planoPermite,
   SEM_CONTA,
   useApp,
 } from './AppProvider';
 import { ConflitoDeAjustes, type AuthUser, type Beneficiary, type Device, type HelpRequest, type Message, type PatientSettings, type RealtimeHandlers, type Session } from '@/data/types';
+import { sincronizarAlarmesLocais, type PedidoDoAlarme } from '@/hooks/usePushNotifications';
 
-jest.mock('@/hooks/usePushNotifications', () => ({ obterTokenDoAparelho: jest.fn(async () => null) }));
+jest.mock('@/hooks/usePushNotifications', () => ({
+  obterTokenDoAparelho: jest.fn(async () => null),
+  sincronizarAlarmesLocais: jest.fn(async () => undefined),
+}));
+const mockSincronizarAlarmes = sincronizarAlarmesLocais as jest.Mock;
+/** Os pedidos que o alarme local deve estar tocando agora (a última sincronização). */
+const tocando = (): PedidoDoAlarme[] => (mockSincronizarAlarmes.mock.calls.at(-1)?.[0] as PedidoDoAlarme[] | undefined) ?? [];
 
 // ---------- camada de dados falsa ----------
 const USUARIO: AuthUser = { id: 'user-1', email: 'familia@exemplo.com' };
@@ -118,6 +132,7 @@ beforeEach(() => {
   ouvinteDoAuth = null;
   handlersDoTempoReal = null;
   for (const f of Object.values(mockData)) f.mockClear();
+  mockSincronizarAlarmes.mockClear();
   mockData.getUser.mockImplementation(async () => USUARIO);
   mockData.garantirSessao.mockImplementation(async () => undefined);
   mockData.listBeneficiaries.mockImplementation(async () => [PACIENTE]);
@@ -413,5 +428,145 @@ describe('AppProvider — alerta minimizado (APP-1)', () => {
     await act(async () => app.minimizePendingAlert());
     await act(async () => app.restorePendingAlert());
     expect(app.pendingAlertMinimized).toBe(false);
+  });
+});
+
+// ---------- revisão de UX de 19/10/2026 ----------
+function pedido(id: string, kind: HelpRequest['kind'], extra: Partial<HelpRequest> = {}): HelpRequest {
+  return { id, beneficiary_id: 'b1', session_id: null, kind, message: '', created_at: new Date().toISOString(), acknowledged_at: null, escalated_at: null, resolved_at: null, ...extra };
+}
+/** O "Chamar atenção" da tela Sim · Não do computador. */
+const chamarAtencao = () => pedido('hr-ajuda', 'ajuda', { message: 'Está chamando você (tela Sim · Não)' });
+const socorroNovo = (id = 'hr-socorro') => pedido(id, 'emergencia', { message: 'FALTA DE AR' });
+
+describe('AppProvider — socorro não fica atrás de outro pedido (achado 6)', () => {
+  it('socorro novo com o "Chamar atenção" na tela: o socorro toma a tela', async () => {
+    mockData.listHelpRequests.mockResolvedValue([chamarAtencao()]);
+    await montar();
+    await esperar(0);
+    expect(app.pendingAlert?.id).toBe('hr-ajuda');
+
+    await act(async () => handlersDoTempoReal?.onHelpRequest?.(socorroNovo()));
+    expect(app.pendingAlert?.id).toBe('hr-socorro');
+  });
+
+  it('com o "Chamar atenção" minimizado: o socorro entra em tela cheia, não escondido na faixa', async () => {
+    mockData.listHelpRequests.mockResolvedValue([chamarAtencao()]);
+    await montar();
+    await esperar(0);
+    await act(async () => app.minimizePendingAlert());
+    expect(app.pendingAlertMinimized).toBe(true);
+
+    await act(async () => handlersDoTempoReal?.onHelpRequest?.(socorroNovo()));
+    expect(app.pendingAlert?.id).toBe('hr-socorro');
+    expect(app.pendingAlertMinimized).toBe(false);
+  });
+
+  it('"Estou indo!" confirma o socorro; o "Chamar atenção" que esperava volta em tela cheia', async () => {
+    mockData.listHelpRequests.mockResolvedValue([chamarAtencao()]);
+    await montar();
+    await esperar(0);
+    await act(async () => app.minimizePendingAlert());
+    await act(async () => handlersDoTempoReal?.onHelpRequest?.(socorroNovo()));
+
+    await act(async () => app.acknowledgeAlert('hr-socorro'));
+    expect(mockData.acknowledgeHelpRequest).toHaveBeenCalledWith('hr-socorro');
+    expect(app.pendingAlert?.id).toBe('hr-ajuda');
+    expect(app.pendingAlertMinimized).toBe(false);
+  });
+
+  it('pedido de ajuda novo não cobre um socorro sem resposta', async () => {
+    mockData.listHelpRequests.mockResolvedValue([socorroNovo()]);
+    await montar();
+    await esperar(0);
+    await act(async () => handlersDoTempoReal?.onHelpRequest?.(chamarAtencao()));
+    expect(app.pendingAlert?.id).toBe('hr-socorro');
+  });
+
+  it('ao abrir o app, o socorro sem resposta vem antes do pedido de ajuda mais recente', () => {
+    const agora = Date.parse('2026-10-19T03:00:00Z');
+    const socorro = pedido('hr-socorro', 'emergencia', { created_at: new Date(agora - 60_000).toISOString() });
+    const ajuda = pedido('hr-ajuda', 'ajuda', { created_at: new Date(agora - 10_000).toISOString() });
+    expect(derivePendingAlert([ajuda, socorro], agora)?.id).toBe('hr-socorro');
+    expect(escolherAlerta(ajuda, socorro)?.id).toBe('hr-socorro');
+    expect(escolherAlerta(socorro, ajuda)?.id).toBe('hr-socorro');
+  });
+});
+
+describe('AppProvider — alarme local para todo pedido urgente sem confirmação (achados 6 e 11)', () => {
+  it('toca para cada socorro e ajuda sem confirmação — não para aviso, nem confirmado, nem resolvido', async () => {
+    const agora = new Date().toISOString();
+    mockData.listHelpRequests.mockResolvedValue([
+      chamarAtencao(),
+      pedido('hr-postura', 'postura', { message: 'Desvio postural lento.' }),
+      pedido('hr-visto', 'emergencia', { acknowledged_at: agora }),
+      pedido('hr-feito', 'emergencia', { acknowledged_at: agora, resolved_at: agora }),
+    ]);
+    await montar();
+    await esperar(0);
+    expect(tocando().map((p) => p.id)).toEqual(['hr-ajuda']);
+    expect(tocando()[0]).toMatchObject({ titulo: 'Pedido de ajuda — Carlos', corpo: 'Está chamando você (tela Sim · Não)', beneficiaryId: 'b1' });
+  });
+
+  it('o socorro que chega com outro na tela também toca — não só o alerta da tela', async () => {
+    mockData.listHelpRequests.mockResolvedValue([socorroNovo('hr-1')]);
+    await montar();
+    await esperar(0);
+    // Mesmo peso: o da tela fica (o alerta não troca debaixo do dedo)…
+    await act(async () => handlersDoTempoReal?.onHelpRequest?.(socorroNovo('hr-2')));
+    expect(app.pendingAlert?.id).toBe('hr-1');
+    // …mas o celular toca pelos dois.
+    expect(tocando().map((p) => p.id).sort()).toEqual(['hr-1', 'hr-2']);
+  });
+
+  it('para ao confirmar e ao resolver', async () => {
+    mockData.listHelpRequests.mockResolvedValue([socorroNovo('hr-1'), socorroNovo('hr-2')]);
+    await montar();
+    await esperar(0);
+    expect(tocando()).toHaveLength(2);
+
+    await act(async () => app.acknowledgeAlert('hr-1'));
+    expect(tocando().map((p) => p.id)).toEqual(['hr-2']);
+    await act(async () => app.resolveAlert('hr-2'));
+    expect(tocando()).toEqual([]);
+  });
+
+  it('confirmado em OUTRO celular (tempo real): para de tocar aqui também', async () => {
+    mockData.listHelpRequests.mockResolvedValue([socorroNovo()]);
+    await montar();
+    await esperar(0);
+    await act(async () => handlersDoTempoReal?.onHelpRequest?.({ ...socorroNovo(), acknowledged_at: new Date().toISOString() }));
+    expect(tocando()).toEqual([]);
+  });
+
+  it('o escalonamento do servidor chega ao alarme (que então toca de novo)', async () => {
+    mockData.listHelpRequests.mockResolvedValue([socorroNovo()]);
+    await montar();
+    await esperar(0);
+    expect(tocando()[0].escalado ?? null).toBeNull();
+
+    const escaladoEm = new Date().toISOString();
+    await act(async () => handlersDoTempoReal?.onHelpRequest?.({ ...socorroNovo(), escalated_at: escaladoEm }));
+    expect(tocando()).toEqual([expect.objectContaining({ id: 'hr-socorro', escalado: escaladoEm, titulo: 'Pedido de socorro sem resposta — Carlos' })]);
+  });
+
+  it('para ao sair da conta', async () => {
+    mockData.listHelpRequests.mockResolvedValue([socorroNovo()]);
+    await montar();
+    await esperar(0);
+    expect(tocando()).toHaveLength(1);
+
+    await act(async () => {
+      await app.signOut();
+    });
+    expect(tocando()).toEqual([]);
+  });
+
+  it('pedido de antes da janela do alerta (horas atrás) não toca', async () => {
+    const antigo = new Date(Date.now() - JANELA_DO_ALERTA_MS - 60_000).toISOString();
+    mockData.listHelpRequests.mockResolvedValue([pedido('hr-velho', 'emergencia', { created_at: antigo, received_at: antigo })]);
+    await montar();
+    await esperar(0);
+    expect(tocando()).toEqual([]);
   });
 });

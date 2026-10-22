@@ -80,6 +80,25 @@ export interface VerificacaoDoModelo {
   hashConfere: boolean | null;
 }
 
+/**
+ * Entrada da inferência de TESTE que o worker roda no `init`, antes do `ready`
+ * (relato de 19/10/2026).
+ *
+ * Sem ela, uma meta que não bate com o modelo (outra grade de bins, outro nome
+ * de saída) ou um lado de recorte que o ONNX não aceita só apareciam na
+ * PRIMEIRA inferência real — depois do `ready`. O status ficava `ready`, a
+ * calibração começava com o bloco angular sempre zerado e terminava em
+ * "features mortas", com a tela culpando o reflexo dos óculos.
+ *
+ * - `porProvider`: tensor quadrado (rede do rosto). O lado depende do provider
+ *   que o worker conseguir ativar (a política por provider do cliente), então
+ *   vão os dois e o worker testa o do provider ativo.
+ * - `dims`: tensor retangular `[altura, largura]` (ramo ocular, 64×96).
+ */
+export type EntradaDeTeste =
+  | { porProvider: { webgpu: number; wasm: number } }
+  | { dims: [number, number] };
+
 export type L2CSWorkerRequest =
   /** `ortBaseUrl`: diretório dos artefatos do ORT, resolvido pela PÁGINA. Dentro
    *  do worker `location.href` é a URL do script do worker (em `assets/` no
@@ -87,8 +106,18 @@ export type L2CSWorkerRequest =
    *  `rotulo`: prefixo das mensagens do worker no console. O mesmo worker roda
    *  a L2CS-Net do rosto (`[L2CS]`, o padrão) e a EyeNet de cada olho
    *  (`[olho esquerdo]`, `[olho direito]`); sem o rótulo, o console dizia
-   *  `[L2CS]` também quando nenhuma L2CS-Net estava rodando. */
-  | { type: 'init'; modelUrl: string; metaUrl: string; provider: 'auto' | 'webgpu' | 'wasm'; ortBaseUrl?: string; rotulo?: string }
+   *  `[L2CS]` também quando nenhuma L2CS-Net estava rodando.
+   *  `teste`: ver `EntradaDeTeste`. Ausente (cliente antigo) = a forma da saída
+   *  é conferida na primeira inferência, como antes. */
+  | {
+      type: 'init';
+      modelUrl: string;
+      metaUrl: string;
+      provider: 'auto' | 'webgpu' | 'wasm';
+      ortBaseUrl?: string;
+      rotulo?: string;
+      teste?: EntradaDeTeste;
+    }
   /** `dims`: `[altura, largura]` do tensor quando ele NÃO é quadrado (ramo
    *  ocular, 64×96). Ausente, o lado é deduzido do comprimento. */
   | { type: 'infer'; id: number; tensor: Float32Array; dims?: [number, number] };
@@ -105,5 +134,7 @@ export type L2CSWorkerResponse =
       verificacao: VerificacaoDoModelo;
     }
   | { type: 'init_error'; error: string }
-  | { type: 'result'; id: number; yaw: number; pitch: number; confidence: number; inferenceMs: number }
-  | { type: 'infer_error'; id: number; error: string };
+  /** `devolvido`: o buffer do tensor de entrada, transferido de volta para o
+   *  client reaproveitar (falha #13, 18/10/2026). Ausente se não deu para devolver. */
+  | { type: 'result'; id: number; yaw: number; pitch: number; confidence: number; inferenceMs: number; devolvido?: Float32Array }
+  | { type: 'infer_error'; id: number; error: string; devolvido?: Float32Array };

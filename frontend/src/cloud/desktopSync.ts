@@ -12,6 +12,9 @@
  *   heartbeat, session.upsert, session.end, calibration.result, message.send,
  *   message.spoken, messages.pending, help.create, settings.get, voice.status,
  *   report.send, device.info
+ *   (pairing.create / pairing.status / pairing.cancel — o QR do celular do
+ *    cuidador, 19/10/2026 — ficam em ./pareamento.ts: não passam por aqui nem
+ *    pela fila offline)
  *
  * Fila offline: com o computador vinculado, o que não puder ser enviado (sem
  * rede, função fora) fica em `irisflow.fila` e é reenviado na ordem quando a
@@ -34,7 +37,7 @@
  */
 import { cloudConfig } from './config';
 import { cofre, CHAVES } from './armazenamento';
-import type { Message, PatientSettings, QuickPhrase, SessaoRemota, HelpKind, MessageKind } from './types';
+import type { HelpRequestRemoto, Message, PatientSettings, QuickPhrase, SessaoRemota, HelpKind, MessageKind } from './types';
 
 /**
  * `occurred_at`: instante em que o evento aconteceu (ISO), carimbado por
@@ -98,8 +101,27 @@ export interface RespostaSync {
   pending_messages?: number;
   /** `heartbeat` com `session_id`: a sessão ainda está aberta no servidor? Ausente em funções antigas. */
   sessao_aberta?: boolean;
+  /**
+   * `heartbeat` (servidor de 19/10/2026 em diante): confirmações do cuidador
+   * das últimas horas, a reserva do realtime para o alarme parar.
+   */
+  reconhecimentos?: Array<Partial<HelpRequestRemoto>>;
   /** `help.create`: o pedido com este id já existia (reenvio). */
   repetido?: boolean;
+  /**
+   * `help.create` de ajuda (não a Emergência): este computador passou do limite de chamados (6 em
+   * 10 minutos); o servidor descartou o aviso, sem push. Ver `limitado` em `eventos.ts` (M6).
+   */
+  limitado?: boolean;
+  /**
+   * `help.create` (servidor de 19/10/2026 em diante): quantos celulares a
+   * Expo aceitou avisar e quantos recusaram, com os motivos (ex.
+   * `DeviceNotRegistered`, `InvalidCredentials` — FCM não configurado).
+   * `avisados: 0` = o pedido foi gravado, mas nenhum celular foi avisado.
+   * `null` (só no reenvio, `repetido`): o servidor não sabe se o push do
+   * primeiro envio foi aceito — ver `push_incerto` em `eventos.ts`.
+   */
+  push?: { avisados: number; recusados: number; motivos?: string[] } | null;
   /**
    * Só nas respostas locais de falha: o evento ficou na fila offline e sai
    * quando a conexão voltar (a tela de emergência diz isso em vez de
@@ -195,6 +217,19 @@ const ENFILEIRAVEIS = new Set<AcaoSync['action']>([
   'session.end', 'calibration.result', 'message.send', 'message.spoken', 'help.create', 'voice.status',
 ]);
 const MAX_FILA = 200;
+/** Recusas seguidas do servidor (5xx/429) antes de o item ceder a vez aos outros. */
+const TENTATIVAS_ANTES_DE_PULAR = 3;
+/** O que não é socorro nem mensagem sai da fila depois de tantas recusas. */
+const MAX_TENTATIVAS_DO_RESTO = 10;
+
+function ehPrioritario(a: AcaoSync): boolean {
+  return a.action === 'help.create' || a.action === 'message.send';
+}
+
+/** 0 = socorro, 1 = mensagem do paciente, 2 = o resto. */
+function prioridadeNaFila(a: AcaoSync): number {
+  return a.action === 'help.create' ? 0 : a.action === 'message.send' ? 1 : 2;
+}
 
 export interface OpcoesSync {
   url?: string;
@@ -208,10 +243,11 @@ export interface OpcoesSync {
   /** Relógio (testes). */
   agora?: () => number;
   /**
-   * Um evento que esperava na fila foi entregue agora. A tela de emergência
-   * usa para trocar "sem internet, na fila" por "enviado".
+   * Um evento que esperava na fila foi entregue agora, com a resposta do
+   * servidor. A tela de emergência usa para trocar "sem internet, na fila" por
+   * "enviado" (ou por "gravado, sem push", se nenhum celular foi avisado).
    */
-  aoEntregarDaFila?: (acao: AcaoSync) => void;
+  aoEntregarDaFila?: (acao: AcaoSync, resposta: RespostaSync) => void;
 }
 
 export class DesktopSync {
@@ -258,7 +294,9 @@ export class DesktopSync {
       // quando o app fechou sem rede só saía depois de toda a inicialização
       // (inclusive falar as mensagens pendentes do cuidador), e nenhum
       // heartbeat o destravava: a fila em memória parecia vazia.
-      if (this.fila.length || !this.filaCarregada) void this.drenar();
+      if (this.fila.length || !this.filaCarregada) {
+        void this.drenar().catch((e) => console.warn('[cloud] a fila não pôde ser reenviada agora', e));
+      }
       return resposta;
     } catch (e) {
       if (e instanceof ErroDeSync && e.credencialInvalida) {
@@ -312,7 +350,20 @@ export class DesktopSync {
     };
   }
 
-  /** Reenvia a fila na ordem. Para na primeira falha de rede. */
+  /**
+   * Reenvia a fila: primeiro os pedidos de socorro, depois as mensagens,
+   * depois o resto — cada grupo na ordem em que entrou. Para na primeira
+   * falha de REDE (nada vai passar agora).
+   *
+   * Antes era a ordem de chegada pura, e o contador de tentativas nunca era
+   * lido (auditoria de 18/10/2026, item 8): um item que o servidor recusasse
+   * sempre com 5xx (um `calibration.result` malformado de um jeito que o banco
+   * não aceita, por exemplo) segurava a fila para sempre, e o socorro que
+   * entrou sem internet esperava atrás dele — e atrás de até 199 itens, 10 s
+   * de prazo cada. Agora um item que falha pelo servidor várias vezes vai para
+   * o fim do grupo dele e deixa os outros passarem; se não for socorro nem
+   * mensagem, é descartado depois de `MAX_TENTATIVAS_DO_RESTO`.
+   */
   async drenar(): Promise<number> {
     if (this.drenando) return 0;
     const chave = this.op.chave();
@@ -322,26 +373,41 @@ export class DesktopSync {
     try {
       await this.carregarFila();
       this.descartarDeOutroVinculo(chave);
-      while (this.fila.length) {
-        const item = this.fila[0];
+      this.ordenarPorPrioridade();
+      // Percorre uma CÓPIA da fila: cada item é tentado no máximo uma vez por
+      // passada, mesmo o que for empurrado para o fim do grupo.
+      for (const item of [...this.fila]) {
         try {
-          await this.chamar(item.acao, chave);
-          this.fila.shift();
+          const resposta = await this.chamar(item.acao, chave);
+          this.tirarDaFila(item);
           enviados++;
-          try { this.op.aoEntregarDaFila?.(item.acao); } catch { /* aviso à tela: não trava a fila */ }
+          try { this.op.aoEntregarDaFila?.(item.acao, resposta); } catch { /* aviso à tela: não trava a fila */ }
         } catch (e) {
           if (e instanceof ErroDeSync && e.credencialInvalida) {
             await this.perderCredencial();
-            break;
+            return enviados;
           }
           if (e instanceof ErroDeSync && e.definitivo) {
             // payload inválido: descarta para não travar a fila inteira
             console.warn(`[cloud] descartando ${item.acao.action} da fila: ${e.message}`);
-            this.fila.shift();
+            this.tirarDaFila(item);
             continue;
           }
           item.tentativas++;
-          break;
+          // Falha de rede (o `fetch` lançou, ou estourou o prazo): nada vai
+          // passar agora, para aqui e tenta na próxima.
+          if (!(e instanceof ErroDeSync)) break;
+          // O servidor respondeu com erro (5xx, 429). Nas primeiras vezes é
+          // tratado como passageiro (a ordem fica); depois, como sendo deste
+          // item, e ele cede a vez.
+          if (item.tentativas < TENTATIVAS_ANTES_DE_PULAR) break;
+          this.tirarDaFila(item);
+          if (!ehPrioritario(item.acao) && item.tentativas >= MAX_TENTATIVAS_DO_RESTO) {
+            console.warn(`[cloud] descartando ${item.acao.action} da fila depois de ${item.tentativas} recusas do servidor: ${e.message}`);
+            continue;
+          }
+          console.warn(`[cloud] ${item.acao.action} recusado ${item.tentativas}× pelo servidor (${e.message}); vai para o fim do grupo`);
+          this.inserirNoFimDoGrupo(item);
         }
       }
       await this.persistirFila();
@@ -349,6 +415,23 @@ export class DesktopSync {
     } finally {
       this.drenando = false;
     }
+  }
+
+  /** Socorro, depois mensagem, depois o resto; ordem de chegada dentro de cada grupo (sort estável). */
+  private ordenarPorPrioridade(): void {
+    this.fila.sort((a, b) => prioridadeNaFila(a.acao) - prioridadeNaFila(b.acao));
+  }
+
+  private tirarDaFila(item: ItemDaFila): void {
+    const i = this.fila.indexOf(item);
+    if (i >= 0) this.fila.splice(i, 1);
+  }
+
+  private inserirNoFimDoGrupo(item: ItemDaFila): void {
+    const p = prioridadeNaFila(item.acao);
+    let i = this.fila.length;
+    while (i > 0 && prioridadeNaFila(this.fila[i - 1].acao) > p) i--;
+    this.fila.splice(i, 0, item);
   }
 
   /**

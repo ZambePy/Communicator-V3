@@ -39,9 +39,15 @@ export const FECHADO_ATE_AVISAR_MS = 2600;
 /** Sai depressa: um olho reaberto é resposta imediata. */
 export const ABERTO_PARA_LIMPAR_MS = 250;
 
+/**
+ * Calma e útil (pedido do dono, 19/10/2026): descansar os olhos é normal para
+ * quem tem fadiga, e o texto diz que nada é clicado enquanto isso — sem acusar
+ * ninguém. A saída concreta (levantar um pouco o olhar) continua, porque olhar
+ * para baixo é a causa mais comum de a pálpebra cobrir a íris.
+ */
 export const MENSAGEM =
-  'Os olhos estão fechados ou a pálpebra está cobrindo a íris — o cursor ficou parado. ' +
-  'Se você estiver olhando para baixo, levante um pouco o olhar.';
+  'Enquanto eu não vejo seus olhos, o cursor espera parado e nada é clicado. ' +
+  'Se estiver olhando para baixo, levante um pouco o olhar.';
 
 export class DetectorDeOlhosFechados {
   private fechadoDesde: number | null = null;

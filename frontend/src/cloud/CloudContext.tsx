@@ -29,13 +29,22 @@ import { cloudConfig, nuvemConfigurada } from './config';
 import { cofre, CHAVES, infoDoApp } from './armazenamento';
 import { supabase } from './supabaseClient';
 import { DesktopSync, novoIdDePedido } from './desktopSync';
-import { ouvir, emitirFalaDoPaciente, emitirPedidoDeAjuda, entregaDaResposta, informarEntrega, type EventoDoPaciente } from './eventos';
+import {
+  ouvir, emitirFalaDoPaciente, emitirPedidoDeAjuda, entregaDaResposta, informarEntrega,
+  entregaDaMensagemPelaResposta, informarEntregaDaMensagem, type EventoDoPaciente,
+} from './eventos';
+import { ligarAvisoDoProblemaAoCuidador } from './avisoDoProblemaAoCuidador';
+import {
+  ehPerguntaDoCuidador, marcarPerguntaRespondida, notaDePerguntaFechada, perguntaFoiRespondida, textoDaResposta, type RespostaDaPergunta,
+} from './perguntaDoCuidador';
+import { definirPrazoDoCuidador, registrarReconhecimento } from '../services/emergencia/pedidoDeSocorro';
 import { camposDeCalibracao, resumoDoRelatorio } from './sessao';
 import { falarComVozDoSistema, vozDoSistemaDisponivel } from '../services/voz/sistema';
 import { assinarEstadoDaVoz, estadoDaVoz, vozClonadaPronta } from '../services/voz';
 import { montarRelatorio } from '../services/diagnostico/relatorioDeSuporte';
 import { instalarRelatosAutomaticos, registrarEnviador } from '../services/diagnostico/relatosAutomaticos';
 import type { FilterPresetRemoto, HelpKind, HelpRequestRemoto, Message, MessageKind, PatientSettings, QuickPhrase, ReconhecimentoDoCuidador, VinculoLocal } from './types';
+import type { ResultadoDoPreset } from '@tracker/tracker/engine';
 
 export interface CloudState {
   /** Há URL e chave do Supabase. Falso = app 100% local, como sempre. */
@@ -59,6 +68,12 @@ export interface CloudState {
    * do paciente: a tela de emergência mostra e fala quando o cuidador viu.
    */
   reconhecimento: ReconhecimentoDoCuidador | null;
+  /**
+   * Perguntas sim/não do cuidador esperando resposta, a mais antiga primeiro
+   * (21/10/2026). Não são faladas na hora: a `PerguntaDoCuidador` mostra a
+   * primeira quando for seguro, fala e devolve a resposta.
+   */
+  perguntasDoCuidador: Message[];
 }
 
 export interface CloudActions {
@@ -72,6 +87,15 @@ export interface CloudActions {
    * servidor gravou. `false` sem vínculo, sem rede ou no teto anti-inundação.
    */
   enviarRelatorioDeSuporte: (motivo: 'erro' | 'manual', resumo?: string) => Promise<boolean>;
+  /**
+   * A resposta do paciente a uma pergunta do cuidador: sai UMA vez, como
+   * `simnao` "Sim (pergunta)" / "Não (pergunta)", e a pergunta deixa a fila.
+   * Devolve o id da mensagem da resposta (para acompanhar a entrega por
+   * `ouvirEntregaDaMensagem`), ou `null` se ela já tinha sido respondida.
+   */
+  responderPerguntaDoCuidador: (id: string, resposta: RespostaDaPergunta) => string | null;
+  /** Tira a pergunta da tela sem resposta (o cuidador, pelo mouse ou teclado). */
+  fecharPerguntaDoCuidador: (id: string) => void;
 }
 
 const estadoInicial: CloudState = {
@@ -87,6 +111,7 @@ const estadoInicial: CloudState = {
   realtime: 'indisponivel',
   filaPendente: 0,
   reconhecimento: null,
+  perguntasDoCuidador: [],
 };
 
 const acoesInertes: CloudActions = {
@@ -96,6 +121,8 @@ const acoesInertes: CloudActions = {
   dispensarMensagemNaTela: () => {},
   carregarConversa: async () => {},
   enviarRelatorioDeSuporte: async () => false,
+  responderPerguntaDoCuidador: () => null,
+  fecharPerguntaDoCuidador: () => {},
 };
 
 const CloudContext = createContext<CloudState & CloudActions>({ ...estadoInicial, ...acoesInertes });
@@ -134,7 +161,17 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const { status: statusDaLicenca, license, reverificar } = useLicense();
   const [estado, setEstado] = useState<CloudState>(estadoInicial);
   const patch = useCallback((p: Partial<CloudState> | ((s: CloudState) => Partial<CloudState>)) => {
-    setEstado((s) => ({ ...s, ...(typeof p === 'function' ? p(s) : p) }));
+    setEstado((s) => {
+      const novo = typeof p === 'function' ? p(s) : p;
+      // Relato de 22/10/2026: sem nenhum campo diferente devolve o MESMO estado.
+      // O heartbeat grava `filaPendente` a cada 30 s e, com a fila igual, um
+      // objeto novo re-desenhava todo consumidor do contexto (teclado, mensagens,
+      // Emergência) à toa, por horas.
+      for (const k of Object.keys(novo) as (keyof CloudState)[]) {
+        if (!Object.is(s[k], novo[k])) return { ...s, ...novo };
+      }
+      return s;
+    });
   }, []);
 
   // Refs para o que os timers e o barramento leem sem re-assinar a cada render.
@@ -156,14 +193,27 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const canalRef = useRef<RealtimeChannel | null>(null);
   const syncRef = useRef<DesktopSync | null>(null);
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** A fila das perguntas do cuidador, lida na hora pelas ações (o estado chega depois). */
+  const perguntasRef = useRef<Message[]>([]);
+  /** Perguntas respondidas cujo "falada" já foi reenviado nesta sessão. */
+  const faladaReenviadaRef = useRef(new Set<string>());
+  const definirPerguntas = useCallback((mudar: (atual: Message[]) => Message[]) => {
+    const proximas = mudar(perguntasRef.current);
+    if (proximas === perguntasRef.current) return;
+    perguntasRef.current = proximas;
+    patch({ perguntasDoCuidador: proximas });
+  }, [patch]);
 
   const sync = useMemo(
     () => new DesktopSync({
       chave: () => vinculoRef.current?.device_key ?? null,
       // Socorro que esperava na fila saiu: a tela de emergência troca "sem
       // internet" por "enviado".
-      aoEntregarDaFila: (acao) => {
-        if (acao.action === 'help.create' && acao.id) informarEntrega(acao.id, 'enviado');
+      aoEntregarDaFila: (acao, resposta) => {
+        if (acao.action === 'help.create' && acao.id) informarEntrega(acao.id, entregaDaResposta({ ok: true, ...resposta }), resposta.id);
+        // A frase do mapa da dor que esperava internet: "na fila" vira
+        // "na conversa" (revisão de UX de 20/10/2026, achado 3).
+        if (acao.action === 'message.send' && acao.id) informarEntregaDaMensagem(acao.id, 'gravada');
       },
       aoPerderCredencial: () => {
         // Computador desvinculado pelo cuidador (site ou app): esquece a chave,
@@ -174,8 +224,11 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         vinculoRef.current = null;
         sessaoIdRef.current = null;
         if (canalRef.current) { void supabase().removeChannel(canalRef.current); canalRef.current = null; }
-        void cofre.remover(CHAVES.vinculo);
-        void cofre.remover(CHAVES.filaDeEnvio);
+        // `secureRemove` é um `invoke` e pode rejeitar (22/10/2026): sem o catch
+        // era uma rejeição solta, e ninguém via que o vínculo ou a fila ficaram no cofre.
+        const apagar = (chave: string) => cofre.remover(chave).catch((e) => console.warn(`[cloud] o cofre não apagou ${chave} depois de a chave ser recusada`, e));
+        void apagar(CHAVES.vinculo);
+        void apagar(CHAVES.filaDeEnvio);
         patch({ vinculo: null, sessaoId: null, realtime: 'indisponivel' });
         void reverificarRef.current?.();
       },
@@ -188,11 +241,22 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   syncRef.current = sync;
 
   // ---------- helpers ----------
-  /** Preset em vigor, no vocabulário do banco (engine → remoto → 'balanceado'). */
-  const presetAtual = useCallback((): FilterPresetRemoto => {
-    let doEngine: string | null = null;
-    try { doEngine = gazeRef.current.getDiagnostics?.()?.filtro.preset ?? null; } catch { /* engine ainda não montou */ }
-    return presetLocalParaRemoto(doEngine, presetAplicadoRef.current);
+  /**
+   * O filtro EM VIGOR no cursor, para o relato à nuvem (auditoria A2,
+   * 19/10/2026). `preset` só existe quando um preset do One Euro governa; com
+   * o estimador de fixação (M9, o padrão do V3 depois da calibração) ou a
+   * cadeia Kalman, nenhum preset governa, e `sessions.filter_preset` — que só
+   * conhece os três presets — não é enviado: antes ia o preset pedido pelo
+   * cuidador, e o relatório dele dizia uma suavização que não valia. O que vale
+   * vai em `capture_conditions.filtro`. Sem diagnóstico (engine que ainda não
+   * montou), fica o comportamento de antes: o preset pedido.
+   */
+  const filtroAtual = useCallback((): { preset: FilterPresetRemoto | null; efetivo: string | null } => {
+    let filtro: { preset?: string | null; efetivo?: string } | null = null;
+    try { filtro = gazeRef.current.getDiagnostics?.()?.filtro ?? null; } catch { /* engine ainda não montou */ }
+    if (!filtro) return { preset: presetLocalParaRemoto(null, presetAplicadoRef.current), efetivo: null };
+    if (filtro.preset) return { preset: presetLocalParaRemoto(filtro.preset, null), efetivo: filtro.efetivo ?? 'oneEuro' };
+    return { preset: null, efetivo: filtro.efetivo ?? null };
   }, []);
 
   /**
@@ -209,6 +273,9 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const aplicarAjustesRemotos = useCallback((a: PatientSettings | null) => {
     if (!a) return;
     patch({ ajustesRemotos: a });
+    // O prazo do cuidador governa o alarme local do pedido de socorro, que
+    // vive fora da tela (services/emergencia/pedidoDeSocorro.ts).
+    definirPrazoDoCuidador(a.emergency_timeout_s);
     if (ajustesAplicadosRef.current === a.updated_at) return;
     ajustesAplicadosRef.current = a.updated_at;
     // Só o que veio PREENCHIDO. Nulo/ausente = "o cuidador não definiu" e o
@@ -227,9 +294,23 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // τ de vários segundos e deixariam o cursor inutilizável.
     if (a.filter_preset != null && a.filter_preset !== presetAplicadoRef.current) {
       presetAplicadoRef.current = a.filter_preset;
-      console.log(`[cloud] ajuste remoto: suavização → ${a.filter_preset}`);
-      try { gazeRef.current.setFilterPreset(`${a.filter_preset}-v2`); } catch (e) { console.warn('[cloud] preset não aplicado', e); }
-      mudou.filter_preset = a.filter_preset;
+      let r: ResultadoDoPreset | null = null;
+      try { r = gazeRef.current.setFilterPreset(`${a.filter_preset}-v2`) ?? null; } catch (e) { console.warn('[cloud] preset não aplicado', e); }
+      if (r?.aplicado) {
+        console.log(`[cloud] ajuste remoto: suavização → ${a.filter_preset}`);
+        // O registro da sessão só muda quando o preset passou a valer.
+        mudou.filter_preset = a.filter_preset;
+      } else {
+        // Uma linha por ajuste recebido (raro), dizendo o que vale de fato.
+        console.warn(
+          `[cloud] ajuste remoto de suavização (${a.filter_preset}) recebido, mas ele não muda o cursor agora: ` +
+          (r?.emVigor === 'fixacao'
+            ? 'quem suaviza é o estimador de fixação, ajustado pela calibração.'
+            : r?.emVigor
+              ? `quem suaviza é o filtro '${r.emVigor}'.`
+              : 'o rastreamento não está ativo.'),
+        );
+      }
     }
     if (Object.keys(mudou).length) atualizarSessao(mudou);
   }, [patch, updateSettings, atualizarSessao]);
@@ -247,6 +328,25 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const mensagens = existe ? s.mensagens.map((x) => (x.id === m.id ? m : x)) : [...s.mensagens, m].slice(-200);
       return { mensagens, naoFaladas: mensagens.filter((x) => x.sender === 'cuidador' && !x.spoken).length };
     });
+    // Pergunta sim/não do cuidador (21/10/2026): não é recado para falar na
+    // hora nem para o cartão de 15 s. Entra na fila das perguntas, que a
+    // `PerguntaDoCuidador` mostra quando for seguro (fora da emergência, da
+    // calibração e da contagem), fala e responde. No servidor ela continua
+    // pendente até ser respondida: o app reaberto no meio a traz de volta.
+    if (ehPerguntaDoCuidador(m)) {
+      if (m.spoken) return;
+      if (perguntaFoiRespondida(m.id)) {
+        // Respondida aqui, mas o "falada" ainda não chegou ao servidor (a
+        // fila offline, o app reaberto): reenviado uma vez, e ela não volta.
+        if (!faladaReenviadaRef.current.has(m.id)) {
+          faladaReenviadaRef.current.add(m.id);
+          void sync.enviar({ action: 'message.spoken', message_id: m.id });
+        }
+        return;
+      }
+      definirPerguntas((atual) => (atual.some((p) => p.id === m.id) ? atual : [...atual, m]));
+      return;
+    }
     if (m.spoken || falandoRef.current.has(m.id) || semVozRef.current.has(m.id)) return;
     falandoRef.current.add(m.id);
     try {
@@ -267,7 +367,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } finally {
       falandoRef.current.delete(m.id);
     }
-  }, [patch, sync, mostrarNaTela]);
+  }, [patch, sync, mostrarNaTela, definirPerguntas]);
 
   const buscarPendentes = useCallback(async () => {
     if (!vinculoRef.current) return;
@@ -308,13 +408,16 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const abrirSessao = useCallback(async (appVersion: string) => {
     if (!vinculoRef.current || sessaoIdRef.current) return;
     const s = settingsRef.current;
+    const filtro = filtroAtual();
     const r = await sync.enviar({
       action: 'session.upsert',
       session: {
         status: 'active',
         started_at: new Date().toISOString(),
         dwell_ms: dwellLocalParaRemoto(s.dwellMs),
-        filter_preset: presetAtual(),
+        // Só quando um preset governa de fato o cursor (ver `filtroAtual`).
+        ...(filtro.preset ? { filter_preset: filtro.preset } : {}),
+        ...(filtro.efetivo ? { capture_conditions: { filtro: filtro.efetivo } } : {}),
         app_version: appVersion,
         modules_used: [],
       },
@@ -323,7 +426,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       sessaoIdRef.current = r.id;
       patch({ sessaoId: r.id });
     }
-  }, [sync, patch, presetAtual]);
+  }, [sync, patch, filtroAtual]);
 
   const encerrarSessao = useCallback(async () => {
     const id = sessaoIdRef.current;
@@ -336,6 +439,21 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       utterances: c.frases, chars_typed: c.caracteres, modules_used: [...c.modulos],
     });
   }, [sync, patch]);
+
+  /**
+   * Confirmação do cuidador, venha do realtime ou do heartbeat (reserva para
+   * quando o websocket não conecta — rede de hospital, proxy). Vai para o
+   * pedido de socorro em andamento, que para o alarme mesmo sem a tela de
+   * emergência montada, e para o estado (a tela mostra "SEU CUIDADOR VIU").
+   */
+  const receberReconhecimento = useCallback((novo: ReconhecimentoDoCuidador) => {
+    try {
+      registrarReconhecimento(novo);
+    } catch (e) {
+      console.warn('[cloud] confirmação do cuidador não aplicada ao pedido', e);
+    }
+    patch((s) => (s.reconhecimento && s.reconhecimento.id === novo.id && s.reconhecimento.resolved_at === novo.resolved_at ? {} : { reconhecimento: novo }));
+  }, [patch]);
 
   const assinarRealtime = useCallback(async (beneficiaryId: string) => {
     // `channel()` reaproveita um canal com o mesmo tópico ainda em `leaving`
@@ -363,33 +481,45 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (!h || !h.id || !h.acknowledged_at || !h.kind) return;
         if (h.kind !== 'emergencia' && h.kind !== 'ajuda') return;
         const novo: ReconhecimentoDoCuidador = { id: h.id, kind: h.kind, created_at: h.created_at ?? '', acknowledged_at: h.acknowledged_at, resolved_at: h.resolved_at ?? null };
-        patch((s) => (s.reconhecimento && s.reconhecimento.id === novo.id && s.reconhecimento.resolved_at === novo.resolved_at ? {} : { reconhecimento: novo }));
+        receberReconhecimento(novo);
       })
       .subscribe((status) => {
         realtimeRef.current = status === 'SUBSCRIBED' ? 'conectado' : 'desconectado';
         patch({ realtime: realtimeRef.current });
       });
     canalRef.current = canal;
-  }, [receberDoCuidador, aplicarAjustesRemotos, carregarAjustes, patch]);
+  }, [receberDoCuidador, aplicarAjustesRemotos, carregarAjustes, receberReconhecimento]);
 
   const iniciarServicos = useCallback(async (v: VinculoLocal) => {
     vinculoRef.current = v;
-    patch({ vinculo: v });
+    // Perguntas de outro vínculo (o novo login neste computador) não podem
+    // ser respondidas na conversa deste: a busca de pendentes traz as daqui.
+    perguntasRef.current = [];
+    patch({ vinculo: v, perguntasDoCuidador: [] });
     // A fila primeiro: um socorro que ficou nela quando o app fechou sem rede
     // não pode esperar a conversa carregar, a sessão abrir e — o mais lento —
     // `buscarPendentes` falar em voz alta as mensagens do cuidador.
-    void sync.drenar().then((n) => { if (n) console.log(`[cloud] ${n} item(ns) reenviado(s) da fila`); });
+    void sync.drenar()
+      .then((n) => { if (n) console.log(`[cloud] ${n} item(ns) reenviado(s) da fila`); })
+      .catch((e) => console.warn('[cloud] a fila não pôde ser reenviada agora', e));
+    // O realtime ANTES de falar as pendentes (auditoria de 18/10/2026, item
+    // 16): `buscarPendentes` fala em voz alta cada mensagem que esperava, e
+    // com várias delas a assinatura atrasava minutos — e é por ela que chega a
+    // confirmação do cuidador ("Estou indo") que para o alarme. As pendentes
+    // são faladas em segundo plano.
+    await assinarRealtime(v.beneficiary_id).catch((e) => console.warn('[cloud] realtime indisponível', e));
     const info = await infoDoApp();
-    await Promise.all([carregarConversa(), carregarAjustes(), buscarPendentes()]);
+    await Promise.all([carregarConversa(), carregarAjustes()]);
     await abrirSessao(info.version);
-    await assinarRealtime(v.beneficiary_id);
+    void buscarPendentes().catch((e) => console.warn('[cloud] mensagens pendentes não buscadas', e));
   }, [patch, carregarConversa, carregarAjustes, buscarPendentes, abrirSessao, assinarRealtime, sync]);
 
   const pararServicos = useCallback(async () => {
     if (canalRef.current) { void supabase().removeChannel(canalRef.current); canalRef.current = null; }
     await encerrarSessao();
     vinculoRef.current = null;
-    patch({ vinculo: null, realtime: 'indisponivel', mensagens: [], naoFaladas: 0, mensagemNaTela: null, reconhecimento: null });
+    perguntasRef.current = [];
+    patch({ vinculo: null, realtime: 'indisponivel', mensagens: [], naoFaladas: 0, mensagemNaTela: null, reconhecimento: null, perguntasDoCuidador: [] });
   }, [encerrarSessao, patch]);
 
   // ---------- segue a licença ----------
@@ -478,6 +608,15 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }).then((r) => {
         patch({ filaPendente: sync.tamanhoDaFila });
         if ((r.pending_messages ?? 0) > 0) void buscarPendentes();
+        // Reserva do realtime: o servidor (19/10/2026 em diante) devolve as
+        // confirmações recentes dos pedidos de socorro e de ajuda. Sem isto,
+        // com o websocket bloqueado o "Seu cuidador viu" nunca aparecia e o
+        // alarme seguia tocando depois do "Estou indo".
+        for (const h of r.reconhecimentos ?? []) {
+          if (h && h.id && h.acknowledged_at && (h.kind === 'emergencia' || h.kind === 'ajuda')) {
+            receberReconhecimento({ id: h.id, kind: h.kind, created_at: h.created_at ?? '', acknowledged_at: h.acknowledged_at, resolved_at: h.resolved_at ?? null });
+          }
+        }
         // A sessão foi encerrada no servidor (o job de sessões órfãs fecha a
         // de um computador que passou minutos sem rede). Sem reabrir, o
         // desktop seguia contando para uma sessão encerrada e o celular
@@ -494,7 +633,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const hb = setInterval(bater, cloudConfig.heartbeatMs);
     const poll = setInterval(() => { if (realtimeRef.current !== 'conectado') void buscarPendentes(); }, POLL_MS);
     return () => { clearInterval(hb); clearInterval(poll); };
-  }, [estado.vinculo, sync, buscarPendentes, patch, abrirSessao]);
+  }, [estado.vinculo, sync, buscarPendentes, patch, abrirSessao, receberReconhecimento]);
 
   // ---------- fim da sessão ao fechar ----------
   useEffect(() => {
@@ -545,13 +684,18 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           // reenvio de uma mensagem cuja resposta se perdeu não a duplica, e a
           // cópia local já tem o id que o realtime vai trazer.
           const local: Message = {
-            id: novoIdDePedido(), beneficiary_id: vinculoRef.current?.beneficiary_id ?? '',
+            // A tela que acompanha a entrega (o mapa da dor) traz o id dela.
+            id: e.id ?? novoIdDePedido(), beneficiary_id: vinculoRef.current?.beneficiary_id ?? '',
             sender: 'paciente', kind: e.kind, text: e.texto, created_at: new Date().toISOString(), read_at: null, spoken: true,
           };
           patch((s) => ({ mensagens: [...s.mensagens, local].slice(-200) }));
+          // O resultado do envio era ignorado, e a tela deduzia "mandei" do
+          // vínculo e da internet (revisão de UX de 20/10/2026, achado 3).
+          if (e.id) informarEntregaDaMensagem(e.id, 'enviando');
           void sync.enviar({ action: 'message.send', id: local.id, text: e.texto, kind: e.kind }).then((r) => {
             if (r.id && r.id !== local.id) patch((s) => ({ mensagens: s.mensagens.map((m) => (m.id === local.id ? { ...m, id: r.id! } : m)) }));
             if (r.enfileirado) patch({ filaPendente: sync.tamanhoDaFila });
+            if (e.id) informarEntregaDaMensagem(e.id, entregaDaMensagemPelaResposta(r));
           });
           break;
         }
@@ -560,7 +704,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (id) informarEntrega(id, 'enviando');
           void sync.enviar({ action: 'help.create', ...(id ? { id } : {}), kind: e.kind, message: e.mensagem, session_id: sessaoIdRef.current })
             .then((r) => {
-              if (id) informarEntrega(id, entregaDaResposta(r));
+              if (id) informarEntrega(id, entregaDaResposta(r), r.id);
               patch({ filaPendente: sync.tamanhoDaFila });
             });
           break;
@@ -570,7 +714,9 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           void sync.enviar({
             action: 'calibration.result',
             session_id: sessaoIdRef.current ?? undefined,
-            calibration: camposDeCalibracao(r, e.meta, e.duracaoCalibracaoS),
+            // O filtro em vigor vai junto das condições de captura: o
+            // `capture_conditions` da calibração substitui o da abertura (A2).
+            calibration: camposDeCalibracao(r, e.meta, e.duracaoCalibracaoS, filtroAtual().efetivo),
             report: resumoDoRelatorio(r, e.meta),
           }).then((resp) => {
             if (resp.id && !sessaoIdRef.current) { sessaoIdRef.current = resp.id; patch({ sessaoId: resp.id }); }
@@ -606,6 +752,43 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const dispensarMensagemNaTela = useCallback(() => patch({ mensagemNaTela: null }), [patch]);
 
+  /** A pergunta foi tratada aqui: "falada" no servidor (deixa de ser pendente) e na cópia local. */
+  const marcarPerguntaComoFalada = useCallback((id: string) => {
+    if (vinculoRef.current) void sync.enviar({ action: 'message.spoken', message_id: id });
+    patch((s) => {
+      const mensagens = s.mensagens.map((x) => (x.id === id ? { ...x, spoken: true } : x));
+      return { mensagens, naoFaladas: mensagens.filter((x) => x.sender === 'cuidador' && !x.spoken).length };
+    });
+  }, [sync, patch]);
+
+  const responderPerguntaDoCuidador = useCallback((id: string, resposta: RespostaDaPergunta): string | null => {
+    const pergunta = perguntasRef.current.find((p) => p.id === id);
+    // Uma resposta por pergunta: o olhar, o mouse, o teclado e o acionador
+    // passam todos por aqui, e a segunda chamada não manda nada.
+    if (!pergunta || perguntaFoiRespondida(id)) return null;
+    marcarPerguntaRespondida(id);
+    definirPerguntas((atual) => atual.filter((p) => p.id !== id));
+    const idDaResposta = novoIdDePedido();
+    // Pelo barramento, como toda fala do paciente: no modo apresentação ela
+    // não sai, e a entrega é acompanhada pelo id.
+    emitirFalaDoPaciente(textoDaResposta(resposta, pergunta.text), 'simnao', idDaResposta);
+    marcarPerguntaComoFalada(id);
+    return idDaResposta;
+  }, [definirPerguntas, marcarPerguntaComoFalada]);
+
+  const fecharPerguntaDoCuidador = useCallback((id: string) => {
+    const pergunta = perguntasRef.current.find((p) => p.id === id);
+    if (!pergunta) return;
+    marcarPerguntaRespondida(id);
+    definirPerguntas((atual) => atual.filter((p) => p.id !== id));
+    marcarPerguntaComoFalada(id);
+    // "Falada" tira a pergunta da fila pendente, mas o app a mostrava como se a resposta estivesse a
+    // caminho (M9, 21/10/2026): uma nota de sistema diz que foi fechada sem resposta. Pelo barramento,
+    // como toda fala: no modo apresentação ela não sai. A guarda acima (a pergunta ainda na fila) faz
+    // um segundo clique não mandar outra.
+    emitirFalaDoPaciente(notaDePerguntaFechada(pergunta.text), 'sistema');
+  }, [definirPerguntas, marcarPerguntaComoFalada]);
+
   // Relatório de suporte → servidor. O conteúdo é o do relatório manual
   // (`montarRelatorio`, que tem teste garantindo que nenhuma frase do paciente
   // entra); aqui só se acrescenta o transporte. Não enfileirável: um relato de
@@ -627,6 +810,11 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => registrarEnviador(null);
   }, [enviarRelatorioDeSuporte]);
 
+  // Problema de rastreamento que DURA → aviso no celular do cuidador (pedido
+  // de 18/10/2026). A regra de quando avisar mora em `avisoDoProblemaAoCuidador`;
+  // o aviso sai pelo barramento, como qualquer pedido de ajuda.
+  useEffect(() => ligarAvisoDoProblemaAoCuidador(), []);
+
   // Voz em uso → app do cuidador (Ajustes → Voz). Só um rótulo: "clonada" ou
   // "do sistema"; nada do áudio sai daqui. Enfileirável, como as outras.
   useEffect(() => {
@@ -642,8 +830,14 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const value = useMemo(
-    () => ({ ...estado, enviarFalaDoPaciente, pedirAjuda, repetirUltimaMensagem, dispensarMensagemNaTela, carregarConversa, enviarRelatorioDeSuporte }),
-    [estado, enviarFalaDoPaciente, pedirAjuda, repetirUltimaMensagem, dispensarMensagemNaTela, carregarConversa, enviarRelatorioDeSuporte],
+    () => ({
+      ...estado, enviarFalaDoPaciente, pedirAjuda, repetirUltimaMensagem, dispensarMensagemNaTela, carregarConversa, enviarRelatorioDeSuporte,
+      responderPerguntaDoCuidador, fecharPerguntaDoCuidador,
+    }),
+    [
+      estado, enviarFalaDoPaciente, pedirAjuda, repetirUltimaMensagem, dispensarMensagemNaTela, carregarConversa, enviarRelatorioDeSuporte,
+      responderPerguntaDoCuidador, fecharPerguntaDoCuidador,
+    ],
   );
 
   return <CloudContext.Provider value={value}>{children}</CloudContext.Provider>;

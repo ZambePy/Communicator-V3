@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Sucesso from './Sucesso'
-import { diagnosticar } from '@/utils/compat'
 import type { Account } from '@/context/AccountContext'
 
 /* ============================================================
@@ -59,73 +58,10 @@ afterEach(() => {
   restaurar(navigator, 'deviceMemory', originais.deviceMemory)
 })
 
-describe('diagnosticar', () => {
-  it('em contexto NÃO seguro diz "não verificado", e não "abaixo do mínimo"', () => {
-    // http://192.168.0.10:5173 — o navegador nem expõe mediaDevices aqui
-    fingirNavegador({ seguro: false, camera: false, nucleos: 8, memoria: 8 })
-
-    const d = diagnosticar()
-
-    expect(d.nivel).not.toBe('abaixo')
-    expect(d.titulo).not.toBe('Abaixo do mínimo')
-    expect(d.linhas.find((l) => l.rotulo.startsWith('Acesso à webcam'))?.valor).toMatch(
-      /não verificado/,
-    )
-    // a ressalva fala do endereço, não do computador
-    expect(d.texto).toMatch(/endereço não seguro/)
-    expect(d.texto).not.toMatch(/antigo demais/)
-  })
-
-  it('em contexto seguro sem câmera é um veredito sobre a máquina', () => {
-    fingirNavegador({ seguro: true, camera: false, nucleos: 8, memoria: 8 })
-
-    const d = diagnosticar()
-
-    expect(d.nivel).toBe('abaixo')
-    expect(d.texto).toMatch(/antigo demais/)
-  })
-
-  it('16 GB e 8 núcleos: compatível', () => {
-    // O Chromium reporta no máximo 8 mesmo com 16 GB instalados; o veredito
-    // não pode depender de ver "16" ali.
-    fingirNavegador({ seguro: true, camera: true, nucleos: 8, memoria: 8 })
-
-    const d = diagnosticar()
-
-    expect(d.nivel).toBe('recomendado')
-    expect(d.titulo).toBe('Compatível')
-    expect(d.linhas.find((l) => l.rotulo === 'Memória')?.valor).toMatch(/8 GB ou mais/)
-  })
-
-  it('4 núcleos e 8 GB: no mínimo, sem ser reprovado', () => {
-    fingirNavegador({ seguro: true, camera: true, nucleos: 4, memoria: 8 })
-
-    const d = diagnosticar()
-
-    expect(d.nivel).toBe('minimo')
-  })
-
-  it('2 núcleos: abaixo do mínimo', () => {
-    fingirNavegador({ seguro: true, camera: true, nucleos: 2, memoria: 8 })
-
-    expect(diagnosticar().nivel).toBe('abaixo')
-  })
-
-  it('4 GB de memória: abaixo do mínimo', () => {
-    fingirNavegador({ seguro: true, camera: true, nucleos: 8, memoria: 4 })
-
-    expect(diagnosticar().nivel).toBe('abaixo')
-  })
-
-  it('sem deviceMemory (Firefox, Safari) diz que a memória não foi verificada', () => {
-    fingirNavegador({ seguro: true, camera: true, nucleos: 8, memoria: undefined })
-
-    const d = diagnosticar()
-
-    expect(d.nivel).toBe('recomendado')
-    expect(d.texto).toMatch(/não informa a memória/)
-  })
-})
+/* As regras do veredito (o endereço sem https não reprova o computador, a
+   memória que o navegador não informa, os mínimos) estão em
+   src/utils/compat.test.ts; o bloco na tela, em
+   components/sections/CompatCheck.test.tsx. */
 
 /* ---------------- a página inteira ----------------
    Mesmas regras, agora vistas pelo usuário: o veredito e a linha da
@@ -167,6 +103,7 @@ vi.mock('@/hooks/useDownloads', async () => {
       platforms: buildDownloads('dono/repo', []),
       detected: null,
       releasesPage: 'https://github.com/dono/repo/releases',
+      apk: { situacao: 'nao-oferecido' },
     }),
   }
 })
@@ -182,6 +119,13 @@ describe('<Sucesso />', () => {
 
   it('não reprova o computador só porque a página está em http', () => {
     fingirNavegador({ seguro: false, camera: false, nucleos: 8, memoria: 8 })
+    // Um Windows de verdade (o jsdom se diz Linux, que ainda não tem instalador).
+    const uaOriginal = Object.getOwnPropertyDescriptor(navigator, 'userAgent')
+    Object.defineProperty(navigator, 'userAgent', {
+      value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+      configurable: true,
+    })
+    onTestFinished(() => restaurar(navigator, 'userAgent', uaOriginal))
 
     render(
       // as flags só calam os avisos de migração para o v7
@@ -190,8 +134,12 @@ describe('<Sucesso />', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Compatível')).toBeInTheDocument()
-    expect(screen.queryByText('Abaixo do mínimo')).not.toBeInTheDocument()
-    expect(screen.getByText(/não verificado — a página não está num endereço seguro/)).toBeInTheDocument()
+    // O mesmo teste de /meu-computador, com o título do bloco de sempre.
+    expect(screen.getByRole('heading', { name: 'Seu computador é compatível?' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Testar a câmera' }))
+    expect(screen.getByText('Não deu para testar neste endereço')).toBeInTheDocument()
+    // na linha da câmera e em "O que fazer"
+    expect(screen.getAllByText(/não diz nada sobre o computador/).length).toBeGreaterThan(0)
+    expect(screen.queryByText('Não vai funcionar')).not.toBeInTheDocument()
   })
 })

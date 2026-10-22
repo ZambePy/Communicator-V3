@@ -7,6 +7,7 @@ import {
   FATOR_DO_OLHO,
   LARGURA_DO_OLHO,
   anguloDaLinhaDosCantos,
+  espelhaPelosCantos,
   matrizDoRecorteDoOlho,
   precisaEspelhar,
   preprocessarOlho,
@@ -193,5 +194,45 @@ describe('fixtures do recorte do olho (contrato com o treino)', () => {
         expect(c.y, caso.nome).toBeCloseTo(p.canvas.y, 6);
       }
     }
+  });
+});
+
+describe('o espelho do recorte sai da geometria, não do rótulo', () => {
+  // Defeito de 19/10/2026: o engine passa os cantos 33/133 (o olho DIREITO da
+  // pessoa no MediaPipe, à ESQUERDA da imagem) com o rótulo 'esquerdo'. Pelo
+  // rótulo, esse olho era espelhado e o de 263/362 não — e os dois saíam com o
+  // canto externo à DIREITA, o espelho do que a EyeNet viu no treino. Cantos
+  // medidos numa foto real com o MediaPipe (gabriel-800.jpg).
+  const fotoReal = {
+    // OLHO_ESQUERDO do app: externo 33, interno 133
+    esquerdo: { externo: { x: 295, y: 262 }, interno: { x: 334, y: 262 } },
+    // OLHO_DIREITO do app: externo 263, interno 362
+    direito: { externo: { x: 427, y: 252 }, interno: { x: 389, y: 258 } },
+  };
+
+  it.each(['esquerdo', 'direito'] as const)(
+    'com os cantos do MediaPipe e o rótulo do engine, o canto externo cai à esquerda (olho %s)',
+    (olho) => {
+      const { externo, interno } = fotoReal[olho];
+      const r = matrizDoRecorteDoOlho({ cantoInterno: interno, cantoExterno: externo, olho, isMirrored: false });
+      expect(aplicar(r.matriz, externo).x).toBeLessThan(aplicar(r.matriz, interno).x);
+    },
+  );
+
+  it('rótulo trocado e espelhamento não mudam o resultado', () => {
+    const { externo, interno } = fotoReal.esquerdo;
+    const base = matrizDoRecorteDoOlho({ cantoInterno: interno, cantoExterno: externo, olho: 'esquerdo', isMirrored: false });
+    for (const olho of ['esquerdo', 'direito'] as const) {
+      for (const isMirrored of [false, true]) {
+        const r = matrizDoRecorteDoOlho({ cantoInterno: interno, cantoExterno: externo, olho, isMirrored });
+        expect(r.flip).toBe(base.flip);
+        expect(r.matriz.a).toBeCloseTo(base.matriz.a, 12);
+      }
+    }
+  });
+
+  it('espelhaPelosCantos: externo à direita depois de nivelar → espelha', () => {
+    expect(espelhaPelosCantos({ x: 0, y: 0 }, { x: 10, y: 1 })).toBe(true);
+    expect(espelhaPelosCantos({ x: 0, y: 0 }, { x: -10, y: 1 })).toBe(false);
   });
 });

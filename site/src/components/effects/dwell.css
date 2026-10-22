@@ -7,7 +7,7 @@
   padding: var(--sp-5);
   border-radius: var(--r-lg);
   border: 2px solid var(--line);
-  background: linear-gradient(150deg, var(--surface-2), var(--surface));
+  background: var(--surface);
   color: var(--text);
   font-family: inherit;
   font-size: 1.05rem;
@@ -15,30 +15,26 @@
   cursor: pointer;
   transition:
     border-color var(--dur) var(--ease-out),
-    background var(--dur) var(--ease-out),
-    transform var(--dur) var(--ease-spring),
-    box-shadow var(--dur) var(--ease-out);
+    background var(--dur) var(--ease-out);
 }
 
 /* estágio 1 — contorno de destaque */
 .dwell:hover,
 .dwell:focus-visible {
   border-color: var(--accent);
-  transform: translateY(-3px);
-  box-shadow: var(--glow);
 }
 
-/* estágio 2 — mudança de cor durante a seleção */
+/* estágio 2 — mudança de cor durante a seleção: o azul da marca */
 .dwell--active {
-  background: linear-gradient(150deg, rgba(27, 84, 168, 0.34), rgba(27, 84, 168, 0.12));
+  background: rgba(27, 84, 168, 0.32);
   border-color: var(--accent);
 }
 
 /* confirmação */
 .dwell--done,
 .dwell--cooldown {
-  background: linear-gradient(150deg, var(--ok-line), var(--ok-soft));
-  border-color: var(--teal);
+  background: var(--ok-soft);
+  border-color: var(--teal-300);
   color: var(--ok);
 }
 
@@ -64,7 +60,6 @@
   stroke: var(--ok);
   stroke-width: 2.6;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 6px rgba(63, 214, 194, 0.7));
 }
 
 .dwell__label {

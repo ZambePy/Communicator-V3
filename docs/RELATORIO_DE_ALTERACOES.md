@@ -1,6 +1,6 @@
 # Relatório de alterações do V2
 
-Registro do que mudou no IrisFlow V2, fase por fase. Cada mudança de matemática ou de comportamento tem uma flag em `src/config/experiment.ts` (desligada, idêntica ao comportamento anterior — conferido por `golden.pipelineBase.test.ts`, Fase 7) e um número M1…M21 que remete à tabela de decisão de `docs/PESQUISA.md` §5; M11, o relatório de precisão, é a exceção sem flag. Ligadas por padrão, menos cinco que ficam desligadas e fora do interruptor: M12 e M13 desde o planejamento, M2 e M10 depois do replay (Fase 5) e M7 depois do olho sintético (Fase 7). O interruptor `?pipeline=base` desliga todas de uma vez. A Fase 8 percorreu o app como o paciente e o cuidador percorrem e corrigiu os defeitos do caminho — correções, sem flag.
+Registro do que mudou no IrisFlow V2, fase por fase. Cada mudança de matemática ou de comportamento tem uma flag em `src/config/experiment.ts` (desligada, idêntica ao comportamento anterior — conferido por `golden.pipelineBase.test.ts`, Fase 7) e um número M1…M22 que remete à tabela de decisão de `docs/PESQUISA.md` §5 (a M22, de 19/10/2026, também à §7); M11, o relatório de precisão, é a exceção sem flag. Ligadas por padrão, menos cinco que ficam desligadas e fora do interruptor: M12 e M13 desde o planejamento, M2 e M10 depois do replay (Fase 5) e M7 depois do olho sintético (Fase 7). O interruptor `?pipeline=base` desliga todas de uma vez. A Fase 8 percorreu o app como o paciente e o cuidador percorrem e corrigiu os defeitos do caminho — correções, sem flag.
 
 Os commits e as publicações são do responsável.
 
@@ -325,3 +325,106 @@ As regras são as do resto do site: só `transform` e `opacity` (o teste lê o C
   - `package-app.mjs --linux --dir` com `IRISFLOW_EXIGIR_MODELO=1` levou `frontend/dist/models/l2cs/l2cs_gaze360.onnx` para dentro do `app.asar`, e o `conferir-pacote.mjs` passou (fuses, sem fonte, sem source map).
 - **Sem mudança:** nada mudou na rede, nos pesos, no recorte, no pré-processamento, na decodificação, no worker ou na cadência do L2CS, nem em `src/olho/`, `frontend/public/models/eyenet/` ou `fixtures/recorte-olho.json`.
 - Nenhum commit, push, publicação, release, Edge Function ou migration.
+
+## 18–19/10/2026 — emergência, Plano B, calibração, robustez, comunicação, site, app e celular por QR
+
+Base: a pasta IrisFlow V2 do PC em 18/10 às 23h10. Cada pacote saiu numa branch própria e foi integrado na `pipeline-v2`. Fora a M22, são correções e recursos sem flag. As descrições completas estão no README; aqui, o que mudou e onde.
+
+**Lote A (18/10).** Os modelos GazeGene e EyeNet conferidos, com o espelho da EyeNet corrigido. A Emergência não dispara mais durante o teste de precisão: navegar interrompe a rodada (`interromperTesteDePrecisao`). No app do cuidador, a barra de navegação do Android fica escondida (`BarrasDoSistema.tsx`). O APK voltou a baixar pelo site.
+
+**Emergência.**
+
+- O pedido mora fora da tela (`frontend/src/services/emergencia/pedidoDeSocorro.ts`); a tela `/emergency` só mostra o estado.
+- O alarme local começa pelo estado da entrega: entregue ou ensaio, no prazo do cuidador (45 s, o mesmo do servidor); não entregue, em 5 s; sem resposta, em 12 s. Ciclo de 6 s: sirene de 3 s e fala.
+- No Electron, o alarme também é do sistema (`electron/alarme.ts`): janela na frente e volume do Windows no máximo, devolvido no fim. Ajuste "Alarme de emergência".
+- Parar o alarme pede dois passos; parar antes de o cuidador ver o avisa.
+- Fila offline por prioridade (socorro, mensagem, o resto), e o item que o servidor recusa não segura os outros.
+- O servidor conta os celulares avisados (`push.avisados`); com zero, a tela diz `sem_push`. A confirmação do cuidador chega também pelo heartbeat (`reconhecimentos`, 6 h).
+- Migração `20261019120000_escalonamento_push_com_id`: o push leva `help_request_id`, e o reenvio pode levar o token da Expo pelo Vault.
+- O app do cuidador toca um alarme local quando o push não vem.
+- Testes: `pedidoDeSocorro.test.ts`, `electronAlarme.test.ts`.
+
+**Plano B.**
+
+- Varredura com acionador (`src/interaction/varreduraPorAcionador.ts` e `components/VarreduraComAcionador.tsx`): Espaço ou Enter, 1,5 s por botão (0,8–4 s); segurar 2 s abre a Emergência; Esc pausa.
+- Sim/Não por piscada longa (`simNaoPorPiscada.ts`): uma = sim, duas = não, a partir de 0,7 s.
+- Telas `/sim-nao` (Sim · Não · Chamar atenção) e `/comunicacao`, o hub para onde o cartão Comunicação do menu passou a levar. A resposta do Sim/Não passa pela fala do paciente.
+- Testes: `varreduraPorAcionador.test.ts`, `simNaoPorPiscada.test.ts`, `SimNaoScreen.test.tsx`, `ComunicacaoScreen.test.tsx`.
+
+**Robustez.** A câmera escolhida no Preparo é a que o rastreador abre (`services/camera/abertura.ts`), com aviso quando cai para outra. Um vigia derruba a página travada por 30 s (`electron/vigiaDoRenderer.ts`). A fala que não sai aparece em letra grande (`AvisoDeFalaQueNaoSaiu`). Uma exceção na verificação da licença vale como "sem internet", dentro da carência. Gravações que falham avisam (`AvisoDeGravacao`).
+
+**Calibração.**
+
+- O alvo ABC (Thaler et al., 2013) é o mesmo na calibração e no teste, sobre o fundo azul-marinho `#091B33`, em `src/alvoDeFixacao.ts`. **Mudança de estímulo:** as medições anteriores usaram outro alvo e outro fundo (MEDICOES §2, PESQUISA §7.2).
+- M22, `recoletaDeAlvosRuins`: refaz na hora até 4 alvos ruins, troca as amostras, retreina e só fica com o modelo novo se o LOTO médio não piorar. Fica ligada; `?pipeline=base` a desliga. Na simulação, o LOTO médio caiu de 54,4 para 6,3 px no caso do canto mal coletado (PESQUISA §7.1). Arquivos: `src/calibration/recoletaDeAlvos.ts` e `calibration.ts`; teste: `calibration.recoleta.test.ts`.
+- O resultado sai em palavras, com os limiares 30, 60 e 100 px de `src/resultadoSimples.ts`. A pergunta "palavras ou números" vira `linguagemDoRelatorio`. Teste: `resultadoSimples.test.ts`.
+
+**Rastreamento.**
+
+- Contraluz em três fases: pausa de ~500 ms; até 10 s, posição não medida; depois, predição degradada só para a Emergência, com o dobro do dwell.
+- Com `posicaoMedida: false`, o dwell não conta tempo.
+- Um supervisor reinicia os modelos que caem, com esperas de 2, 5, 15, 30 e 60 s. Da 2ª tentativa em diante força o WASM, que usa 224² e invalida a calibração feita em 448².
+- Inferência de teste no init do L2CS e da EyeNet (A3 da auditoria).
+- Predição não finita faz o `mapGaze` devolver `null`, e um perfil com números inválidos é recusado.
+- Itens A4, A5 e A6 da auditoria: o peso do bloco ocular; as features mortas agrupadas pelo alvo nominal; `IRISFLOW_DEV_CALIB=1` abre com `?calib=1`.
+- Problema persistente (`services/problemaDoRastreamento.ts`): o mesmo tipo por mais de 45 s.
+
+**Coordenação.**
+
+- Aviso ao cuidador quando o problema dura (`cloud/avisoDoProblemaAoCuidador.ts`, tipo `dispositivo`).
+- "Som ao selecionar" passou a tocar.
+- Pouca luz (`src/poucaLuz.ts`): o brilho do quadro inteiro, com limiares 0,12 e 0,18 **a conferir** (PESQUISA §7.3).
+- Buffers reaproveitados, com saída idêntica (`reusoDeBuffers.test.ts`). Na medição sintética de 1 min de pipeline, a alocação caiu de 707 MB para ~0 e as coletas de lixo de 33 para 11 (224²); de 1,74 GB para ~0 e de 63 para 12 (448²). O `getImageData` ainda aloca por recorte.
+
+**Site.** Redesenho: Sora e Inter servidas pelo site, marinho chapado, sem partículas. Entrou `/meu-computador`, o teste "Meu computador funciona?", e com ele `Permissions-Policy: camera=(self)` (antes `camera=()` bloqueava o teste no ar). O APK do cuidador aparece no painel de download, vindo do último release.
+
+**App do cuidador.** Redesenho: as palavras do paciente em destaque; na emergência, o motivo como manchete, vermelho chapado `#9E1B16` e uma barra de prazo no lugar dos anéis; superfícies chapadas; boas-vindas numa tela só.
+
+**Celular do cuidador por QR (wp/qr).** Em Configurações → "Conectar o celular do cuidador" → "Mostrar o código", atrás do PIN.
+
+- O código tem 256 bits, vale 3 min e uma vez só. O banco guarda só o SHA-256 (`pareamentos_de_celular`) e o HMAC do endereço (`tentativas_de_pareamento`, por 1 h).
+- O QR leva a `irisflow.ia.br/parear#t=…`; a página `/parear` apaga o código da barra de endereço antes de montar.
+- No app, "Conectar este celular" chama a função `parear-celular`, que troca o código por um link mágico de uso único; o app entra com `verifyOtp`.
+- O computador só diz "Celular conectado às HH:MM" depois que o celular confirma.
+- Limites: 5 códigos por computador a cada 10 min; 10 tentativas por endereço a cada 10 min; 300 por minuto no total. Conta sem e-mail confirmado não pareia.
+- Migração `20261019200000_pareamento_do_celular`; ações `pairing.create`, `pairing.status` e `pairing.cancel` na `desktop-sync`; função nova `parear-celular`, com `verify_jwt` desligado.
+
+**Revisões de 19/10 (rodada 1).**
+
+- Só a confirmação do PRÓPRIO socorro (pelo id) para o alarme. Antes, o "Estou indo" de um "Chamar atenção" calava o socorro seguinte.
+- O socorro sobrevive à recarga da página (`sessionStorage`, `restaurarPedidoDeSocorro`), e a abertura desliga o alarme do sistema que ficou preso.
+- No alarme do sistema, uma operação de volume por vez; o volume devolvido é o do começo do episódio; o PowerShell é chamado pelo caminho completo; e fechar o app espera o volume voltar, até 8 s.
+- A nota "O olhar voltou a funcionar" só sai com rastreamento bom depois do aviso. O problema que persiste é o de rastreamento mais grave, não o do banner. O tipo novo `calibracao_perdida` avisa sem exigir uso recente.
+- O servidor limita os avisos de dispositivo: um do mesmo texto a cada 15 min e quatro por hora por computador.
+- O vigia de página travada desarma durante o treino da calibração (`src/trabalhoLongo.ts`).
+- "Clarear a tela" ganhou o tamanho mínimo de alvo. A suspensão do dwell passou a ser por motivo.
+
+**Documentação** (este registro). README e `docs/MEDICOES.md` conferidos contra o código: os itens B1–B3, C1–C5 e D da auditoria de 18/10 e o que mudou nestes dois dias. `docs/PESQUISA.md` ganhou o aviso de que a §1 descreve o pipeline base, a linha da M22 e a §7. `docs/ROTEIRO_DE_MEDICAO.md` ganhou as sessões novas, e 19/10/2026 ficou marcado como mudança de protocolo.
+
+**Conferido.** `npx vitest run src/calibration.recoleta.test.ts`: 9 de 9. Os tempos da calibração saíram do próprio código: 41,8 e 39,2 s de acomodação e janela, e 49,9 e 54,8 s com as esperas, no V3 e no base. Os números da M22 vieram de uma cópia do teste, fora do repositório, que imprime as medidas.
+
+**Ainda não aplicado.** Nenhuma migração, Edge Function, publicação ou release: as duas migrações e as duas funções estão escritas para o responsável aplicar e publicar, e a ordem está no README, na seção Supabase.
+
+**Comunicação (wp/comunica).** "Onde dói" (`/dor`): o mapa da dor em passos de poucos alvos — onde, o lado, a faixa da escala 0–10 e o número —, falado, enviado ao cuidador e guardado no histórico clínico; de 8 a 10, oferece a Emergência com a contagem. "Minha voz" (`/minha-voz` e `/minha-voz/gravar`): mensagens gravadas na voz da pessoa, guardadas no computador e nunca na rede; com o plano Voz, uma gravação de 2 s ou mais vira a base da voz clonada. Prancha de letras impressa nas Configurações: A4, imprimir ou salvar em PDF.
+
+**Correções da rodada 1 das revisões (19–20/10).**
+
+- App do cuidador (wp/cuidador2): o pedido mais grave toma a tela, e o socorro sai da faixa minimizada. O alarme local vale para todo pedido urgente sem confirmação e repete a cada 25 s, por até 10 min; recomeça no escalonamento e, com o app em segundo plano, vai para o agendador do sistema. A trava de 1,5 s contra o toque duplo vale também na lista de Alertas. O estado do computador no Início ganhou alvo de 48 dp, e a faixa minimizada não cobre o Voltar e o Fechar.
+- Acionador (wp/acionador2): a pausa pelo Esc acaba em 2 min, com aviso 10 s antes e "Continuar pausada"; na pausa, com calibração, o olhar volta a clicar. Segurar chama a Emergência também pausada, na calibração, no teste e num campo de texto (com o socorro em curso, desde 20/10, segurar não escolhe nada — ver a rodada 2, abaixo). O tempo de segurar é ajustável em Configurações (1–4 s, padrão 2 s). Espaço e Enter num campo de texto são do campo, e Esc num campo ou diálogo não pausa. O reajuste rápido virou diálogo modal, e a varredura fica no de cima.
+
+## 20/10/2026 — revisões da rodada 2 (segurança, UX e rastreamento) e o site com movimento
+
+Rodada 2 das revisões (segurança com a skill de code-review, UX/emergência e pipeline), sobre tudo o que entrou depois da rodada 1 — inclusive o pareamento por QR, a voz guardada e o mapa da dor, que ainda não tinham sido revisados. Cada correção tem teste que falha sem ela.
+
+- **Segurança.** O QR não cai mais por um limite global: o código certo passa antes de qualquer limite (só a tentativa que falha conta), IPv6 é agrupado por /64 e a função responde 415 sem `application/json` (a migração `20261019200000`, ainda não publicada, foi editada). O termo da voz guardada passou a ser por paciente (`consentimento.json` versão 2; o formato antigo vale para o perfil dele). Fechar o app com a subida do volume em curso espera até 18 s para devolver o volume.
+- **UX e emergência.** Com o socorro em curso (contagem aberta ou pedido ativo), segurar o acionador não cancela nem para o alarme — só o aperto curto; "Sim, parar" exige aperto curto sempre. O erro do "Guardar"/"Ouvir" da voz aparece primeiro. O mapa da dor diz o envio real e, de 7 em diante, também chama o cuidador (pedido de ajuda, com push). Sair da suspensão do dwell (pausa da varredura, fim do Modo Computador) arma o rearme. CANCELAR da contagem e "Continuar" da pausa da calibração com o alvo mínimo. A contagem aberta durante a calibração interrompe a rodada. A prancha imprime pelo processo principal (sem travar a página).
+- **Rastreamento.** O reinício em WASM preso em 448² mede as primeiras respostas: acima de 1,25 s (metade do teto de 2,5 s), volta a 224² e suspende a calibração (estado seguro, aviso "olhar em modo reduzido"); sem leitura válida por 10 s com o modelo pronto, aviso de modelo lento. Recoleta, reforço e segunda pose recusados com a calibração suspensa pela janela. Uma sessão cancelada não treina. O abort do reforço devolve o perfil. A saída do caminho normal ficou idêntica byte a byte (7 cenários).
+- **Aviso ao cuidador.** Tipos novos `calibracao_perdida` e `olhar_reduzido`; o problema que persiste é o de rastreamento mais grave, não o que o banner mostra; "o olhar voltou" só com rastreamento bom depois do aviso.
+- **Site.** Movimento a partir das mecânicas do produto (o teclado do olhar no topo, a piscada entre páginas, os 13 pontos da calibração, a frase indo ao celular), com movimento reduzido respeitado.
+- **Decisões que ficam com o dono:** a sessão do QR é a do dono da conta (recomendação: exigir a senha atual para trocar a senha no Auth, e avisar a família a cada pareamento); o limite de avisos `dispositivo` no servidor não é atômico e o tipo `ajuda` não tem limite (precisa de uma função SQL com trava); o aviso `calibracao_perdida` sai no canal comum, sem furar o "Não perturbe".
+
+## 20/10/2026 — ida para a beta: o domínio da main entra no V2
+
+- A main (Communicator-V3) recebeu em 13/10 o commit `58a7411` ("Arrumando dominio"), que o pipeline-v2 não tinha: site, app do cuidador e desktop passam a ter `https://irisflow.ia.br` como padrão, o desktop ganha o domínio na lista fixa de hosts, e quem abre `irisflow-communicator.pages.dev` é levado ao mesmo caminho no domínio (`site/src/seo/hostCanonico.ts`). Entrou aqui inteiro. O resto da main desde a base comum `7f0c132` já estava no pipeline-v2: Beta 10, site e correções de 30/09 em `9fbd298` e `6fdf2f8`, cartão animado em `53e32f5`.
+- Único conflito: `site/src/main.tsx`. O redirecionamento para o domínio vem antes da captura do código do QR: o `#t=` de um QR que ainda aponte para o pages.dev viaja no redirecionamento e é capturado no domínio. `site/src/main.dominio.test.tsx` confere a ordem e falha com ela invertida.
+- `app.json` e `eas.json` na raiz vieram junto, como estão na main.

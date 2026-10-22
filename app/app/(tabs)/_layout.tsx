@@ -1,32 +1,27 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { ColorValue, StyleSheet, View } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Text } from '@/components';
 import { useApp } from '@/store/AppProvider';
 import { SemPaciente } from '@/features/SemPaciente';
-import { motion, radius, sizes, spacing, useTheme } from '@/theme';
+import { radius, sizes, spacing, useTheme } from '@/theme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
 /**
- * Ícone da aba com a "pílula" de aba ativa (padrão Material 3) e selo.
+ * Ícone da aba e selo. A aba ativa se marca pelo ícone cheio e pelo rótulo na
+ * cor de ação — sem a "pílula" atrás do ícone (19/10/2026): era o padrão do
+ * Material 3 copiado sem motivo, e somava um terceiro sinal ao mesmo estado.
  * `badgeTone`: `primary` para o que é só novidade (mensagens não lidas),
  * `danger` reservado ao que exige ação (alertas abertos) — dois vermelhos na
  * barra faziam uma mensagem carinhosa parecer um socorro.
  */
 function TabIcon({ name, active, color, badge, badgeTone = 'primary' }: { name: IconName; active: boolean; color: ColorValue; badge?: number; badgeTone?: 'primary' | 'danger' }) {
-  const { colors, reduceMotion } = useTheme();
-  const s = useSharedValue(active ? 1 : 0);
-  useEffect(() => {
-    s.value = reduceMotion ? (active ? 1 : 0) : withSpring(active ? 1 : 0, motion.spring.slide);
-  }, [active, s, reduceMotion]);
-  const pill = useAnimatedStyle(() => ({ opacity: s.value, transform: [{ scaleX: 0.6 + s.value * 0.4 }] }));
+  const { colors } = useTheme();
   return (
     <View style={styles.icon}>
-      <Animated.View style={[styles.pill, { backgroundColor: colors.primaryTint }, pill]} />
       <Ionicons name={active ? name : (`${name}-outline` as IconName)} size={sizes.icon.md} color={color} />
       {badge ? (
         <View style={[styles.badge, { backgroundColor: badgeTone === 'danger' ? colors.dangerStrong : colors.primaryStrong, borderColor: colors.tabBar }]}>
@@ -108,7 +103,6 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   icon: { width: sizes.touch + spacing.md, height: sizes.icon.md + spacing.sm + spacing.xxs, alignItems: 'center', justifyContent: 'center' },
-  pill: { ...StyleSheet.absoluteFill, borderRadius: radius.pill },
   badge: {
     position: 'absolute',
     top: -spacing.xs,

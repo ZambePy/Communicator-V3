@@ -1,7 +1,33 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render as renderBase, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { DownloadPanel } from './DownloadPanel'
 import { __resetLatestReleaseForTests } from '@/lib/latestRelease'
+
+/** O painel tem links internos (o teste do computador, o contato): precisa do roteador. */
+function render(ui: ReactElement) {
+  return renderBase(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{ui}</MemoryRouter>,
+  )
+}
+
+// O APK do app do cuidador: o teste decide se o site o oferece
+// (VITE_APP_CUIDADOR_URL). Por padrão, não — os testes dos instaladores
+// continuam olhando só para o computador.
+const { lojas, aparelho } = vi.hoisted(() => ({
+  lojas: { googlePlay: null as string | null, appStore: null as string | null, apk: null as string | null },
+  aparelho: { celular: false },
+}))
+vi.mock('@/lib/lojas', () => ({ LOJAS: lojas, SELOS_OFICIAIS: false, PACOTE_ANDROID: 'br.com.irisflow.cuidador' }))
+vi.mock('@/lib/aparelho', () => ({
+  ehIOS: () => false,
+  ehAndroid: () => aparelho.celular,
+  ehCelular: () => aparelho.celular,
+}))
 
 /* ============================================================
    Painel de downloads com a disponibilidade vinda do último release do
@@ -44,6 +70,8 @@ function responder(status: number, corpo: unknown) {
 beforeEach(() => {
   window.sessionStorage.clear()
   __resetLatestReleaseForTests()
+  lojas.apk = null
+  aparelho.celular = false
 })
 
 afterEach(() => {
@@ -62,8 +90,8 @@ describe('<DownloadPanel /> com o último release do GitHub', () => {
         `${DL}/IrisFlow-Setup.exe`,
       ),
     )
-    expect(screen.getByRole('button', { name: /macOS — Em breve/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /Linux — Em breve/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /macOS: em breve/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Linux: em breve/ })).toBeDisabled()
     expect(screen.queryByRole('link', { name: /Mac/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Linux|\.deb/ })).not.toBeInTheDocument()
     // mesma palavra das frases de plataforma do site
@@ -114,7 +142,7 @@ describe('<DownloadPanel /> com o último release do GitHub', () => {
       render(<Painel />)
 
       await waitFor(() => expect(document.querySelector('.dl')).not.toHaveAttribute('aria-busy'))
-      expect(screen.getByRole('button', { name: /macOS — Em breve/ })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /macOS: em breve/ })).toBeDisabled()
       expect(screen.getByRole('link', { name: /Baixar para Windows/ })).toHaveAttribute(
         'href',
         `${DL}/IrisFlow-Setup.exe`,
@@ -129,8 +157,8 @@ describe('<DownloadPanel /> com o último release do GitHub', () => {
     responder(200, SO_WINDOWS)
     render(<DownloadPanel />)
 
-    expect(await screen.findByRole('button', { name: /macOS — Em breve/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /Linux — Em breve/ })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: /macOS: em breve/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Linux: em breve/ })).toBeDisabled()
     expect(screen.getByRole('link', { name: /Baixar para Windows/ })).toHaveAttribute(
       'href',
       `${DL}/IrisFlow-Setup.exe`,
@@ -147,7 +175,7 @@ describe('<DownloadPanel /> com o último release do GitHub', () => {
       'href',
       'https://github.com/ZambePy/Communicator-V3/releases/latest/download/IrisFlow-Setup.exe',
     )
-    expect(screen.getByRole('button', { name: /macOS — Em breve/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /macOS: em breve/ })).toBeDisabled()
     expect(screen.getByRole('link', { name: /Todas as versões/ })).toHaveAttribute(
       'href',
       'https://github.com/ZambePy/Communicator-V3/releases',
@@ -163,7 +191,7 @@ describe('<DownloadPanel /> com o último release do GitHub', () => {
     render(<DownloadPanel />)
 
     expect(document.querySelector('.dl')).toHaveAttribute('aria-busy', 'true')
-    expect(screen.getByRole('button', { name: /macOS — Em breve/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /macOS: em breve/ })).toBeDisabled()
 
     soltar({ ok: true, status: 200, json: async () => RELEASE_COMPLETO })
     await waitFor(() => expect(document.querySelector('.dl')).not.toHaveAttribute('aria-busy'))
@@ -172,19 +200,19 @@ describe('<DownloadPanel /> com o último release do GitHub', () => {
       `${DL}/IrisFlow-Setup.exe`,
     )
     // o release tem .dmg, mas o macOS não está liberado: continua "Em breve"
-    expect(screen.getByRole('button', { name: /macOS — Em breve/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /macOS: em breve/ })).toBeDisabled()
   })
 
   it('segunda montagem na mesma aba usa o cache, sem nova consulta', async () => {
     const fetchFake = responder(200, SO_WINDOWS)
     const { unmount } = render(<DownloadPanel />)
-    await screen.findByRole('button', { name: /Linux — Em breve/ })
+    await screen.findByRole('button', { name: /Linux: em breve/ })
     unmount()
 
     render(<DownloadPanel />)
     // sem estado de espera: a resposta guardada já vale no primeiro quadro
     expect(document.querySelector('.dl')).not.toHaveAttribute('aria-busy')
-    expect(screen.getByRole('button', { name: /Linux — Em breve/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Linux: em breve/ })).toBeDisabled()
     expect(fetchFake).toHaveBeenCalledTimes(1)
   })
 })
@@ -206,7 +234,7 @@ describe('<DownloadPanel liberaEm vitrine />', () => {
     expect(screen.queryByRole('link', { name: /Baixar para Windows/ })).not.toBeInTheDocument()
     expect(screen.queryByText('Todas as versões')).not.toBeInTheDocument()
     // macOS e Linux continuam "Em breve", como antes
-    expect(screen.getByRole('button', { name: 'macOS — Em breve' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'macOS: em breve' })).toBeDisabled()
   })
 
   it('depois do lançamento: volta a ser o painel de sempre', async () => {
@@ -236,6 +264,136 @@ describe('<DownloadPanel liberaEm vitrine />', () => {
       await waitFor(() => expect(screen.getByRole('link', { name: /Baixar para Windows/ })).toBeInTheDocument())
     } finally {
       vi.useRealTimers()
+    }
+  })
+})
+
+/* ---------------- o app do cuidador (APK) e o teste do computador ---------------- */
+
+describe('<DownloadPanel /> e o .apk do release (relato de 19/10/2026)', () => {
+  const APK_FIXO = 'https://github.com/ZambePy/Communicator-V3/releases/latest/download/IrisFlow-Cuidador.apk'
+  const COM_APK = {
+    tag_name: 'v1.0.0-beta.3',
+    assets: ['IrisFlow-Setup.exe', 'latest.yml', 'IrisFlow-Cuidador.apk'].map(asset),
+  }
+
+  it('release com o .apk: o painel oferece o app do cuidador, com o arquivo do release', async () => {
+    lojas.apk = APK_FIXO
+    responder(200, COM_APK)
+    render(<DownloadPanel liberaEm="2020-11-10T03:00:00Z" />)
+
+    const bloco = await screen.findByRole('region', { name: 'IrisFlow Cuidador para Android' })
+    await waitFor(() =>
+      expect(within(bloco).getByRole('link', { name: /Baixar para Android/ })).toHaveAttribute(
+        'href',
+        `${DL}/IrisFlow-Cuidador.apk`,
+      ),
+    )
+    // Mesma aba: o arquivo vem como anexo e o navegador baixa sem sair da página.
+    expect(within(bloco).getByRole('link', { name: /Baixar para Android/ })).not.toHaveAttribute('target')
+    // No computador, o código QR leva o celular de quem cuida até o arquivo.
+    expect(within(bloco).getByRole('img', { name: /Código QR/ })).toBeInTheDocument()
+    // E o .apk não vira um quarto "sistema" do computador: os três cartões
+    // continuam os mesmos (na ordem do sistema de quem visita), e o app do
+    // cuidador vem depois deles, à parte.
+    const sistemas = Array.from(document.querySelectorAll('.dl__card .dl__name')).map((h) => h.textContent)
+    expect([...sistemas].sort()).toEqual(['Linux', 'Windows', 'macOS'])
+    const titulos = screen.getAllByRole('heading', { level: 3 })
+    expect(titulos[titulos.length - 1]).toHaveTextContent('IrisFlow Cuidador para Android')
+  })
+
+  it('release publicado SEM o .apk: o aviso no lugar de um link que daria 404', async () => {
+    lojas.apk = APK_FIXO
+    responder(200, SO_WINDOWS)
+    render(<DownloadPanel liberaEm="2020-11-10T03:00:00Z" />)
+
+    expect(await screen.findByText(/O app para Android não está na versão publicada agora/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Baixar para Android/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'contato' })).toHaveAttribute('href', '/contato')
+  })
+
+  it('API fora do ar: vale o link configurado, como nos instaladores', async () => {
+    lojas.apk = APK_FIXO
+    const fetchFake = responder(503, {})
+    render(<DownloadPanel liberaEm="2020-11-10T03:00:00Z" />)
+    await waitFor(() => expect(fetchFake).toHaveBeenCalled())
+    await waitFor(() => expect(document.querySelector('.dl')).not.toHaveAttribute('aria-busy'))
+    expect(screen.getByRole('link', { name: /Baixar para Android/ })).toHaveAttribute('href', APK_FIXO)
+  })
+
+  it('antes do lançamento: o dia, e nenhum arquivo', async () => {
+    lojas.apk = APK_FIXO
+    responder(200, COM_APK)
+    render(<DownloadPanel liberaEm="2099-11-10T03:00:00Z" />)
+    expect(await screen.findByText(/O app para Android sai no dia do lançamento, 10\/11/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Baixar para Android/ })).not.toBeInTheDocument()
+  })
+
+  it('site sem APK configurado, vitrine ou apk={false}: o bloco não aparece', async () => {
+    responder(200, COM_APK)
+    const { unmount } = render(<DownloadPanel liberaEm="2020-11-10T03:00:00Z" />)
+    await waitFor(() => expect(document.querySelector('.dl')).not.toHaveAttribute('aria-busy'))
+    expect(screen.queryByText('IrisFlow Cuidador para Android')).not.toBeInTheDocument()
+    unmount()
+
+    lojas.apk = APK_FIXO
+    const vitrine = render(<DownloadPanel vitrine liberaEm="2020-11-10T03:00:00Z" />)
+    expect(screen.queryByText('IrisFlow Cuidador para Android')).not.toBeInTheDocument()
+    vitrine.unmount()
+
+    render(<DownloadPanel apk={false} liberaEm="2020-11-10T03:00:00Z" />)
+    expect(screen.queryByText('IrisFlow Cuidador para Android')).not.toBeInTheDocument()
+  })
+
+  it('os botões de download levam ao teste "Meu computador funciona?"', async () => {
+    responder(200, SO_WINDOWS)
+    const { unmount } = render(<DownloadPanel liberaEm="2020-11-10T03:00:00Z" />)
+    expect(await screen.findByRole('link', { name: 'veja se o seu computador funciona' })).toHaveAttribute(
+      'href',
+      '/meu-computador',
+    )
+    unmount()
+    // A própria página do teste desliga o link.
+    render(<DownloadPanel teste={false} liberaEm="2020-11-10T03:00:00Z" />)
+    expect(screen.queryByRole('link', { name: 'veja se o seu computador funciona' })).not.toBeInTheDocument()
+  })
+})
+
+/* Revisão final (22/10/2026): o aviso do Windows (SmartScreen) é a frase que quem
+   instala precisa achar; fica num parágrafo só dele, com o texto do relatório B. Os
+   cartões de sistema não usam teal (só confirmação), âmbar nem vermelho (emergência). */
+describe('<DownloadPanel /> aviso do Windows e cores dos cartões', () => {
+  it('diz o que o Windows mostra, por que (sem assinatura digital) e o que clicar', async () => {
+    responder(200, SO_WINDOWS)
+    render(<DownloadPanel liberaEm="2020-11-10T03:00:00Z" />)
+    const aviso = await waitFor(() => {
+      const el = document.querySelector('.dl__smartscreen')
+      expect(el).not.toBeNull()
+      return el as HTMLElement
+    })
+    expect(aviso.textContent).toBe(
+      'Na hora de instalar, o Windows pode mostrar “O Windows protegeu o computador”, porque o instalador ainda não tem assinatura digital. Clique em Mais informações e depois em Executar assim mesmo.',
+    )
+    expect(within(aviso).getByText('Mais informações').tagName).toBe('STRONG')
+    expect(within(aviso).getByText('Executar assim mesmo').tagName).toBe('STRONG')
+  })
+
+  it('no painel compacto (/conta) a nota não aparece', async () => {
+    responder(200, SO_WINDOWS)
+    render(<DownloadPanel compact liberaEm="2020-11-10T03:00:00Z" />)
+    await waitFor(() => expect(document.querySelector('.dl')).not.toHaveAttribute('aria-busy'))
+    expect(document.querySelector('.dl__smartscreen')).toBeNull()
+  })
+
+  it('"Seu sistema", "Em breve" e o cartão travado não usam teal, âmbar nem vermelho', () => {
+    const css = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'download-panel.css'), 'utf8')
+    const regra = (seletor: string) => {
+      const i = css.indexOf(`${seletor} {`)
+      expect(i, `regra ${seletor}`).toBeGreaterThanOrEqual(0)
+      return css.slice(i, css.indexOf('}', i))
+    }
+    for (const seletor of ['.dl__card.is-mine', '.dl__badge', '.dl__badge--soon', '.dl__card.is-locked']) {
+      expect(regra(seletor)).not.toMatch(/teal|--ok|--warn|--danger|214,\s*41,\s*58/)
     }
   })
 })

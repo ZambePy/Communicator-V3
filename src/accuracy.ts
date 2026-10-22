@@ -11,7 +11,27 @@ import {
   mapGaze, getCalibrationTargets,
   getCalibrationFitDiagnostics, getDistanceRange, getCalibrationDistancesCm,
   getCurrentCameraDistanceCm, getCalibrationTimestampMs, getTermosDaUltimaPredicao,
+  registrarValidacaoDoModelo, alvosParaRecoletar,
 } from './calibration';
+import {
+  classificarErroPx,
+  CLASSE_CSS_DO_ERRO,
+  FRASE_DO_TESTE,
+  FRASE_DOS_CANTOS_COM_RESULTADO_DEPOIS,
+  LIMIAR_REGULAR_PX,
+  palavraDoResultado,
+  TITULO_DA_PALAVRA,
+  type LinguagemDoRelatorio,
+  type PalavraDoResultado,
+} from './resultadoSimples';
+import {
+  CLASSE_CHEGANDO,
+  CLASSE_DO_ALVO_ANTIGO_DO_TESTE,
+  CLASSE_DO_FUNDO_ANTIGO_DO_TESTE,
+  MARCACAO_DO_ALVO_ABC,
+  MARCACAO_DO_ALVO_ANTIGO_DO_TESTE,
+  usarEstimuloAntigo,
+} from './alvoDeFixacao';
 import { autocorrelacaoLag1, lado95, atrasoDoDegrau, type AmostraDoDegrau } from './metricasDoSinal';
 import { amostrasEfetivas } from './ruidoDaCalibracao';
 import type { TermosDaPredicao } from './calibration';
@@ -626,6 +646,15 @@ export let isAccuracyTesting = false;
 /** Modo da rodada em curso. Sem rodada em curso, o último valor é irrelevante. */
 let modoDoTeste: ModoDoTeste = 'medicao';
 
+/**
+ * Como o painel do fim da rodada fala (pedido de 19/10/2026): a mesma escolha
+ * da tela de resultado da calibração. Padrão `tecnica`, o painel de sempre —
+ * quem não passa nada não muda de comportamento.
+ */
+let linguagemDaRodada: LinguagemDoRelatorio = 'tecnica';
+/** A rodada é a do fim da calibração, e depois do painel vem a tela de resultado. */
+let resultadoDepoisDaRodada = false;
+
 /** Modo da rodada em curso (ou da última). */
 export function modoDoTesteAtual(): ModoDoTeste {
   return modoDoTeste;
@@ -666,6 +695,16 @@ export function getCurrentTargetPx(): { xPx: number; yPx: number; label: string 
   return currentValidationTarget;
 }
 
+/**
+ * O relatório completo vai para o disco (endpoint do Vite ou, sem ele, o
+ * download do navegador)? Não no app instalado, em `file:`: lá não há
+ * endpoint e o download abre o "Salvar como" do sistema por cima da tela
+ * (revisão final de 22/10/2026). Sem protocolo conhecido, o de sempre.
+ */
+export function gravaRelatorioNoDisco(protocolo: string | undefined): boolean {
+  return protocolo !== 'file:';
+}
+
 /** Chamado pelo engine a cada quadro com features válidas. */
 export function feedAccuracyRaw(
   featuresLeft: number[],
@@ -695,7 +734,14 @@ export function startAccuracyTest(
   onComplete?: (result: AccuracyResult, action: 'continue' | 'redo') => void,
   meta?: RunMeta,
   runtime?: RuntimeInfo,
-  opts?: { modo?: ModoDoTeste },
+  opts?: {
+    modo?: ModoDoTeste;
+    /** Como o painel final fala: palavras (`simples`) ou os números (`tecnica`, padrão). */
+    linguagem?: LinguagemDoRelatorio | null;
+    /** Depois do painel vem a tela de resultado da calibração (que oferece
+     *  refazer só os cantos). Muda só a frase do painel simples. */
+    resultadoDepois?: boolean;
+  },
 ) {
   // REENTRÂNCIA: uma rodada por vez.
   //
@@ -713,6 +759,8 @@ export function startAccuracyTest(
   // Default `'medicao'`: quem não pede nada continua rodando o protocolo, e
   // nenhum chamador existente muda de comportamento.
   modoDoTeste = opts?.modo ?? 'medicao';
+  linguagemDaRodada = opts?.linguagem === 'simples' ? 'simples' : 'tecnica';
+  resultadoDepoisDaRodada = opts?.resultadoDepois === true;
 
   try {
     prepararRodada(onComplete, meta, runtime);
@@ -728,12 +776,46 @@ export function startAccuracyTest(
     //
     // Desliga, limpa o que já tinha sido montado, e RELANÇA: o chamador
     // continua vendo a falha e mostrando a mensagem que já mostrava.
+    // Se o preparo chegou a ligar o vigia, ele também tem que parar: solto, ele
+    // estourava em alguns segundos e chamava o `onComplete` de uma rodada que
+    // nunca existiu.
+    interromperTesteDePrecisao('o preparo da rodada falhou');
     isAccuracyTesting = false;
     currentValidationTarget = null;
+    interromperRodadaAtual = null;
     document.getElementById('accuracy-overlay')?.remove();
     fecharPainelDeDiagnostico();
     throw e;
   }
+}
+
+/** Como encerrar a rodada viva. `null` quando não há rodada. */
+let interromperRodadaAtual: ((motivo: string) => void) | null = null;
+
+/**
+ * Interrompe o teste de precisão em andamento, sem relatório e sem painel.
+ *
+ * Existe por causa da emergência (relato de 18/10/2026). O overlay do teste
+ * (z-index 9998) é anexado ao `body`, fora do React, e não sai quando a rota
+ * muda. Quem disparava a emergência durante o teste — pelo mouse ou pelo
+ * teclado; pelo olhar o botão fica desligado enquanto se mede — chegava a
+ * `/emergency` com o teste ainda rodando por cima. A tela de emergência ficava
+ * coberta até o último ponto, e aí o painel de resultados (9999) abria sobre
+ * ela, ouvindo Espaço e R.
+ *
+ * Não chama o `onComplete` de quem iniciou: ele navega (`finishAndTransition`,
+ * `navigate('/calibration-check')`) e tiraria a pessoa da emergência. Também
+ * não grava relatório: uma rodada cortada no meio não mede o que o protocolo
+ * mede (docs/MEDICOES.md), e o `motivoDeAborto` do `finishTest` é para falha
+ * do teste, não para a pessoa ter saído dele.
+ *
+ * Idempotente. Devolve `true` se havia uma rodada para interromper.
+ */
+export function interromperTesteDePrecisao(motivo: string): boolean {
+  const interromper = interromperRodadaAtual;
+  if (!interromper) return false;
+  interromper(motivo);
+  return true;
 }
 
 /** O preparo e o disparo da rodada. Separado para o `startAccuracyTest` poder
@@ -841,8 +923,26 @@ function prepararRodada(
     clearInterval(vigia);
     isAccuracyTesting = false;
     currentValidationTarget = null;
+    interromperRodadaAtual = null;
     finishTest(overlay, pointErrors, diagnostics, onComplete, meta, runtime, poseBaseline, overlap, distanciasDoTeste, sementeDaOrdem, motivoDeAborto);
   }
+
+  /** Encerra SEM relatório, sem painel e sem `onComplete` (ver
+   *  `interromperTesteDePrecisao`). */
+  function interromper(motivo: string) {
+    if (encerrado) return;
+    encerrado = true;
+    clearInterval(vigia);
+    isAccuracyTesting = false;
+    currentValidationTarget = null;
+    interromperRodadaAtual = null;
+    overlay.remove();
+    console.warn(
+      `[accuracy] teste interrompido (${motivo}): ${diagnostics.length} de ` +
+      `${pontosDaRodada.length} pontos medidos, nenhum relatório gravado.`,
+    );
+  }
+  interromperRodadaAtual = interromper;
 
   const vw = document.documentElement.clientWidth;
   const vh = document.documentElement.clientHeight;
@@ -1117,7 +1217,11 @@ function mediaDosTermos(
 function createAccuracyOverlay(): HTMLDivElement {
   const overlay = document.createElement('div');
   overlay.id = 'accuracy-overlay';
-  overlay.className = 'accuracy-overlay';
+  // Com `estimuloAntigo`, o fundo preto de antes de 19/10 (revisão do pipeline
+  // de 19/10/2026): o antes/depois do estímulo medido no mesmo build.
+  overlay.className = usarEstimuloAntigo()
+    ? `accuracy-overlay ${CLASSE_DO_FUNDO_ANTIGO_DO_TESTE}`
+    : 'accuracy-overlay';
   overlay.innerHTML = `
     <div class="accuracy-instruction">
       Teste de Precisão — olhe para cada ponto
@@ -1142,21 +1246,39 @@ function showValidationDot(
   // CSS incluem a barra de rolagem; `clientWidth` não).
   const dot = document.createElement('div');
   dot.id = 'accuracy-dot';
-  dot.className = 'accuracy-dot';
+  const antigo = usarEstimuloAntigo();
+  dot.className = antigo ? `accuracy-dot ${CLASSE_DO_ALVO_ANTIGO_DO_TESTE}` : 'accuracy-dot';
   // O botão de emergência se afasta de qualquer elemento com este atributo.
   dot.setAttribute('data-calibration-target', '');
   dot.style.left = `${fracaoDaTelaParaPx(vp.screenX, vw)}px`;
   dot.style.top = `${fracaoDaTelaParaPx(vp.screenY, vh)}px`;
-  // Alvo bullseye + crosshair: mede-se dispersão de fixação e microssacada
-  // menores com ele do que com um círculo simples (Thaler et al., 2013).
-  dot.innerHTML = '<div class="dot-cross"></div><div class="dot-inner"></div>';
+  // O MESMO alvo da calibração (pedido de 19/10/2026): o "ABC" de Thaler,
+  // Schütz, Goodale & Gegenfurtner (2013, Vision Research 76:31–42) — bull's
+  // eye com cruz, a forma de fixação mais estável —, nas cores da marca. Ver
+  // `alvoDeFixacao.ts`. Nasce 1,5× maior e se contrai dentro dos 600 ms de
+  // acomodação, que o protocolo descarta. Com `estimuloAntigo` (revisão do
+  // pipeline de 19/10/2026), o alvo de antes: círculo azul-claro com cruz e
+  // anel pulsante, sem contração.
+  dot.innerHTML = antigo
+    ? MARCACAO_DO_ALVO_ANTIGO_DO_TESTE
+    : `<span class="alvo-abc ${CLASSE_CHEGANDO}">${MARCACAO_DO_ALVO_ABC}</span>`;
 
   const instr = overlay.querySelector('.accuracy-instruction') as HTMLElement;
   if (instr) {
-    instr.innerHTML = `Teste de Precisão &nbsp;<span class="highlight">${index + 1}/${total}</span> — olhe para o ponto`;
+    // O alvo de antes não tem ponto vermelho: a instrução de antes também volta.
+    instr.innerHTML = `Teste de Precisão &nbsp;<span class="highlight">${index + 1}/${total}</span> — ` +
+      (antigo ? 'olhe para o ponto' : 'olhe para o ponto vermelho');
   }
 
   overlay.appendChild(dot);
+  if (antigo) return;
+  // A contração precisa partir do tamanho de chegada já pintado: lê o layout
+  // (força o estilo inicial) e só então tira a classe, para a transição rodar.
+  const alvo = dot.firstElementChild as HTMLElement | null;
+  if (alvo) {
+    void alvo.offsetWidth;
+    alvo.classList.remove(CLASSE_CHEGANDO);
+  }
 }
 
 // 2% de cada eixo (~38 px em X, ~22 px em Y em 1080p): bem abaixo do menor
@@ -1359,24 +1481,13 @@ function finishTest(
   const totalJanelaMs = janelas.reduce((s, w) => s + w, 0);
   const sampleRateHz = totalJanelaMs > 0 ? (totalAmostras * 1000) / totalJanelaMs : null;
 
-  let score: string;
-  let colorClass: string;
-  if (meanError === null) {
-    score = 'Não medido';
-    colorClass = 'accuracy-poor';
-  } else if (meanError < 30) {
-    score = 'Excelente';
-    colorClass = 'accuracy-excellent';
-  } else if (meanError < 60) {
-    score = 'Bom';
-    colorClass = 'accuracy-good';
-  } else if (meanError < 100) {
-    score = 'Regular';
-    colorClass = 'accuracy-regular';
-  } else {
-    score = 'Ruim';
-    colorClass = 'accuracy-poor';
-  }
+  // Os limiares (30/60/100 px) moram em `resultadoSimples.ts` desde 19/10/2026:
+  // as palavras da tela de resultado ("Ótima", "Boa", "Refazer…") saem da
+  // MESMA função, e não há como as duas leituras divergirem. A saída é a de
+  // antes, classe por classe.
+  const classe = classificarErroPx(meanError);
+  const score: string = classe ?? 'Não medido';
+  const colorClass = classe ? CLASSE_CSS_DO_ERRO[classe] : 'accuracy-poor';
 
   let poseDrift: AccuracyResult['poseDrift'] = undefined;
   if (poseBaseline) {
@@ -1585,6 +1696,26 @@ function finishTest(
     window.dispatchEvent(new Event(EVENTO_DE_ACURACIA_MEDIDA));
   } catch { /* storage indisponível */ }
 
+  // O teste que acabou de medir ESTE modelo passa a ser quem diz se um canto
+  // ficou ruim (ver `registrarValidacaoDoModelo`): a tela de resultado e este
+  // painel precisam concordar. Só rodada de medição inteira — a de
+  // verificação mede outra coisa, e uma interrompida não mediu tudo.
+  if (modoDoTeste === 'medicao' && !motivoDeAborto) {
+    try {
+      registrarValidacaoDoModelo({
+        erroInternoPx: agg.meanErrorInner,
+        pontos: diagnostics.map((d) => ({
+          x: vw > 0 ? d.groundX / vw : Number.NaN,
+          y: vh > 0 ? d.groundY / vh : Number.NaN,
+          erroPx: Number.isFinite(d.error) ? d.error : Number.NaN,
+          borda: d.isEdge === true,
+        })),
+      });
+    } catch (e) {
+      console.warn('[accuracy] não foi possível registrar o teste para o modelo em uso:', e);
+    }
+  }
+
   const pipeline = {
     variant: `${ACTIVE_FEATURE_SET}+${REGRESSOR_MODE}`,
     featureSet: ACTIVE_FEATURE_SET,
@@ -1659,7 +1790,18 @@ function finishTest(
 
   // Grava na raiz do projeto pelo endpoint do Vite (dev e preview); sem ele,
   // cai no download do navegador. Os relatórios acumulam — nunca são apagados.
-  (async () => {
+  //
+  // No app INSTALADO (página em file://) não há endpoint, e o download abria o
+  // "Salvar como" do sistema por cima da tela depois de TODA calibração — na
+  // frente de quem só tem o olhar, que não fecha uma janela do Windows (revisão
+  // final de 22/10/2026). Ali fica o resumo: o resultado logo abaixo, a linha
+  // de base do vigia no armazenamento local e o painel que a tela mostra.
+  if (!gravaRelatorioNoDisco(typeof location === 'undefined' ? undefined : location.protocol)) {
+    console.log(
+      '[accuracy] app instalado: o relatório completo não é baixado (abriria o "Salvar como" na frente da ' +
+      'pessoa); o resumo segue abaixo e no app.',
+    );
+  } else (async () => {
     try {
       const resp = await fetch('/__/save-accuracy-report', {
         method: 'POST',
@@ -1769,6 +1911,77 @@ export function avisoDeTaxaInsuficiente(
   );
 }
 
+/**
+ * A palavra do painel simples, tirada do PRÓPRIO teste: a classe do erro dos
+ * pontos interiores (a mesma de `score`) e os cantos medidos "Ruim" (a mesma
+ * fronteira de 100 px). `null` quando não há erro interior medido — aí não há
+ * palavra honesta a dizer.
+ */
+export function palavraDoTeste(
+  r: Pick<AccuracyResult, 'meanErrorInner'>,
+  pontos: readonly { isEdge?: boolean; error?: number }[],
+): PalavraDoResultado | null {
+  if (r.meanErrorInner === null || !Number.isFinite(r.meanErrorInner)) return null;
+  const cantosRuins = pontos.filter(
+    (d) => d.isEdge === true && typeof d.error === 'number' && Number.isFinite(d.error) && d.error >= LIMIAR_REGULAR_PX,
+  ).length;
+  return palavraDoResultado({ erroInternoPx: r.meanErrorInner, pontosRuins: { borda: cantosRuins, interno: 0 } });
+}
+
+/** Cor da palavra: verde e azul para "pode usar"; âmbar, calmo, para "refazer". */
+const COR_DA_PALAVRA: Record<PalavraDoResultado, string> = {
+  otima: '#22c55e',
+  boa: '#38bdf8',
+  refazerCantos: '#fbbf24',
+  refazerPontos: '#fbbf24',
+  refazerTudo: '#fbbf24',
+};
+
+/** O painel em linguagem simples: a palavra, uma frase do que fazer, os dois botões. */
+function rodapeSimples(
+  diagnostics: readonly PointDiagnostic[],
+  result: AccuracyResult,
+  motivoDeAborto: string | undefined,
+  porTaxa: boolean,
+): string {
+  const palavra = motivoDeAborto ? null : palavraDoTeste(result, diagnostics);
+  let titulo: string;
+  let frase: string;
+  let cor = '#e2e8f0';
+  if (motivoDeAborto) {
+    titulo = 'O teste parou no meio';
+    frase = 'Nem todos os pontos foram medidos. Dá para refazer a calibração agora ou continuar e testar outra hora.';
+  } else if (palavra === null) {
+    titulo = 'Não deu para medir';
+    frase = porTaxa
+      ? 'O computador ficou lento demais para medir agora. Feche outros programas e tente de novo.'
+      : 'O sistema não conseguiu ver o seu olhar nos pontos. Confira a luz no rosto e o enquadramento, e refaça a calibração.';
+  } else {
+    titulo = TITULO_DA_PALAVRA[palavra];
+    cor = COR_DA_PALAVRA[palavra];
+    // A promessa "na próxima tela dá para refazer só os cantos" só quando a
+    // próxima tela vai mesmo oferecer o botão (revisão do pipeline de
+    // 19/10/2026): quem chama passa `resultadoDepois` pelo que a recoleta
+    // permite, e a lista que a tela de resultado vai mostrar — a deste teste,
+    // já registrado acima — não pode estar vazia (um canto do teste que não
+    // coincide com nenhum alvo da calibração, no perfil `computador`).
+    frase = palavra === 'refazerCantos' && resultadoDepoisDaRodada && alvosParaRecoletar().length > 0
+      ? FRASE_DOS_CANTOS_COM_RESULTADO_DEPOIS
+      : FRASE_DO_TESTE[palavra];
+  }
+  return `
+    <div class="diagnostic-card diagnostic-card--simples">
+      <div class="diagnostic-title">Teste de Precisão</div>
+      <div class="diagnostic-palavra" data-palavra="${palavra ?? 'sem-medida'}" style="color:${cor}">${titulo}</div>
+      <p class="diagnostic-frase">${frase}</p>
+      <div class="diagnostic-actions">
+        <button type="button" class="diagnostic-btn" data-action="continue" data-recovery="true">Continuar <kbd>Espaço</kbd></button>
+        <button type="button" class="diagnostic-btn secondary" data-action="redo" data-recovery="true">Refazer a calibração <kbd>R</kbd></button>
+      </div>
+    </div>
+  `;
+}
+
 function showDiagnosticOverlay(
   diagnostics: PointDiagnostic[],
   result: AccuracyResult,
@@ -1858,7 +2071,11 @@ function showDiagnosticOverlay(
     svg.appendChild(nameText);
   }
 
-  overlay.appendChild(svg);
+  // Linguagem simples (pedido de 19/10/2026): sem o desenho de alvo × predição
+  // e sem px — a palavra e uma frase do que fazer. Os botões e o teclado são
+  // os mesmos dos dois jeitos.
+  const tecnico = linguagemDaRodada !== 'simples';
+  if (tecnico) overlay.appendChild(svg);
 
   const footer = document.createElement('div');
   footer.className = 'diagnostic-footer';
@@ -1905,7 +2122,7 @@ function showDiagnosticOverlay(
   const hit150 = result.hitRateByRadius.find(r => r.radiusPx === 150)?.pct;
   const degTxt = (v: number | null) => (v === null ? '—' : `${v.toFixed(2)}°`);
 
-  footer.innerHTML = `
+  footer.innerHTML = !tecnico ? rodapeSimples(diagnostics, result, motivoDeAborto, porTaxa !== null) : `
     <div class="diagnostic-card">
       <div class="diagnostic-title">Teste de Precisão</div>
 

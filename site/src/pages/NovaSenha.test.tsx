@@ -114,3 +114,36 @@ describe('<NovaSenha /> com token_hash', () => {
     expect(apiFake.verificar).not.toHaveBeenCalled()
   })
 })
+
+/* Revisão final (22/10/2026): "Salvar nova senha" ficava desabilitado com os campos em branco ou
+   a senha curta. Sem foco, sem Enter e sem dizer o motivo (o mesmo defeito que /entrar, /beta e
+   /contato corrigiram em P2-10). Agora o botão fica ativo, diz o que falta e leva o foco. */
+describe('<NovaSenha /> envio com o que falta', () => {
+  it('em branco: o botão está ativo, diz o que falta, leva o foco à senha e não troca nada', async () => {
+    sessao.authenticated = true
+    montar('/nova-senha')
+    await screen.findByLabelText('Nova senha')
+
+    const botao = screen.getByRole('button', { name: 'Salvar nova senha' })
+    expect(botao).toBeEnabled()
+    fireEvent.click(botao)
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Para salvar, falta preencher ou corrigir: nova senha e confirmação da senha.',
+    )
+    expect(screen.getByLabelText('Nova senha')).toHaveFocus()
+    expect(apiFake.trocar).not.toHaveBeenCalled()
+  })
+
+  it('senha boa e confirmação diferente: o foco vai à confirmação', async () => {
+    sessao.authenticated = true
+    montar('/nova-senha')
+    fireEvent.change(await screen.findByLabelText('Nova senha'), { target: { value: 'senhanova99' } })
+    fireEvent.change(screen.getByLabelText('Confirmar nova senha'), { target: { value: 'outra-coisa' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar nova senha' }))
+
+    expect(screen.getByRole('status')).toHaveTextContent('falta preencher ou corrigir: confirmação da senha.')
+    expect(screen.getByLabelText('Confirmar nova senha')).toHaveFocus()
+    expect(apiFake.trocar).not.toHaveBeenCalled()
+  })
+})

@@ -5,6 +5,7 @@ import path from 'node:path'
 import { PAGES } from './src/seo/pages'
 import { buildRobots, buildSitemap } from './src/seo/sitemap'
 import { resolveSiteUrl } from './src/seo/site'
+import { versaoDoBuild } from './plugins/versaoDoBuild'
 
 /**
  * SEO no build, sem dependência nova:
@@ -91,7 +92,7 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     define: { __SELOS_OFICIAIS__: JSON.stringify(selosOficiais) },
-    plugins: [react(), seoFiles(siteUrl), somenteASolucao()],
+    plugins: [react(), seoFiles(siteUrl), somenteASolucao(), versaoDoBuild()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

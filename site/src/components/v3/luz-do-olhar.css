@@ -1,0 +1,42 @@
+/* A luz do olhar (LuzDoOlhar.tsx), rodada 3, 21/10/2026.
+
+   Uma luz grande, macia e de baixa opacidade (no máximo 0,11 no centro) no azul
+   da marca (--blue-400, #4d86e0), que segue o ponteiro com atraso. Fixa na
+   janela, abaixo do cabeçalho (z-index 100), sem receber clique. A posição vem
+   do componente (transform); o centro da luz fica no ponteiro (margem
+   negativa, metade do tamanho).
+
+   "Atrás de todo o conteúdo": cada faixa da página tem o próprio fundo
+   opaco, então uma camada por baixo nunca apareceria. A luz fica por cima e
+   usa `mix-blend-mode: lighten`: o resultado em cada ponto é o MAIS CLARO entre
+   o que está embaixo e a luz. O fundo marinho (mais escuro que o azul) recebe
+   a luz; o texto, os botões e a tela do app (mais claros) ficam exatamente
+   como estavam — o contraste do texto não muda. */
+
+.v3-luz {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 2;
+  width: 1100px;
+  height: 1100px;
+  margin: -550px 0 0 -550px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 500ms ease;
+  background: radial-gradient(closest-side, rgba(77, 134, 224, 0.11), rgba(77, 134, 224, 0.045) 52%, rgba(77, 134, 224, 0) 100%);
+  mix-blend-mode: lighten;
+  will-change: transform;
+}
+
+.v3-luz.is-visivel {
+  opacity: 1;
+}
+
+/* Sem mouse ou com movimento reduzido o componente nem monta; isto é o cinto
+   e o suspensório, caso a consulta de mídia mude com a página aberta. */
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .v3-luz {
+    display: none;
+  }
+}

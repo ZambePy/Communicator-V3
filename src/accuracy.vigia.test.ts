@@ -15,6 +15,7 @@ vi.mock('./calibration', () => ({
   getCalibrationDistancesCm: () => ({ cameraCm: null, screenCm: null }),
   getCurrentCameraDistanceCm: () => null,
   getCalibrationTimestampMs: () => null,
+  registrarValidacaoDoModelo: () => undefined,
 }));
 
 const { startAccuracyTest } = await import('./accuracy');

@@ -49,47 +49,45 @@
   justify-content: center;
 }
 
-/* --- resumo do programa: custo, lançamento, sistema, fim --- */
+/* --- resumo do programa: custo, lançamento, sistema, fim ---
+   Quatro linhas de uma ficha, separadas por fios: o rótulo pequeno em cima,
+   o valor em Sora embaixo. Sem caixa colorida em volta de cada uma. */
 .beta__facts {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-3);
+  gap: 0 var(--sp-5);
   list-style: none;
   margin: 0 0 var(--sp-6);
   padding: 0;
+  border-top: 1px solid var(--line-strong);
 }
 
 .beta__facts li {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: var(--sp-4);
-  border-radius: var(--r-md);
-  border: 1px solid var(--ok-line);
-  background: var(--ok-soft);
+  gap: 2px;
+  margin: 0;
+  padding: var(--sp-4) 0;
+  border-bottom: 1px solid var(--line);
 }
 
 .beta__facts span {
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: var(--fs-sm);
+  font-weight: 500;
   color: var(--text-dim);
 }
 
 .beta__facts strong {
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
   color: var(--text);
 }
 
 /* o dia do lançamento, no mesmo vermelho da etiqueta */
-.beta__facts .beta__fact--lancamento {
-  border-color: rgba(214, 41, 58, 0.55);
-  background: rgba(214, 41, 58, 0.12);
-}
-
 .beta__facts .beta__fact--lancamento strong {
-  color: #ff8a93;
+  color: var(--danger);
 }
 
 /* --- o que a pessoa recebe (lista compacta, ao lado do formulário) --- */
@@ -110,23 +108,18 @@
 
 .beta__recebe-icone {
   flex: none;
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--r-md);
-  background: var(--accent-soft);
+  padding-top: 2px;
   color: var(--accent);
 }
 
 .beta__recebe h2 {
-  font-size: 1.02rem;
+  font-size: 1.125rem;
   margin: 0 0 4px;
 }
 
 .beta__recebe p {
   margin: 0;
-  font-size: 0.93rem;
+  font-size: var(--fs-sm);
   color: var(--text-soft);
 }
 
@@ -154,12 +147,12 @@
   height: 64px;
   margin-bottom: var(--sp-4);
   border-radius: 50%;
-  background: var(--accent-soft);
+  border: 2px solid var(--accent-line);
   color: var(--accent);
 }
 
 .beta__icone-grande--ok {
-  background: var(--ok-soft);
+  border-color: var(--ok-line);
   color: var(--ok);
 }
 
@@ -250,7 +243,6 @@
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.5);
 }
 
 .beta__cuidador-acoes {

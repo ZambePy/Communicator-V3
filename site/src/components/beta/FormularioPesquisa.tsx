@@ -249,7 +249,7 @@ export function FormularioPesquisa({
       <Escolhas
         campo="app"
         legenda="Quer o app do cuidador no celular?"
-        nota="O que o paciente escreve com os olhos chega ao celular da família, e a resposta é falada na tela."
+        nota="O que a pessoa escreve com os olhos chega ao celular da família, e a resposta é falada na tela dela."
         opcoes={[
           { valor: 'sim', titulo: 'Sim, quero' },
           { valor: 'nao', titulo: 'Agora não' },

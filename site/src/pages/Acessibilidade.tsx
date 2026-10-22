@@ -3,7 +3,8 @@ import { Capitulo, Recursos } from '@/components/pagina/Blocos'
 import { Reveal } from '@/components/effects/Reveal'
 import { DwellTarget } from '@/components/effects/DwellTarget'
 import { CallToAction } from '@/components/sections/CallToAction'
-import { A11Y_PRINCIPLES, BRAND } from '@/data/content'
+import { A11Y_PRINCIPLES } from '@/data/content'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 const COMPROMISSOS_DO_SITE = [
   { titulo: 'Contraste alto', texto: 'Entre texto e fundo, e nenhum texto essencial em corpo pequeno.' },
@@ -18,11 +19,10 @@ const COMPROMISSOS_DO_SITE = [
 export default function Acessibilidade() {
   return (
     <>
+      <FundoDaPagina />
       <PageHead
-        eyebrow="Acessibilidade"
         title="Quatro regras que valem em todas as telas."
-        highlight={['todas']}
-        lead="Quem navega pelo olhar não tem a barra do sistema como referência. Por isso estas regras são requisito de projeto, no app e neste site."
+        lead="Quem usa o olhar não tem mouse nem barra do sistema para se orientar. Por isso o app e este site seguem quatro regras."
       />
 
       <section className="faixa on-raised" aria-label="Os quatro princípios">
@@ -40,8 +40,8 @@ export default function Acessibilidade() {
         <div className="container">
           <Capitulo
             id="retorno-titulo"
-            titulo="Experimente o retorno em três estágios."
-            texto="Pare o cursor sobre um alvo, ou chegue nele pela tecla Tab: o contorno aparece, a cor muda e o aro enche até confirmar."
+            titulo="Experimente o aviso em três momentos."
+            texto="Pare o cursor sobre um botão, ou chegue nele pela tecla Tab. O contorno aparece, a cor muda e o aro enche até confirmar."
           />
           <div className="grid grid--3">
             <Reveal anim="up">
@@ -55,8 +55,8 @@ export default function Acessibilidade() {
             </Reveal>
           </div>
           <p className="aside-note">
-            O padrão é 1,5 segundo. Como o tempo ideal muda com a fadiga e com a condição, o cuidador
-            ajusta de 0,4 a 4 segundos.
+            O padrão é 1,5 segundo. O tempo ideal muda com o cansaço e com a condição de cada pessoa,
+            então o cuidador ajusta de 0,4 a 4 segundos.
           </p>
         </div>
       </section>
@@ -65,17 +65,15 @@ export default function Acessibilidade() {
         <div className="container">
           <Capitulo id="site-titulo" titulo="O que este site cumpre." />
           <Recursos itens={COMPROMISSOS_DO_SITE} />
-          <p className="aside-note">
-            Encontrou uma barreira? Escreva para{' '}
-            <a className="link-ok" href={`mailto:${BRAND.email}`}>
-              {BRAND.email}
-            </a>
-            . Corrigir acessibilidade vem antes de qualquer outro item do roteiro.
-          </p>
         </div>
       </section>
 
-      <CallToAction />
+      <CallToAction
+        titulo="Conte o que faltou."
+        texto="Se alguma coisa neste site ou no app não funciona para você, escreva para a equipe. Corrigir acessibilidade vem antes de qualquer outro item."
+        principal={{ label: 'Falar com a equipe', to: '/contato' }}
+        secundario={false}
+      />
     </>
   )
 }

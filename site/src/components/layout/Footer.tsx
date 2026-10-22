@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom'
 import { Logo } from './Logo'
-import { BETA, BETA_CTA, BRAND, CONDITIONS_SHORT } from '@/data/content'
+import { RelogioAoVivo } from '@/components/v3/RelogioAoVivo'
+import { BETA, BETA_CTA, BRAND, CONDITIONS_SHORT, RODAPE_AO_VIVO } from '@/data/content'
+import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { resetConsent } from '@/lib/consent'
+import { diaEMes } from '@/lib/lancamento'
 import './footer.css'
 
 const COLUMNS = [
@@ -13,6 +16,7 @@ const COLUMNS = [
       { to: '/como-funciona', label: 'Como funciona' },
       { to: '/planos', label: 'Planos' },
       { to: '/baixar', label: 'Baixar' },
+      { to: '/meu-computador', label: 'Meu computador funciona?' },
     ],
   },
   {
@@ -35,7 +39,18 @@ const COLUMNS = [
   },
 ]
 
+/**
+ * O rodapé de todas as páginas. Desde a rodada 3 (21/10/2026), como no vídeo
+ * de referência, tem uma linha com o relógio ao vivo (hora de Brasília) e desde
+ * quando a beta está no ar: o dia do lançamento, o mesmo do selo da beta
+ * (beta_program.launch_at, com a reserva do content.ts). O relógio é pequeno
+ * de propósito (auditoria P2-17): informa, não decora.
+ */
 export function Footer() {
+  const program = useBetaProgram()
+  const lancou = useJaLancou(program.launchAt)
+  const dia = diaEMes(program.launchAt)
+
   return (
     <footer className="footer on-dark" data-sticky-hide>
       <div className="container footer__inner">
@@ -79,6 +94,16 @@ export function Footer() {
             </ul>
           </nav>
         ))}
+      </div>
+
+      <div className="container footer__ao-vivo">
+        <RelogioAoVivo />
+        {BETA.ativo && dia && (
+          <p className="footer__beta">
+            <span className="footer__beta-ponto" aria-hidden="true" />
+            {lancou ? `${RODAPE_AO_VIVO.betaNoAr} ${dia}` : `${RODAPE_AO_VIVO.betaAbre} ${dia}`}
+          </p>
+        )}
       </div>
 
       <div className="container footer__bottom">

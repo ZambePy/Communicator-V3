@@ -6,8 +6,8 @@
   position: relative;
   overflow: hidden;
   padding-top: calc(var(--header-h) + var(--sp-6));
-  padding-bottom: var(--sp-8);
-  background: var(--navy-deep);
+  padding-bottom: var(--faixa);
+  background: var(--v3-noite);
 }
 
 .cuidador-hero__grade {
@@ -30,11 +30,11 @@
 }
 
 .cuidador-hero__titulo {
-  font-size: clamp(2.2rem, 5.4vw, 4rem);
-  line-height: 1.04;
-  letter-spacing: -0.034em;
+  font-size: var(--fs-h1);
+  line-height: 1.02;
+  letter-spacing: -0.038em;
   max-width: 13ch;
-  margin-bottom: var(--sp-4);
+  margin-bottom: var(--sp-5);
 }
 
 .cuidador-hero__lead {
@@ -62,20 +62,23 @@
 
 /* ---------- recursos: carrossel no celular, grade no computador ---------- */
 .cuidador-recursos {
-  padding-block: var(--sp-8);
+  padding-block: var(--faixa);
 }
 
+/* Sangra até a borda da tela: a margem negativa e o recuo seguem o --gutter
+   do .container (relato de 19/10/2026: com o recuo fixo de 24 px e o
+   contêiner de 16 px no celular, a lista passava 8 px da tela). */
 .cuidador-recursos__lista {
   list-style: none;
-  margin: var(--sp-6) calc(-1 * var(--sp-5)) 0;
-  padding: 0 var(--sp-5) var(--sp-4);
+  margin: var(--sp-6) calc(-1 * var(--gutter)) 0;
+  padding: 0 var(--gutter) var(--sp-4);
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: min(78%, 280px);
   gap: var(--sp-5);
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  scroll-padding-inline: var(--sp-5);
+  scroll-padding-inline: var(--gutter);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -110,19 +113,16 @@
 .recurso__plano {
   display: inline-block;
   margin-top: var(--sp-3);
-  padding: 3px 10px;
-  border-radius: var(--r-pill);
-  background: var(--accent-soft);
+  font-size: var(--fs-sm);
+  font-weight: 600;
   color: var(--accent);
-  font-size: 0.78rem;
-  font-weight: 700;
 }
 
 /* ---------- passos ---------- */
 .cuidador-passos {
   position: relative;
-  padding-block: var(--sp-8);
-  background: var(--navy-deep);
+  padding-block: var(--faixa);
+  background: var(--v3-noite);
   overflow: hidden;
 }
 
@@ -131,9 +131,25 @@
   z-index: 1;
 }
 
+/* O título e a frase à esquerda; à direita, a frase chegando ao celular
+   (FraseQueChega). No celular, a cena vem logo depois do texto. */
+.cuidador-passos__cabeca {
+  display: grid;
+  gap: var(--sp-6);
+  align-items: center;
+  margin-bottom: var(--sp-6);
+}
+
+@media (min-width: 1000px) {
+  .cuidador-passos__cabeca {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: var(--sp-8);
+  }
+}
+
 /* ---------- onde baixar ---------- */
 .cuidador-disponivel {
-  padding-block: var(--sp-8);
+  padding-block: var(--faixa);
 }
 
 .cuidador-disponivel__inner {
@@ -149,15 +165,27 @@
   gap: var(--sp-3);
 }
 
-.disponibilidade li {
+/* Só os itens da lista (">"): o passo a passo do APK, que vem dentro do item
+   do Android, é outra lista e tem o estilo dele (baixar-apk.css). */
+.disponibilidade > li {
   display: grid;
   grid-template-columns: 90px minmax(0, 1fr);
   gap: var(--sp-3);
   margin: 0;
+  padding: var(--sp-4) 0;
+  border-top: 1px solid var(--line);
   color: var(--text-soft);
 }
 
-.disponibilidade a {
+/* O botão do APK (e o passo a passo) fica embaixo da frase, na coluna do
+   texto — e não espremido na coluna de 90 px do nome do sistema, como
+   saía antes do redesenho de 19/10/2026. */
+.disponibilidade > li > :nth-child(n + 3) {
+  grid-column: 2;
+}
+
+/* Os links do texto; o botão de baixar o APK fica com a cara de botão. */
+.disponibilidade a:not(.btn) {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -169,10 +197,8 @@
   align-items: flex-start;
   align-self: end;
   margin: 0;
-  padding: var(--sp-5);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  padding-left: var(--sp-5);
+  border-left: 2px solid var(--ok-line);
   color: var(--text-soft);
 }
 

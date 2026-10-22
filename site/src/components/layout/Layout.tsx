@@ -1,10 +1,12 @@
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useLayoutEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Header } from './Header'
 import { Footer } from './Footer'
 import { NavigationEnhancer } from './NavigationEnhancer'
 import { CookieNotice } from './CookieNotice'
 import { StickyCta } from './StickyCta'
+import { FundoDaPaginaProvider } from './FundoDaPagina'
+import { LuzDoOlhar } from '@/components/v3/LuzDoOlhar'
 import { FronteiraDeErro } from './FronteiraDeErro'
 import { RouteMeta } from '@/hooks/useDocumentMeta'
 import { SkeletonCard } from '@/components/ui/Skeleton'
@@ -22,11 +24,15 @@ import './layout.css'
 function ScrollManager() {
   const { pathname, hash } = useLocation()
 
+  // Sem âncora, o topo vai ANTES da pintura (layout effect): a página nova
+  // nunca aparece um quadro na altura da anterior — e, na piscada entre
+  // páginas (piscada.ts), as pálpebras abrem sobre ela já no topo.
+  useLayoutEffect(() => {
+    if (!hash) window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
+  }, [pathname, hash])
+
   useEffect(() => {
-    if (!hash) {
-      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior })
-      return
-    }
+    if (!hash) return
 
     let frame = 0
     const deadline = Date.now() + 2500
@@ -96,17 +102,24 @@ export function Layout() {
       <ScrollManager />
       <RouteMeta />
       <NavigationEnhancer />
+      {/* A luz do olhar acompanha o mouse em todas as páginas (rodada 4,
+          21/10/2026, pedido do dono: o fundo é o mesmo sistema em todo o site).
+          Só com mouse e sem movimento reduzido; mora no <body> (portal). */}
+      <LuzDoOlhar />
       <Header />
-      {/* A key remonta o <main> a cada rota, o que dá a transição de página.
-          Sem padding-top: cada rota abre com a própria faixa escura, que
-          corre por baixo do cabeçalho transparente. */}
-      <main id="conteudo" key={pathname} className="main anim-page">
+      {/* A key remonta o <main> a cada rota; `data-rota` diz à piscada
+          entre páginas (piscada.ts) que a página nova chegou. Sem
+          padding-top: cada rota abre com a própria faixa escura, que corre
+          por baixo do cabeçalho transparente. */}
+      <main id="conteudo" key={pathname} data-rota={pathname} className="main">
         {/* Uma página que quebra (ou cujo pedaço sumiu num deploy) não leva
             junto o cabeçalho e o rodapé: ver FronteiraDeErro. */}
         <FronteiraDeErro>
-          <Suspense fallback={<RouteFallback />}>
-            <Outlet />
-          </Suspense>
+          <FundoDaPaginaProvider>
+            <Suspense fallback={<RouteFallback />}>
+              <Outlet />
+            </Suspense>
+          </FundoDaPaginaProvider>
         </FronteiraDeErro>
       </main>
       <Footer />

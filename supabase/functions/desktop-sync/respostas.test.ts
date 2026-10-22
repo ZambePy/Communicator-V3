@@ -1,7 +1,7 @@
 // Testes das decisões de resposta da desktop-sync.
 //   deno test supabase/functions/desktop-sync/
 import { deepStrictEqual, strictEqual } from 'node:assert/strict';
-import { idDoCliente, sessoesDoHeartbeat, statusDoErroDoBanco } from './respostas.ts';
+import { avisoDeDispositivoExcedido, idDoCliente, sessoesDoHeartbeat, statusDoErroDoBanco } from './respostas.ts';
 
 Deno.test('dado inválido e restrição violada são culpa do conteúdo: 400', () => {
   strictEqual(statusDoErroDoBanco({ code: '22P02' }), 400); // invalid_text_representation
@@ -51,4 +51,18 @@ Deno.test('heartbeat com a sessão do desktop: carimba só ela', () => {
     sessoesDoHeartbeat({ action: 'heartbeat', session_id: '3F2504E0-4F89-41D3-9A0C-0305E82C3301' }),
     { tipo: 'uma', id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301' },
   );
+});
+
+Deno.test('aviso de dispositivo: o mesmo texto no máximo a cada 15 min, e 4 por hora (revisão de 19/10/2026)', () => {
+  const agora = Date.parse('2026-10-19T12:00:00Z');
+  const ha = (min: number) => new Date(agora - min * 60_000).toISOString().replace('Z', '+00:00');
+  strictEqual(avisoDeDispositivoExcedido([], 'A câmera parou', agora), false);
+  strictEqual(avisoDeDispositivoExcedido([{ message: 'A câmera parou', received_at: ha(5) }], 'A câmera parou', agora), true);
+  strictEqual(avisoDeDispositivoExcedido([{ message: 'A câmera parou', received_at: ha(16) }], 'A câmera parou', agora), false);
+  strictEqual(avisoDeDispositivoExcedido([{ message: 'Outro texto', received_at: ha(1) }], 'A câmera parou', agora), false);
+  const quatro = [1, 10, 20, 30].map((m) => ({ message: `texto ${m}`, received_at: ha(m) }));
+  strictEqual(avisoDeDispositivoExcedido(quatro, 'novo', agora), true);
+  strictEqual(avisoDeDispositivoExcedido(quatro.map((r) => ({ ...r, received_at: ha(61) })), 'novo', agora), false);
+  // Data ilegível não conta (nem para bloquear, nem para liberar o mesmo texto).
+  strictEqual(avisoDeDispositivoExcedido([{ message: 'A câmera parou', received_at: null }], 'A câmera parou', agora), false);
 });

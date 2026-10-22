@@ -35,7 +35,7 @@
   font-size: 1.02rem;
   color: var(--text);
   background: var(--surface-2);
-  border: 1.5px solid var(--line);
+  border: 1.5px solid var(--campo-borda);
   border-radius: var(--r-md);
   transition:
     border-color var(--dur) var(--ease-out),
@@ -84,21 +84,38 @@
 }
 
 .field--valid .field__input {
-  border-color: var(--ok-line);
+  /* Teal da marca, e não o --ok-line de antes (translúcido, 2,7:1) nem o teal
+     600 (2,5:1 sobre a superfície mais clara do marinho): a fronteira do
+     campo não pode ficar abaixo de 3:1 só porque o valor passou. */
+  border-color: var(--teal);
   padding-right: 44px;
 }
 
 .field__input:hover {
-  border-color: var(--line-strong);
+  border-color: var(--campo-borda-hover);
 }
 
 .field__input:focus {
-  outline: none;
-  /* Anel de foco visível: 3 px sólidos, não translúcidos. Teal claro,
-     porque o azul institucional some no fundo marinho. */
-  border-color: var(--teal-300);
-  box-shadow: 0 0 0 3px var(--teal-300);
+  /* Foco neutro (papel), como o anel global: o teal é só da confirmação, e o
+     campo válido o usa. Contorno de verdade, e não só sombra: a sombra some no
+     modo de alto contraste do Windows. */
+  outline: 3px solid var(--papel);
+  outline-offset: 2px;
+  border-color: var(--papel);
   background: var(--surface);
+}
+
+/* Desabilitado continua legível, como o botão: borda tracejada e sem reação ao ponteiro. */
+.field__input:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-soft);
+}
+
+.field__input:disabled:hover {
+  border-color: var(--campo-borda);
 }
 
 .field__select {
@@ -120,7 +137,6 @@
 
 .field--error .field__input:focus {
   border-color: var(--danger);
-  box-shadow: 0 0 0 3px var(--danger);
 }
 
 .field__hint {
@@ -130,11 +146,26 @@
 }
 
 .field__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   margin: 0;
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--danger);
   animation: fade-up 260ms var(--ease-out) both;
+}
+
+/* O erro não depende só da cor (WCAG 1.4.1): leva um ícone de aviso na frente. */
+.field__error::before {
+  content: '';
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+  margin-top: 0.12em;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' d='M10 2.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15ZM10 6v4.6M10 13.6v.1'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' d='M10 2.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15ZM10 6v4.6M10 13.6v.1'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
 /* --- checkbox --- */
@@ -164,7 +195,7 @@
   width: 24px;
   height: 24px;
   margin-top: 2px;
-  border: 1.5px solid var(--line-strong);
+  border: 1.5px solid var(--campo-borda);
   border-radius: 7px;
   background: var(--surface-2);
   display: grid;
@@ -182,14 +213,15 @@
 }
 
 .check__input:checked + .check__label .check__box {
-  background: var(--teal);
-  border-color: var(--teal);
-  color: #fff;
+  /* Marcar é escolher, não confirmar: azul claro da marca, tique no marinho. */
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--navy);
   animation: pop-check 300ms var(--ease-spring);
 }
 
 .check__input:focus-visible + .check__label .check__box {
-  outline: 3px solid var(--ok);
+  outline: 3px solid var(--papel);
   outline-offset: 3px;
 }
 

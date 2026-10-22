@@ -5,9 +5,10 @@
  *  - Reconhecer e resolver chamam as ações de verdade, e a falha aparece.
  */
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import Alertas from '../../app/(tabs)/alertas';
 import type { HelpRequest } from '@/data/types';
+import { TRAVA_DO_BOTAO_MS } from '@/hooks/useTravaDosBotoes';
 
 const mockApp = {
   helpRequests: [] as HelpRequest[],
@@ -87,5 +88,52 @@ describe('Alertas', () => {
     await render(<Alertas />);
     expect(screen.getByTestId('alertas-desatualizados')).toBeTruthy();
     expect(screen.getByText('Estou ciente')).toBeTruthy();
+  });
+
+  // Revisão de UX de 19/10/2026 (achado 12): depois de "Estou ciente", o botão
+  // "Resolvido" ocupa o lugar dele — um toque duplo resolvia o socorro. O alerta
+  // em tela cheia já tinha a trava; a lista não.
+  describe('toque duplo', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('o segundo toque de "Estou ciente" não resolve o socorro: "Resolvido" espera um instante', async () => {
+      const socorro = alerta({ kind: 'emergencia', message: 'FALTA DE AR' });
+      mockApp.helpRequests = [socorro];
+      const tela = await render(<Alertas />);
+
+      await fireEvent.press(screen.getByText('Estou ciente'));
+      await waitFor(() => expect(mockApp.acknowledgeAlert).toHaveBeenCalledWith('hr-1'));
+      // O banco confirmou: "Estou ciente" sai e "Resolvido" ocupa a linha toda.
+      mockApp.helpRequests = [{ ...socorro, acknowledged_at: new Date().toISOString() }];
+      await tela.rerender(<Alertas />);
+      expect(screen.queryByText('Estou ciente')).toBeNull();
+
+      await fireEvent.press(screen.getByText('Resolvido'));
+      expect(mockApp.resolveAlert).not.toHaveBeenCalled();
+
+      await act(() => {
+        jest.advanceTimersByTime(TRAVA_DO_BOTAO_MS);
+      });
+      await fireEvent.press(screen.getByText('Resolvido'));
+      await waitFor(() => expect(mockApp.resolveAlert).toHaveBeenCalledWith('hr-1'));
+    });
+
+    it('confirmado em outro celular enquanto a lista está aberta: a mesma trava', async () => {
+      const socorro = alerta({ kind: 'emergencia' });
+      mockApp.helpRequests = [socorro];
+      const tela = await render(<Alertas />);
+      mockApp.helpRequests = [{ ...socorro, acknowledged_at: new Date().toISOString() }];
+      await tela.rerender(<Alertas />);
+      await fireEvent.press(screen.getByText('Resolvido'));
+      expect(mockApp.resolveAlert).not.toHaveBeenCalled();
+    });
+
+    it('pedido que já aparece confirmado: "Resolvido" responde na hora', async () => {
+      mockApp.helpRequests = [alerta({ kind: 'emergencia', acknowledged_at: new Date().toISOString() })];
+      await render(<Alertas />);
+      await fireEvent.press(screen.getByText('Resolvido'));
+      await waitFor(() => expect(mockApp.resolveAlert).toHaveBeenCalledWith('hr-1'));
+    });
   });
 });

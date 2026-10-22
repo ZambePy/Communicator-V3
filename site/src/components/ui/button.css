@@ -1,33 +1,38 @@
+/* Botões (Button.tsx). Chapados: sem degradê, sem halo, sem brilho que
+   segue o ponteiro. A hierarquia vem da cor: o principal é papel sobre o
+   marinho (15,7:1), o secundário é contorno, o fantasma é só texto. Alvos
+   grandes, como no app: 48 px de altura, 56 px no tamanho grande. */
+
 .btn {
   position: relative;
-  /* Alvo de toque mínimo de 44 px (WCAG 2.5.5 / diretrizes móveis). */
-  min-height: 44px;
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--sp-2);
-  padding: 0.88rem 1.65rem;
+  padding: 0.75rem 1.4rem;
   border: 1.5px solid transparent;
-  border-radius: var(--r-pill);
-  font-family: inherit;
+  border-radius: var(--r-md);
+  font-family: var(--font-body);
   font-size: 1rem;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.2;
+  letter-spacing: -0.005em;
   cursor: pointer;
-  overflow: hidden;
-  isolation: isolate;
   text-align: center;
+  text-decoration: none;
   transition:
-    transform var(--dur) var(--ease-spring),
-    box-shadow var(--dur) var(--ease-out),
-    background var(--dur) var(--ease-out),
-    border-color var(--dur) var(--ease-out),
-    color var(--dur) var(--ease-out);
+    background-color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
 }
 
 .btn--lg {
-  padding: 1.05rem 2.1rem;
-  font-size: 1.06rem;
+  min-height: 56px;
+  padding: 0.95rem 1.75rem;
+  font-size: 1.0625rem;
+  border-radius: 14px;
 }
 
 .btn--full {
@@ -36,47 +41,22 @@
 
 .btn__content {
   position: relative;
-  z-index: 2;
   display: inline-flex;
   align-items: center;
   gap: var(--sp-2);
 }
 
-/* Brilho que acompanha o ponteiro. */
-.btn__shine {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: radial-gradient(
-    150px circle at var(--mx, 50%) var(--my, 50%),
-    rgba(255, 255, 255, 0.26),
-    transparent 60%
-  );
-  opacity: 0;
-  transition: opacity var(--dur) var(--ease-out);
-}
-
-.btn:hover:not(:disabled) .btn__shine {
-  opacity: 1;
-}
-
-.btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-}
-
-.btn:active {
-  transform: translateY(0) scale(0.985);
+.btn:active:not(:disabled):not([aria-disabled='true']) {
+  transform: translateY(1px);
 }
 
 .btn.is-loading {
   cursor: progress;
-  opacity: 0.75;
-  transform: none;
+  opacity: 0.8;
 }
 
-/* Desabilitado precisa continuar LEGÍVEL: nada de opacidade que joga texto
-   escuro sobre fundo escuro. Superfície neutra, borda tracejada e texto
-   claro (#c3d2e8 sobre #132844 ≈ 9:1). Vale para todas as variantes. */
+/* Desabilitado continua LEGÍVEL: superfície neutra, borda tracejada e texto
+   claro (#c3d1e6 sobre #17305a ≈ 8:1). Vale para todas as variantes. */
 .btn:disabled,
 .btn[aria-disabled='true'] {
   cursor: not-allowed;
@@ -86,61 +66,162 @@
   border-color: var(--line-strong);
   border-style: dashed;
   color: var(--text-soft);
-  box-shadow: none;
-}
-
-.btn:disabled .btn__shine,
-.btn[aria-disabled='true'] .btn__shine {
-  display: none;
 }
 
 /* --- variantes --- */
-.btn--primary {
-  background: linear-gradient(135deg, var(--blue-400), var(--blue));
-  color: #fff;
-  box-shadow: var(--glow);
-}
-
-.btn--primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--blue-400), var(--blue-500));
-  box-shadow: 0 18px 44px rgba(27, 84, 168, 0.5);
-}
-
-/* Teal claro com texto marinho: 8,9:1. */
+.btn--primary,
 .btn--teal {
-  background: linear-gradient(135deg, var(--teal-300), var(--teal));
-  color: #04231f;
-  box-shadow: 0 12px 32px rgba(0, 166, 147, 0.26);
+  background: var(--papel);
+  color: var(--navy);
 }
 
+.btn--primary:hover:not(:disabled),
 .btn--teal:hover:not(:disabled) {
-  box-shadow: 0 18px 44px rgba(0, 166, 147, 0.4);
+  background: #ffffff;
+}
+
+/* Pressionado: um tom abaixo do papel e 1 px para baixo (o transform está acima).
+   O hover clareia, o clique escurece: a mão sente a diferença. */
+.btn--primary:active:not(:disabled):not([aria-disabled='true']),
+.btn--teal:active:not(:disabled):not([aria-disabled='true']) {
+  background: #d8e1ef;
+}
+
+/* O aro de fixação das chamadas principais (`chamada` no Button.tsx): um anel
+   menta que fecha em volta do botão em 600 ms com o ponteiro parado em cima ou
+   com o foco do teclado, e fecha de vez no clique — o gesto do clique pelo
+   olhar. Ao sair, some na hora, como no app. No toque, nada: o botão é só
+   botão.
+
+   O anel é a borda do ::after, revelada por um recorte (clip-path) que gira
+   do topo, no sentido do relógio: um leque com centro no meio do botão, cujo
+   último vértice corre pela borda. As porcentagens dos quadros seguem o
+   perímetro de um botão grande (232 × 68 com a folga), para o anel andar em
+   velocidade quase constante. Só clip-path anima (até 20/10/2026 era um
+   conic-gradient com uma propriedade registrada, que repinta a cada quadro).
+   Com movimento reduzido, a regra global encurta a animação: o anel aparece
+   já fechado. */
+.btn--chamada::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 2px solid var(--teal-300);
+  border-radius: calc(var(--r-md) + 6px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.btn--lg.btn--chamada::after {
+  border-radius: 20px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn--chamada:hover:not(:disabled)::after {
+    opacity: 1;
+    animation: btn-fixacao 600ms linear both;
+  }
+}
+
+/* Com o teclado, o contorno do foco fica aceso e fraco (é o trilho), e o anel
+   fecha por cima dele: o foco nunca some, e o anel diz o mesmo que no mouse.
+   O trilho tem 70 % de opacidade (era 42 %): nos primeiros instantes só ele
+   marca o foco, e a 42 % ficava em 2,7:1 contra o marinho, abaixo dos 3:1 do
+   critério 1.4.11 (auditoria de 21/10/2026, P3-16). Agora são 6,2:1. */
+.btn--chamada:focus-visible {
+  outline: 3px solid rgba(67, 214, 195, 0.7);
+  outline-offset: 4px;
+}
+
+.btn--chamada:focus-visible::after {
+  opacity: 1;
+  animation: btn-fixacao 600ms linear both;
+}
+
+/* O clique fecha o anel de vez. */
+.btn--chamada:active:not(:disabled)::after {
+  opacity: 1;
+  animation: none;
+  clip-path: none;
+}
+
+@keyframes btn-fixacao {
+  0% {
+    clip-path: polygon(50% 50%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%);
+  }
+  19% {
+    clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%);
+  }
+  31% {
+    clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 100% 100%, 100% 100%, 100% 100%);
+  }
+  69% {
+    clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 100%, 0% 100%);
+  }
+  81% {
+    clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 0% 0%);
+  }
+  100% {
+    clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, 50% 0%);
+  }
 }
 
 .btn--secondary {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: var(--line-strong);
+  background: transparent;
+  border-color: rgba(243, 246, 251, 0.42);
   color: var(--text);
 }
 
 .btn--secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: var(--blue-300);
-  color: #fff;
+  border-color: var(--papel);
+  background: rgba(243, 246, 251, 0.06);
 }
 
-.on-dark .btn--secondary {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+.btn--secondary:active:not(:disabled):not([aria-disabled='true']) {
+  border-color: var(--papel);
+  background: rgba(243, 246, 251, 0.14);
 }
 
 .btn--ghost {
   background: transparent;
   color: var(--text-soft);
   padding-inline: 1rem;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 4px;
 }
 
 .btn--ghost:hover:not(:disabled) {
   color: var(--text);
-  background: var(--surface-2);
+  text-decoration-color: currentColor;
+}
+
+.btn--ghost:active:not(:disabled):not([aria-disabled='true']) {
+  color: var(--papel);
+  text-decoration-color: currentColor;
+  background: rgba(243, 246, 251, 0.08);
+}
+
+/* Desabilitado com explicação (prop `motivo`): o botão e, logo abaixo, a frase
+   que diz por que não dá para clicar ainda. */
+.btn-com-motivo {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  max-width: 100%;
+}
+
+.btn-com-motivo--full {
+  display: flex;
+  width: 100%;
+}
+
+.btn-com-motivo--full > .btn {
+  width: 100%;
+}
+
+.btn__motivo {
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--text-soft);
 }

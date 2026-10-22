@@ -12,25 +12,31 @@ type Props = {
    * 'longa' = "Beta liberada".
    */
   variante?: 'curta' | 'longa'
+  /**
+   * Texto no lugar de "Beta liberada"/"Liberada" quando o download já abriu:
+   * a abertura da home diz "Beta gratuita para Windows" num selo só. Quem lê a
+   * tela continua ouvindo "Beta liberada: o download está aberto".
+   */
+  rotulo?: string
   className?: string
 }
 
 /**
- * A etiqueta vermelha da beta. Antes do lançamento, o dia em que o download
+ * O selo da beta (azul da marca; era vermelho até 21/10/2026). Antes do lançamento, o dia em que o download
  * abre; depois, que a beta foi liberada. A troca é sozinha, na virada, com a
  * página aberta (`useJaLancou`), como o resto do site. Quem lê a tela ouve a
  * frase por extenso ("lançamento em 10 de novembro", "beta liberada: o
  * download está aberto"), não "10 barra 11".
  */
-export function EtiquetaLancamento({ lancamento, variante = 'longa', className = '' }: Props) {
+export function EtiquetaLancamento({ lancamento, variante = 'longa', rotulo, className = '' }: Props) {
   const liberada = useJaLancou(lancamento)
   const classes = (base: string) => `${base} ${className}`.trim()
 
   if (liberada) {
     return (
       <span className={classes(`etiqueta-lancamento etiqueta-lancamento--${variante} etiqueta-lancamento--liberada`)}>
-        <span aria-hidden="true">{variante === 'longa' ? 'Beta liberada' : 'Liberada'}</span>
-        <span className="sr-only">Beta liberada: o download está aberto</span>
+        <span aria-hidden="true">{rotulo ?? (variante === 'longa' ? 'Beta liberada' : 'Liberada')}</span>
+        <span className="sr-only">{rotulo ? `${rotulo}: o download está aberto` : 'Beta liberada: o download está aberto'}</span>
       </span>
     )
   }

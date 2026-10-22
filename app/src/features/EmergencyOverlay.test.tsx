@@ -11,9 +11,12 @@
  *    "Tentar de novo" — em vez de fingir que o computador do paciente foi avisado.
  */
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { EspacoDoTopoProvider, Screen, ScreenHeader } from '@/components';
 import type { HelpRequest, PatientSettings } from '@/data/types';
-import { acaoDoVoltar, EmergencyOverlay, TRAVA_DO_RESOLVIDO_MS } from './EmergencyOverlay';
+import { TRAVA_DO_BOTAO_MS } from '@/hooks/useTravaDosBotoes';
+import { acaoDoVoltar, EmergencyOverlay, mancheteDoAlerta } from './EmergencyOverlay';
 
 // `useApp` é a única entrada do overlay. Substituir o hook (e não o provider
 // inteiro) mantém o teste sobre o componente, sem rede, sem realtime e sem os
@@ -133,7 +136,7 @@ describe('EmergencyOverlay', () => {
       `Pedido feito às ${hora(pedidoEm)} no computador do paciente; chegou às ${hora(chegouEm)}.`,
     );
     // O topo mostra a hora do pedido.
-    expect(screen.getByText(new RegExp(`Emergência · ${hora(pedidoEm)}`))).toBeTruthy();
+    expect(screen.getByText(new RegExp(`Emergência às ${hora(pedidoEm)}`))).toBeTruthy();
   });
 
   it('chegada logo depois do pedido não ganha nota de atraso', async () => {
@@ -306,10 +309,77 @@ describe('EmergencyOverlay', () => {
     expect(mockApp.resolveAlert).not.toHaveBeenCalled();
 
     await act(() => {
-      jest.advanceTimersByTime(TRAVA_DO_RESOLVIDO_MS);
+      jest.advanceTimersByTime(TRAVA_DO_BOTAO_MS);
     });
     await fireEvent.press(screen.getByText('Resolvido'));
     await waitFor(() => expect(mockApp.resolveAlert).toHaveBeenCalledWith('hr-1'));
+  });
+
+  // Revisão de UX de 19/10/2026 (achado 6): um socorro mais grave agora toma o
+  // lugar de um "Chamar atenção" na tela — e, confirmado um pedido, o seguinte
+  // sem resposta aparece no mesmo lugar. O "Estou indo!" do pedido novo nasce
+  // onde o dedo estava: sem a trava, o segundo toque confirmava um socorro que
+  // ninguém leu (e o computador do paciente diria "seu cuidador viu").
+  it('outro pedido assume a tela: o "Estou indo!" dele espera um instante', async () => {
+    mockApp.pendingAlert = alerta({ id: 'hr-ajuda', kind: 'ajuda', message: 'Está chamando você (tela Sim · Não)' });
+    mockApp.acknowledgeAlert.mockResolvedValue(undefined);
+    const tela = await render(<EmergencyOverlay />);
+
+    mockApp.pendingAlert = alerta({ id: 'hr-socorro', kind: 'emergencia', message: 'FALTA DE AR' });
+    await tela.rerender(<EmergencyOverlay />);
+    expect(screen.getByText('Falta de ar')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Estou indo!'));
+    expect(mockApp.acknowledgeAlert).not.toHaveBeenCalled();
+
+    await act(() => {
+      jest.advanceTimersByTime(TRAVA_DO_BOTAO_MS);
+    });
+    await fireEvent.press(screen.getByText('Estou indo!'));
+    await waitFor(() => expect(mockApp.acknowledgeAlert).toHaveBeenCalledWith('hr-socorro'));
+  });
+
+  // Revisão de UX de 19/10/2026 (achado 20): a faixa do alerta minimizado
+  // ficava exatamente sobre os botões Voltar/Fechar das telas (o mesmo topo de
+  // `Screen`) até alguém confirmar.
+  describe('faixa do alerta minimizado', () => {
+    const ALTURA_DA_FAIXA = 76;
+    const montarTela = () => (
+      <EspacoDoTopoProvider>
+        <Screen testID="tela">
+          <ScreenHeader onBack={jest.fn()} title="Relatório de sessão" />
+        </Screen>
+        <EmergencyOverlay />
+      </EspacoDoTopoProvider>
+    );
+
+    it('não cobre o Voltar/Fechar da tela: o conteúdo desce, e a faixa segue visível e tocável', async () => {
+      mockApp.pendingAlert = alerta();
+      mockApp.pendingAlertMinimized = true;
+      await render(montarTela());
+
+      const faixa = screen.getByTestId('alerta-minimizado');
+      // A faixa informa a altura que ganhou na tela (fonte do sistema grande a faz crescer).
+      await fireEvent(screen.getByTestId('faixa-do-alerta'), 'layout', { nativeEvent: { layout: { x: 20, y: 8, width: 280, height: ALTURA_DA_FAIXA } } });
+      const topoDaFaixa = StyleSheet.flatten(screen.getByTestId('faixa-do-alerta').props.style).top as number;
+      const topoDaTela = StyleSheet.flatten(screen.getByTestId('tela').props.contentContainerStyle).paddingTop as number;
+      expect(topoDaTela).toBeGreaterThanOrEqual(topoDaFaixa + ALTURA_DA_FAIXA);
+      expect(screen.getByLabelText('Voltar')).toBeTruthy();
+
+      await fireEvent.press(faixa);
+      expect(mockApp.restorePendingAlert).toHaveBeenCalledTimes(1);
+    });
+
+    it('sem a faixa, a tela volta ao topo de sempre', async () => {
+      mockApp.pendingAlert = alerta();
+      mockApp.pendingAlertMinimized = true;
+      const tela = await render(montarTela());
+      await fireEvent(screen.getByTestId('faixa-do-alerta'), 'layout', { nativeEvent: { layout: { x: 20, y: 8, width: 280, height: ALTURA_DA_FAIXA } } });
+
+      mockApp.pendingAlert = null;
+      mockApp.pendingAlertMinimized = false;
+      await tela.rerender(montarTela());
+      expect(StyleSheet.flatten(screen.getByTestId('tela').props.contentContainerStyle).paddingTop).toBe(8);
+    });
   });
 
   it('alerta que já abre confirmado (outro celular confirmou antes): "Resolvido" responde na hora', async () => {
@@ -319,4 +389,40 @@ describe('EmergencyOverlay', () => {
     await fireEvent.press(screen.getByText('Resolvido'));
     await waitFor(() => expect(mockApp.resolveAlert).toHaveBeenCalledTimes(1));
   });
+
+  // Redesenho de 19/10/2026: o motivo do pedido é a manchete, legível ao acordar.
+  describe('manchete e prazo', () => {
+    it('o motivo curto que o computador manda vira a manchete, em caixa de frase', async () => {
+      mockApp.pendingAlert = alerta({ message: 'FALTA DE AR' });
+      await render(<EmergencyOverlay />);
+      expect(screen.getByText('Falta de ar')).toBeTruthy();
+      // O tipo do pedido continua visível, no topo, com a hora.
+      expect(screen.getByText(/^Pedido de socorro às \d{2}:\d{2}$/)).toBeTruthy();
+      expect(screen.getByText('Carlos precisa de você agora.')).toBeTruthy();
+    });
+
+    it('motivo longo fica no texto; a manchete é o tipo do pedido', () => {
+      expect(mancheteDoAlerta({ kind: 'emergencia', message: 'Carlos acionou o pedido de socorro na tela.' })).toEqual({ titulo: 'Pedido de socorro', motivoNaManchete: false });
+      expect(mancheteDoAlerta({ kind: 'ajuda', message: 'OUTRA URGÊNCIA' })).toEqual({ titulo: 'Outra urgência', motivoNaManchete: true });
+      // Aviso da sessão: sempre o tipo, mesmo com mensagem curta.
+      expect(mancheteDoAlerta({ kind: 'postura', message: 'Desvio lento.' })).toEqual({ titulo: 'Aviso de postura', motivoNaManchete: false });
+      expect(mancheteDoAlerta({ kind: 'emergencia', message: '' })).toEqual({ titulo: 'Pedido de socorro', motivoNaManchete: false });
+    });
+
+    it('a barra do prazo diminui com o tempo e some da tela depois da confirmação', async () => {
+      mockApp.pendingAlert = alerta(); // 45 s de prazo, criado há 10 s
+      const tela = await render(<EmergencyOverlay />);
+      // A barra é escondida do leitor de tela (o texto do prazo já diz tudo).
+      const largura = () => StyleSheet.flatten(screen.getByTestId('restante-do-prazo', { includeHiddenElements: true }).props.style).width;
+      expect(largura()).toBe('78%'); // 35 de 45 s
+      await act(() => {
+        jest.advanceTimersByTime(17_000);
+      });
+      expect(largura()).toBe('40%'); // 18 de 45 s
+      mockApp.pendingAlert = alerta({ acknowledged_at: new Date(AGORA).toISOString() });
+      await tela.rerender(<EmergencyOverlay />);
+      expect(screen.queryByTestId('barra-do-prazo', { includeHiddenElements: true })).toBeNull();
+    });
+  });
 });
+

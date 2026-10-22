@@ -18,6 +18,7 @@ import type {
   RecordingApi,
   EngineDiagnostics,
   MedidaDoPontoDaRecalibracao,
+  ResultadoDoPreset,
 } from '@tracker/tracker/engine';
 import {
   stepDwell,
@@ -43,11 +44,26 @@ import {
 import type { MotivoDeRecalibracao } from '@tracker/vigiaDeRecalibracao';
 import { DetectorDeOlharForaDaTela } from '@tracker/interaction/olharForaDaTela';
 import { DetectorDeOlhosFechados } from '@tracker/interaction/olhosFechados';
+import { mensagemDeContraluz, mensagemDeContraluzForte } from '@tracker/contraluz';
 import { preflight, podeComecar } from '@tracker/diagnostics/preflight';
 import { cursorVisivelNoTeste } from '@tracker/accuracy';
 import { rotaMostraCursor } from '../rotasComCursor';
 import { stepBlinkClick, criarEstadoBlinkClick } from '@tracker/interaction/blinkClick';
-import { GazeStatusBanner } from '../components/GazeStatusBanner';
+import {
+  GazeStatusBanner,
+  problemaPersistenteDoOlhar,
+  type EntradasDoAviso,
+} from '../components/GazeStatusBanner';
+import { avisoDoModeloDoOlhar } from '../avisoDoModeloDoOlhar';
+import { informarProblemaDoRastreamento } from '../services/problemaDoRastreamento';
+import {
+  ESTADO_INICIAL_DA_LUZ,
+  MedidorDeBrilhoDoQuadro,
+  mensagemDePoucaLuz,
+  passoDaPoucaLuz,
+  type EstadoDaPoucaLuz,
+} from '@tracker/poucaLuz';
+import { medicaoEmAndamento } from '../medicaoEmAndamento';
 import {
   ReancoragemOverlay,
   DURACAO_DO_REAJUSTE_MS,
@@ -82,7 +98,14 @@ import { aoClicar, aoNavegar, criarRearme, filtrarAlvo } from '@tracker/interact
 import { detectFlicker, inferPowerLineHz } from '@tracker/flickerDetector';
 import { AvisoDeDistancia } from '@tracker/distanceAdvisory';
 import { useSettings } from './SettingsContext';
+import { tocarSomDaSelecao } from '../utils/emergencyAudio';
 import { chaveDaCamera, resolverFovParaCamera } from '@tracker/camera/fovPorCamera';
+import {
+  abrirCameraDoRastreador,
+  deviceIdDaChave,
+  MENSAGEM_DE_CAMERA_DE_RESERVA,
+} from '../services/camera/abertura';
+import { ligarBatidaDoRenderer } from '../services/batidaDoRenderer';
 import { isDevMode, onDevModeChange } from '../devMode';
 import {
   sinalizarEstadoDoOlhar,
@@ -90,6 +113,7 @@ import {
   confirmarSelecao,
 } from '../utils/feedbackVisual';
 import { dwellDoAlvo, limitarDwellMs } from '../dwellMs';
+import { alvoComZonasLaterais, ehZonaLateral, haZonasLaterais } from '../components/ui/zonasLaterais';
 
 export type {
   GazeEngine,
@@ -151,10 +175,69 @@ function naFolgaEAVista(p: { x: number; y: number }, alvo: HTMLElement, folgaPx:
 }
 
 /**
+ * O ponto que a folga de intrusão (M19) confere. Numa zona lateral (modo só
+ * horizontal, 21/10/2026) só a coluna conta: o `y` vai para a altura do meio
+ * dela, e a folga vale de 1° para os lados — com o `y` de verdade, que para
+ * quem perdeu o olhar vertical cai em qualquer lugar, a folga nunca valia.
+ */
+function pontoParaAFolga(alvo: HTMLElement, x: number, y: number): { x: number; y: number } {
+  if (!ehZonaLateral(alvo)) return { x, y };
+  const r = alvo.getBoundingClientRect();
+  return { x, y: r.top + r.height / 2 };
+}
+
+/**
  * O que continua acionável pelo olhar durante a calibração: a Emergência e o
  * CANCELAR da confirmação dela (`data-cancelar-emergencia`).
  */
 export const SELETOR_DURANTE_CALIBRACAO = '[data-emergency="true"], [data-cancelar-emergencia="true"]';
+
+/**
+ * Falhas SEGUIDAS do despachante de dwell a partir das quais a tela avisa
+ * (relato de 19/10/2026). Trinta quadros são ~1 s: uma exceção isolada não
+ * acende aviso nenhum; uma que se repete a cada quadro — o olhar não aciona
+ * mais nada, nem a Emergência — aparece antes de alguém concluir que travou.
+ */
+export const FALHAS_DO_DESPACHO_PARA_AVISAR = 30;
+/** Intervalo mínimo entre dois logs de falha do despachante ou dos assinantes. */
+const INTERVALO_DO_LOG_DO_DESPACHO_MS = 2000;
+/** O detalhe do banner "O acionamento pelo olhar falhou". */
+export const MENSAGEM_DE_ACIONAMENTO_FALHOU =
+  'Estou tentando de novo a cada instante. Enquanto isso, o mouse e o teclado continuam ' +
+  'funcionando; se não voltar em alguns segundos, feche e abra o IrisFlow.';
+
+/**
+ * `elementFromPoint` só com coordenada finita: com NaN ou Infinity ele LANÇA
+ * `TypeError` — e, no despachante, uma exceção por quadro era o dwell inteiro
+ * morto, Emergência inclusive.
+ */
+function elementoNoPonto(x: number, y: number): Element | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return document.elementFromPoint(x, y);
+}
+
+/**
+ * O texto da faixa com a calibração suspensa (o olhar só aciona a Emergência e
+ * a recuperação). Pela janela fora do tamanho ela volta sozinha com a janela;
+ * pelo recorte do modelo do rosto (`s.recorte`, revisão do pipeline de
+ * 19/10/2026) não — o texto diz o que resolve.
+ */
+export function textoDaSuspensaoDaCalibracao(s: SuspensaoDaCalibracao | null): string | null {
+  if (!s) return null;
+  if (s.recorte) {
+    return (
+      'O IrisFlow precisou reiniciar a leitura do rosto de um jeito diferente do da ' +
+      'calibração. Por enquanto, o olhar só aciona a Emergência e os botões de ' +
+      'recuperação. Se não voltar ao normal em alguns minutos, calibre de novo.'
+    );
+  }
+  return (
+    `A janela do IrisFlow não está do tamanho em que a calibração foi feita ` +
+    `(${s.calibracao.w}×${s.calibracao.h}; agora ${s.atual.w}×${s.atual.h}). Até ela voltar — ` +
+    'em geral, com F11 para a tela cheia —, o olhar só aciona a Emergência e os botões de ' +
+    'recuperação. Não é preciso calibrar de novo.'
+  );
+}
 
 /**
  * Suspensão do dwell do APP.
@@ -167,12 +250,49 @@ export const SELETOR_DURANTE_CALIBRACAO = '[data-emergency="true"], [data-cancel
  * também para. É uma variável de módulo, não estado React: precisa valer no
  * mesmo frame em que o modo liga, sem esperar re-render.
  */
+/**
+ * Quem suspendeu (revisão de UX de 19/10/2026). Era um booleano único,
+ * dividido entre o Modo Computador e o acionador do Plano B: sair do Modo
+ * Computador devolvia o olhar mesmo com o ajuste "o olhar não clica enquanto o
+ * acionador manda" ligado. Agora cada um suspende e devolve só a sua parte, e
+ * o dwell fica suspenso enquanto houver algum motivo.
+ */
+export type MotivoDaSuspensaoDoDwell = 'acionador' | 'modo_computador';
+const motivosDaSuspensao = new Set<MotivoDaSuspensaoDoDwell>();
 let dwellSuspenso = false;
-export function suspenderDwell(suspenso: boolean): void {
-  dwellSuspenso = suspenso;
+/**
+ * Quantas vezes o dwell VOLTOU de uma suspensão (revisão de UX de 20/10/2026,
+ * achado 4). A pausa da varredura (Esc) devolve o olhar, e o botão em que ele
+ * já estava parado — o destacado, que o paciente seguia — era clicado sozinho
+ * ~1,5 s depois: sair da suspensão não armava o rearme, só a troca de tela.
+ * O dispatcher compara com o último valor que viu e, na primeira amostra
+ * depois da volta, arma o rearme como numa tela nova. Um contador, e não um
+ * booleano: um provider montado depois da volta não a toma por sua.
+ */
+let voltasDaSuspensao = 0;
+/** Sem motivo, vale o do acionador (o primeiro a usar); o Modo Computador passa o seu. */
+export function suspenderDwell(suspenso: boolean, motivo: MotivoDaSuspensaoDoDwell = 'acionador'): void {
+  const estava = dwellSuspenso;
+  if (suspenso) motivosDaSuspensao.add(motivo);
+  else motivosDaSuspensao.delete(motivo);
+  dwellSuspenso = motivosDaSuspensao.size > 0;
+  if (estava && !dwellSuspenso) voltasDaSuspensao++;
 }
 export function dwellEstaSuspenso(): boolean {
   return dwellSuspenso;
+}
+
+/**
+ * Conteúdo novo sob o olhar sem troca de rota (modo só horizontal, 21/10/2026):
+ * a pergunta do cuidador abre POR CIMA da tela, e a metade dela que cai sob o
+ * olhar parado respondia sozinha 1,5 s depois — sem o paciente ter lido a
+ * pergunta. Quem abre conteúdo assim avisa aqui, e o dispatcher arma o rearme
+ * como numa tela nova: o que estiver sob o olhar só vale depois de o olhar
+ * sair dele. Um contador, pela mesma razão do `voltasDaSuspensao`.
+ */
+let trocasDeConteudo = 0;
+export function avisarConteudoNovoSobOOlhar(): void {
+  trocasDeConteudo++;
 }
 
 interface GazeContextValue {
@@ -181,10 +301,28 @@ interface GazeContextValue {
   l2csStatus: L2CSStatus;
   calibration: CalibrationApi;
   recording: RecordingApi;
-  setFilterPreset: (preset: FilterPreset | FilterPresetV2) => void;
+  /**
+   * Troca o preset do One Euro. Devolve se ele passou a governar o cursor —
+   * com o estimador de fixação (M9) ou a cadeia Kalman em vigor, NÃO governa
+   * (auditoria A2, 19/10/2026). `null` sem engine.
+   */
+  setFilterPreset: (preset: FilterPreset | FilterPresetV2) => ResultadoDoPreset | null;
   getDiagnostics: () => EngineDiagnostics | null;
-  /** Identidade da câmera aberta (chave + rótulo), para o FOV por câmera. */
-  getCameraAtual: () => { chave: string | null; rotulo: string };
+  /** Identidade da câmera aberta (chave + rótulo + `deviceId`), para o FOV por câmera e o Preparo. */
+  getCameraAtual: () => { chave: string | null; rotulo: string; deviceId?: string | null };
+  /**
+   * Abre NO RASTREADOR a câmera escolhida no Preparo (e grava a escolha nos
+   * ajustes). Resolve quando essa abertura terminou — com a câmera aberta,
+   * outra no lugar dela (`caiuParaOutra`), ou a falha. Relato de 18/10/2026,
+   * item 3: antes a escolha não chegava ao rastreador, e o Preparo mostrava
+   * uma câmera enquanto media outra.
+   */
+  trocarCamera: (deviceId: string | null) => Promise<ResultadoDaTrocaDeCamera>;
+  /**
+   * Sobe a cada stream nova no rastreador (troca, reabertura). Quem mostra a
+   * imagem da câmera (o Preparo) reaponta o `<video>` quando muda.
+   */
+  versaoDaCamera: number;
   /** Aviso sobre a câmera (FOV restaurado / voltou ao padrão); a UI mostra e limpa. */
   avisoDeCamera: string | null;
   limparAvisoDeCamera: () => void;
@@ -243,6 +381,17 @@ interface GazeContextValue {
    * normal.
    */
   cancelarReancoragem: () => void;
+}
+
+/** O que `trocarCamera` deu. */
+export interface ResultadoDaTrocaDeCamera {
+  ok: boolean;
+  /** `deviceId` da câmera que ficou aberta, quando o navegador informa. */
+  deviceId: string | null;
+  /** A escolhida não abriu e o rastreador está usando outra câmera. */
+  caiuParaOutra: boolean;
+  /** Mensagem para a tela quando não abriu. */
+  erro?: string;
 }
 
 const GazeContext = createContext<GazeContextValue | null>(null);
@@ -339,96 +488,10 @@ const DwellContext = createContext<boolean>(false);
  */
 export const useIsDwelling = (): boolean => useContext(DwellContext);
 
-/**
- * Abre a câmera tentando resoluções em ordem decrescente.
- *
- * POR QUE UMA ESCADA E NÃO UM PEDIDO SÓ
- *
- * O pipeline quer 1080p: o sinal útil é o deslocamento da íris no frame, e ele
- * escala com a densidade de pixels sobre o olho (ver o comentário de
- * `cameraTuner.ts`). Mas pedir 1080p e desistir se falhar deixa o usuário sem
- * rastreamento nenhum — e para software assistivo isso é pior que rastrear com
- * menos precisão.
- *
- * Duas armadilhas que a escada evita:
- *
- *   • `min` é constraint DURA. `width: { min: 640 }` faz o browser recusar a
- *     câmera inteira se ela não puder garantir o mínimo, com
- *     OverconstrainedError. A primeira tentativa aqui usa só `ideal`, que
- *     negocia em vez de falhar.
- *   • Alguns drivers do Windows anunciam 1080p mas não conseguem INICIAR nesse
- *     modo, e o Chrome reporta isso como `NotReadableError` — o mesmo erro de
- *     "câmera em uso por outro app". Sem tentar uma resolução menor não dá para
- *     distinguir os dois casos.
- */
-async function openCameraWithFallback(): Promise<MediaStream> {
-  const tentativas: { rotulo: string; constraints: MediaStreamConstraints }[] = [
-    {
-      rotulo: '1920×1080',
-      constraints: {
-        video: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          facingMode: 'user',
-          frameRate: { ideal: 30 },
-        },
-      },
-    },
-    {
-      rotulo: '1280×720',
-      constraints: {
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'user',
-          frameRate: { ideal: 30 },
-        },
-      },
-    },
-    // Última tentativa sem nenhuma preferência: se a câmera abrir de algum
-    // jeito, o rastreamento roda (pior, mas roda). O ajuste automático tenta
-    // subir a resolução depois, já com as capabilities em mãos.
-    { rotulo: 'padrão da câmera', constraints: { video: true } },
-  ];
-
-  let ultimoErro: unknown = null;
-  for (const { rotulo, constraints } of tentativas) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      const t = stream.getVideoTracks()[0]?.getSettings();
-      console.log(
-        `[IrisFlow] câmera aberta (pedido: ${rotulo}) → ${t?.width}×${t?.height} @ ${t?.frameRate ?? '?'}fps`
-      );
-      return stream;
-    } catch (e) {
-      ultimoErro = e;
-      const nome = (e as DOMException)?.name ?? 'Error';
-      // Permissão negada não melhora tentando outra resolução — abortar já
-      // evita três diálogos seguidos na cara do usuário.
-      if (nome === 'NotAllowedError' || nome === 'SecurityError') break;
-      console.warn(`[IrisFlow] tentativa "${rotulo}" falhou (${nome}); tentando resolução menor…`);
-    }
-  }
-
-  // Sem "recarregue": o app empacotado bloqueia F5/Ctrl+R, e o provider tenta
-  // abrir a câmera de novo sozinho (com espera crescente e a cada câmera
-  // conectada). A frase diz o que a pessoa pode resolver.
-  const nome = (ultimoErro as DOMException)?.name ?? 'Error';
-  const causa =
-    nome === 'NotAllowedError' || nome === 'SecurityError'
-      ? 'O acesso à câmera foi negado. Confira nas configurações de privacidade do sistema se os aplicativos podem usar a câmera.'
-      : nome === 'NotFoundError' || nome === 'DevicesNotFoundError'
-        ? 'Nenhuma câmera encontrada. Conecte a webcam.'
-        : nome === 'NotReadableError' || nome === 'TrackStartError'
-          ? 'A câmera existe mas não pôde ser iniciada — quase sempre porque OUTRO PROGRAMA está usando ela ' +
-            '(OBS, Teams, Zoom, Meet, ou outra aba deste navegador). Feche o outro programa.'
-          : nome === 'OverconstrainedError'
-            ? 'A câmera não suporta nenhum dos formatos solicitados.'
-            : `Falha ao abrir a câmera (${nome}).`;
-
-  console.error(`[IrisFlow] ${causa}`);
-  throw new Error(causa, { cause: ultimoErro });
-}
+// A abertura da câmera do rastreador (qual câmera, e a escada de resoluções)
+// mora em `services/camera/abertura.ts` — `abrirCameraDoRastreador`. Ali
+// também está por que o `facingMode: 'user'` saiu (relato de 18/10/2026,
+// item 3).
 
 /**
  * Guard de instância única do provider.
@@ -475,11 +538,32 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // rodar durante o await, `video.srcObject` ainda é null — este ref é o que
   // garante que as tracks sejam paradas mesmo assim.
   const streamRef = useRef<MediaStream | null>(null);
-  /** Identidade da câmera aberta nesta sessão (para o FOV por câmera). */
-  const cameraAtualRef = useRef<{ chave: string | null; rotulo: string }>({
+  /** Identidade da câmera aberta nesta sessão (para o FOV por câmera e o Preparo). */
+  const cameraAtualRef = useRef<{ chave: string | null; rotulo: string; deviceId: string | null }>({
     chave: null,
     rotulo: '',
+    deviceId: null,
   });
+  /**
+   * A câmera que o rastreador deve abrir: a escolhida no Preparo (ajustes).
+   * Ref, e não `settingsRef`: `trocarCamera` reabre a câmera NA HORA, antes de
+   * os ajustes gravados renderizarem.
+   */
+  const cameraPedidaRef = useRef<string | null>(settings.cameraDeviceId ?? null);
+  // A escolha também muda por fora de `trocarCamera` (o Preparo fixa a câmera
+  // mostrada ao concluir): a próxima abertura usa a escolha gravada.
+  useEffect(() => {
+    cameraPedidaRef.current = settings.cameraDeviceId ?? null;
+  }, [settings.cameraDeviceId]);
+  /** Implementada dentro do boot (precisa de `abrirCamera`); ver `trocarCamera`. */
+  const trocarCameraRef = useRef<(deviceId: string | null) => Promise<ResultadoDaTrocaDeCamera>>(async () => ({
+    ok: false,
+    deviceId: null,
+    caiuParaOutra: false,
+    erro: 'O rastreamento ainda não começou.',
+  }));
+  /** Sobe a cada stream nova no rastreador (ver `versaoDaCamera` no contexto). */
+  const [versaoDaCamera, setVersaoDaCamera] = useState(0);
   const [avisoDeCamera, setAvisoDeCamera] = useState<string | null>(null);
   // O aviso é de configuração, não de operação: some sozinho depois de um
   // tempo de leitura, para não competir com os avisos que pedem ação agora.
@@ -515,6 +599,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [calibrationInvalidated, setCalibrationInvalidated] = useState<string | null>(null);
   /** Calibração suspensa pela janela fora do tamanho em que foi feita (texto do banner). */
   const [avisoDeTela, setAvisoDeTela] = useState<string | null>(null);
+  /** A suspensão em vigor é pelo recorte do modelo do rosto (não volta sozinha com a janela). */
+  const [suspensaoPeloRecorte, setSuspensaoPeloRecorte] = useState(false);
   const isDegradedRef = useRef(false);
   const wasDwellingRef = useRef(false);
 
@@ -534,6 +620,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const dwellStateRef = useRef(createDwellState());
   /** Rearme por saída (FE-7): alvo recém-clicado ou herdado da tela anterior. */
   const rearmeRef = useRef(criarRearme());
+  /** A última volta da suspensão do dwell que este dispatcher já tratou (achado 4 de 20/10/2026). */
+  const voltaDaSuspensaoVistaRef = useRef(voltasDaSuspensao);
+  /** O último aviso de conteúdo novo sob o olhar já tratado (`avisarConteudoNovoSobOOlhar`). */
+  const conteudoNovoVistoRef = useRef(trocasDeConteudo);
   /** Última rota vista pelo dispatcher (o provider fica fora do router). */
   const ultimoHashRef = useRef<string | null>(null);
   /** Estado da rolagem por borda: em qual faixa o olhar está e desde quando. */
@@ -559,6 +649,27 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const olhosFechadosRef = useRef(new DetectorDeOlhosFechados());
   const [avisoDeOlhosFechados, setAvisoDeOlhosFechados] = useState<string | null>(null);
   const avisoDeOlhosFechadosRef = useRef<string | null>(null);
+  /**
+   * Contraluz forte (relato de 19/10/2026): o texto do banner, ou `null`. Vem
+   * das amostras com `motivo: 'contraluz'` e tem prioridade sobre o aviso de
+   * olhos fechados — antes a tela dizia "os olhos estão fechados… levante o
+   * olhar" para quem tinha uma janela às costas.
+   */
+  const [avisoDeContraluz, setAvisoDeContraluz] = useState<string | null>(null);
+  const avisoDeContraluzRef = useRef<string | null>(null);
+  /** O despachante do olhar está falhando seguidamente (texto do banner). */
+  const [avisoDeAcionamento, setAvisoDeAcionamento] = useState<string | null>(null);
+  const avisoDeAcionamentoRef = useRef<string | null>(null);
+  /** O modelo do olhar (L2CS ou EyeNet) parou ou não carregou (texto do banner). */
+  const [avisoDoModelo, setAvisoDoModelo] = useState<{ titulo: string; detalhe: string } | null>(null);
+  // Pouca luz durante o uso (pedido de 18/10/2026: funcionar à noite). O
+  // medidor lê o quadro INTEIRO — no escuro o rosto some e, com ele, o
+  // medidor do recorte dos olhos. Ver `src/poucaLuz.ts`.
+  const [avisoDePoucaLuz, setAvisoDePoucaLuz] = useState<string | null>(null);
+  const luzRef = useRef<EstadoDaPoucaLuz>(ESTADO_INICIAL_DA_LUZ);
+  const medidorDeLuzRef = useRef<MedidorDeBrilhoDoQuadro | null>(null);
+  /** A exposição foi travada pelo ajuste da câmera (imagem boa no início). */
+  const exposicaoTravadaRef = useRef(false);
   // O `<circle>` do anel de progresso, quando a flag está ligada.
   const anelRef = useRef<SVGCircleElement | null>(null);
   /**
@@ -718,6 +829,9 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } catch {
         return;
       }
+
+      // Câmera (re)aberta: a trava da exposição é decidida de novo neste ajuste.
+      exposicaoTravadaRef.current = false;
 
       // Fotografa o estado original antes de mexer: `applyConstraints` altera o
       // dispositivo, não só a nossa view dele — em vários drivers o zoom e o
@@ -950,6 +1064,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (Object.keys(constraints).length > 0) {
         try {
           await track.applyConstraints(constraints as MediaTrackConstraints);
+          if (constraints.exposureMode === 'manual') exposicaoTravadaRef.current = true;
           console.log(
             '[camera] estabilização:',
             Object.entries(constraints)
@@ -1001,9 +1116,19 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let timerSemQuadros: ReturnType<typeof setTimeout> | null = null;
     /** Desliga os ouvintes da track corrente. */
     let desligarTrack: (() => void) | null = null;
+    /** A câmera aberta é OUTRA no lugar da escolhida: quando a escolhida voltar, troca. */
+    let emCameraDeReserva = false;
+    /** Uma troca pedida durante outra abertura: roda assim que a atual terminar. */
+    let trocaPendente = false;
+    /** Quem pediu `trocarCamera` e espera a abertura terminar. */
+    let esperasDaTroca: Array<(r: ResultadoDaTrocaDeCamera) => void> = [];
 
     const engine = createGazeEngine();
     engineRef.current = engine;
+    // Batida para o vigia de página travada do processo principal (auditoria
+    // de 18/10/2026, item 4): marcada pelas amostras do laço do engine. Fora do
+    // Electron não faz nada.
+    const desligarBatida = ligarBatidaDoRenderer(engine);
 
     // Os efeitos de `eyeDominance` e `cameraHorizontalFovDeg` acima rodam
     // ANTES deste (ordem de declaração), quando `engineRef` ainda é null: sem
@@ -1104,22 +1229,22 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // rearranjado): a calibração fica SUSPENSA — o olhar só aciona a Emergência
     // e os botões de recuperação — e volta sozinha com a janela. Antes ela era
     // descartada, e nada era clicável até calibrar de novo.
-    const textoDaSuspensao = (s: SuspensaoDaCalibracao | null): string | null =>
-      s
-        ? `A janela do IrisFlow não está do tamanho em que a calibração foi feita ` +
-          `(${s.calibracao.w}×${s.calibracao.h}; agora ${s.atual.w}×${s.atual.h}). Até ela voltar — ` +
-          'em geral, com F11 para a tela cheia —, o olhar só aciona a Emergência e os botões de ' +
-          'recuperação. Não é preciso calibrar de novo.'
-        : null;
+    const textoDaSuspensao = textoDaSuspensaoDaCalibracao;
     // Engines de teste (dublês) podem não ter os dois métodos.
     const calSuspensao = engine.calibration as Partial<
       Pick<GazeEngine['calibration'], 'onSuspensao' | 'getSuspensao'>
     >;
     const unsubSuspensao =
       calSuspensao.onSuspensao?.((s) => {
-        if (!cancelled) setAvisoDeTela(textoDaSuspensao(s));
+        if (cancelled) return;
+        setAvisoDeTela(textoDaSuspensao(s));
+        setSuspensaoPeloRecorte(Boolean(s?.recorte));
       }) ?? (() => {});
-    setAvisoDeTela(textoDaSuspensao(calSuspensao.getSuspensao?.() ?? null));
+    {
+      const s = calSuspensao.getSuspensao?.() ?? null;
+      setAvisoDeTela(textoDaSuspensao(s));
+      setSuspensaoPeloRecorte(Boolean(s?.recorte));
+    }
 
     const unsubState = engine.onStateChange((s) => {
       if (cancelled) return;
@@ -1296,17 +1421,95 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     let avisouCursorAusente = false;
-    const unsubGaze = engine.subscribe((sample) => {
-      if (devMode) {
-        if (cursorRef.current) esconderCursor(cursorRef.current, ultimoEstiloDoCursorRef.current);
-        // O laço de render também precisa saber, senão ele repinta o cursor no
-        // quadro seguinte e o modo desenvolvedor volta a mostrá-lo.
-        pinturaRef.current.escondido = true;
-        seguidorRef.current.reiniciar();
-        planejadorRef.current.reiniciar();
+
+    // ── Falhas do despachante (relato de 19/10/2026) ──────────────────────
+    //
+    // Uma exceção aqui dentro sumia no `emitToSubscribers` do engine com um
+    // log por quadro: o anel completava e nada acontecia, ou — persistente — o
+    // dwell inteiro morria, Emergência inclusive, com o engine dizendo
+    // `tracking`. Agora a falha é contada, aparece na tela depois de
+    // `FALHAS_DO_DESPACHO_PARA_AVISAR` seguidas e vai ao console no máximo a
+    // cada 2 s. Os assinantes continuam recebendo a amostra.
+    let falhasSeguidasDoDespacho = 0;
+    let falhasNaoLogadasDoDespacho = 0;
+    let ultimoLogDoDespachoMs = -Infinity;
+    let errosNaoLogadosDosAssinantes = 0;
+    let ultimoLogDosAssinantesMs = -Infinity;
+    /** Última posição finita vista, para a amostra com coordenada inválida. */
+    let ultimaPosicaoFinita = { x: 0, y: 0 };
+
+    // ── Contraluz (relato de 19/10/2026) ──────────────────────────────────
+    //
+    // O episódio é lido das amostras COM rosto: a de rosto perdido não diz
+    // nada sobre a luz, e numa silhueta contra a janela o detector perde o
+    // rosto o tempo todo — o aviso não pode piscar a cada perda.
+    let contraluzAtiva = false;
+    /** `espera`: o cursor está parado (fase 2); `emergencia`: a predição
+     *  voltou só para a Emergência e a recuperação (fase 3). */
+    let faseDaContraluz: 'espera' | 'emergencia' | null = null;
+    let textoDaContraluzEmMs = -Infinity;
+
+    const definirAvisoDeContraluz = (texto: string | null): void => {
+      if (avisoDeContraluzRef.current === texto) return;
+      avisoDeContraluzRef.current = texto;
+      setAvisoDeContraluz(texto);
+    };
+    const limparAvisoDeContraluz = (): void => definirAvisoDeContraluz(null);
+
+    const atualizarAvisoDeContraluz = (s: GazeSample, agoraMs: number): void => {
+      let faseMudou = false;
+      if (s.hasFace) {
+        contraluzAtiva = s.motivo === 'contraluz';
+        // A amostra de piscada não diz em que fase o episódio está.
+        const fase = !contraluzAtiva
+          ? null
+          : s.eyeState === 'closed'
+            ? faseDaContraluz
+            : s.posicaoMedida === false
+              ? 'espera'
+              : 'emergencia';
+        faseMudou = fase !== faseDaContraluz;
+        faseDaContraluz = fase ?? (contraluzAtiva ? 'espera' : null);
+      }
+      if (!contraluzAtiva) {
+        limparAvisoDeContraluz();
         return;
       }
+      // A razão fundo/rosto muda a cada medida (2 s): o texto é refeito na
+      // troca de fase ou a cada 2 s, não a cada quadro.
+      if (!faseMudou && avisoDeContraluzRef.current !== null && agoraMs - textoDaContraluzEmMs < 2000) return;
+      textoDaContraluzEmMs = agoraMs;
+      let medida: Parameters<typeof mensagemDeContraluz>[0] | null = null;
+      try {
+        medida = engine.getDiagnostics?.()?.framing?.contraluz ?? null;
+      } catch {
+        medida = null;
+      }
+      const base = medida && medida.nivel === 'forte' ? mensagemDeContraluz(medida) : mensagemDeContraluzForte();
+      definirAvisoDeContraluz(
+        `${base} ${
+          faseDaContraluz === 'emergencia'
+            ? 'Por enquanto, o olhar só aciona a Emergência e os botões de recuperação, com um tempo maior.'
+            : 'Por enquanto, o cursor espera parado.'
+        }`
+      );
+    };
 
+    /**
+     * Coordenada não finita não é um ponto da tela: `elementFromPoint` lança
+     * `TypeError` com ela, e o cursor receberia `translate3d(NaNpx…)`. A amostra
+     * segue com a última posição finita, marcada como NÃO medida — o dwell não
+     * conta sobre ela, como em qualquer posição repetida.
+     */
+    const sanearAmostra = (s: GazeSample): GazeSample => {
+      if (Number.isFinite(s.x) && Number.isFinite(s.y)) {
+        ultimaPosicaoFinita = { x: s.x, y: s.y };
+        return s;
+      }
+      return { ...s, x: ultimaPosicaoFinita.x, y: ultimaPosicaoFinita.y, posicaoMedida: false };
+    };
+
+    const despacharAmostra = (sample: GazeSample): void => {
       const now = performance.now();
 
       // ── Global dwell dispatcher ───────────────────────────────────────────
@@ -1333,7 +1536,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // acionou sem querer precisa conseguir desfazer pelo olhar: sem o
       // CANCELAR aqui, o alerta saía sozinho ao fim da contagem.
       const alvoDuranteCalibracao = engineIsCalibrating
-        ? ((document.elementFromPoint(sample.x, sample.y) as Element | null)?.closest(
+        ? ((elementoNoPonto(sample.x, sample.y) as Element | null)?.closest(
             SELETOR_DURANTE_CALIBRACAO
           ) as HTMLElement | null)
         : null;
@@ -1345,9 +1548,16 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         clearDwellVisuals();
         dwellStateRef.current = createDwellState();
       } else {
-        const el = document.elementFromPoint(sample.x, sample.y);
+        const el = elementoNoPonto(sample.x, sample.y);
         // `?? null`: sem elemento sob o olhar, `el?.closest` dá `undefined`.
-        const noSobOOlhar = (el?.closest(DWELL_SELECTOR) as HTMLElement | null | undefined) ?? null;
+        const noNoPonto = (el?.closest(DWELL_SELECTOR) as HTMLElement | null | undefined) ?? null;
+        // Modo só horizontal (21/10/2026): com zonas laterais na tela, o alvo
+        // vale pela COLUNA do olhar — o `y` de quem perdeu o olhar vertical não
+        // diz para onde ele olha. Socorro e recuperação sob o ponto continuam
+        // valendo pelo ponto. Sem zona registrada, nada aqui é chamado.
+        const noSobOOlhar = haZonasLaterais()
+          ? alvoComZonasLaterais(noNoPonto, sample.x, settingsRef.current.modoHorizontal === true)
+          : noNoPonto;
         // Tolerância a intrusões (M19): com um dwell já começado, o olhar que
         // escorrega para o espaço VAZIO a menos de 1° do alvo continua valendo
         // para ele. Outro alvo sob o olhar sempre ganha: a folga não invade.
@@ -1358,7 +1568,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const emDwell = dwellStateRef.current.targetKey as HTMLElement | null;
         const node = noSobOOlhar === null && EXPERIMENT.toleranciaIntrusoes && emDwell?.isConnected
             && dwellStateRef.current.elapsedMs > 0
-            && naFolgaEAVista({ x: sample.x, y: sample.y }, emDwell, folgaDeIntrusaoPx())
+            && naFolgaEAVista(pontoParaAFolga(emDwell, sample.x, sample.y), emDwell, folgaDeIntrusaoPx())
           ? emDwell
           : noSobOOlhar;
 
@@ -1371,8 +1581,11 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Correção por dwell em malha aberta (M15): guarda a predição deste
         // quadro ANTES da correção e do clamp, em px. Olho fechado ou rosto
         // ausente não trazem predição nova.
+        // Nem posição repetida (não medida) nem quadro sob contraluz: nenhum
+        // dos dois diz onde a pessoa olhava.
         if (EXPERIMENT.correcaoPorDwellKalman && sample.hasFace && sample.eyeState !== 'closed'
-            && sample.uncalibrated !== true) {
+            && sample.uncalibrated !== true && sample.posicaoMedida !== false
+            && sample.motivo !== 'contraluz') {
           const pre = getUltimaPredicaoSemCorrecao();
           if (pre) {
             historicoDoOlharRef.current.registrar({
@@ -1402,6 +1615,20 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // que sumiu não protegia nada: com o olhar parado numa célula, o
           // teclado abria o grupo, escrevia a letra da mesma célula, voltava
           // aos grupos e repetia (percurso da Fase 8).
+          rearmeRef.current = aoNavegar(tDaAmostra, { x: sample.x, y: sample.y });
+        }
+        if (voltaDaSuspensaoVistaRef.current !== voltasDaSuspensao) {
+          // O dwell acabou de voltar de uma suspensão (a pausa da varredura,
+          // o fim do Modo Computador): o que estiver sob o olhar parado não
+          // vale até o olhar sair dele, como numa tela nova (revisão de UX de
+          // 20/10/2026, achado 4).
+          voltaDaSuspensaoVistaRef.current = voltasDaSuspensao;
+          rearmeRef.current = aoNavegar(tDaAmostra, { x: sample.x, y: sample.y });
+        }
+        if (conteudoNovoVistoRef.current !== trocasDeConteudo) {
+          // Conteúdo novo por cima da tela (a pergunta do cuidador): o mesmo
+          // rearme de uma tela nova (21/10/2026).
+          conteudoNovoVistoRef.current = trocasDeConteudo;
           rearmeRef.current = aoNavegar(tDaAmostra, { x: sample.x, y: sample.y });
         }
         // `data-rearme-permanencia`: alvo que só navega (os grupos do teclado)
@@ -1472,6 +1699,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             // bloqueia tudo, inclusive emergência.
             uncalibrated: sample.uncalibrated === true,
             eyeState: sample.eyeState ?? 'unknown',
+            // Posição repetida, não medida: o dwell não conta sobre ela.
+            ...(sample.posicaoMedida === false ? { posicaoMedida: false } : {}),
           },
           target,
           configComTolerancia(
@@ -1483,9 +1712,14 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // dwell zera — e zera de vez. Sem isto, o `stepDwell` guardava o alvo
         // como numa saída comum, e voltar a ele dentro da memória de saída
         // (300–400 ms) devolvia o progresso: a perda de até ~900 ms valia como
-        // pausa, e com o rosto sumido o olhar pode ter ido para a porta.
-        dwellStateRef.current = EXPERIMENT.pausaNaPerdaCurta && outcome.blockedBy === 'no-face'
-            && outcome.state.targetKey === null
+        // pausa, e com o rosto sumido o olhar pode ter ido para a porta. A
+        // posição não medida (contraluz, predição que falhou) é a mesma
+        // ignorância sobre o olhar, e zera de vez sempre (19/10/2026).
+        const zerouSemSaberDoOlhar =
+          (outcome.blockedBy === 'sem-medida' ||
+            (EXPERIMENT.pausaNaPerdaCurta && outcome.blockedBy === 'no-face')) &&
+          outcome.state.targetKey === null;
+        dwellStateRef.current = zerouSemSaberDoOlhar
           ? { ...outcome.state, lastTargetKey: null, lastTargetElapsedMs: 0, exitTs: null }
           : outcome.state;
 
@@ -1504,12 +1738,16 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // (`uncalibrated`), em `degraded` (só emergência/recuperação, com dwell
         // mais longo) e em alvos desabilitados.
         const piscadaPermitida =
-          sample.uncalibrated !== true && !isDegraded && target?.isDisabled !== true;
+          sample.uncalibrated !== true &&
+          !isDegraded &&
+          target?.isDisabled !== true &&
+          sample.posicaoMedida !== false;
 
         if (EXPERIMENT.blinkClick && !dwellSuspenso) {
           const rb = stepBlinkClick(blinkClickRef.current, {
+            // `unknown` (contraluz) é "não sei", não "aberto".
             piscando:
-              !sample.hasFace || sample.eyeState === undefined
+              !sample.hasFace || sample.eyeState === undefined || sample.eyeState === 'unknown'
                 ? null
                 : sample.eyeState === 'closed',
             nowMs: now,
@@ -1532,6 +1770,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (alvoDaPiscada?.isConnected) {
               rearmeRef.current = aoClicar(alvoDaPiscada, alvoDaPiscada.dataset.repetir === 'true');
               confirmarSelecao(alvoDaPiscada);
+              if (settingsRef.current.soundEnabled !== false) tocarSomDaSelecao();
               alvoDaPiscada.click();
             }
           }
@@ -1570,35 +1809,50 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // frequentemente não acertou a tecla pretendida, e aprender ali
           // ensina o erro. As outras guardas (degradado, apresentação,
           // emergência, alvo especial) estão em `deveAprender`.
-          if (
-            alvo.isConnected &&
-            deveAprender({
-              alvoIsolado: alvo.dataset.isolado === 'true' && isoladoMedido(alvo),
-              degradado: isDegraded,
-              apresentacao: modoApresentacaoAtivo(),
-              emergencia: emergenciaAtiva(),
-              alvoEspecial: target?.isEmergency === true || target?.isRecovery === true,
-              // Quadro comprimido pelo softClamp não diz onde a pessoa olhava,
-              // diz onde o clamp a pôs — e aprender dele realimenta a saturação.
-              saturado: getSaturacaoDoOlhar().fora,
-            })
-          ) {
-            const r = alvo.getBoundingClientRect();
-            // Janela estável do dwell desde que o olhar entrou NESTE alvo.
-            const entrada = entradaNoAlvoRef.current.alvo === alvo ? entradaNoAlvoRef.current.t : tDaAmostra;
-            aprenderComSelecao({
-              centroDoAlvo: { x: r.left + r.width / 2, y: r.top + r.height / 2 },
-              olhar: { x: sample.x, y: sample.y },
-              agoraMs: now,
-              viewport: {
-                largura: document.documentElement.clientWidth,
-                altura: document.documentElement.clientHeight,
-              },
-              medida: EXPERIMENT.correcaoPorDwellKalman
-                ? historicoDoOlharRef.current.medir(entrada, tDaAmostra)
-                : null,
-              ladoDoAlvoPx: { largura: r.width, altura: r.height },
-            });
+          //
+          // ORDEM (relato de 19/10/2026): primeiro se LÊ o que o aprendizado
+          // precisa, depois se CLICA, e só então se aprende — cada parte no
+          // seu `try`. Antes o aprendizado rodava inteiro antes do clique e
+          // fora do `try`: uma exceção nele fazia o anel completar e nada
+          // acontecer, toda vez, nos alvos isolados. As entradas são lidas
+          // antes do clique porque ele pode tirar o alvo da tela (navegar) e
+          // mudar o estado (abrir a Emergência) — o aprendizado vê o mesmo
+          // que via antes, e o clique já não depende dele.
+          let aprendizado: Parameters<typeof aprenderComSelecao>[0] | null = null;
+          try {
+            if (
+              alvo.isConnected &&
+              deveAprender({
+                alvoIsolado: alvo.dataset.isolado === 'true' && isoladoMedido(alvo),
+                degradado: isDegraded,
+                apresentacao: modoApresentacaoAtivo(),
+                emergencia: emergenciaAtiva(),
+                alvoEspecial: target?.isEmergency === true || target?.isRecovery === true,
+                // Quadro comprimido pelo softClamp não diz onde a pessoa olhava,
+                // diz onde o clamp a pôs — e aprender dele realimenta a saturação.
+                saturado: getSaturacaoDoOlhar().fora,
+              })
+            ) {
+              const r = alvo.getBoundingClientRect();
+              // Janela estável do dwell desde que o olhar entrou NESTE alvo.
+              const entrada = entradaNoAlvoRef.current.alvo === alvo ? entradaNoAlvoRef.current.t : tDaAmostra;
+              aprendizado = {
+                centroDoAlvo: { x: r.left + r.width / 2, y: r.top + r.height / 2 },
+                olhar: { x: sample.x, y: sample.y },
+                agoraMs: now,
+                viewport: {
+                  largura: document.documentElement.clientWidth,
+                  altura: document.documentElement.clientHeight,
+                },
+                medida: EXPERIMENT.correcaoPorDwellKalman
+                  ? historicoDoOlharRef.current.medir(entrada, tDaAmostra)
+                  : null,
+                ladoDoAlvoPx: { largura: r.width, altura: r.height },
+              };
+            }
+          } catch (err) {
+            aprendizado = null;
+            console.error('[IrisFlow] a correção por dwell falhou ao ler o alvo (o clique segue):', err);
           }
 
           // O refratário já está armado dentro de `outcome.state`, que foi
@@ -1608,10 +1862,19 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             if (alvo.isConnected) {
               rearmeRef.current = aoClicar(alvo, alvo.dataset.repetir === 'true');
               confirmarSelecao(alvo);
+              if (settingsRef.current.soundEnabled !== false) tocarSomDaSelecao();
               alvo.click();
             }
           } catch (err) {
             console.error('[IrisFlow] handler de clique por dwell lançou:', err);
+          }
+
+          if (aprendizado) {
+            try {
+              aprenderComSelecao(aprendizado);
+            } catch (err) {
+              console.error('[IrisFlow] a correção por dwell falhou ao aprender (o clique já saiu):', err);
+            }
           }
         }
 
@@ -1637,11 +1900,14 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // rolava a página até o fim sem ninguém olhando. Olhos fechados
         // PAUSAM (como no dwell): uma piscada não zera o prazo da borda.
         const olhosFechados = sample.eyeState === 'closed';
+        // Posição não medida é a última repetida — pelo mesmo motivo do rosto
+        // perdido, ela não rola a página.
         const podeRolar =
           target === null &&
           sample.uncalibrated !== true &&
           !isDegraded &&
           sample.hasFace === true &&
+          sample.posicaoMedida !== false &&
           !olhosFechados;
         const pausaDaBorda = !podeRolar && olhosFechados && sample.hasFace === true && target === null;
 
@@ -1739,6 +2005,9 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setGazeLostMessage(null);
             fallbackRef.current.reset();
           }
+          // O aviso da luz também sai: na calibração e no teste a tela tem o
+          // seu (a recusa por contraluz), e o banner cobriria os alvos do topo.
+          limparAvisoDeContraluz();
         } else {
           // ── Fallback de gaze perdido ───────────────────────────────────
           //
@@ -1798,11 +2067,19 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setAvisoDeBorda(vereditoDeBorda.mensagem);
           }
 
-          const vereditoDeOlhos = olhosFechadosRef.current.avaliar({
-            estado: sample.eyeState ?? 'unknown',
-            temRosto: sample.hasFace === true,
-            tMs: now,
-          });
+          // Contraluz (relato de 19/10/2026): a amostra com o motivo da luz NÃO
+          // alimenta o detector de olhos fechados. Sob contraluz o EAR mente e
+          // a causa é a janela, não os olhos — antes a tela dizia "os olhos
+          // estão fechados… levante o olhar" para quem tinha a luz às costas.
+          // O detector zera e o aviso da luz assume, com prioridade.
+          atualizarAvisoDeContraluz(sample, now);
+          const vereditoDeOlhos = contraluzAtiva
+            ? (olhosFechadosRef.current.zerar(), { mensagem: null })
+            : olhosFechadosRef.current.avaliar({
+                estado: sample.eyeState ?? 'unknown',
+                temRosto: sample.hasFace === true,
+                tMs: now,
+              });
           if (vereditoDeOlhos.mensagem !== avisoDeOlhosFechadosRef.current) {
             avisoDeOlhosFechadosRef.current = vereditoDeOlhos.mensagem;
             setAvisoDeOlhosFechados(vereditoDeOlhos.mensagem);
@@ -1866,12 +2143,68 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         avisouCursorAusente = true;
         console.warn('[IrisFlow] gaze subscribe callback disparou mas cursorRef.current é null');
       }
-      // Fan out to subscribers.
+    };
+
+    const unsubGaze = engine.subscribe((amostraDoEngine) => {
+      if (devMode) {
+        if (cursorRef.current) esconderCursor(cursorRef.current, ultimoEstiloDoCursorRef.current);
+        // O laço de render também precisa saber, senão ele repinta o cursor no
+        // quadro seguinte e o modo desenvolvedor volta a mostrá-lo.
+        pinturaRef.current.escondido = true;
+        seguidorRef.current.reiniciar();
+        planejadorRef.current.reiniciar();
+        return;
+      }
+
+      const sample = sanearAmostra(amostraDoEngine);
+      try {
+        despacharAmostra(sample);
+        if (falhasSeguidasDoDespacho > 0) {
+          falhasSeguidasDoDespacho = 0;
+          falhasNaoLogadasDoDespacho = 0;
+          if (avisoDeAcionamentoRef.current !== null) {
+            avisoDeAcionamentoRef.current = null;
+            setAvisoDeAcionamento(null);
+          }
+        }
+      } catch (err) {
+        falhasSeguidasDoDespacho++;
+        falhasNaoLogadasDoDespacho++;
+        const agora = performance.now();
+        if (agora - ultimoLogDoDespachoMs >= INTERVALO_DO_LOG_DO_DESPACHO_MS) {
+          ultimoLogDoDespachoMs = agora;
+          console.error(
+            `[IrisFlow] o despachante do olhar falhou (${falhasSeguidasDoDespacho} seguidas; ` +
+              `${falhasNaoLogadasDoDespacho} desde o último aviso):`,
+            err
+          );
+          falhasNaoLogadasDoDespacho = 0;
+        }
+        if (
+          falhasSeguidasDoDespacho >= FALHAS_DO_DESPACHO_PARA_AVISAR &&
+          avisoDeAcionamentoRef.current === null
+        ) {
+          avisoDeAcionamentoRef.current = MENSAGEM_DE_ACIONAMENTO_FALHOU;
+          setAvisoDeAcionamento(MENSAGEM_DE_ACIONAMENTO_FALHOU);
+        }
+      }
+
+      // Fan out to subscribers. Um assinante que lança não derruba os outros
+      // nem enche o console: um aviso a cada 2 s, com a contagem.
       subscribersRef.current.forEach((cb) => {
         try {
           cb(sample);
         } catch (e) {
-          console.error('[GazeContext] subscriber threw', e);
+          errosNaoLogadosDosAssinantes++;
+          const agora = performance.now();
+          if (agora - ultimoLogDosAssinantesMs >= INTERVALO_DO_LOG_DO_DESPACHO_MS) {
+            ultimoLogDosAssinantesMs = agora;
+            console.error(
+              `[GazeContext] subscriber threw (${errosNaoLogadosDosAssinantes} desde o último aviso)`,
+              e
+            );
+            errosNaoLogadosDosAssinantes = 0;
+          }
         }
       });
 
@@ -1925,6 +2258,20 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       desligarTrack = null;
       const antiga = streamRef.current;
       streamRef.current = null;
+      // Devolve a câmera que sai como estava antes do nosso ajuste (zoom,
+      // brilho), como o cleanup já faz: com a troca de câmera no Preparo, a
+      // integrada não pode ficar com o zoom que o ajuste automático deixou.
+      // Best-effort, despachado antes do `stop()`.
+      const original = originalCameraSettingsRef.current;
+      originalCameraSettingsRef.current = null;
+      const trackAntiga = antiga?.getVideoTracks?.()[0];
+      if (original && trackAntiga && trackAntiga.readyState === 'live' && Object.keys(original).length > 0) {
+        try {
+          void trackAntiga.applyConstraints(original as MediaTrackConstraints).catch(() => undefined);
+        } catch {
+          /* driver recusou: segue */
+        }
+      }
       antiga?.getTracks().forEach((t) => {
         try {
           t.stop();
@@ -1948,7 +2295,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const aoTerminar = () => {
         if (cancelled || streamRef.current !== stream) return;
         console.warn('[camera] a track da câmera terminou (desconectada ou parou) — reabrindo.');
-        setCameraError('A câmera foi desconectada ou parou de responder. O IrisFlow está tentando reconectar.');
+        setCameraError('A câmera parou de responder. Estou tentando reconectar…');
         void abrirCamera('reabrir');
       };
       const aoSilenciar = () => {
@@ -1998,22 +2345,42 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
      * (`ESPERAS_DA_CAMERA_MS`) enquanto o provider existir — antes, uma câmera
      * ausente no boot ou perdida no meio da sessão só voltava fechando e
      * abrindo o app (o F5 é bloqueado no app empacotado).
+     *
+     * `troca`: o Preparo escolheu outra câmera (`trocarCamera`). Pedida
+     * durante outra abertura, ela espera essa terminar e roda em seguida — com
+     * a câmera escolhida mais recente.
      */
-    async function abrirCamera(motivo: 'boot' | 'reabrir'): Promise<void> {
-      if (cancelled || abrindoCamera || !videoDoEngine) return;
+    async function abrirCamera(motivo: 'boot' | 'reabrir' | 'troca'): Promise<void> {
+      if (cancelled || !videoDoEngine) return;
+      if (abrindoCamera) {
+        if (motivo === 'troca') trocaPendente = true;
+        return;
+      }
       abrindoCamera = true;
       if (timerDaCamera !== null) {
         clearTimeout(timerDaCamera);
         timerDaCamera = null;
       }
       const video = videoDoEngine;
+      let resultado: ResultadoDaTrocaDeCamera = {
+        ok: false,
+        deviceId: null,
+        caiuParaOutra: false,
+        erro: 'O rastreador foi encerrado.',
+      };
       try {
-        if (motivo === 'reabrir') {
+        if (motivo !== 'boot') {
           soltarStreamAtual();
           video.srcObject = null;
         }
         console.log(`[IrisFlow] solicitando getUserMedia (${motivo})...`);
-        const stream = await openCameraWithFallback();
+        // A câmera escolhida no Preparo; sem escolha, a última aberta (é com
+        // ela que a calibração em uso foi feita). Ver `abertura.ts`.
+        const aberta = await abrirCameraDoRastreador({
+          escolhida: cameraPedidaRef.current,
+          ultima: deviceIdDaChave(settingsRef.current.ultimaCameraChave),
+        });
+        const stream = aberta.stream;
         // Registra a stream ANTES de qualquer outra coisa: a partir daqui o
         // cleanup consegue pará-la mesmo que nunca cheguemos ao <video>.
         streamRef.current = stream;
@@ -2037,7 +2404,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             deviceId: track?.getSettings().deviceId,
             label: track?.label,
           });
-          cameraAtualRef.current = { chave, rotulo: track?.label ?? '' };
+          cameraAtualRef.current = { chave, rotulo: track?.label ?? '', deviceId: aberta.deviceIdAberto };
           const s0 = settingsRef.current;
           const r = resolverFovParaCamera(
             s0.fovPorCamera,
@@ -2061,6 +2428,14 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } catch (e) {
           console.warn('[camera] não foi possível identificar a câmera para o FOV:', e);
         }
+        // A escolhida não abriu e veio outra no lugar: a tela diz (depois do
+        // aviso do FOV, que é sobre a mesma troca e vale menos). Quando a
+        // escolhida voltar, `aoMudarDispositivos` troca de volta.
+        emCameraDeReserva = aberta.caiuParaOutra;
+        if (aberta.caiuParaOutra) {
+          console.warn('[camera] a câmera escolhida no Preparo não abriu; usando outra no lugar.');
+          setAvisoDeCamera(MENSAGEM_DE_CAMERA_DE_RESERVA);
+        }
         // Espera LIMITADA. Sem o teto, uma câmera que abre mas nunca entrega
         // quadro (driver Windows travado, dispositivo tomado por outro app
         // depois do getUserMedia) deixava este await pendente para sempre:
@@ -2079,9 +2454,9 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             video.removeEventListener('loadeddata', aoCarregar);
             reject(
               new Error(
-                'A câmera foi aberta mas não entregou nenhum quadro em 10 segundos. ' +
-                  'Feche outros programas que usem a webcam (Teams, Zoom, OBS) ' +
-                  'ou desconecte e reconecte a câmera.'
+                'A câmera abriu, mas não mandou imagem em 10 segundos. Fechar outros programas ' +
+                  'que usem a webcam (Teams, Zoom, OBS), ou desconectar e conectar a câmera de ' +
+                  'novo, costuma resolver.'
               )
             );
           }, LOADEDDATA_TIMEOUT_MS);
@@ -2123,6 +2498,8 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           console.log('[IrisFlow] stream parada — provider desmontado durante o warm-up.');
           return;
         }
+        // A câmera está aberta e entregando quadro: é isto que `trocarCamera` responde.
+        resultado = { ok: true, deviceId: aberta.deviceIdAberto, caiuParaOutra: aberta.caiuParaOutra };
         vigiarTrack(stream);
         if (engineIniciado) {
           // Reaberta: o engine segue rodando no mesmo <video>, agora com a
@@ -2135,7 +2512,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           await engine.start(video);
         } catch (e) {
           throw new Error(
-            `O rastreador não pôde iniciar (${e instanceof Error ? e.message : String(e)}).`,
+            `Não consegui iniciar o rastreamento (${e instanceof Error ? e.message : String(e)}).`,
             { cause: e }
           );
         }
@@ -2287,12 +2664,13 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         aberturaConcluida(stream);
       } catch (err) {
         console.error('[IrisFlow] Falha ao abrir a câmera/iniciar o rastreador:', err);
+        const causa = err instanceof Error && err.message ? err.message : 'Não consegui abrir a câmera.';
+        resultado = { ok: false, deviceId: null, caiuParaOutra: false, erro: causa };
         if (cancelled) return;
         falhasDaCamera++;
         const espera =
           ESPERAS_DA_CAMERA_MS[Math.min(falhasDaCamera - 1, ESPERAS_DA_CAMERA_MS.length - 1)];
-        const causa = err instanceof Error && err.message ? err.message : 'Falha ao abrir a câmera.';
-        setCameraError(`${causa} O IrisFlow tenta de novo em ${Math.round(espera / 1000)} s.`);
+        setCameraError(`${causa} Tento de novo em ${Math.round(espera / 1000)} s.`);
         if (timerDaCamera !== null) clearTimeout(timerDaCamera);
         timerDaCamera = setTimeout(() => {
           timerDaCamera = null;
@@ -2300,13 +2678,39 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }, espera);
       } finally {
         abrindoCamera = false;
+        if (trocaPendente && !cancelled) {
+          // O Preparo escolheu outra câmera enquanto esta abria: abre a
+          // escolhida agora; quem espera recebe o resultado DELA.
+          trocaPendente = false;
+          void abrirCamera('troca');
+        } else {
+          const esperas = esperasDaTroca;
+          esperasDaTroca = [];
+          for (const responder of esperas) responder(resultado);
+        }
       }
     }
+
+    // `trocarCamera` do contexto: grava a escolha (lá fora) e reabre aqui.
+    trocarCameraRef.current = (deviceId) =>
+      new Promise<ResultadoDaTrocaDeCamera>((resolve) => {
+        cameraPedidaRef.current = deviceId && deviceId.trim() ? deviceId : null;
+        if (cancelled || !videoDoEngine) {
+          resolve({ ok: false, deviceId: null, caiuParaOutra: false, erro: 'O rastreador não está ativo.' });
+          return;
+        }
+        esperasDaTroca.push(resolve);
+        falhasDaCamera = 0;
+        if (abrindoCamera) trocaPendente = true;
+        else void abrirCamera('troca');
+      });
 
     /** Câmera aberta e entregando quadro: zera as falhas, tira o aviso e ajusta a câmera. */
     function aberturaConcluida(stream: MediaStream): void {
       falhasDaCamera = 0;
       setCameraError(null);
+      // Quem mostra a imagem da câmera (o Preparo) reaponta para a stream nova.
+      setVersaoDaCamera((v) => v + 1);
       // Ajuste automático da câmera. Roda DEPOIS do engine porque a malha
       // se fecha sobre o tamanho do rosto, que só existe com o detector de
       // landmarks rodando. Deliberadamente sem `await`: são ~8 s de
@@ -2318,6 +2722,25 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (engine.getState() === 'sem_camera') vigiarSemQuadros();
     }
 
+    /**
+     * Na câmera de reserva e a escolhida voltou a aparecer (hub USB que
+     * reiniciou, cabo recolocado): volta para ela. Confere a lista antes, para
+     * outro aparelho qualquer (um fone conectado) não interromper o olhar.
+     */
+    async function voltarParaAEscolhida(): Promise<void> {
+      const escolhida = cameraPedidaRef.current;
+      if (!escolhida || typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
+      try {
+        const lista = await navigator.mediaDevices.enumerateDevices();
+        if (cancelled || !emCameraDeReserva || escolhida !== cameraPedidaRef.current) return;
+        if (!lista.some((d) => d.kind === 'videoinput' && d.deviceId === escolhida)) return;
+        console.log('[camera] a câmera escolhida no Preparo voltou — trocando de volta para ela.');
+        void abrirCamera('reabrir');
+      } catch {
+        /* sem lista de aparelhos: fica na câmera de reserva */
+      }
+    }
+
     // Câmera conectada (ou trocada) enquanto estamos sem ela: tenta já, sem
     // esperar a próxima tentativa agendada.
     const aoMudarDispositivos = () => {
@@ -2325,7 +2748,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const track = streamRef.current?.getVideoTracks?.()[0];
       const semCamera =
         !track || track.readyState !== 'live' || engine.getState() === 'sem_camera';
-      if (timerDaCamera === null && !semCamera) return;
+      if (timerDaCamera === null && !semCamera) {
+        if (emCameraDeReserva) void voltarParaAEscolhida();
+        return;
+      }
       console.log('[camera] os dispositivos mudaram com a câmera fora — tentando abrir agora.');
       falhasDaCamera = 0;
       void abrirCamera('reabrir');
@@ -2342,6 +2768,18 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       desligarTrack?.();
       desligarTrack = null;
       dispositivos?.removeEventListener?.('devicechange', aoMudarDispositivos);
+      // Quem esperava uma troca de câmera não fica pendurado; o vigia do main
+      // é desarmado (o laço vai parar de propósito).
+      for (const responder of esperasDaTroca.splice(0)) {
+        responder({ ok: false, deviceId: null, caiuParaOutra: false, erro: 'O rastreador foi encerrado.' });
+      }
+      trocarCameraRef.current = async () => ({
+        ok: false,
+        deviceId: null,
+        caiuParaOutra: false,
+        erro: 'O rastreador não está ativo.',
+      });
+      desligarBatida();
       unsubState();
       unsubInvalid();
       unsubSuspensao();
@@ -2462,6 +2900,32 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // de posição antes de chamar: sem isso a rodada duplica a mesma pose.
       iniciarRodadaDeSegundaPose: () =>
         engineRef.current?.calibration.iniciarRodadaDeSegundaPose() ?? [],
+      // Recoleta dos alvos ruins (M22). Sem engine não há o que refazer, e a
+      // conclusão diz que nada mudou em vez de deixar a tela esperando.
+      podeRecoletarAlvos: () => engineRef.current?.calibration.podeRecoletarAlvos() ?? false,
+      alvosParaRecoletar: () => engineRef.current?.calibration.alvosParaRecoletar() ?? [],
+      iniciarRecoletaDeAlvos: (alvos, opcoes) =>
+        engineRef.current?.calibration.iniciarRecoletaDeAlvos(alvos, opcoes) ?? [],
+      concluirRecoletaDeAlvos: (onComplete) => {
+        const eng = engineRef.current;
+        if (eng) return eng.calibration.concluirRecoletaDeAlvos(onComplete);
+        console.error('[IrisFlow] concluirRecoletaDeAlvos sem engine ativo.');
+        const nada = {
+          automatica: false,
+          em: new Date().toISOString(),
+          alvos: [],
+          aceito: false,
+          motivo: 'sem_rodada' as const,
+          looAntesPx: Number.NaN,
+          looDepoisPx: Number.NaN,
+          looInternoAntesPx: Number.NaN,
+          looInternoDepoisPx: Number.NaN,
+          tempoUtilMs: 0,
+        };
+        onComplete?.(nada);
+        return nada;
+      },
+      getUltimaRecoleta: () => engineRef.current?.calibration.getUltimaRecoleta() ?? null,
       // Perseguição suave (sprint S8). A tela precisa atualizar o alvo a cada
       // quadro; sem isso o quadro não é guardado, porque amostra sem rótulo
       // não serve para nada.
@@ -2532,6 +2996,50 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setDistanceAdvice((anterior) => (anterior === r.mensagem ? anterior : r.mensagem));
       const postura = engineRef.current?.sugereReancoragem?.() ?? false;
       setAvisoDePostura((anterior) => (anterior === postura ? anterior : postura));
+      // Modelo do olhar parado ou que não carregou (relato de 19/10/2026): o
+      // diagnóstico é lido aqui, a 2 Hz, e não no caminho quente — o estado do
+      // worker muda na escala de segundos.
+      const eng = engineRef.current;
+      let modelo: { titulo: string; detalhe: string } | null = null;
+      try {
+        modelo = eng ? avisoDoModeloDoOlhar(eng.getDiagnostics?.() ?? null, eng.getState()) : null;
+      } catch {
+        modelo = null;
+      }
+      setAvisoDoModelo((anterior) =>
+        anterior?.titulo === modelo?.titulo && anterior?.detalhe === modelo?.detalhe ? anterior : modelo
+      );
+
+      // Pouca luz (18/10/2026). O medidor amostra o quadro a cada 2 s; a regra
+      // tem histerese (10 s para entrar, 3 s para sair) e zera na medição.
+      try {
+        const agoraMs = performance.now();
+        medidorDeLuzRef.current ??= new MedidorDeBrilhoDoQuadro();
+        const brilho = medidorDeLuzRef.current.medir(videoRef.current, agoraMs);
+        const antes = luzRef.current;
+        const depois = passoDaPoucaLuz(antes, brilho, agoraMs, medicaoEmAndamento(eng?.getState() ?? 'idle'));
+        luzRef.current = depois;
+        if (depois.poucaLuz && !antes.poucaLuz) {
+          console.warn(`[camera] pouca luz no quadro (brilho ${(depois.brilho ?? 0).toFixed(2)}) há mais de 10 s.`);
+          // A exposição travada de dia não deixa a câmera compensar a noite:
+          // volta ao automático, uma vez por episódio. Não volta a travar
+          // depois — a trava só existe para a imagem boa do início.
+          if (exposicaoTravadaRef.current) {
+            exposicaoTravadaRef.current = false;
+            const track = streamRef.current?.getVideoTracks()[0];
+            void track
+              ?.applyConstraints({ exposureMode: 'continuous', whiteBalanceMode: 'continuous' } as unknown as MediaTrackConstraints)
+              .then(() => console.warn('[camera] pouca luz: a exposição voltou ao automático para a câmera compensar.'))
+              .catch((e: unknown) => console.warn('[camera] pouca luz: a câmera não aceitou voltar a exposição ao automático:', e));
+          }
+        }
+        const ajustes = settingsRef.current;
+        const telaEscurecida = (ajustes.brightnessLevel ?? 1) < 1 || ajustes.amberFilter === true;
+        const texto = depois.poucaLuz ? mensagemDePoucaLuz(telaEscurecida) : null;
+        setAvisoDePoucaLuz((anterior) => (anterior === texto ? anterior : texto));
+      } catch (e) {
+        console.warn('[camera] a medição de luz falhou (o aviso de pouca luz fica desligado):', e);
+      }
     }, 500);
     return () => clearInterval(id);
   }, []);
@@ -2689,6 +3197,18 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   /**
+   * O Preparo escolheu a câmera: grava nos ajustes (o próximo boot abre esta)
+   * e reabre a câmera do RASTREADOR com ela — a mesma imagem que o Preparo
+   * mostra é a que o rastreador mede (relato de 18/10/2026, item 3).
+   * Identidade estável.
+   */
+  const trocarCamera = useCallback((deviceId: string | null): Promise<ResultadoDaTrocaDeCamera> => {
+    const id = deviceId && deviceId.trim() ? deviceId : null;
+    updateSettingsRef.current({ cameraDeviceId: id });
+    return trocarCameraRef.current(id);
+  }, []);
+
+  /**
    * A câmera está entregando imagem agora? É o `camera_ok` do heartbeat: track
    * `live` e não muda, engine fora de `sem_camera` e com quadros no último
    * diagnóstico. Lê refs — identidade estável.
@@ -2713,11 +3233,13 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       calibration,
       recording,
       setFilterPreset: (preset: FilterPreset | FilterPresetV2) =>
-        engineRef.current?.setFilterPreset(preset),
+        engineRef.current?.setFilterPreset(preset) ?? null,
       getDiagnostics: () => engineRef.current?.getDiagnostics() ?? null,
       getCameraStream: () => (videoRef.current?.srcObject as MediaStream | null) ?? null,
       cameraAtiva,
       getCameraAtual: () => cameraAtualRef.current,
+      trocarCamera,
+      versaoDaCamera,
       avisoDeCamera,
       limparAvisoDeCamera: () => setAvisoDeCamera(null),
       getCameraTuning: () => cameraTuningRef.current,
@@ -2752,10 +3274,67 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       calibrationInvalidated,
       gazeLostMessage,
       avisoDeCamera,
+      trocarCamera,
+      versaoDaCamera,
       reancorando,
       cancelarReancoragem,
     ]
   );
+
+  // "Clarear a tela" no aviso de pouca luz: brilho cheio e sem filtro âmbar —
+  // a tela é uma fonte de luz de frente, e de noite é a que está mais perto.
+  const telaEscurecida = (settings.brightnessLevel ?? 1) < 1 || settings.amberFilter === true;
+  const clarearTela = useCallback(() => {
+    updateSettings({ brightnessLevel: 1, amberFilter: false });
+  }, [updateSettings]);
+
+  // O aviso em vigor, pela mesma regra do banner — é dele que sai o problema
+  // de rastreamento informado ao serviço de problema persistente.
+  const entradasDoAviso: EntradasDoAviso = {
+    state,
+    cameraError,
+    calibrationInvalidated,
+    avisoDeTela,
+    suspensaoPeloRecorte,
+    distanceAdvice,
+    gazeLostMessage,
+    avisoDeBorda,
+    avisoDeOlhosFechados,
+    avisoDeContraluz,
+    avisoDePoucaLuz,
+    avisoDeAcionamento,
+    avisoDoModelo,
+    avisoDeCamera,
+    avisoDePostura,
+    reajuste: usaRecalibracaoEmPontos() ? REAJUSTE_EM_PONTOS : undefined,
+    avisoDeRecalibracao,
+  };
+  // O problema que persiste (e vira aviso ao cuidador) NÃO é o que o banner
+  // mostra: o banner põe na frente avisos de configuração sem tipo, e isso
+  // calava o aviso justamente com a calibração perdida (revisão de UX de
+  // 19/10/2026) — ver `problemaPersistenteDoOlhar`.
+  const problemaEmVigor = problemaPersistenteDoOlhar(entradasDoAviso);
+  const problemaEmVigorRef = useRef(problemaEmVigor);
+  problemaEmVigorRef.current = problemaEmVigor;
+  // A cada mudança do aviso, e a cada 1 s: o teste de precisão não é estado
+  // React, e é ele (com a calibração) que suspende a contagem.
+  useEffect(() => {
+    const estadoAgora = engineRef.current?.getState() ?? state;
+    informarProblemaDoRastreamento(problemaEmVigorRef.current, {
+      emMedicao: medicaoEmAndamento(estadoAgora),
+      rastreando: estadoAgora === 'tracking',
+    });
+  }, [problemaEmVigor?.tipo, problemaEmVigor?.mensagem, state]);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const estadoAgora = engineRef.current?.getState() ?? 'idle';
+      informarProblemaDoRastreamento(problemaEmVigorRef.current, {
+        emMedicao: medicaoEmAndamento(estadoAgora),
+        rastreando: estadoAgora === 'tracking',
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <GazeContext.Provider value={value}>
@@ -2764,22 +3343,12 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           nunca renderizados: o usuário ficava com cursor invisível e nada
           clicável, sem explicação. */}
       <GazeStatusBanner
-        state={state}
-        cameraError={cameraError}
-        calibrationInvalidated={calibrationInvalidated}
-        avisoDeTela={avisoDeTela}
-        distanceAdvice={distanceAdvice}
-        gazeLostMessage={gazeLostMessage}
-        avisoDeBorda={avisoDeBorda}
-        avisoDeOlhosFechados={avisoDeOlhosFechados}
-        avisoDeCamera={avisoDeCamera}
-        avisoDePostura={avisoDePostura}
+        {...entradasDoAviso}
         onReancorar={reancorar}
         reancorando={reancorando}
-        reajuste={usaRecalibracaoEmPontos() ? REAJUSTE_EM_PONTOS : undefined}
-        avisoDeRecalibracao={avisoDeRecalibracao}
         onRecalibrar={irRecalibrar}
         onDispensarRecalibracao={dispensarRecalibracao}
+        onClarearTela={telaEscurecida ? clarearTela : null}
       />
       {/* O alvo do reajuste rápido: aparece só durante a coleta, no centro ou
           no ponto da vez (M20). Cobre a tela inteira MENOS a Emergência, que o

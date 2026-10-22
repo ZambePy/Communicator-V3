@@ -18,6 +18,7 @@ const Sobre = lazy(ROUTE_LOADERS['/sobre'])
 const Contato = lazy(ROUTE_LOADERS['/contato'])
 const Cuidador = lazy(ROUTE_LOADERS['/cuidador'])
 const Baixar = lazy(ROUTE_LOADERS['/baixar'])
+const MeuComputador = lazy(ROUTE_LOADERS['/meu-computador'])
 const AbrirApp = lazy(ROUTE_LOADERS['/app'])
 const Beta = lazy(ROUTE_LOADERS['/beta'])
 const Cadastro = lazy(ROUTE_LOADERS['/cadastro'])
@@ -30,6 +31,7 @@ const Conta = lazy(ROUTE_LOADERS['/conta'])
 const Perfil = lazy(ROUTE_LOADERS['/perfil'])
 const ConfirmarEmail = lazy(ROUTE_LOADERS['/confirmar-email'])
 const NotFound = lazy(() => import('@/pages/NotFound'))
+const Parear = lazy(() => import('@/pages/Parear'))
 const Privacidade = lazy(ROUTE_LOADERS['/privacidade'])
 const Termos = lazy(ROUTE_LOADERS['/termos'])
 
@@ -52,6 +54,9 @@ export default function App() {
                 /app é o endereço do código QR (abre a loja certa no celular) */}
             <Route path="cuidador" element={<Cuidador />} />
             <Route path="baixar" element={<Baixar />} />
+            {/* "Meu computador funciona?": o teste no navegador antes de
+                baixar, ligado a partir dos botões de download */}
+            <Route path="meu-computador" element={<MeuComputador />} />
             <Route path="app" element={<AbrirApp />} />
 
             {/* programa beta (README da raiz, seção "Site (site/)"): criar conta →
@@ -60,6 +65,8 @@ export default function App() {
             {/* destino do link de confirmação do e-mail: abre a sessão no
                 aparelho onde o link foi clicado e agradece */}
             <Route path="confirmar-email" element={<ConfirmarEmail />} />
+            {/* destino do código QR do computador: abre o app do cuidador */}
+            <Route path="parear" element={<Parear />} />
             {/* "Meu perfil": dados da conta, respostas da pesquisa e download */}
             <Route path="perfil" element={<Perfil />} />
 

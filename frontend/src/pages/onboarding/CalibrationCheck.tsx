@@ -1,6 +1,7 @@
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { buildRuntimeInfo } from '../../utils/runtimeInfo';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useGaze } from '../../context/GazeContext';
 import { useSettings } from '../../context/SettingsContext';
@@ -16,6 +17,7 @@ import {
   currentCalibrationGeometry,
   DESLOCAMENTO_DA_BOLA_MS,
   getCalibrationTimestampMs,
+  onColetaInterrompida,
 } from '@tracker/calibration';
 import { idadeEmTexto } from '../../idadeEmTexto';
 import type { OpticalCondition } from '@tracker/calibrationProfiles';
@@ -34,6 +36,31 @@ import { EXPERIMENT, gravarExperimento } from '@tracker/config/experiment';
 import { olhoNaCalibracao } from '../../utils/olhoNaCalibracao';
 import { tutorialConcluido } from '../../services/local/tutorialProfile';
 import { useAuth } from '../../context/AuthContext';
+import {
+  CLASSE_CHEGANDO,
+  CLASSE_CONFIRMADO,
+  CLASSE_DA_BOLA_ANTIGA,
+  CLASSE_DO_ALVO,
+  COR_DA_BOLA_ANTIGA,
+  COR_DA_BOLA_ANTIGA_CONFIRMADA,
+  corDoFundoDoEstimulo,
+  DIAMETRO_DO_ALVO_PX,
+  MARCACAO_DO_ALVO_ABC,
+  usarEstimuloAntigo,
+} from '@tracker/alvoDeFixacao';
+import { PerguntaDaLinguagem } from '../calibration/EscolhaDaLinguagem';
+import { GazeButton } from '../../components/ui/GazeButton';
+import { degToPx, GAZE_TOKENS } from '../../design/gazeMetrics';
+import { emergenciaPorFonte, ouvirEstadoDaEmergencia } from '../../services/estadoDeEmergencia';
+
+/**
+ * O alvo mínimo de 5° como o token do design system (`--gaze-target-min`, o
+ * mesmo valor que `alvoMinimoPx()` lê), como em `EmergencyEscalation`.
+ */
+const ALVO_MINIMO = `var(--gaze-target-min, ${Math.round(degToPx(GAZE_TOKENS.targetMinDeg))}px)`;
+
+/** A contagem da emergência está aberta? (O sinal que o `EmergencyProvider` publica.) */
+const contagemDaEmergenciaAberta = () => emergenciaPorFonte('confirmacao');
 
 /** Alvo na tela, em porcentagem da largura e da altura. */
 interface CalibrationPointUI {
@@ -57,18 +84,56 @@ const OPTICAL_OPTIONS: OpticalCondition[] = [
 ];
 
 // ─── Paleta CAA — escura em todas as etapas ────────────────────────────────
-// fundo preto reduz fadiga ocular e força menos a piscada, permitindo fixações
-// mais longas e estáveis. Contraste alto (branco/âmbar sobre preto) é o padrão CAA.
-const BG = '#000000';
+// Fundo escuro reduz fadiga ocular e força menos a piscada, permitindo fixações
+// mais longas e estáveis. Era preto puro; desde 19/10/2026 é o azul-marinho da
+// marca (#091B33, luminância ~1 %, escuro do mesmo jeito para a pupila), o
+// mesmo fundo do teste de precisão — o mesmo alvo sobre o mesmo fundo nos dois.
+// Com a flag `estimuloAntigo` volta o preto de antes, para a troca ser medida
+// no mesmo build (revisão do pipeline de 19/10/2026): o fundo é lido no render
+// (`corDoFundoDoEstimulo`), e não aqui.
 const TEXT_PRIMARY = '#FFFFFF';
 const TEXT_DIM = 'rgba(255,255,255,0.65)';
 const ACCENT = '#1B54A8'; // IrisFlow Azul
 
-const SUCCESS = '#22C55E';
 const DANGER = '#EF4444';
 
-/** Diâmetro da bola que percorre a grade. */
-const TAMANHO_DA_BOLA_PX = 36;
+/** Diâmetro do alvo que percorre a grade (o ABC de `alvoDeFixacao.ts`). */
+const TAMANHO_DA_BOLA_PX = DIAMETRO_DO_ALVO_PX;
+
+/** O aviso calmo da rodada de recoleta, no lugar de "Siga o ponto". */
+const AvisoDaRecoleta: React.FC<{ n: number }> = ({ n }) => {
+  const { t } = useTranslation();
+  return <>{n === 1 ? t('calib.recoleta.avisoUm') : t('calib.recoleta.avisoVarios', { n })}</>;
+};
+
+/** O retreino depois dos pontos refeitos (a tela de espera não fala em teste). */
+const AtualizandoARecoleta: React.FC<{ parte: 'titulo' | 'dica' }> = ({ parte }) => {
+  const { t } = useTranslation();
+  return <>{parte === 'titulo' ? t('calib.recoleta.atualizando') : t('calib.recoleta.atualizandoDica')}</>;
+};
+
+/** "Não há pontos para refazer agora" — informação, não falha. */
+const AvisoSemPontos: React.FC = () => {
+  const { t } = useTranslation();
+  return (
+    <div
+      role="status"
+      data-testid="recoleta-sem-pontos"
+      style={{
+        padding: '1rem',
+        background: 'rgba(27, 84, 168, 0.14)',
+        border: '1px solid rgba(27, 84, 168, 0.6)',
+        borderRadius: '0.75rem',
+        color: TEXT_PRIMARY,
+        fontSize: '1rem',
+        lineHeight: 1.5,
+        maxWidth: 420,
+      }}
+    >
+      {t('calib.recoleta.nenhum')}
+    </div>
+  );
+};
 
 const humanMessage: Record<string, string> = {
   singular_matrix:
@@ -77,7 +142,16 @@ const humanMessage: Record<string, string> = {
     'Amostras insuficientes coletadas. Certifique-se de que seu rosto está visível e centralizado durante toda a calibração.',
   degenerate_features:
     'Os dados coletados não variaram o suficiente. A causa mais comum é reflexo nos óculos travando a detecção ou olhar fixo fora dos pontos.',
+  // `degenerate_features` com o modelo do olhar sem resposta durante a coleta
+  // (relato de 19/10/2026, auditoria A3): a causa é o modelo, não os óculos —
+  // mandar a pessoa tirar os óculos ali seria pedir o esforço errado.
+  modelo_sem_resposta:
+    'O modelo do olhar não respondeu durante a calibração, então os dados ficaram sem a parte dele. ' +
+    'Não é nada que você tenha feito: espere o aviso do modelo sumir e calibre de novo.',
   engine_indisponivel: 'O rastreamento não está ativo. Volte ao menu e entre de novo nesta tela.',
+  // O núcleo recusou treinar uma coleta cancelada (revisão do pipeline de 20/10/2026).
+  sessao_cancelada:
+    'A calibração foi interrompida antes do fim, e estes pontos não foram usados. Comece de novo quando quiser.',
   unknown: 'Erro desconhecido durante o treinamento do modelo. Por favor, tente novamente.',
 };
 
@@ -85,6 +159,7 @@ const AUTO_RECORD_STORAGE_KEY = 'irisflow.autoRecordOnCalibrate';
 
 export const CalibrationCheck: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentProfile: perfilAtual, isCaregiver } = useAuth();
   // Os três checks do paciente liberam o início; o painel detalhado (onze
   // checks, viewport, cintilação) é do cuidador e do modo desenvolvedor.
@@ -95,7 +170,17 @@ export const CalibrationCheck: React.FC = () => {
   // relatório e (b) o posicionamento dos alvos pelo orçamento de
   // excentricidade. Antes eram dois hardcodes de 15,6"/60 cm em arquivos
   // diferentes, e numa tela de 23,6" o erro angular saía 34% menor que o real.
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
+  // O estímulo (fundo e alvo): o de hoje, ou o de antes de 19/10 com a flag
+  // `estimuloAntigo` — ver `src/alvoDeFixacao.ts`.
+  const BG = corDoFundoDoEstimulo();
+  const estimuloAntigo = usarEstimuloAntigo();
+  // Palavras ou números no resultado (pedido de 19/10/2026). `null` = ainda
+  // não perguntado: a pergunta aparece UMA vez, antes do "Começar". Só o
+  // `null` pergunta — ajustes sem o campo (`undefined`) vêm de quem não guarda
+  // a escolha, e lá o resultado segue como antes.
+  const linguagemDoRelatorio = settings.linguagemDoRelatorio;
+  const perguntarLinguagem = linguagemDoRelatorio === null;
 
   // 2.5 — `disabled` libera a calibração tanto quanto `ready`.
   //
@@ -111,11 +196,16 @@ export const CalibrationCheck: React.FC = () => {
   const [statusDoOlho, setStatusDoOlho] = useState<string | null>(() =>
     EXPERIMENT.eyeNet === 'off' ? null : (getDiagnostics()?.olho?.status ?? null),
   );
+  /** O worker da EyeNet morreu e está sendo reiniciado (não é "não carregou"). */
+  const [olhoReiniciando, setOlhoReiniciando] = useState(false);
   useEffect(() => {
     if (EXPERIMENT.eyeNet === 'off') return;
     const id = setInterval(() => {
-      const s = getDiagnostics()?.olho?.status ?? null;
+      const o = getDiagnostics()?.olho;
+      const s = o?.status ?? null;
       setStatusDoOlho((antes) => (antes === s ? antes : s));
+      const reiniciando = o?.motivoDoErro === 'falha_do_worker' && o?.reinicio?.desistiu !== true;
+      setOlhoReiniciando((antes) => (antes === reiniciando ? antes : reiniciando));
     }, 300);
     return () => clearInterval(id);
   }, [getDiagnostics]);
@@ -124,17 +214,44 @@ export const CalibrationCheck: React.FC = () => {
   const l2csReady = l2csPronto && olho === 'livre';
   const podeComecar = l2csReady && checksProntos;
   const l2csFailed = l2csStatus === 'error';
-  // 'error' tem duas causas. Na carga (arquivo ausente, sessão do ONNX que não
-  // sobe) o worker nunca ficou pronto e não há provider em vigor: é o caso de
-  // calibrar só com a íris. Depois da carga, é a saída travada (a imagem da
-  // câmera parada ou preta por segundos), que volta sozinha — oferecer ali uma
-  // troca gravada no disco rebaixaria a máquina por causa de um soluço.
+  // 'error' tem três causas (o motivo vem do engine desde 19/10/2026). Na
+  // carga (arquivo ausente, sessão do ONNX que não sobe, meta que não combina
+  // com o modelo — conferida pela inferência de teste) o worker nunca ficou
+  // pronto: é o caso de calibrar só com a íris, e também quando os reinícios
+  // de um worker que morreu se esgotaram. Já a saída travada (a imagem da
+  // câmera parada ou preta por segundos) e o worker em reinício voltam
+  // sozinhos — oferecer ali uma troca gravada no disco rebaixaria a máquina
+  // por causa de um soluço.
+  // O motivo e o fim dos reinícios mudam sem o status mudar: com o L2CS em
+  // erro, a tela confere a cada 0,5 s e se redesenha quando eles mudam.
+  const [, redesenhar] = useState(0);
+  useEffect(() => {
+    if (l2csStatus !== 'error') return;
+    let ultimo = '';
+    const id = setInterval(() => {
+      const l = getDiagnostics()?.l2cs;
+      const chave = `${l?.motivoDoErro ?? '-'}|${l?.reinicio?.desistiu === true}`;
+      if (chave !== ultimo) {
+        if (ultimo !== '') redesenhar((n) => n + 1);
+        ultimo = chave;
+      }
+    }, 500);
+    return () => clearInterval(id);
+  }, [l2csStatus, getDiagnostics]);
+  const diagDoL2cs = getDiagnostics()?.l2cs;
+  const motivoDoL2cs = diagDoL2cs?.motivoDoErro ?? null;
+  const l2csReiniciando =
+    l2csFailed && motivoDoL2cs === 'falha_do_worker' && diagDoL2cs?.reinicio?.desistiu !== true;
   const l2csNaoCarregou =
-    l2csFailed && (getDiagnostics()?.l2cs?.executionProvider ?? null) === null;
+    l2csFailed &&
+    (motivoDoL2cs === 'carga' ||
+      (motivoDoL2cs === 'falha_do_worker' && diagDoL2cs?.reinicio?.desistiu === true) ||
+      // Engine sem o motivo (dublês de teste antigos): a regra de antes.
+      (motivoDoL2cs === null && (diagDoL2cs?.executionProvider ?? null) === null));
   const [falhaAoGravarEscolha, setFalhaAoGravarEscolha] = useState(false);
 
   const [stage, setStage] = useState<
-    'tutorial' | 'calibrating' | 'testing' | 'transitioning' | 'drift-warning'
+    'tutorial' | 'calibrating' | 'testing' | 'transitioning' | 'drift-warning' | 'pausa'
   >('tutorial');
   // Espelho do `stage` para os listeners de visibilidade/blur, que são
   // registrados uma única vez e fechariam sobre o valor do primeiro render.
@@ -223,6 +340,39 @@ export const CalibrationCheck: React.FC = () => {
   const activePointsRef = useRef<CalibrationPointUI[]>([]);
   /** A rodada de reforço (sprint S4) acontece no máximo uma vez por sessão. */
   const reforcoFeitoRef = useRef(false);
+  /**
+   * A recoleta automática dos alvos ruins (M22, pedido de 19/10/2026) acontece
+   * no máximo uma vez por calibração. A tela de resultado pode pedir outra, à
+   * mão — é escolha de quem está lá, e a trava do núcleo vale do mesmo jeito.
+   */
+  const recoletaAutomaticaFeitaRef = useRef(false);
+  /** Que sequência está rodando: calibração (ou reforço), recoleta automática ou pedida. */
+  const rodadaRef = useRef<'calibracao' | 'recoleta' | 'recoletaPedida'>('calibracao');
+  /** Pontos da recoleta em curso, para o aviso calmo no lugar de "Siga o ponto". */
+  const [pontosDaRecoleta, setPontosDaRecoleta] = useState<number | null>(null);
+  /** A recoleta pedida não achou o que refazer: informação, não falha. */
+  const [semPontosParaRefazer, setSemPontosParaRefazer] = useState(false);
+  /** Para onde a recoleta pedida volta: o destino que a tela de resultado já tinha. */
+  const destinoDaRecoletaRef = useRef<string | null>(null);
+  /**
+   * O que fazer quando a janela voltar, depois da pausa por perda de foco numa
+   * rodada que não é a dos 13 pontos (revisão do pipeline de 19/10/2026).
+   * `null` fora da pausa.
+   */
+  const continuarDepoisDaPausaRef = useRef<(() => void) | null>(null);
+  /**
+   * Por que a rodada parou: a janela perdeu o foco, ou a contagem da
+   * emergência abriu por cima dos alvos (revisão de UX de 20/10/2026,
+   * achado 7). Muda só o texto da pausa: o caminho é o mesmo.
+   */
+  const [motivoDaPausa, setMotivoDaPausa] = useState<'foco' | 'emergencia'>('foco');
+  /** O mesmo caminho da perda de foco, para a contagem da emergência usar. */
+  const interromperRodadaRef = useRef<((motivo: string) => void) | null>(null);
+  // As versões mais novas de "seguir depois do treino" e "voltar ao
+  // resultado", para os ouvintes de foco, registrados uma vez só, não
+  // chamarem as do primeiro render (com a linguagem e os ajustes de então).
+  const seguirDepoisDoTreinoRef = useRef<() => void>(() => {});
+  const voltarAoResultadoRef = useRef<() => void>(() => {});
   const [sessionPoints, setSessionPoints] = useState<CalibrationPointUI[] | null>(null);
 
   const toUiPoints = (targets: readonly { x: number; y: number }[]): CalibrationPointUI[] =>
@@ -255,13 +405,23 @@ export const CalibrationCheck: React.FC = () => {
   const alvoDaBola: CalibrationPointUI | null = activePoints[currentIndex] ?? null;
 
   /**
-   * A cor da bola. Verde por um instante ao fechar um ponto — é a única
-   * confirmação que sobrou depois que o ✓ em elemento separado saiu, e ela
-   * acontece no próprio nó que já está na tela, sem nada aparecer nem sumir.
+   * O alvo confirma o ponto ficando verde por um instante — a única
+   * confirmação que sobrou depois que o ✓ em elemento separado saiu, no próprio
+   * nó que já está na tela. Só a COR muda (transição de 260 ms); o tamanho não
+   * dá tranco (pedido de 19/10/2026).
    */
-  const tintaDaBola = lastCompletedPoint !== null ? SUCCESS : ACCENT;
+  const alvoConfirmado = lastCompletedPoint !== null;
 
   const ordemDaSequenciaRef = useRef<number[]>([]);
+  /**
+   * Número da sequência de coleta em curso (revisão do pipeline de 20/10/2026).
+   * Sobe a cada início de sequência e a cada abort ou interrupção; o treino
+   * agendado para depois da pintura confere se ainda é a mesma. Antes, uma
+   * interrupção entre o último ponto e a pintura (o núcleo trocou o recorte, a
+   * coleta parou) não impedia o `completeCalibration` — que treinava a sessão
+   * cancelada por cima da calibração que tinha voltado.
+   */
+  const sessaoDaColetaRef = useRef(0);
   const isMounted = useRef(true);
   /** Quando a coleta começou — vira `calibration_seconds` no resumo para o cuidador. */
   const calibracaoIniciadaEmRef = useRef<number | null>(null);
@@ -321,36 +481,140 @@ export const CalibrationCheck: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Sai da pausa (a janela voltou, ou o botão "Continuar"): segue o caminho guardado. */
+  const retomarDepoisDaPausa = () => {
+    if (stageRef.current !== 'pausa') return;
+    // Com a contagem da emergência aberta, a coleta não recomeça por baixo
+    // dela (a janela que volta a ter o foco no meio da contagem).
+    if (contagemDaEmergenciaAberta()) return;
+    const seguir = continuarDepoisDaPausaRef.current;
+    if (!seguir) return;
+    continuarDepoisDaPausaRef.current = null;
+    seguir();
+  };
+
   // A janela perder o foco durante a coleta é o mesmo problema por outra
   // porta: os alvos continuariam sendo coletados enquanto o usuário olha para
   // outro lugar, contaminando o modelo com amostras que não correspondem a
   // alvo nenhum. Aborta e devolve a tela ao início, em vez de treinar sujo.
+  //
+  // Numa rodada DEPOIS dos 13 pontos — a recoleta dos alvos ruins (M22) ou o
+  // reforço (S4) — a calibração já está treinada e gravada: o núcleo descarta
+  // só as amostras da rodada. Antes a tela dizia "A calibração foi
+  // interrompida… Comece de novo" e mandava refazer tudo (revisão do pipeline
+  // de 19/10/2026). Agora ela diz que a calibração está salva e, quando a
+  // janela voltar, segue para o reforço ou o teste (ou volta ao resultado,
+  // na recoleta pedida lá).
+  //
+  // A contagem da emergência aberta por cima dos alvos é o mesmo problema
+  // (revisão de UX de 20/10/2026, achado 7): o paciente olha o CANCELAR, e o
+  // núcleo rotulava esse olhar com o alvo da vez. Mesmo caminho, motivo
+  // `emergencia`; da pausa ela só sai pelo "Continuar", depois de a contagem
+  // fechar.
   useEffect(() => {
     const abortarPorPerdaDeFoco = (motivo: string) => {
       if (document.visibilityState === 'visible' && motivo === 'visibility') return;
       if (stageRef.current !== 'calibrating') return;
       console.warn(`[calib] calibração abortada por ${motivo}`);
+      const pelaEmergencia = motivo === 'emergencia';
+      // A contagem da emergência passa por aqui também: a sessão cancelada não
+      // treina nem fecha recoleta (revisão do pipeline de 20/10/2026).
+      sessaoDaColetaRef.current++;
+      const rodada = rodadaRef.current;
+      const dosTrezePontos = rodada === 'calibracao' && !reforcoFeitoRef.current;
+      // Uma recoleta em curso também cai aqui: o núcleo descarta as amostras
+      // novas e o modelo de antes segue valendo.
       calibration.abort?.();
+      rodadaRef.current = 'calibracao';
+      if (!dosTrezePontos) {
+        if (!isMounted.current) return;
+        setPontosDaRecoleta(null);
+        setPreparing(false);
+        setColetando(false);
+        setMotivoDaPausa(pelaEmergencia ? 'emergencia' : 'foco');
+        continuarDepoisDaPausaRef.current =
+          rodada === 'recoletaPedida'
+            ? () => voltarAoResultadoRef.current()
+            : () => {
+                // A espera de sempre ("Iniciando teste de precisão"); o reforço,
+                // se vier, troca para a coleta.
+                setStage('testing');
+                seguirDepoisDoTreinoRef.current();
+              };
+        setStage('pausa');
+        return;
+      }
       finalizeAutoRecordingRef.current(false);
       if (!isMounted.current) return;
+      setPontosDaRecoleta(null);
       setStage('tutorial');
       setPreparing(false);
       setCompletedList([]);
       setSessionPoints(null);
       setErrorMessage(
-        'A calibração foi interrompida porque a janela perdeu o foco. Comece de novo.'
+        pelaEmergencia
+          ? 'A calibração parou porque a emergência foi acionada. Quando quiser, comece de novo.'
+          : 'A calibração foi interrompida porque a janela perdeu o foco. Comece de novo.'
       );
     };
-    const onVisibility = () => abortarPorPerdaDeFoco('visibility');
+    interromperRodadaRef.current = abortarPorPerdaDeFoco;
+    const onVisibility = () => {
+      abortarPorPerdaDeFoco('visibility');
+      if (document.visibilityState === 'visible') retomarDepoisDaPausa();
+    };
     const onBlur = () => abortarPorPerdaDeFoco('blur');
+    const onFocus = () => retomarDepoisDaPausa();
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
     return () => {
+      interromperRodadaRef.current = null;
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A contagem da emergência abriu (pelo botão, pelo mouse, pela pressão longa
+  // do acionador): a rodada em curso para pelo caminho da perda de foco
+  // (achado 7 de 20/10/2026). Fora da coleta, nada muda.
+  const contagemAberta = useSyncExternalStore(ouvirEstadoDaEmergencia, contagemDaEmergenciaAberta, () => false);
+  useEffect(() => {
+    if (contagemAberta) interromperRodadaRef.current?.('emergencia');
+  }, [contagemAberta]);
+
+  // O núcleo interrompeu a coleta (revisão do pipeline de 19/10/2026): o
+  // recorte do modelo do rosto mudou no meio dela, e as amostras de dois lados
+  // não treinam um modelo só. Antes a tela ficava presa no alvo, esperando um
+  // `onDone` que nunca vinha. Volta ao início com a explicação, sem culpar
+  // ninguém; a calibração de antes (se havia) continua em uso.
+  useEffect(
+    () =>
+      onColetaInterrompida((e) => {
+        if (!isMounted.current) return;
+        console.warn(`[calib] a coleta foi interrompida pelo núcleo: ${e.detalhe}`);
+        sessaoDaColetaRef.current++;
+        rodadaRef.current = 'calibracao';
+        continuarDepoisDaPausaRef.current = null;
+        if (e.rodada === 'calibracao') finalizeAutoRecordingRef.current(false);
+        setPontosDaRecoleta(null);
+        setStage('tutorial');
+        setPreparing(false);
+        setColetando(false);
+        setCompletedList([]);
+        setSessionPoints(null);
+        setErrorMessage(
+          e.rodada === 'recoleta'
+            ? 'O IrisFlow precisou reiniciar a leitura do rosto enquanto refazíamos alguns pontos. ' +
+                'A calibração continua salva; os pontos ficaram como estavam.'
+            : 'O IrisFlow precisou reiniciar a leitura do rosto no meio da calibração, e os pontos ' +
+                'desta vez não valem mais. Não foi nada que você fez: comece de novo quando quiser.'
+        );
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   const finishAndTransition = () => {
     setStage('transitioning');
@@ -452,7 +716,13 @@ export const CalibrationCheck: React.FC = () => {
         finishAndTransition();
       },
       meta,
-      runtime
+      runtime,
+      // O painel do teste fala como a tela de resultado (a mesma escolha), e
+      // sabe que ela vem depois — é lá que se refaz só os cantos. Só quando dá
+      // para refazer (revisão do pipeline de 19/10/2026): com a recoleta
+      // desligada (`?exp.recoletaDeAlvosRuins=0`) o painel prometia "na
+      // próxima tela dá para refazer só os cantos" e a próxima não tinha o botão.
+      { linguagem: linguagemDoRelatorio ?? null, resultadoDepois: calibration.podeRecoletarAlvos?.() ?? false }
     );
   };
 
@@ -464,6 +734,8 @@ export const CalibrationCheck: React.FC = () => {
    * duplicar isso era o caminho mais curto para as duas divergirem.
    */
   const iniciarSequencia = (targets: readonly { x: number; y: number }[]) => {
+    sessaoDaColetaRef.current++;
+    const sessao = sessaoDaColetaRef.current;
     const sessionTargets = commitSessionTargets(targets);
     // Ordem calculada, não sorteada (M1). A ordem de leitura deixava a altura
     // do alvo crescer junto com o tempo, e a deriva da cabeça — quase sempre
@@ -485,14 +757,154 @@ export const CalibrationCheck: React.FC = () => {
 
     setPreparing(true);
     setTimeout(() => {
-      if (!isMounted.current) return;
+      // Interrompida no preparo (e talvez já recomeçada): este timer é da
+      // sequência velha (revisão final de 22/10/2026).
+      if (!isMounted.current || sessaoDaColetaRef.current !== sessao) return;
       setPreparing(false);
       startNextPoint(0);
     }, PREPARE_MS);
   };
 
+  /**
+   * O que vem depois de um treino bem-sucedido: a recoleta automática dos
+   * alvos ruins (M22, uma vez), o reforço (S4, uma vez) e o teste de precisão.
+   *
+   * A recoleta vem ANTES do reforço: refeito um alvo que só tinha sido mal
+   * coletado, o reforço lê o LOTO já limpo e não gasta pontos extras ao redor
+   * dele. Sem alvo ruim (o caso normal), a recoleta não abre nada e o caminho
+   * é exatamente o de antes.
+   */
+  const seguirDepoisDoTreino = () => {
+    if (!isMounted.current) return;
+    if (!recoletaAutomaticaFeitaRef.current) {
+      recoletaAutomaticaFeitaRef.current = true;
+      if (iniciarRecoleta(true)) return;
+    }
+    // ── Rodada de reforço (sprint S4) ─────────────────────────
+    //
+    // O `looByTarget` do treino que acabou já diz quais alvos o modelo
+    // não consegue prever a partir dos outros. Em vez de mandar refazer
+    // a calibração inteira — mais ~40–50 s de fadiga no V3, com a mesma grade que
+    // já falhou — gasta-se de 6 a 12 s onde o modelo é cego.
+    //
+    // `reforcoFeito` impede o laço: a segunda passada nunca pede uma
+    // terceira, mesmo que o erro continue concentrado.
+    if (!reforcoFeitoRef.current) {
+      const extras = calibration.iniciarRodadaDeReforco?.() ?? [];
+      if (extras.length > 0 && isMounted.current) {
+        reforcoFeitoRef.current = true;
+        console.log(`[React] Reforçando ${extras.length} alvo(s) difícil(eis)`);
+        setStage('calibrating');
+        iniciarSequencia(extras);
+        return;
+      }
+    }
+
+    console.log('[React] Calibração concluída — disparando teste de precisão automático');
+    setTimeout(() => {
+      if (!isMounted.current) return;
+      // Dentro de um `setTimeout` uma exceção não tem quem a pegue: a
+      // tela ficaria no spinner de "Iniciando teste de precisão" para
+      // sempre, sem nada dito ao operador.
+      try {
+        runAccuracyTestThenExit();
+      } catch (e) {
+        console.error('[React] falha ao iniciar o teste de precisão:', e);
+        finalizeAutoRecordingRef.current(false);
+        setFalhaDoTeste(e instanceof Error ? e.message : String(e));
+      }
+    }, 400);
+  };
+
+  /**
+   * Abre a recoleta dos alvos ruins (M22) e roda a sequência deles pela mesma
+   * máquina da calibração. Devolve se abriu: sem alvo ruim, sem a flag ou sem
+   * as amostras deste modelo, não abre nada.
+   */
+  const iniciarRecoleta = (automatica: boolean): boolean => {
+    const alvos = calibration.alvosParaRecoletar?.() ?? [];
+    if (alvos.length === 0) return false;
+    const abertos = calibration.iniciarRecoletaDeAlvos?.(alvos, { automatica }) ?? [];
+    if (abertos.length === 0) return false;
+    rodadaRef.current = automatica ? 'recoleta' : 'recoletaPedida';
+    setPontosDaRecoleta(abertos.length);
+    console.log(
+      `[React] Refazendo ${abertos.length} ponto(s) impreciso(s)` +
+        (automatica ? '' : ' — pedido na tela de resultado')
+    );
+    setStage('calibrating');
+    iniciarSequencia(abertos);
+    return true;
+  };
+
+  /**
+   * De volta à tela de resultado (a recoleta pedida lá), que mostra o antes e
+   * o depois. Sem outro teste de precisão — quem paga o tempo é o paciente.
+   */
+  const voltarAoResultado = () => {
+    if (!isMounted.current) return;
+    setStage('transitioning');
+    setTimeout(() => {
+      if (!isMounted.current) return;
+      navigate('/calibration/resultado', {
+        state: { destino: destinoDaRecoletaRef.current ?? '/menu' },
+      });
+    }, 800);
+  };
+  seguirDepoisDoTreinoRef.current = seguirDepoisDoTreino;
+  voltarAoResultadoRef.current = voltarAoResultado;
+
+  /** Fecha a recoleta no núcleo e segue: o caminho de sempre, ou de volta ao resultado. */
+  const concluirRecoleta = () => {
+    const pedida = rodadaRef.current === 'recoletaPedida';
+    rodadaRef.current = 'calibracao';
+    const seguir = () => {
+      if (!isMounted.current) return;
+      // Só agora: enquanto o núcleo retreina, a tela de espera diz
+      // "Atualizando a calibração", e não "Iniciando teste de precisão".
+      setPontosDaRecoleta(null);
+      if (pedida) {
+        voltarAoResultado();
+        return;
+      }
+      seguirDepoisDoTreino();
+    };
+    if (!calibration.concluirRecoletaDeAlvos) {
+      seguir();
+      return;
+    }
+    calibration.concluirRecoletaDeAlvos(() => seguir());
+  };
+
+  // Recoleta PEDIDA na tela de resultado ("Refazer só os cantos"). O pedido
+  // sai do histórico na hora: voltar para esta tela não pode reabrir a rodada.
+  useEffect(() => {
+    const pedido = location.state as { recoletar?: boolean; destino?: unknown } | null;
+    if (!pedido?.recoletar) return;
+    destinoDaRecoletaRef.current = typeof pedido.destino === 'string' ? pedido.destino : null;
+    navigate(location.pathname, { replace: true, state: null });
+    // Sem os modelos prontos a tela fica no início, onde a linha de estado
+    // diz o que falta; sem pontos a refazer, diz isso — é informação, não falha.
+    if (!l2csReady) {
+      console.warn('[calib] recoleta pedida com os modelos ainda carregando — a tela fica no início.');
+    } else if (!iniciarRecoleta(false)) {
+      setSemPontosParaRefazer(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const startNextPoint = (step: number) => {
     if (!isMounted.current) return;
+    // A sequência foi interrompida (perda de foco, coleta interrompida pelo
+    // núcleo) com um passo ainda agendado: ele não pode seguir — no último
+    // alvo, seguir seria treinar as amostras da sessão cancelada por cima da
+    // calibração que voltou (revisão do pipeline de 19/10/2026).
+    if (stageRef.current !== 'calibrating') return;
+    // A sequência deste passo. Os timers abaixo só seguem nela: interrompida e
+    // RECOMEÇADA antes de eles dispararem, a tela volta a `calibrating` e a
+    // guarda acima deixava a sequência velha abrir coleta por cima da nova
+    // (revisão final de 22/10/2026).
+    const sessao = sessaoDaColetaRef.current;
     const order = ordemDaSequenciaRef.current;
 
     if (step >= order.length) {
@@ -509,6 +921,17 @@ export const CalibrationCheck: React.FC = () => {
       // quadro que mostra a tela nova, o segundo já depois dele.
       esperarPintura(() => {
         if (!isMounted.current) return;
+        // Interrompida entre o último ponto e a pintura (revisão do pipeline de
+        // 20/10/2026): a tela já disse o que houve, e treinar — ou fechar a
+        // recoleta — seria seguir com a sessão cancelada.
+        if (sessaoDaColetaRef.current !== sessao) return;
+        // Fim de uma RECOLETA (M22): o núcleo troca as amostras e retreina, e a
+        // trava decide se o modelo novo fica. Não passa pelo aviso de deriva:
+        // ele já foi mostrado (ou não era o caso) no treino da calibração.
+        if (rodadaRef.current !== 'calibracao') {
+          concluirRecoleta();
+          return;
+        }
         calibration.completeCalibration?.((outcome) => {
           if (!outcome || outcome.ok !== false) {
             // a deriva de pose já era medida e só ia para o console. Se a
@@ -529,44 +952,20 @@ export const CalibrationCheck: React.FC = () => {
               setStage('drift-warning');
               return;
             }
-            // ── Rodada de reforço (sprint S4) ─────────────────────────
-            //
-            // O `looByTarget` do treino que acabou já diz quais alvos o modelo
-            // não consegue prever a partir dos outros. Em vez de mandar refazer
-            // a calibração inteira — mais 26 s de fadiga, com a mesma grade que
-            // já falhou — gasta-se de 6 a 12 s onde o modelo é cego.
-            //
-            // `reforcoFeito` impede o laço: a segunda passada nunca pede uma
-            // terceira, mesmo que o erro continue concentrado.
-            if (!reforcoFeitoRef.current) {
-              const extras = calibration.iniciarRodadaDeReforco?.() ?? [];
-              if (extras.length > 0 && isMounted.current) {
-                reforcoFeitoRef.current = true;
-                console.log(`[React] Reforçando ${extras.length} alvo(s) difícil(eis)`);
-                setStage('calibrating');
-                iniciarSequencia(extras);
-                return;
-              }
-            }
-
-            console.log('[React] Calibração concluída — disparando teste de precisão automático');
-            setTimeout(() => {
-              if (!isMounted.current) return;
-              // Dentro de um `setTimeout` uma exceção não tem quem a pegue: a
-              // tela ficaria no spinner de "Iniciando teste de precisão" para
-              // sempre, sem nada dito ao operador.
-              try {
-                runAccuracyTestThenExit();
-              } catch (e) {
-                console.error('[React] falha ao iniciar o teste de precisão:', e);
-                finalizeAutoRecordingRef.current(false);
-                setFalhaDoTeste(e instanceof Error ? e.message : String(e));
-              }
-            }, 400);
+            seguirDepoisDoTreino();
           } else {
             if (isMounted.current) {
               const reason = outcome.reason || 'unknown';
-              const msg = humanMessage[reason] || humanMessage.unknown;
+              // Features mortas porque o modelo do olhar não respondeu: o núcleo
+              // marca a causa; e um modelo em erro AGORA explica o mesmo.
+              const d = getDiagnostics();
+              const modeloEmErro =
+                d?.l2cs?.status === 'error' || (d?.olho?.ativo === true && d.olho.status === 'erro');
+              const msg =
+                reason === 'degenerate_features' &&
+                (outcome.causa === 'bloco_angular_zerado' || modeloEmErro)
+                  ? humanMessage.modelo_sem_resposta
+                  : humanMessage[reason] || humanMessage.unknown;
               console.error(`[React] Treinamento falhou: ${reason} - ${outcome.detail}`);
               // Calibração falhou — o JSONL até aqui não tem accuracy test útil.
               // Descarta em vez de exportar; próxima tentativa recomeça limpa.
@@ -620,7 +1019,7 @@ export const CalibrationCheck: React.FC = () => {
         // depois e descarta 600 ms (o primeiro dado útil vinha 1180 ms depois
         // de a bola parar). Ver `aberturaDaColetaMs` em calibration.ts.
         setTimeout(() => {
-          if (isMounted.current) startNextPoint(step + 1);
+          if (isMounted.current && sessaoDaColetaRef.current === sessao) startNextPoint(step + 1);
         }, aberturaDaColetaMs());
       } else {
         retryCountRef.current++;
@@ -632,7 +1031,7 @@ export const CalibrationCheck: React.FC = () => {
           if (proximo !== undefined) setCurrentIndex(proximo);
           setCompletedList((prev) => [...prev, pointIdx]);
           setTimeout(() => {
-            if (isMounted.current) startNextPoint(step + 1);
+            if (isMounted.current && sessaoDaColetaRef.current === sessao) startNextPoint(step + 1);
           }, 500);
         } else {
           // A mensagem diz a causa real: culpar o movimento quando o
@@ -670,7 +1069,7 @@ export const CalibrationCheck: React.FC = () => {
                 : `Poucas amostras neste ponto (${detalhe}) — o rosto pode ter saído do enquadramento. Tentando novamente...`
           );
           setTimeout(() => {
-            if (isMounted.current) startNextPoint(step);
+            if (isMounted.current && sessaoDaColetaRef.current === sessao) startNextPoint(step);
           }, 1500);
         }
       }
@@ -732,8 +1131,13 @@ export const CalibrationCheck: React.FC = () => {
     setStage('calibrating');
     calibracaoIniciadaEmRef.current = Date.now();
     setCompletedList([]);
-    // Nova calibração, novo direito a um reforço (sprint S4).
+    // Nova calibração, novo direito a um reforço (sprint S4) e a uma recoleta
+    // automática dos alvos ruins (M22).
     reforcoFeitoRef.current = false;
+    recoletaAutomaticaFeitaRef.current = false;
+    rodadaRef.current = 'calibracao';
+    setPontosDaRecoleta(null);
+    setSemPontosParaRefazer(false);
 
     // A distância MEDIDA nesta sessão manda, quando existe.
     // `viewingDistanceCm` posiciona os alvos pelo orçamento de excentricidade.
@@ -924,7 +1328,9 @@ export const CalibrationCheck: React.FC = () => {
                   a barra diz isso. Numa recalibração não há jornada a mostrar. */}
               {!temCalibracaoSalva && <ProgressoDoOnboarding atual="calibracao" />}
 
-              {/* Preview do ponto — mostra ao usuário o que vai aparecer */}
+              {/* Preview do alvo — o MESMO que vai percorrer a tela (o ABC de
+                  `alvoDeFixacao.ts`), parado e ampliado para dar para ver o
+                  ponto vermelho do meio, que é para onde se olha. */}
               <div
                 style={{
                   position: 'relative',
@@ -945,26 +1351,43 @@ export const CalibrationCheck: React.FC = () => {
                     animation: 'cfRadarPing 2s ease-out infinite',
                   }}
                 />
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: ACCENT,
-                    boxShadow: `0 0 30px ${ACCENT}`,
-                    animation: 'cfPulse 1.2s infinite alternate',
-                  }}
-                />
-                <div
-                  style={{
-                    position: 'absolute',
-                    width: 9,
-                    height: 9,
-                    borderRadius: '50%',
-                    background: BG,
-                    opacity: 0.85,
-                  }}
-                />
+                {estimuloAntigo ? (
+                  // A prévia de antes de 19/10 (flag `estimuloAntigo`): a bola lisa.
+                  <>
+                    <div
+                      data-testid="calib-alvo-preview"
+                      data-estimulo="antigo"
+                      aria-hidden="true"
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: '50%',
+                        background: COR_DA_BOLA_ANTIGA,
+                        boxShadow: `0 0 30px ${COR_DA_BOLA_ANTIGA}`,
+                        animation: 'cfPulse 1.2s infinite alternate',
+                      }}
+                    />
+                    <div
+                      aria-hidden="true"
+                      style={{
+                        position: 'absolute',
+                        width: 9,
+                        height: 9,
+                        borderRadius: '50%',
+                        background: BG,
+                        opacity: 0.85,
+                      }}
+                    />
+                  </>
+                ) : (
+                  <div
+                    data-testid="calib-alvo-preview"
+                    aria-hidden="true"
+                    className={CLASSE_DO_ALVO}
+                    style={{ transform: 'scale(1.6)', transition: 'none' }}
+                    dangerouslySetInnerHTML={{ __html: MARCACAO_DO_ALVO_ABC }}
+                  />
+                )}
               </div>
 
               <div>
@@ -975,7 +1398,9 @@ export const CalibrationCheck: React.FC = () => {
                   Vamos ensinar o IrisFlow a entender o seu olhar
                 </h1>
                 <p style={{ fontSize: '1.15rem', color: TEXT_DIM, margin: 0, lineHeight: 1.65 }}>
-                  Siga o ponto <strong style={{ color: ACCENT }}>azul</strong> com os olhos.
+                  Siga o círculo <strong style={{ color: '#7FA8EC' }}>azul</strong> com os olhos e
+                  olhe para o ponto <strong style={{ color: '#F87171' }}>vermelho</strong> no meio
+                  dele.
                 </p>
               </div>
 
@@ -999,6 +1424,8 @@ export const CalibrationCheck: React.FC = () => {
               {mostrarDetalhes && <PreparoDaCalibracao />}
 
               {mostrarDetalhes && <ReadinessPanel />}
+
+              {semPontosParaRefazer && <AvisoSemPontos />}
 
               {errorMessage && (
                 <div
@@ -1133,75 +1560,84 @@ export const CalibrationCheck: React.FC = () => {
                   Em vez de bloquear, um dwell LONGO (`data-dwell-ms`): iniciar
                   a calibração por acidente custa 1–2 min de sessão, então o
                   acionamento tem que ser deliberado — mas possível. */}
-              <button
-                type="button"
-                onClick={() => handleStart(false)}
-                disabled={!podeComecar}
-                data-dwell-ms="2500"
-                data-testid="start-calibration-full"
-                  data-recovery="true"
-                aria-disabled={!podeComecar}
-                aria-describedby="l2cs-status-message"
-                style={{
-                  background: podeComecar ? ACCENT : 'rgba(255,255,255,0.10)',
-                  color: podeComecar ? '#fff' : TEXT_DIM,
-                  border: 'none',
-                  padding: '1rem 3rem',
-                  borderRadius: '2rem',
-                  fontSize: '1.15rem',
-                  fontWeight: 800,
-                  cursor: podeComecar ? 'pointer' : 'not-allowed',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.7rem',
-                  transition: 'all 0.2s',
-                  boxShadow: podeComecar ? '0 8px 24px rgba(27, 84, 168, 0.40)' : 'none',
-                  opacity: podeComecar ? 1 : 0.75,
-                }}
-                {...hoverAndFocus(
-                  (el) => {
-                    if (l2csReady) {
-                      el.style.transform = 'translateY(-2px)';
-                      el.style.boxShadow = '0 12px 32px rgba(27, 84, 168, 0.55)';
+              {/* A pergunta de UMA vez (pedido de 19/10/2026): palavras ou números
+                  no resultado. Fica no lugar do "Começar" até ser respondida —
+                  uma decisão de cada vez — e não volta mais (Configurações muda). */}
+              {perguntarLinguagem ? (
+                <PerguntaDaLinguagem
+                  aoEscolher={(l) => updateSettings({ linguagemDoRelatorio: l })}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleStart(false)}
+                  disabled={!podeComecar}
+                  data-dwell-ms="2500"
+                  data-testid="start-calibration-full"
+                    data-recovery="true"
+                  aria-disabled={!podeComecar}
+                  aria-describedby="l2cs-status-message"
+                  style={{
+                    background: podeComecar ? ACCENT : 'rgba(255,255,255,0.10)',
+                    color: podeComecar ? '#fff' : TEXT_DIM,
+                    border: 'none',
+                    padding: '1rem 3rem',
+                    borderRadius: '2rem',
+                    fontSize: '1.15rem',
+                    fontWeight: 800,
+                    cursor: podeComecar ? 'pointer' : 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.7rem',
+                    transition: 'all 0.2s',
+                    boxShadow: podeComecar ? '0 8px 24px rgba(27, 84, 168, 0.40)' : 'none',
+                    opacity: podeComecar ? 1 : 0.75,
+                  }}
+                  {...hoverAndFocus(
+                    (el) => {
+                      if (l2csReady) {
+                        el.style.transform = 'translateY(-2px)';
+                        el.style.boxShadow = '0 12px 32px rgba(27, 84, 168, 0.55)';
+                      }
+                    },
+                    (el) => {
+                      if (l2csReady) {
+                        el.style.transform = '';
+                        el.style.boxShadow = '0 8px 24px rgba(27, 84, 168, 0.40)';
+                      }
                     }
-                  },
-                  (el) => {
-                    if (l2csReady) {
-                      el.style.transform = '';
-                      el.style.boxShadow = '0 8px 24px rgba(27, 84, 168, 0.40)';
-                    }
-                  }
-                )}
-              >
-                {l2csReady &&
-                  (checksProntos
-                    ? `👁  Começar (${nominalPoints.length} pontos)`
-                    : 'Ajuste a câmera para começar')}
-                {l2csStatus === 'loading' && (
-                  <>
-                    <Loader2 size={20} style={{ animation: 'cfSpin 1s linear infinite' }} />
-                    Carregando...
-                  </>
-                )}
-                {l2csFailed && (
-                  <>
-                    <AlertTriangle size={20} />
-                    Modelo indisponível
-                  </>
-                )}
-                {l2csPronto && olho === 'aguardando' && (
-                  <>
-                    <Loader2 size={20} style={{ animation: 'cfSpin 1s linear infinite' }} />
-                    Carregando o modelo dos olhos...
-                  </>
-                )}
-                {l2csPronto && olho === 'falhou' && (
-                  <>
-                    <AlertTriangle size={20} />
-                    Modelo dos olhos indisponível
-                  </>
-                )}
-              </button>
+                  )}
+                >
+                  {l2csReady &&
+                    (checksProntos
+                      ? `👁  Começar (${nominalPoints.length} pontos)`
+                      : 'Ajuste a câmera para começar')}
+                  {l2csStatus === 'loading' && (
+                    <>
+                      <Loader2 size={20} style={{ animation: 'cfSpin 1s linear infinite' }} />
+                      Carregando...
+                    </>
+                  )}
+                  {l2csFailed && (
+                    <>
+                      <AlertTriangle size={20} />
+                      Modelo indisponível
+                    </>
+                  )}
+                  {l2csPronto && olho === 'aguardando' && (
+                    <>
+                      <Loader2 size={20} style={{ animation: 'cfSpin 1s linear infinite' }} />
+                      Carregando o modelo dos olhos...
+                    </>
+                  )}
+                  {l2csPronto && olho === 'falhou' && (
+                    <>
+                      <AlertTriangle size={20} />
+                      Modelo dos olhos indisponível
+                    </>
+                  )}
+                </button>
+              )}
 
               {/* Reaproveitar a calibração salva.
                   Refazer a calibração inteira é perto de um minuto de fixação
@@ -1236,7 +1672,7 @@ export const CalibrationCheck: React.FC = () => {
                 </button>
               )}
 
-              {l2csReady && (
+              {l2csReady && !perguntarLinguagem && (
                 <button
                   type="button"
                   onClick={() => handleStart(true)}
@@ -1318,11 +1754,15 @@ export const CalibrationCheck: React.FC = () => {
                   (falhaAoGravarEscolha
                     ? 'Não deu para gravar a escolha neste computador (armazenamento cheio ou bloqueado).'
                     : 'O modelo do olhar (L2CS) não carregou. Dá para calibrar só com a íris — o mesmo rastreamento do instalador.')}
-                {l2csFailed && !l2csNaoCarregou &&
+                {l2csFailed && !l2csNaoCarregou && l2csReiniciando &&
+                  'O modelo do olhar (L2CS) parou de responder. Estou reiniciando ele sozinho — espere alguns segundos.'}
+                {l2csFailed && !l2csNaoCarregou && !l2csReiniciando &&
                   'O modelo do olhar (L2CS) parou de responder: a imagem da câmera ficou parada ou escura. Ele volta sozinho quando a imagem voltar.'}
                 {l2csPronto && olho === 'aguardando' &&
                   'Aguardando a EyeNet, o modelo dos olhos (alguns segundos). Não feche a página.'}
-                {l2csPronto && olho === 'falhou' &&
+                {l2csPronto && olho === 'falhou' && olhoReiniciando &&
+                  'A EyeNet (modelo dos olhos) parou de responder. Estou reiniciando ela sozinho — espere alguns segundos.'}
+                {l2csPronto && olho === 'falhou' && !olhoReiniciando &&
                   'A EyeNet (modelo dos olhos) não carregou. Confira a pasta frontend/public/models/eyenet (LEIA-ME.txt) ou abra o app com ?olho=off.'}
               </div>
             </div>
@@ -1427,30 +1867,38 @@ export const CalibrationCheck: React.FC = () => {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {errorMessage ?? '👁  Siga o ponto com os olhos.'}
+                {errorMessage ??
+                  (pontosDaRecoleta !== null ? (
+                    <AvisoDaRecoleta n={pontosDaRecoleta} />
+                  ) : (
+                    '👁  Siga o ponto com os olhos.'
+                  ))}
               </div>
             )}
 
-            {/* ── A bola ───────────────────────────────────────────────────
-                UMA bola percorre a grade inteira. Não é um elemento por alvo:
+            {/* ── O alvo ───────────────────────────────────────────────────
+                UM alvo percorre a grade inteira. Não é um elemento por alvo:
                 é o MESMO nó mudando de posição, e é essa continuidade que
-                deixa o olho PERSEGUIR a bola. Um elemento por alvo, acendendo
+                deixa o olho PERSEGUIR o alvo. Um elemento por alvo, acendendo
                 e apagando, daria um salto sacádico por alvo, e o olho chegaria
                 ao alvo novo depois que a janela de coleta já abriu.
 
-                O marcador cinza de "o alvo vai aparecer aqui" saiu de vez: ele
-                disputava a fixação com o único ponto que se quer fixar, e
-                sobre fundo preto qualquer segundo ponto claro é distrator.
+                O desenho é o ABC de Thaler et al. (2013) com as cores da marca,
+                o MESMO do teste de precisão (ver `alvoDeFixacao.ts`): disco
+                azul, cruz recortada no fundo, ponto central vermelho. Viaja
+                1,5× maior e se contrai quando a coleta abre — a contração cabe
+                na acomodação descartada —; durante a coleta fica PARADO, sem o
+                pulso de antes; ao fechar o ponto só a cor muda (verde).
 
-                São dois nós porque as duas animações precisam de `transform`
+                São dois nós porque as duas transições precisam de `transform`
                 ao mesmo tempo: o externo POSICIONA (translate + transição) e o
-                interno PULSA (scale). Num nó só, a animação do pulso
-                sobrescreveria a posição e a bola voltaria para o canto. */}
+                interno muda de ESCALA. Num nó só, uma sobrescreveria a outra. */}
             {alvoDaBola && (
               <div
                 data-testid="calib-bola"
                 data-calibration-target=""
                 data-coletando={coletando ? 'true' : 'false'}
+                data-confirmado={alvoConfirmado ? 'true' : 'false'}
                 aria-hidden="true"
                 className="cf-bola-posicao"
                 style={{
@@ -1478,26 +1926,39 @@ export const CalibrationCheck: React.FC = () => {
                   transition: `transform ${DESLOCAMENTO_DA_BOLA_MS}ms cubic-bezier(0.33, 0, 0.2, 1)`,
                 }}
               >
-                <div
-                  className={`cf-bola${coletando ? ' cf-bola--coletando' : ''}`}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    borderRadius: '50%',
-                    // `color` é a tinta da bola INTEIRA: o preenchimento, os
-                    // dois anéis e o halo do pulso saem todos de
-                    // `currentColor`. Uma cor cravada no CSS deixaria o brilho
-                    // azul em volta de uma bola verde no instante da
-                    // confirmação.
-                    color: tintaDaBola,
-                    backgroundColor: tintaDaBola,
-                    // 2E ≈ 18 % e BF ≈ 75 % de opacidade: o anel colado e o
-                    // brilho externo, a mesma geometria do alvo antigo.
-                    boxShadow: `0 0 0 8px ${tintaDaBola}2E, 0 0 36px ${tintaDaBola}BF`,
-                    transition:
-                      'color 220ms ease, background-color 220ms ease, box-shadow 220ms ease',
-                  }}
-                />
+                {estimuloAntigo ? (
+                  // A bola de antes de 19/10 (flag `estimuloAntigo`, revisão do
+                  // pipeline de 19/10/2026), como em `pc-atual`: lisa, azul,
+                  // pulsando só durante a coleta, verde ao fechar o ponto. A
+                  // tinta inteira (preenchimento, anéis, halo) sai de uma cor.
+                  <div
+                    data-estimulo="antigo"
+                    className={`${CLASSE_DA_BOLA_ANTIGA}${coletando ? ` ${CLASSE_DA_BOLA_ANTIGA}--coletando` : ''}`}
+                    style={(() => {
+                      const tinta = alvoConfirmado ? COR_DA_BOLA_ANTIGA_CONFIRMADA : COR_DA_BOLA_ANTIGA;
+                      return {
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '50%',
+                        color: tinta,
+                        backgroundColor: tinta,
+                        boxShadow: `0 0 0 8px ${tinta}2E, 0 0 36px ${tinta}BF`,
+                        transition: 'color 220ms ease, background-color 220ms ease, box-shadow 220ms ease',
+                      };
+                    })()}
+                  />
+                ) : (
+                  <div
+                    className={
+                      `cf-bola ${CLASSE_DO_ALVO}` +
+                      (coletando ? ' cf-bola--coletando' : ` ${CLASSE_CHEGANDO}`) +
+                      (alvoConfirmado ? ` ${CLASSE_CONFIRMADO}` : '')
+                    }
+                    // Marcação constante, a mesma do teste de precisão — sem
+                    // dado de fora nenhum.
+                    dangerouslySetInnerHTML={{ __html: MARCACAO_DO_ALVO_ABC }}
+                  />
+                )}
               </div>
             )}
           </>
@@ -1613,12 +2074,94 @@ export const CalibrationCheck: React.FC = () => {
                     color: TEXT_PRIMARY,
                   }}
                 >
-                  Iniciando teste de precisão
+                  {/* Fim de uma recoleta: o núcleo está retreinando com os
+                      pontos refeitos, e o teste só vem depois (ou nem vem,
+                      quando ela foi pedida na tela de resultado). */}
+                  {pontosDaRecoleta !== null ? (
+                    <AtualizandoARecoleta parte="titulo" />
+                  ) : (
+                    'Iniciando teste de precisão'
+                  )}
                 </h2>
                 <p style={{ color: TEXT_DIM, fontSize: '1rem', margin: 0, lineHeight: 1.6 }}>
-                  Não se mexa. Olhe para os pontos que aparecerem.
+                  {pontosDaRecoleta !== null ? (
+                    <AtualizandoARecoleta parte="dica" />
+                  ) : (
+                    'Não se mexa. Olhe para os pontos que aparecerem.'
+                  )}
                 </p>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── PAUSA: a janela saiu da frente numa rodada DEPOIS dos 13 pontos
+            (recoleta ou reforço). A calibração está treinada e gravada; quando
+            a janela volta, segue sozinha. O botão é a saída pelo olhar (dwell
+            de recuperação) e pelo mouse — revisão do pipeline de 19/10/2026. */}
+        {stage === 'pausa' && (
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '2rem',
+            }}
+          >
+            <div
+              role="status"
+              data-testid="pausa-calibracao-salva"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+                gap: '1.5rem',
+                maxWidth: 620,
+                animation: 'cfFadeUp 0.4s ease-out both',
+              }}
+            >
+              <h2 style={{ fontSize: '1.65rem', fontWeight: 800, margin: 0, color: TEXT_PRIMARY }}>
+                A calibração está salva
+              </h2>
+              <p style={{ color: TEXT_DIM, fontSize: '1.1rem', margin: 0, lineHeight: 1.6 }}>
+                {motivoDaPausa === 'emergencia'
+                  ? 'A emergência foi acionada durante os últimos pontos, e eles ficaram de fora; a ' +
+                    'calibração que já estava pronta não mudou. Quando quiser seguir, escolha Continuar.'
+                  : 'A janela saiu da frente durante os últimos pontos, e eles ficaram de fora; a ' +
+                    'calibração que já estava pronta não mudou. Quando você voltar para esta janela, ' +
+                    'seguimos de onde paramos.'}
+              </p>
+              {/* A saída pelo olhar (revisão de UX de 20/10/2026, achado 6):
+                  era um <button> comum de 220×64 px, sem zona de acerto nem
+                  anel de progresso, numa rota que não mostra o cursor — o
+                  paciente não via onde o olhar estava. Agora é um GazeButton
+                  de recuperação (a rota só aceita esses e a Emergência), com
+                  o alvo mínimo nos dois eixos. Sem `isolado` de propósito:
+                  ele faria deste botão um rótulo da correção por dwell, e
+                  aqui só muda a forma de acionar, não o rastreamento. */}
+              <GazeButton
+                recovery
+                variante="primaria"
+                data-dwell-ms="2000"
+                data-testid="pausa-continuar"
+                onClick={retomarDepoisDaPausa}
+                style={{
+                  background: ACCENT,
+                  color: '#fff',
+                  border: 'none',
+                  padding: '1rem 2.4rem',
+                  borderRadius: '2rem',
+                  fontSize: '1.4rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  minWidth: `max(320px, ${ALVO_MINIMO})`,
+                  minHeight: ALVO_MINIMO,
+                }}
+              >
+                Continuar
+              </GazeButton>
             </div>
           </div>
         )}
@@ -1794,10 +2337,6 @@ export const CalibrationCheck: React.FC = () => {
 
         {/* ─── KEYFRAMES ───────────────────────────────────────────────── */}
         <style>{`
-          @keyframes cfPulse {
-            0%   { transform: scale(0.88); box-shadow: 0 0 0 8px rgba(27, 84, 168, 0.15), 0 0 18px #1B54A8; }
-            100% { transform: scale(1.10); box-shadow: 0 0 0 12px rgba(27, 84, 168, 0.05), 0 0 44px #1B54A8; }
-          }
           @keyframes cfRadarPing {
             0%   { transform: scale(0.1); opacity: 0.9; }
             100% { transform: scale(2.8); opacity: 0; }
@@ -1807,18 +2346,35 @@ export const CalibrationCheck: React.FC = () => {
           @keyframes cfPulseRed { from { opacity: 0.55; } to { opacity: 1; } }
 
           /*
-           * A bola que percorre a grade.
+           * O alvo que percorre a grade (o ABC de alvoDeFixacao.ts; o
+           * desenho está no index.css, bloco "Alvo de fixação ABC").
            *
-           * Só as propriedades transform e opacity animam — as duas que o
-           * compositor resolve sozinho. Um box-shadow animado repintaria o
-           * halo inteiro a cada quadro, e este é o único elemento em
-           * movimento numa tela em que a fixação do paciente É o dado sendo
-           * medido: qualquer engasgo aqui vira amostra ruim.
+           * Durante a coleta aparece um anel fino e PARADO em volta do alvo:
+           * é o sinal de "estou medindo agora", que antes era um pulso de
+           * escala. Parado, porque a fixação do paciente É o dado sendo
+           * medido — e o ABC foi medido como alvo estático. Só opacity anima,
+           * e só na entrada e na saída da coleta.
            */
-          .cf-bola { position: relative; }
-          /* O halo do pulso herda a tinta da bola por currentColor: azul
-             enquanto mede, verde no instante em que o ponto fecha. */
           .cf-bola::after {
+            content: '';
+            position: absolute;
+            inset: -12px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.28);
+            opacity: 0;
+            transition: opacity 300ms ease;
+            pointer-events: none;
+          }
+          .cf-bola--coletando::after { opacity: 1; }
+
+          /*
+           * A bola de antes de 19/10/2026 (flag estimuloAntigo), copiada de
+           * pc-atual: o halo herda a tinta por currentColor, e o pulso — o
+           * sinal de "estou medindo AGORA" de então — só existe durante a
+           * coleta.
+           */
+          .cf-bola-antiga { position: relative; }
+          .cf-bola-antiga::after {
             content: '';
             position: absolute;
             inset: -20px;
@@ -1827,12 +2383,8 @@ export const CalibrationCheck: React.FC = () => {
             opacity: 0;
             pointer-events: none;
           }
-
-          /* O pulso é o sinal de "estou medindo AGORA". Existe só enquanto a
-             janela de coleta está aberta — ver o estado coletando. */
-          .cf-bola--coletando { animation: cfBolaPulso 1.1s ease-in-out infinite alternate; }
-          .cf-bola--coletando::after { animation: cfBolaHalo 1.1s ease-in-out infinite alternate; }
-
+          .cf-bola-antiga--coletando { animation: cfBolaPulso 1.1s ease-in-out infinite alternate; }
+          .cf-bola-antiga--coletando::after { animation: cfBolaHalo 1.1s ease-in-out infinite alternate; }
           @keyframes cfBolaPulso {
             from { transform: scale(0.90); }
             to   { transform: scale(1.14); }
@@ -1841,13 +2393,19 @@ export const CalibrationCheck: React.FC = () => {
             from { opacity: 0.10; transform: scale(0.80); }
             to   { opacity: 0.32; transform: scale(1.25); }
           }
+          @keyframes cfPulse {
+            0%   { transform: scale(0.88); box-shadow: 0 0 0 8px rgba(27, 84, 168, 0.15), 0 0 18px #1B54A8; }
+            100% { transform: scale(1.10); box-shadow: 0 0 0 12px rgba(27, 84, 168, 0.05), 0 0 44px #1B54A8; }
+          }
 
-          /* Quem pediu menos movimento recebe a bola PARADA: ela reposiciona
-             de um alvo para o outro sem deslizar e sem pulsar. O alvo continua
-             óbvio — é o único ponto aceso na tela. */
+          /* Quem pediu menos movimento recebe o alvo PARADO: ele reposiciona
+             de um ponto para o outro sem deslizar, sem contrair e sem
+             transição de cor. O alvo continua óbvio — é o único aceso na tela. */
           @media (prefers-reduced-motion: reduce) {
             .cf-bola,
-            .cf-bola::after { animation: none !important; }
+            .cf-bola::after { animation: none !important; transition: none !important; }
+            .cf-bola-antiga,
+            .cf-bola-antiga::after { animation: none !important; }
             .cf-bola-posicao { transition: none !important; }
           }
         `}</style>

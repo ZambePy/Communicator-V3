@@ -71,19 +71,38 @@ export function classificarContraluz(rosto: number, fundo: number): MedidaDeCont
   return { rosto: r, fundo: f, razao, nivel };
 }
 
+/** Razão em pt-BR ("3,2"), sem casas sobrando. */
+function razaoEmTexto(razao: number): string {
+  return razao.toFixed(1).replace('.', ',');
+}
+
+/**
+ * A mensagem da contraluz FORTE, com ou sem a razão medida. Calma e sem culpa
+ * (pedido do dono, 19/10/2026): diz o que está acontecendo e o que resolve —
+ * a janela é que está forte, não a pessoa que está fazendo algo errado. É o
+ * texto do banner durante o uso, quando o engine marca as amostras com o
+ * motivo `contraluz`.
+ */
+export function mensagemDeContraluzForte(razao?: number): string {
+  const quanto = typeof razao === 'number' && Number.isFinite(razao) && razao > 0
+    ? ` (o fundo está ${razaoEmTexto(razao)}× mais claro que o rosto)`
+    : '';
+  return (
+    `Há bastante luz atrás de você${quanto}, e a câmera não está conseguindo ver bem os seus olhos. ` +
+    'Fechar a cortina ou acender uma luz de frente resolve.'
+  );
+}
+
 export function mensagemDeContraluz(m: MedidaDeContraluz): string {
   switch (m.nivel) {
     case 'indefinido':
-      return 'Rosto escuro demais para medir a luz do ambiente. Acenda uma luz de frente e tente de novo.';
+      return 'O rosto está escuro demais para eu medir a luz do ambiente. Uma luz acesa de frente ajuda.';
     case 'forte':
-      return (
-        `O fundo está ${m.razao.toFixed(1)}× mais claro que o rosto — há luz forte atrás de você. ` +
-        'Feche a cortina ou vire a cadeira de costas para a janela: a câmera está expondo para a luz e apagando os seus olhos.'
-      );
+      return mensagemDeContraluzForte(m.razao);
     case 'atencao':
       return (
-        `O fundo está ${m.razao.toFixed(1)}× mais claro que o rosto. ` +
-        'Ainda funciona, mas fechar a cortina ou acender uma luz de frente melhora a leitura da íris.'
+        `O fundo está ${razaoEmTexto(m.razao)}× mais claro que o rosto. ` +
+        'Ainda funciona, mas fechar a cortina ou acender uma luz de frente melhora a leitura dos olhos.'
       );
     default:
       return 'Sem contraluz: o rosto está tão claro quanto o fundo.';

@@ -3,7 +3,7 @@ import { Alert, KeyboardAvoidingView, Linking, Modal, Pressable, StyleSheet, Vie
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, Card, IconButton, ListRow, Notice, PressableScale, Screen, ScreenHeader, SectionTitle, SegmentedControl, StatusPill, Text, TextField } from '@/components';
+import { Button, IconButton, ListRow, Notice, PressableScale, Screen, ScreenHeader, SectionTitle, SegmentedControl, StatusPill, Text, TextField } from '@/components';
 import { DwellMs, FilterPreset, isBetaPlan, KeyboardLayout } from '@/data/types';
 import { buildInfo } from '@/lib/buildInfo';
 import { legalLinks } from '@/lib/config';
@@ -149,9 +149,9 @@ export default function Ajustes() {
         ) : null}
 
         <SectionTitle title={patient ? `Computador de ${nome}` : 'Computador do paciente'} first />
-        <View style={styles.stack}>
-          <Card>
-            <Setting icon="timer-outline" title="Tempo de fixação" hint="Quanto tempo o olhar fica no alvo para selecionar." />
+        <Grupo>
+          <Bloco>
+            <Setting title="Tempo de fixação" hint="Quanto tempo o olhar fica no alvo para selecionar." />
             <SegmentedControl<DwellMs>
               value={settings?.dwell_ms ?? null}
               onChange={(v) => void apply({ dwell_ms: v })}
@@ -162,10 +162,10 @@ export default function Ajustes() {
                 { value: 2500, label: '2500 ms', hint: 'seguro', accessibilityLabel: '2500 milissegundos' },
               ]}
             />
-          </Card>
+          </Bloco>
 
-          <Card>
-            <Setting icon="pulse-outline" title="Suavização do olhar" hint="Estável ajuda com tremor; responsivo, com controle firme." />
+          <Bloco>
+            <Setting title="Suavização do olhar" hint="Estável ajuda com tremor; responsivo, com controle firme." />
             <SegmentedControl<FilterPreset>
               value={settings?.filter_preset ?? null}
               onChange={(v) => void apply({ filter_preset: v })}
@@ -176,13 +176,13 @@ export default function Ajustes() {
                 { value: 'responsivo', label: 'Responsivo' },
               ]}
             />
-          </Card>
+          </Bloco>
 
           {/* Teclado e sensibilidade: o campo existe em patient_settings, mas o
               computador ainda não aplica nenhum dos dois. Mostrados desligados,
               com "Em breve", em vez de fingir que um toque aqui muda algo lá. */}
-          <Card>
-            <Setting icon="keypad-outline" title="Teclado" hint="O computador ainda não aplica este ajuste; o teclado segue como está configurado lá." emBreve />
+          <Bloco>
+            <Setting title="Teclado" hint="O computador ainda não aplica este ajuste; o teclado segue como está configurado lá." emBreve />
             <SegmentedControl<KeyboardLayout>
               value={null}
               onChange={() => undefined}
@@ -194,10 +194,10 @@ export default function Ajustes() {
                 { value: 'qwerty', label: 'QWERTY' },
               ]}
             />
-          </Card>
+          </Bloco>
 
-          <Card>
-            <Setting icon="speedometer-outline" title="Sensibilidade" hint="O computador ainda não aplica este ajuste." emBreve />
+          <Bloco ultimo>
+            <Setting title="Sensibilidade" hint="O computador ainda não aplica este ajuste." emBreve />
             {/* Dez níveis em duas fileiras de cinco: cada alvo tem pelo menos
                 48 dp nas duas direções (dez barras numa fileira ficariam com
                 metade disso na largura). */}
@@ -226,18 +226,15 @@ export default function Ajustes() {
                 Mais
               </Text>
             </View>
-          </Card>
-        </View>
+          </Bloco>
+        </Grupo>
 
         {/* Emergência — o prazo é lido pela função agendada do servidor: passado
             sem confirmação, ela reenvia o alerta a todos os celulares da conta. */}
         <SectionTitle title="Emergência" />
-        <Card padding={0}>
+        <Grupo>
           <View style={[styles.prazo, { borderBottomColor: colors.border }]}>
             <View style={styles.prazoTop}>
-              <View style={[styles.prazoIcon, { backgroundColor: colors.warningTint }]}>
-                <Ionicons name="hourglass-outline" size={sizes.icon.sm} color={colors.warningText} />
-              </View>
               <View style={styles.flex}>
                 <Text variant="body" weight="medium">
                   Prazo para responder
@@ -278,35 +275,35 @@ export default function Ajustes() {
               setNovoContato(true);
             }}
           />
-        </Card>
+        </Grupo>
         <Text variant="caption" tone="muted" style={styles.footnote}>
           Ligar é sempre com você: o app não telefona sozinho.
         </Text>
 
         <SectionTitle title="Paciente" />
-        <Card padding={0}>
+        <Grupo>
           <ListRow icon="person-circle-outline" title={patient?.user_name ?? 'Paciente'} subtitle="Perfil e computadores" onPress={() => router.push('/paciente')} />
           <ListRow icon="albums-outline" title="Frases rápidas" subtitle={`O que aparece na tela de ${nome}`} tone="accent" onPress={() => router.push('/frases')} />
           <ListRow
             icon="desktop-outline"
             title={device?.name ?? 'Nenhum computador'}
-            subtitle={device ? `${online ? 'Ligado agora' : `Visto ${timeAgo(device.last_seen_at)}`}${device.app_version ? ` · versão ${device.app_version}` : ''}` : 'Entre com esta conta no IrisFlow do computador'}
+            subtitle={device ? `${online ? 'Ligado agora' : `Visto ${timeAgo(device.last_seen_at)}`}${device.app_version ? `, versão ${device.app_version}` : ''}` : 'Entre com esta conta no IrisFlow do computador'}
             tone={online ? 'accent' : 'muted'}
             onPress={() => router.push('/paciente')}
           />
           <ListRow icon="mic-outline" title="Voz" subtitle={settings?.voice ?? 'O computador informa depois do primeiro ajuste'} tone="muted" last />
-        </Card>
+        </Grupo>
 
         <SectionTitle title="Conta" />
-        <Card padding={0}>
+        <Grupo>
           <ListRow
             icon={beta ? 'sparkles-outline' : 'card-outline'}
             title={beta ? 'Programa beta' : plan ? `Plano ${plan.name}` : 'Sem assinatura'}
-            subtitle={beta ? detalheDaBeta(license, subscription) : subscription ? `${brl(subscription.price_brl)}/mês · ${subscription.status === 'avaliacao' ? 'período de avaliação' : subscription.status}` : undefined}
+            subtitle={beta ? detalheDaBeta(license, subscription) : subscription ? `${brl(subscription.price_brl)} por mês, ${subscription.status === 'avaliacao' ? 'em período de avaliação' : subscription.status}` : undefined}
             onPress={() => router.push('/assinatura')}
           />
           <ListRow icon="mail-outline" title={profile?.buyer_name ?? '—'} subtitle={profile?.email} tone="muted" last />
-        </Card>
+        </Grupo>
 
         <SectionTitle title="Aparência" />
         <SegmentedControl<ThemePreference>
@@ -324,11 +321,11 @@ export default function Ajustes() {
             DENTRO do app, e a exclusão de conta precisa de um caminho claro. As
             URLs vêm de app.json > extra — as mesmas cadastradas nas lojas. */}
         <SectionTitle title="Privacidade" />
-        <Card padding={0}>
+        <Grupo>
           <ListRow icon="shield-checkmark-outline" title="Política de privacidade" subtitle="Como tratamos os dados (LGPD)" role="link" onPress={() => abrirLink(legalLinks.privacy)} />
           <ListRow icon="reader-outline" title="Termos de uso" tone="muted" role="link" onPress={() => abrirLink(legalLinks.terms)} />
           <ListRow icon="trash-outline" title="Excluir conta e dados" subtitle="Pedido por e-mail, em até 15 dias" tone="danger" last onPress={excluir} />
-        </Card>
+        </Grupo>
 
         <Button title={saindo ? 'Saindo…' : 'Sair da conta'} variant="dangerOutline" icon="log-out-outline" loading={saindo} onPress={sair} style={styles.logout} />
 
@@ -362,12 +359,25 @@ export default function Ajustes() {
   );
 }
 
-function Setting({ icon, title, hint, emBreve = false }: { icon: keyof typeof Ionicons.glyphMap; title: string; hint: string; emBreve?: boolean }) {
+/**
+ * Grupo de ajustes sem moldura (19/10/2026): as linhas encostam na margem da
+ * tela e um fio separa cada uma — no lugar de um cartão por ajuste, que fazia
+ * a tela parecer uma pilha de caixas iguais.
+ */
+function Grupo({ children }: { children: React.ReactNode }) {
   const { colors } = useTheme();
+  return <View style={[styles.grupo, { borderTopColor: colors.border, borderBottomColor: colors.border }]}>{children}</View>;
+}
+
+function Bloco({ children, ultimo = false }: { children: React.ReactNode; ultimo?: boolean }) {
+  const { colors } = useTheme();
+  return <View style={[styles.bloco, !ultimo && { borderBottomWidth: sizes.hairline, borderBottomColor: colors.border }]}>{children}</View>;
+}
+
+function Setting({ title, hint, emBreve = false }: { title: string; hint: string; emBreve?: boolean }) {
   return (
     <View style={styles.setting}>
       <View style={styles.settingTitle}>
-        <Ionicons name={icon} size={sizes.icon.md} color={emBreve ? colors.textMuted : colors.primary} />
         <Text variant="h3" accessibilityRole="header" style={styles.flexShrink}>
           {title}
         </Text>
@@ -448,9 +458,10 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   flexShrink: { flexShrink: 1 },
   notice: { marginBottom: spacing.md },
-  stack: { gap: spacing.md },
+  grupo: { marginHorizontal: -spacing.lg, borderTopWidth: sizes.hairline, borderBottomWidth: sizes.hairline },
+  bloco: { paddingHorizontal: spacing.lg, paddingVertical: spacing.xl },
   setting: { marginBottom: spacing.md, gap: spacing.xs },
-  settingTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  settingTitle: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: spacing.md, rowGap: spacing.xxs },
   sens: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   // 5 por fileira nos celulares comuns (base de 16% + 4 vãos; o que sobra é
   // repartido igualmente). `minWidth` garante os 48 dp mesmo em tela estreita,
@@ -459,7 +470,6 @@ const styles = StyleSheet.create({
   sensLegend: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
   prazo: { gap: spacing.md, padding: spacing.lg, borderBottomWidth: sizes.hairline },
   prazoTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  prazoIcon: { width: sizes.tile.md, height: sizes.tile.md, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.pill, padding: spacing.xxs },
   stepperValue: { flex: 1 },
   footnote: { marginTop: spacing.sm, paddingHorizontal: spacing.xs },

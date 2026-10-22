@@ -94,7 +94,7 @@ describe('DesktopSync — envio, fila offline e credencial', () => {
     expect(localStorage.getItem('irisflow.fila')).not.toBeNull();
   });
 
-  it('quando a rede volta, drena na ordem e limpa a fila', async () => {
+  it('quando a rede volta, drena (socorro primeiro) e limpa a fila', async () => {
     let online = false;
     const enviados: string[] = [];
     const fetchImpl = vi.fn(async (_u: string | URL | Request, init?: RequestInit) => {
@@ -108,7 +108,9 @@ describe('DesktopSync — envio, fila offline e credencial', () => {
     online = true;
     const n = await s.drenar();
     expect(n).toBe(2);
-    expect(enviados).toEqual(['message.send', 'help.create']);
+    // O pedido de ajuda passa na frente da mensagem que entrou antes dele
+    // (auditoria de 18/10/2026, item 8).
+    expect(enviados).toEqual(['help.create', 'message.send']);
     expect(s.tamanhoDaFila).toBe(0);
     expect(localStorage.getItem('irisflow.fila')).toBeNull();
   });
@@ -393,5 +395,109 @@ describe('DesktopSync — envio, fila offline e credencial', () => {
     expect(await s.drenar()).toBe(0);
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(localStorage.getItem('irisflow.fila')).toBeNull();
+  });
+});
+
+describe('DesktopSync — prioridade da fila (auditoria de 18/10/2026, item 8)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  it('socorro, depois mensagens, depois o resto — cada grupo na ordem de chegada', async () => {
+    let online = false;
+    const enviados: string[] = [];
+    const fetchImpl = vi.fn(async (_u: string | URL | Request, init?: RequestInit) => {
+      if (!online) throw new TypeError('Failed to fetch');
+      const corpo = JSON.parse(String(init?.body));
+      enviados.push(`${corpo.action}:${corpo.text ?? corpo.message ?? corpo.session_id ?? ''}`);
+      return respostaHttp(200, { ok: true });
+    });
+    const s = new DesktopSync({ url: URL_FN, chave: () => 'k', fetchImpl: fetchImpl as unknown as typeof fetch });
+    await s.enviar({ action: 'session.end', session_id: 's1' });
+    await s.enviar({ action: 'message.send', text: 'm1', kind: 'texto' });
+    await s.enviar({ action: 'help.create', kind: 'emergencia', message: 'h1' });
+    await s.enviar({ action: 'calibration.result', calibration: {}, report: null });
+    await s.enviar({ action: 'message.send', text: 'm2', kind: 'texto' });
+    await s.enviar({ action: 'help.create', kind: 'ajuda', message: 'h2' });
+    online = true;
+    await s.drenar();
+    expect(enviados).toEqual([
+      'help.create:h1', 'help.create:h2', 'message.send:m1', 'message.send:m2', 'session.end:s1', 'calibration.result:',
+    ]);
+  });
+
+  it('um socorro que o servidor recusa sempre (5xx) cede a vez depois de 3 recusas e não segura o próximo', async () => {
+    let online = false;
+    const enviados: string[] = [];
+    const fetchImpl = vi.fn(async (_u: string | URL | Request, init?: RequestInit) => {
+      if (!online) throw new TypeError('Failed to fetch');
+      const corpo = JSON.parse(String(init?.body));
+      if (corpo.message === 'quebrado') return respostaHttp(503, { error: 'servico_indisponivel' });
+      enviados.push(corpo.message);
+      return respostaHttp(200, { ok: true });
+    });
+    const s = new DesktopSync({ url: URL_FN, chave: () => 'k', fetchImpl: fetchImpl as unknown as typeof fetch });
+    await s.enviar({ action: 'help.create', kind: 'emergencia', message: 'quebrado' });
+    await s.enviar({ action: 'help.create', kind: 'emergencia', message: 'bom' });
+    online = true;
+    await s.drenar(); // 1ª recusa: tratada como passageira, a ordem fica
+    await s.drenar(); // 2ª
+    expect(enviados).toEqual([]);
+    await s.drenar(); // 3ª: cede a vez
+    expect(enviados).toEqual(['bom']);
+    // O socorro recusado NÃO é descartado: continua na fila.
+    expect(s._fila().map((i) => (i.acao as { message?: string }).message)).toEqual(['quebrado']);
+  });
+
+  it('o que não é socorro nem mensagem sai da fila depois de 10 recusas do servidor', async () => {
+    const fetchImpl = vi.fn(async () => respostaHttp(500, { error: 'erro interno' }));
+    let online = false;
+    const s = new DesktopSync({
+      url: URL_FN, chave: () => 'k',
+      fetchImpl: (async (...a: Parameters<typeof fetch>) => {
+        if (!online) throw new TypeError('Failed to fetch');
+        return fetchImpl(...a);
+      }) as unknown as typeof fetch,
+    });
+    await s.enviar({ action: 'calibration.result', calibration: {}, report: null });
+    online = true;
+    for (let i = 0; i < 9; i++) await s.drenar();
+    expect(s.tamanhoDaFila).toBe(1);
+    await s.drenar();
+    expect(s.tamanhoDaFila).toBe(0);
+  });
+
+  it('falha de REDE não conta como recusa do item: ninguém fura a fila sem internet', async () => {
+    const corpos: string[] = [];
+    const fetchImpl = vi.fn(async (_u: string | URL | Request, init?: RequestInit) => {
+      corpos.push(JSON.parse(String(init?.body)).message);
+      throw new TypeError('Failed to fetch');
+    });
+    const s = new DesktopSync({ url: URL_FN, chave: () => 'k', fetchImpl: fetchImpl as unknown as typeof fetch });
+    await s.enviar({ action: 'help.create', kind: 'emergencia', message: 'a' });
+    await s.enviar({ action: 'help.create', kind: 'emergencia', message: 'b' });
+    corpos.length = 0;
+    for (let i = 0; i < 5; i++) await s.drenar();
+    // Cada passada tenta só o primeiro e para.
+    expect(corpos).toEqual(['a', 'a', 'a', 'a', 'a']);
+    expect(s.tamanhoDaFila).toBe(2);
+  });
+
+  it('o aviso de entrega da fila leva a resposta do servidor (para a tela saber se algum celular foi avisado)', async () => {
+    let online = false;
+    const respostas: unknown[] = [];
+    const fetchImpl = vi.fn(async () => {
+      if (!online) throw new TypeError('Failed to fetch');
+      return respostaHttp(200, { ok: true, id: 'h', push: { avisados: 0, recusados: 1, motivos: ['InvalidCredentials'] } });
+    });
+    const s = new DesktopSync({
+      url: URL_FN, chave: () => 'k', fetchImpl: fetchImpl as unknown as typeof fetch,
+      aoEntregarDaFila: (_a, r) => respostas.push(r),
+    });
+    await s.enviar({ action: 'help.create', kind: 'emergencia', message: 'x' });
+    online = true;
+    await s.drenar();
+    expect(respostas).toEqual([{ ok: true, id: 'h', push: { avisados: 0, recusados: 1, motivos: ['InvalidCredentials'] } }]);
   });
 });

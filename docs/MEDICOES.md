@@ -80,6 +80,27 @@ beta.9 e, hoje, só para quem escolhe "calibrar só com a íris". O que a famíl
 instala volta a ter o bloco angular das sessões desta página, mas roda o
 pipeline V3, que só foi medido em replay (§14.6).
 
+**Revisão de 2026-10-19 — o estímulo mudou.** Nenhuma medição nova. Três
+mudanças tocam o protocolo:
+
+1. **Alvo e fundo novos** (§2, *Alvo de fixação*): o alvo ABC de Thaler et al.
+   (2013), o mesmo na calibração e no teste, sobre azul-marinho `#091B33`. As
+   rodadas de antes usaram outro alvo e outro fundo: compare só rodadas do
+   mesmo lado dessa data.
+2. **Recoleta dos alvos ruins** (M22, §6): no V3 a calibração pode refazer até
+   4 alvos e trocar o modelo, com uma trava; o relatório registra em
+   `calibrationFit.recoleta`.
+3. **Resultado em palavras** (§2, *Escala verbal*): só a tela; o relatório não
+   muda.
+
+E a página foi conferida contra o código: o tempo da calibração com a M8 (§6),
+a ordem dos alvos (§6), o que fica fora do treino (§6), o `l2cs=` que o
+`ep=auto` ignora (§4.6, §5.2), as flags que obrigam a recalibrar entre
+condições (§4.6), a compensação de distância sem flag (§4.6), o
+`IRISFLOW_EXP_<chave>` que só vale no Node e a assinatura de
+`__irisflowExp.set` (§5.2), a calibração de 13 alvos (§5.5) e a distância
+medida, que usa os cantos dos olhos e não a distância interpupilar (§8.1).
+
 ---
 
 ## 0. Resumo em linguagem simples
@@ -107,7 +128,8 @@ beta é acadêmica e não comercial. O pipeline padrão de hoje (V3) ainda não 
 medido ao vivo, e sem o L2CS ("calibrar só com a íris") a acurácia nunca foi
 medida. A precisão (o tremor) também piorou entre o pipeline antigo e
 o atual (§14.4): acertar o botão ficou mais fácil, segurar o olhar parado nele,
-não.
+não. E desde 19/10/2026 a calibração e o teste usam outro alvo e outro fundo
+(§2): o 1,40° é de antes da troca, e só uma sessão nova diz se o número muda.
 
 **O que falta medir, nesta ordem:** o pipeline sem o L2CS (M-ablação, §4.6);
 uma sessão ao vivo com a calibração de 13 pontos e uma réplica (§14.5); o
@@ -214,9 +236,22 @@ ponto **não é descartado**: entra no relatório com o nome em
 enxerga bem perda no começo e no fim da janela, e só parcialmente uma queda
 uniforme — para essa, olhe `sampleRateHz`.
 
-**Alvo de fixação.** Bullseye + crosshair com ponto escuro no centro; Thaler et
-al. (2013) mediram menor dispersão com essa combinação. O alvo do teste e o da
-calibração usam o mesmo desenho.
+**Alvo de fixação — mudou em 2026-10-19.** Desde então é o alvo **ABC** de
+Thaler et al. (2013), o MESMO na calibração e no teste (`src/alvoDeFixacao.ts`):
+disco azul `#1B54A8` de 36 px (≈ 0,9° na bancada de referência), cruz recortada
+na cor do fundo e ponto central vermelho, nas proporções 3 : 1 : 1 do artigo
+(disco de 0,6°, cruz e ponto de 0,2°), sobre o fundo azul-marinho `#091B33`.
+Entre sete formas fixadas por 17 s, só essa combinação deu ao mesmo tempo
+dispersão e taxa de microssacadas baixas. O alvo chega 1,5× maior e se contrai
+em 560 ms — dentro da acomodação descartada (600 ms no teste, 800 ms na
+calibração com M8; o artigo não estuda alvo animado) —, fica parado durante a
+coleta útil e, fechado o ponto, passa de azul a verde sem mudar de tamanho; com
+"reduzir movimento" do sistema, tem um tamanho só. **Até 2026-10-18** a
+calibração mostrava uma bola azul de 36 px que pulsava e ficava verde, e o
+teste, um círculo azul-claro com cruz e anel pulsante, os dois sobre preto. É
+mudança de estímulo: como em 2026-09-23 (`meanErrorEdge`, abaixo), compare
+rodadas só do mesmo lado dessa data — a sessão que mede a diferença está em
+`docs/ROTEIRO_DE_MEDICAO.md`.
 
 **Populações.** Não são as mesmas, e isso importa ao ler a seção 8:
 
@@ -253,7 +288,11 @@ ligada não é comparável com nenhuma outra**, e a flag fica registrada em
 
 **Escala verbal.** `score` vem do `meanError` em px: Excelente < 30, Bom < 60,
 Regular < 100, Ruim acima. Rótulo para a tela do paciente; para análise, os
-números.
+números. Desde 2026-10-19 a tela pode dizer só a palavra (`linguagemDoRelatorio`
+= `simples`, perguntado uma vez antes da primeira calibração): Excelente e Bom
+viram "Ótima", Regular vira "Boa", Ruim vira "Refazer…" — os mesmos limiares, de
+uma fonte só (`src/resultadoSimples.ts`); na bancada de referência (38,5 px por
+grau), 0,8°, 1,6° e 2,6°. O relatório não muda.
 
 ---
 
@@ -610,7 +649,12 @@ os relatórios — **a ficha de proveniência diz com que pesos a rodada foi
 feita**, e uma rodada com `usoComercial: 'proibido'` pode ser medida e
 comparada, e só sai no release da beta acadêmica, nunca num comercial (README,
 *Pendências e riscos*, item 1); `l2csValidFraction` ≥ 0,98, senão a
-sessão é de iluminação, não da condição.
+sessão é de iluminação, não da condição. E **uma calibração por condição**
+quando a condição troca uma flag que entra na chave do perfil — `ep=off`,
+`dimsIris`, `expansao`, `geometricPoseCompensation`, `rollCrop` (no V3, pela
+marca `+rl`), o lado efetivo do L2CS e as outras da lista do README (*Flags de
+experimento*): na recarga, o perfil da condição anterior é descartado, e "sem
+recalibrar" entre duas condições dessas não acontece.
 
 #### M-ablação — quanto vale o bloco L2CS
 
@@ -622,7 +666,7 @@ caminho de quem escolhe "calibrar só com a íris".
 
 | | condição A | condição B |
 |---|---|---|
-| URL | `?ep=auto&l2cs=448&filtro=oneEuro&diagonal=…` | `?ep=off&filtro=oneEuro&diagonal=…` |
+| URL | `?ep=webgpu&l2cs=448&filtro=oneEuro&diagonal=…` (com `ep=auto` o `l2cs=` é ignorado: o provider decide, 448 no WebGPU e 224 no WASM) | `?ep=off&filtro=oneEuro&diagonal=…` |
 | conjunto de features | `irisAbs+l2cs` (4 dims por olho — o que o instalador da beta roda) | `irisAbs` (2 dims por olho — "calibrar só com a íris") |
 | pessoa, distância, hora | iguais | iguais |
 
@@ -634,12 +678,16 @@ está pagando o custo e a prioridade do retreino cai.
 #### M-deslocamento — calibrar sentado, medir reclinado
 
 A medição que ainda não existe e que define se o produto serve a quem está
-acamado. Calibrar na postura de referência (M1); sem recalibrar, medir em três
-posturas: a mesma, reclinado ~15° (encosto da cadeira um dente atrás) e
-reclinado ~30°. Duas condições por postura: compensação de pose ligada e
-desligada (`geometricPoseCompensation`, via `__irisflowExp.set`), e a normalização
-de roll do recorte (`?rollCrop=1` · `?rollCrop=0`) — o efeito de S6 só existe
-aqui.
+acamado. Em cada condição, calibrar na postura de referência (M1) e, sem
+recalibrar, medir em três posturas: a mesma, reclinado ~15° (encosto da
+cadeira um dente atrás) e reclinado ~30°. As condições: compensação de pose
+ligada e desligada (`__irisflowExp.set('geometricPoseCompensation', false)` e
+reload) e a normalização de roll do recorte (`?rollCrop=1` · `?rollCrop=0`) — o
+efeito de S6 só existe aqui. As duas flags entram na chave do perfil, então
+**cada condição tem a sua calibração**: o "sem recalibrar" vale entre as
+posturas, nunca entre as condições. E a de hoje dobra a inclinação no recorte
+(README, *Compensação de cabeça*): a comparação do roll, com a M13, está no
+`ROTEIRO_DE_MEDICAO.md`.
 
 Registrar `poseDeltaCalibToTestDeg` (a prova de quanto a pessoa se moveu),
 `meanErrorDeg` e `biasY`. **Meta do V2:** a 15° o erro fica ≤ 1,5× o da
@@ -668,19 +716,25 @@ escalares de íris.
 #### M-distância — 45, 60, 75 cm
 
 Calibrar a 60 cm; sem recalibrar, medir a 45, 60 e 75 (fita métrica, e
-`distanciaMedidaCm` no relatório como testemunha). Compensação de distância
-ligada e desligada. Registrar `meanErrorDeg` e `affine.gainX/gainY` — o ganho
-é o que a distância muda primeiro. **Decisão:** a compensação fica se reduzir
-o erro nas duas distâncias fora da calibração; o FOV por câmera
-(Configurações → "Calibrar campo de visão") tem de estar medido, não no
-padrão, senão a sessão mede o erro do default de 69,7°, não o da compensação.
+`distanciaMedidaCm` no relatório como testemunha). Registrar `meanErrorDeg` e
+`affine.gainX/gainY` — o ganho é o que a distância muda primeiro. **Não existe
+flag que desligue a compensação de distância**: ela é sempre aplicada, com o
+FOV da câmera — o medido ou o padrão de 69,7° —, e só deixa de agir quando
+falta uma das distâncias (fator 1; com a M12 ligada, a reprojeção 6DoF faz o
+papel dela). A condição "desligada" pede uma flag nova;
+até lá a sessão mede só a compensação ligada, e o que ela registra — quanto o
+erro cresce fora dos 60 cm — é o número contra o qual a flag vai ser julgada.
+**Decisão (com a flag):** a compensação fica se reduzir o erro nas duas
+distâncias fora da calibração. O FOV por câmera (Configurações → "Calibrar
+campo de visão") tem de estar medido, não no padrão, senão a sessão mede o erro
+do default de 69,7°, não o da compensação.
 
 #### Parâmetros de URL novos
 
 | parâmetro | valores | flag |
 |---|---|---|
 | `rollCrop=` | `1` · `0` | `normalizarRollNoCrop` (S6) |
-| `estabilizar=` | `1` · `0` | `estabilizarFixacao` (S5) |
+| `estabilizar=` | `1` · `0` | `estabilizarFixacao` (S5) — sem efeito no V3 depois de uma calibração que mediu o ruído: ali quem governa é o estimador de fixação (M9); para medir o estabilizador, junte `exp.estimadorDeFixacao=0` |
 | `dwellCorrige=` | `1` · `0` | `correcaoPorDwell` (S3) |
 | `olho=` | `off` · `onnx` | `eyeNet` — ramo ocular (exige `models/eyenet/eyenet.onnx`) |
 | `pipeline=` | `v3` · `base` | interruptor do V3 (§4.7): `base` desliga todas as mudanças do V3 |
@@ -688,10 +742,11 @@ padrão, senão a sessão mede o erro do default de 69,7°, não o da compensaç
 
 ### 4.7 V3 — o pipeline novo contra o anterior *(a medir)*
 
-O V2 fez 21 mudanças — matemática do rastreamento, calibração e interação;
-M11 é o relatório (README → *Pipeline V3*; a evidência de cada uma em
-`docs/PESQUISA.md` §5). Nesta seção M1–M21 numeram essas mudanças, e não as
-sessões M1–M4 da §4.1–4.3. Nenhuma foi medida com uma pessoa. As sessões, a ordem e a régua estão em
+O V2 fez 22 mudanças — matemática do rastreamento, calibração e interação;
+M11 é o relatório, e M22, a recoleta dos alvos ruins, entrou em 2026-10-19
+(README → *Pipeline V3*; a evidência de cada uma em `docs/PESQUISA.md` §5 e,
+da M22, §7). Nesta seção M1–M22 numeram essas mudanças, e não as sessões M1–M4
+da §4.1–4.3. Nenhuma foi medida com uma pessoa. As sessões, a ordem e a régua estão em
 [`ROTEIRO_DE_MEDICAO.md`](ROTEIRO_DE_MEDICAO.md); o resumo:
 
 | sessão | condições | decide |
@@ -702,6 +757,10 @@ sessões M1–M4 da §4.1–4.3. Nenhuma foi medida com uma pessoa. As sessões,
 | condições de ELA | cabeça inclinada, olhar para baixo, um olho semicerrado, luz, óculos | M2, M3, M7, M10, M13 |
 | 30 min de uso | Kalman, Kalman sem ganho, integrador anterior | a correção por dwell (M15, M16) |
 | sessão longa | 2 h, teste a cada 30 min | deriva, fadiga, M17–M21 |
+| roll do recorte | `?rollCrop=0&exp.nivelarRecorteCorrigido=0` · `?rollCrop=1&exp.nivelarRecorteCorrigido=0` · `?rollCrop=1&exp.nivelarRecorteCorrigido=1`, cabeça a ~15° e nivelada | o padrão de `normalizarRollNoCrop` e a M13 |
+| recoleta | `?exp.recoletaDeAlvosRuins=0` · `=1`, blocos alternados | se a M22 fica ligada |
+| estímulo novo | o build de antes de 2026-10-19 contra o atual, na mesma pessoa | quanto a troca de alvo e fundo muda os números (§2) |
+| robustez de 2026-10-19 | contraluz real, WebGPU perdida, pouca luz, desempenho no PC | os avisos e os limiares novos |
 
 A régua é a do projeto: ≥ 15 % na métrica da sessão, com a diferença maior que
 a variação entre réplicas da mesma condição. As condições se registram na §14
@@ -731,8 +790,8 @@ http://127.0.0.1:4173/?preflight=1&debug=1&ep=webgpu&l2cs=448&filtro=oneEuro&dia
 | `preflight=1` | | painel de verificação de prontidão |
 | `debug=1` | | HUD com fps, latência e provider |
 | `ep=` | `auto` · `webgpu` · `wasm` · `off` | onde o L2CS roda |
-| `l2cs=` | `224` · `448` | lado do recorte facial |
-| `filtro=` | `oneEuro` · `kalman` · `kalmanEma` | filtro temporal |
+| `l2cs=` | `224` · `448` | lado do recorte facial — só com `ep=webgpu` ou `ep=wasm`; com `ep=auto` vale a política do provider (448 no WebGPU, 224 no WASM), e a cadência também (100 ms e 160 ms) |
+| `filtro=` | `oneEuro` · `kalman` · `kalmanEma` | filtro temporal — no V3, depois de uma calibração que mediu o ruído, quem suaviza o cursor é o estimador de fixação (M9); `exp.estimadorDeFixacao=0` devolve o filtro escolhido aqui |
 | `diagonal=` | polegadas | diagonal real do monitor (grava procedência `manual`) |
 | `cursorNoTeste=` | `1` · `0` | cursor visível durante o teste (diagnóstico) |
 | `compTranslacao=` | `1` · `0` | compensação de translação lateral da cabeça (M4) |
@@ -740,8 +799,9 @@ http://127.0.0.1:4173/?preflight=1&debug=1&ep=webgpu&l2cs=448&filtro=oneEuro&dia
 | `exp.<flag>=` | `1` · `0` | uma mudança do V3 de cada vez (§4.7); M14 aceita `mediapipe` · `desligada` |
 
 Os valores são gravados no localStorage e a página recarrega uma vez. Também
-dá para usar `__irisflowExp.set({...})` + reload, ou `IRISFLOW_EXP_<chave>` no
-Electron.
+dá para usar `__irisflowExp.set('chave', valor)` + reload. `IRISFLOW_EXP_<chave>`
+vale só no Node (vitest e o replay, ex.: `IRISFLOW_EXP_PIPELINE=base`): no
+Electron nada leva o ambiente à página.
 
 ⚠️ O preflight tem checagem de "condição esperada" mas o painel **não passa
 `condicaoEsperada`** — ela nunca roda. Confira à mão com `__irisflowExp.dump()`
@@ -801,17 +861,23 @@ veredito.
 ### 5.5 Calibração e teste
 
 Ver a seção 6 para o que a calibração faz. Na tela: escolha a condição óptica,
-clique no botão de **9 pontos**, e a pessoa olha o centro escuro de cada alvo
-até ele sumir (~26 s).
+comece a calibração completa (**13 alvos** no perfil padrão), e a pessoa olha o
+ponto vermelho do centro de cada alvo (o ABC, §2) até ele ficar verde — no pior
+caso ~50 s no V3, contando as esperas (§6). No V3, se algum alvo saiu ruim, a
+recoleta (M22) refaz até 4 deles logo em seguida, com um aviso calmo no lugar
+de "Siga o ponto"; para medir sem ela, `?exp.recoletaDeAlvosRuins=0`.
 
 - **Não troque de janela durante a coleta** — perder o foco aborta a calibração.
-- **Ao terminar o último alvo a tela congela ~11 s.** O diagnóstico de ajuste
-  roda dentro do treino. É esperado; não clique em nada.
+- **Ao terminar o último alvo a tela congela ~11–13 s** (e de novo, se a
+  recoleta rodar, porque ela treina outra vez). O diagnóstico de ajuste roda
+  dentro do treino. É esperado; não clique em nada. Desde 2026-10-19 o vigia de
+  página travada desarma durante o treino e não derruba a página no meio dele.
 - Se aparecer o **diálogo de deriva** ou aviso de **alvos pulados**, escolha
   "Refazer calibração". "Continuar mesmo assim" mede um ajuste que o próprio
   app já sinalizou como contaminado.
 
-O teste dispara sozinho 400 ms depois do treino. Durante os 31 s: ninguém fala,
+O teste dispara sozinho 400 ms depois do treino (no V3, depois da recoleta e
+do reforço, quando eles rodam). Durante os 31 s: ninguém fala,
 ninguém entra na sala, ninguém mexe na luz. **Não saia da tela com o teste em
 curso** — falta o `abortAccuracyTest` no unmount, e `isAccuracyTesting` fica
 preso em `true`, sumindo com o painel de preflight pelo resto da sessão.
@@ -827,14 +893,37 @@ preso em `true`, sumindo com o painel de preflight pelo resto da sessão.
   (`INSET_CANTOS_PADRAO`), fora do orçamento de propósito — o orçamento segue
   decidindo a grade interna, que é o que segura o ganho do modelo no miolo.
   **4 alvos** na calibração rápida (só os cantos da grade: os cantos da tela
-  ficam sem calibrar). Ordem embaralhada pela UI, mas **sem semente
-  registrada** — só o teste de precisão tem.
-- Cada alvo descarta os primeiros 600 ms (`CALIBRATION_ACCLIMATION_MS`) e
-  coleta até `1680 + d·1120` ms, com `d` a distância ao centro normalizada (0 no
-  centro, 1 no canto geométrico): 1680 ms no centro, ~2690 ms nos cantos a 5 %.
-  É teto, não duração fixa — o ponto fecha quando o olhar estabiliza. No pior
-  caso, os 13 alvos somam ~39 s na tela de referência, dentro do teto de fadiga
-  de 40 s que `calibration.janelaDoPonto.test.ts` segura.
+  ficam sem calibrar). A ordem não é sorteada nem tem semente — só o teste de
+  precisão tem: no V3 (M1, `ordemDescorrelacionada`) é uma busca
+  determinística que começa no alvo do centro e não correlaciona a posição do
+  alvo com o tempo, para a deriva da cabeça não virar ganho; no pipeline base, a
+  ordem de leitura, linha a linha, de cima para baixo
+  (`frontend/src/pages/calibration/ordemDaGrade.ts`).
+- No V3 (M8, `assentamentoPelaChegada`) a coleta de cada alvo abre quando a
+  bola chega (o deslocamento leva 620 ms) e descarta os primeiros 800 ms
+  (`ACOMODACAO_DESDE_A_CHEGADA_MS`); no pipeline base, ela abre 1200 ms depois
+  do alvo anterior e descarta 600 ms (`CALIBRATION_ACCLIMATION_MS`). Depois
+  vem a janela útil, até `1680 + d·1120` ms, com `d` a distância ao centro
+  normalizada (0 no centro, 1 no canto geométrico): 1680 ms no centro, ~2690 ms
+  nos cantos a 5 %. É teto, não duração fixa — o ponto fecha quando o olhar
+  estabiliza, com piso de 900 ms e 15 amostras. No pior caso (toda janela até
+  o teto), na tela de referência, acomodação e janela somam 41,8 s no V3 e
+  39,2 s no base; com a espera até cada coleta abrir, a sessão dá 49,9 s no V3
+  e 54,8 s no base. `calibration.janelaDoPonto.test.ts` segura o teto de
+  fadiga de 40 s só no pipeline base (ele desliga M7 e M8) e, com M7 e M8
+  ligadas, que a sessão inteira não passa a do base (53,7 s com 14 alvos).
+- No V3, terminados os pontos, a **recoleta dos alvos ruins** (M22,
+  `recoletaDeAlvosRuins`) refaz na hora até 4 alvos cujo LOTO ou dispersão
+  passou de 2× a mediana da região (miolo com miolo, borda com borda) e de um
+  piso de 2,5° (erro) ou 2,0° (dispersão), ou que ficaram com menos de 15
+  amostras. As amostras novas SUBSTITUEM as antigas, o treino é refeito do zero
+  e o modelo novo só fica se o LOTO médio dos mesmos alvos não piorar; senão
+  volta o anterior, idêntico. É uma rodada automática por calibração (e a tela
+  de resultado oferece a mesma rodada à mão). O antes e o depois vão em
+  `calibrationFit.recoleta`: `looAntesPx`, `looDepoisPx`, `aceito`, `motivo` e
+  `tempoUtilMs`, o tempo útil de coleta que a rodada custou. Sem alvo ruim, a
+  saída é a mesma de antes; com alvo ruim, o modelo medido é outro, e a sessão
+  que compara precisa registrar se a recoleta rodou e se foi aceita.
 - Os quatro cantos entram no Ridge como qualquer alvo e, além disso, alimentam
   a **correção local** (`src/correcaoLocal.ts`): o resíduo médio de cada canto
   (alvo − predição média, depois das compensações de cabeça) é interpolado por
@@ -861,9 +950,18 @@ preso em `true`, sumindo com o painel de preflight pelo resto da sessão.
   modelo, com esse deslocamento aplicado — registre que ele houve.
 - **Não há mais gates de amostra.** Quadro com imagem ruim (olho escuro,
   estourado, borrado, pálpebra semifechada) e amostra com bloco L2CS zerado
-  (leitura obsoleta ou implausível) **entram no treino**. Os critérios
-  continuam sendo avaliados e contados — a contagem alimenta o console e
-  `calibrationFit.l2csValidFraction` —, mas não rejeitam mais nada.
+  (leitura obsoleta ou implausível) **entram no treino**, com peso menor
+  dentro do alvo (o bloco zerado ou atenuado vale ×0,35,
+  `src/calibration/pesoDaAmostra.ts`). Os critérios continuam sendo avaliados
+  e contados — a contagem alimenta o console e
+  `calibrationFit.l2csValidFraction` —, mas não rejeitam mais nada. O que fica
+  fora do treino: os quadros da acomodação e os recebidos fora de um alvo; os
+  de piscada e os de contraluz forte, que o engine nem manda à calibração; e,
+  com M6 (`calibracaoRobusta`, padrão do V3), o quadro a mais de
+  4·1,4826·MAD da mediana do alvo em alguma feature (entre 3 e 4, ele entra com
+  peso menor, numa rampa). A fração vai em
+  `calibrationFit.robusto.fracaoDescartada`. Não há um "centro robusto por
+  alvo": o resíduo do alvo é a média ponderada dos quadros.
   **Por quê:** com os gates ligados, os alvos da linha inferior esgotavam as
   tentativas e eram PULADOS, e o modelo passava a extrapolar a região inteira,
   que é o modo de falha pior. **O preço:** um zero, depois do StandardScaler,
@@ -997,7 +1095,7 @@ desenvolve, não por e-mail de suporte.
 | campo | o que é | origem |
 |---|---|---|
 | `meta.distanciaCm` | distância olho→**tela** | **digitada** nas Configurações. É intenção; nenhum sensor mede a distância até a tela |
-| `result.distanciaMedidaCm` | distância olho→**câmera**, mediana/mín./máx. | **medida** a cada amostra aceita, da distância interpupilar em px e do FOV (§3.2) |
+| `result.distanciaMedidaCm` | distância olho→**câmera**, mediana/mín./máx. | **medida** a cada amostra aceita, da distância entre os cantos externos dos olhos (landmarks 33 e 263) em px de vídeo, com 9,0 cm fixos para essa distância (`CANTHAL_DISTANCE_CM`), e do FOV (§3.2). Não usa a régua da íris (`cantalCm`, a distância cantal desta pessoa), que a compensação lateral usa |
 
 O erro angular usa `meta.distanciaCm`, porque é a distância até a tela que
 define a excentricidade dos alvos. `distanciaMedidaCm` é testemunha: faixa
@@ -1052,6 +1150,8 @@ dentro.
 | `samplesPerTarget` | amostras por alvo; desequilíbrio grande enviesa o ajuste |
 | `targetsPlanned`, `targetsTrained`, `targetsSkipped` | alvo pulado invalida a rodada |
 | `lambda`, `dimsPerEye`, `polynomialFeatures`, `poseCompensatedTargets` | o que entrou no Ridge |
+| `robusto.fracaoDescartada` | com M6, a fração dos quadros que saiu do treino (a mais de 4·1,4826·MAD da mediana do alvo, §6) |
+| `recoleta` | desde 2026-10-19, com M22: a rodada da recoleta dos alvos ruins — `automatica`, os `alvos` refeitos (antes e depois de cada um, e se as amostras novas entraram), `aceito`, `motivo`, `looAntesPx` · `looDepoisPx` (LOTO médio nos mesmos alvos), `looInternoAntesPx` · `looInternoDepoisPx` e `tempoUtilMs`. `aceito: false` = a calibração de antes segue valendo, inteira |
 
 ---
 

@@ -56,17 +56,19 @@
   height: 16px;
 }
 
+/* A etapa atual é o alvo de fixação aceso: aro menta, número em papel. A
+   concluída fecha com o check, como a seleção no app. */
 .stepper__item.is-current .stepper__dot {
-  border-color: var(--accent);
-  color: #fff;
-  background: var(--blue);
-  box-shadow: 0 0 0 6px var(--accent-soft);
+  border-color: var(--teal-300);
+  color: var(--text);
+  background: transparent;
+  box-shadow: 0 0 0 4px var(--ok-soft);
 }
 
 .stepper__item.is-done .stepper__dot {
-  border-color: var(--teal);
-  background: var(--teal);
-  color: #fff;
+  border-color: var(--teal-300);
+  background: var(--teal-300);
+  color: var(--navy);
   animation: pop-check 340ms var(--ease-spring);
 }
 
@@ -102,7 +104,7 @@
 .stepper__fill {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, var(--teal), var(--accent));
+  background: var(--teal-300);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform var(--dur-slow) var(--ease-out);

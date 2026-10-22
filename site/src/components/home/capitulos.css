@@ -1,24 +1,41 @@
 /* Capítulos do produto (Capitulos.tsx): os passos à esquerda e a gravação,
-   em perspectiva, à direita. O tempo do vídeo decide o passo aceso, o trilho
-   e a legenda. Só `transform` e `opacity` animam (o teste confere); com
-   movimento reduzido, a regra global de global.css zera as transições e a
-   tela fica parada na pose de repouso. */
+   reta, à direita. O tempo do vídeo decide o passo aceso, o aro de cada passo
+   e a legenda. Só `transform`, `opacity` e o traço do anel (`stroke-dashoffset`)
+   animam (o teste confere); com movimento reduzido, a regra global de
+   global.css zera as transições. */
 
 .capitulos {
-  padding-block: clamp(80px, 12vh, 140px);
+  /* Começa logo depois do título da abertura: o monitor é o visual dela, e o
+     topo dele tem de aparecer na primeira tela. */
+  padding-block: clamp(24px, 4vh, 48px) var(--faixa);
+}
+
+/* Sem a linha de topo das outras faixas (.on-raised): a abertura e esta seção
+   são uma composição só. */
+.capitulos.on-raised {
+  box-shadow: none;
 }
 
 /* No computador: o título e os passos numa coluna, a tela na outra, parada
-   ao lado deles enquanto a página rola (sticky). */
+   ao lado deles enquanto a página rola (sticky). Embaixo, na largura toda,
+   "Testar com o meu olhar" — FORA da grade: a tela presa acompanha a rolagem
+   até o fim da grade em que está e, com o teste dentro dela, passava por cima
+   do botão e do painel (revisão das capturas, 21/10/2026). */
 .capitulos__grade {
   display: grid;
-  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   grid-template-areas:
     'cabeca palco'
     'passos palco';
   grid-template-rows: auto 1fr;
   column-gap: clamp(40px, 6vw, 96px);
-  row-gap: clamp(36px, 6vh, 64px);
+  row-gap: clamp(40px, 6vh, 64px);
+}
+
+.capitulos__teste {
+  margin-top: clamp(40px, 6vh, 64px);
+  padding-top: var(--sp-6);
+  border-top: 1px solid var(--line);
 }
 
 .capitulos__cabeca {
@@ -27,9 +44,9 @@
 
 .capitulos__lead {
   font-size: var(--fs-lead);
-  line-height: 1.6;
+  line-height: 1.55;
   color: var(--text-soft);
-  max-width: 46ch;
+  max-width: 42ch;
   margin: 0;
 }
 
@@ -42,7 +59,7 @@
 }
 
 .capitulos__passo {
-  --marca: 40px;
+  --marca: 44px;
   position: relative;
   padding: 0 0 clamp(28px, 4.5vh, 44px) calc(var(--marca) + 20px);
 }
@@ -51,70 +68,116 @@
   padding-bottom: 0;
 }
 
+/* O número do passo, no centro do aro. */
 .capitulos__marca {
   position: absolute;
   left: 0;
   top: 0;
+  z-index: 1;
   display: grid;
   place-items: center;
   width: var(--marca);
   height: var(--marca);
-  border-radius: 50%;
   font-family: var(--font-display);
-  font-size: 0.82rem;
+  font-size: 0.9375rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  background: rgba(143, 180, 240, 0.08);
-  box-shadow: inset 0 0 0 1px var(--accent-line);
-  transition:
-    background-color var(--dur) var(--ease-out),
-    color var(--dur) var(--ease-out),
-    box-shadow var(--dur) var(--ease-out);
+  color: var(--text-dim);
+  transition: color var(--dur) ease;
 }
 
 .capitulos__passo.is-ativo .capitulos__marca {
-  color: var(--navy-deep);
-  background: var(--accent);
-  box-shadow: 0 0 0 6px rgba(143, 180, 240, 0.16);
+  color: var(--text);
 }
 
-/* O trilho desce da marca até o passo seguinte e enche com o trecho do vídeo
-   (`--progresso`, de 0 a 1, escrito a cada quadro pelo componente). */
+/* O aro de fixação do passo: o fundo é o aro inteiro, apagado; por cima, o
+   trecho aceso, que fecha com a gravação (`--progresso`, de 0 a 1, escrito a
+   cada quadro pelo componente). É o retorno de fixação do app, em três
+   estágios: apagado, aceso, completo. */
 .capitulos__trilho {
   position: absolute;
-  left: calc(var(--marca) / 2 - 1px);
-  top: calc(var(--marca) + 8px);
-  bottom: 8px;
-  width: 2px;
-  border-radius: 2px;
-  overflow: hidden;
-  background: rgba(174, 201, 240, 0.16);
+  left: 0;
+  top: 0;
+  width: var(--marca);
+  height: var(--marca);
+  border-radius: 50%;
+  background: conic-gradient(var(--teal-300) calc(var(--progresso, 0) * 1turn), var(--line-strong) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
 }
 
-.capitulos__trilho::after {
-  content: '';
+/* O aro que fecha quando o passo entra na tela (rodada 3, 21/10/2026): o
+   círculo enche como o alvo de fixação do app, uma vez, e solta. Mesma faixa do
+   trilho (raio 20,5 de 22, traço de 3), por cima dele; o `--atraso` põe os três
+   em sequência quando entram juntos. O aro que acompanha o vídeo não muda. */
+.capitulos__fixa {
   position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, var(--blue-300), var(--teal-300));
-  transform: scaleY(var(--progresso, 0));
-  transform-origin: 50% 0;
+  left: 0;
+  top: 0;
+  width: var(--marca);
+  height: var(--marca);
+  overflow: visible;
+  pointer-events: none;
+  /* O traço do círculo começa às 3 horas; o aro do app começa às 12. */
+  transform: rotate(-90deg);
 }
 
-.capitulos__passo:last-child .capitulos__trilho {
-  bottom: 0;
+.capitulos__fixa circle {
+  fill: none;
+  stroke: var(--teal-300);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+}
+
+.capitulos__passo.is-entrou .capitulos__fixa circle {
+  animation:
+    passo-fixa 800ms linear var(--atraso, 0ms) both,
+    passo-solta 500ms ease-out calc(var(--atraso, 0ms) + 920ms) both;
+}
+
+@keyframes passo-fixa {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 1;
+  }
+  6% {
+    opacity: 1;
+    stroke-dashoffset: 0.94;
+  }
+  100% {
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes passo-solta {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 .capitulos__titulo {
-  font-size: clamp(1.2rem, 1.75vw, 1.5rem);
-  line-height: 1.22;
+  font-size: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+  line-height: 1.2;
   letter-spacing: -0.02em;
-  margin: 7px 0 var(--sp-3);
+  /* As margens já descontam os 10 px de respiro do botão (abaixo): o desenho do
+     passo não muda, só a área que responde ao toque. */
+  margin: -2px 0 calc(var(--sp-3) - 10px);
 }
 
-/* O título é o botão: leva o vídeo ao começo do passo. */
+/* O título é o botão: leva o vídeo ao começo do passo. Auditoria P3-3
+   (21/10/2026): com 24 px de altura ele ficava abaixo dos 44 px de alvo; o
+   respiro vertical é padding (conta como alvo), compensado na margem do título. */
 .capitulos__botao {
-  padding: 0;
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 0;
   border: 0;
   border-radius: 6px;
   background: none;
@@ -123,7 +186,7 @@
   text-align: left;
   color: var(--text-soft);
   cursor: pointer;
-  transition: color var(--dur) var(--ease-out);
+  transition: color var(--dur) ease;
 }
 
 .capitulos__botao:hover,
@@ -131,139 +194,107 @@
   color: var(--text);
 }
 
-.capitulos__botao:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 4px;
-}
-
 /* O passo fora do vídeo fica em segundo plano pela cor, não pela opacidade:
    assim o contraste continua acima de 4,5:1. */
 .capitulos__texto {
-  font-size: 1.02rem;
+  font-size: 1.0625rem;
   line-height: 1.6;
   color: var(--text-dim);
   max-width: 44ch;
   margin: 0;
-  transition: color var(--dur) var(--ease-out);
+  transition: color var(--dur) ease;
 }
 
 .capitulos__passo.is-ativo .capitulos__texto {
   color: var(--text-soft);
 }
 
-/* ---------- o palco: a gravação em perspectiva ---------- */
+/* ---------- o palco: a gravação, reta ---------- */
 .capitulos__palco {
   grid-area: palco;
   align-self: start;
   position: sticky;
-  top: calc(var(--header-h) + clamp(32px, 10vh, 120px));
-  perspective: 1700px;
-  perspective-origin: 20% 50%;
+  top: calc(var(--header-h) + clamp(32px, 8vh, 96px));
 }
 
-/* A rolagem: a tela entra mais inclinada e se assenta (`--inclinacao` e
-   `--escala` vêm do useInclinacaoAoRolar, de 12° a 0°). */
-.capitulos__cena {
-  --inclinacao: 0deg;
-  --escala: 1;
-  position: relative;
-  transform-style: preserve-3d;
-  transform: rotateY(calc(var(--inclinacao) * -1)) rotateX(calc(var(--inclinacao) * 0.5))
-    scale(var(--escala));
-  will-change: transform;
-}
-
-/* O repouso: levemente virada para os passos. Sob o ponteiro (ou com o foco
-   no botão de pausa), ela se endireita para a interface ficar legível. */
+.capitulos__cena,
 .capitulos__corpo {
   position: relative;
-  transform-style: preserve-3d;
-  transform: rotateY(-11deg) rotateX(5deg);
-  transition: transform 700ms var(--ease-out);
 }
 
-.capitulos__palco:hover .capitulos__corpo,
-.capitulos__palco:focus-within .capitulos__corpo {
-  transform: rotateY(-2deg) rotateX(1deg);
+/* ---------- o monitor ----------
+   O monitor genérico de aparelhos.css, reto, com uma sombra funda embaixo e
+   um fio claro na borda. Sem brilho (pedido do dono, 21/10/2026). Ao carregar
+   a página ele sobe uma vez para o lugar: o único movimento da abertura. */
+.capitulos__corpo {
+  z-index: 1;
+  animation: monitor-sobe 700ms var(--ease-out) 120ms both;
 }
 
-/* A luz da marca atrás da tela, mais funda que ela. */
-.capitulos__halo {
-  position: absolute;
-  inset: 6% 4%;
-  border-radius: 40%;
-  background:
-    radial-gradient(closest-side at 30% 60%, rgba(63, 214, 194, 0.34), transparent),
-    radial-gradient(closest-side at 70% 40%, rgba(77, 134, 224, 0.42), transparent);
-  filter: blur(36px);
-  transform: translateZ(-140px) scale(1.2);
-  pointer-events: none;
+@keyframes monitor-sobe {
+  from {
+    opacity: 0;
+    transform: translateY(36px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-.capitulos__moldura {
+.capitulos__monitor .monitor__moldura {
+  background: #0a0f1a;
   box-shadow:
-    0 50px 100px -40px rgba(2, 7, 16, 0.85),
-    0 40px 90px -36px rgba(47, 102, 194, 0.7),
-    0 18px 50px -30px rgba(63, 214, 194, 0.45);
+    inset 0 0 0 1px rgba(169, 198, 247, 0.2),
+    0 40px 80px -40px rgba(0, 0, 0, 0.9);
 }
 
-/* Um reflexo discreto de vidro no terço de cima. */
-.capitulos__reflexo {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(162deg, rgba(255, 255, 255, 0.08) 0%, transparent 32%);
+.capitulos__monitor .monitor__pescoco {
+  background: #121a29;
 }
 
-/* A legenda flutua na frente da tela (translateZ): com a perspectiva, ela se
-   descola da gravação e acompanha a inclinação por conta própria. */
+.capitulos__monitor .monitor__base {
+  background: #1a2436;
+}
+
+.capitulos__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A legenda, logo abaixo da gravação: o nome do trecho e o que a tela
+   mostra naquele instante. Texto, sem pílula flutuando por cima. */
 .capitulos__legenda {
-  position: absolute;
-  left: clamp(14px, 5%, 32px);
-  bottom: -30px;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  max-width: calc(100% - 110px);
-  margin: 0;
-  padding: 9px 16px 9px 9px;
-  border-radius: var(--r-pill);
-  font-size: 0.95rem;
-  font-weight: 500;
-  line-height: 1.3;
-  color: var(--text);
-  background: rgba(7, 18, 36, 0.94);
-  box-shadow:
-    inset 0 0 0 1px rgba(143, 180, 240, 0.3),
-    0 20px 44px -18px rgba(2, 7, 16, 0.95);
-  transform: translateZ(80px);
-  animation: legenda-entrar 460ms var(--ease-out) both;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0 0;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: var(--text-soft);
+  animation: legenda-entrar 320ms var(--ease-out) both;
 }
 
 .capitulos__legenda-rotulo {
   flex: none;
-  padding: 4px 10px;
-  border-radius: var(--r-pill);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--navy-deep);
-  background: var(--teal-300);
+  font-weight: 600;
+  color: var(--accent);
 }
 
 @keyframes legenda-entrar {
   from {
     opacity: 0;
-    transform: translateZ(80px) translateY(8px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translateZ(80px);
+    transform: none;
   }
 }
 
-/* ---------- celular e tablet: a tela reta, acima dos passos ---------- */
+/* ---------- celular e tablet: a tela acima dos passos ---------- */
 @media (max-width: 960px) {
   .capitulos__grade {
     grid-template-columns: minmax(0, 1fr);
@@ -277,35 +308,33 @@
   .capitulos__palco {
     position: relative;
     top: auto;
-    perspective: none;
   }
-  .capitulos__cena,
-  .capitulos__corpo,
-  .capitulos__palco:hover .capitulos__corpo,
-  .capitulos__palco:focus-within .capitulos__corpo {
-    transform: none;
-  }
-  .capitulos__halo {
-    transform: scale(1.1);
-  }
-  .capitulos__legenda {
-    position: relative;
-    left: auto;
-    bottom: auto;
-    max-width: none;
-    margin-top: var(--sp-4);
-    transform: none;
-    animation-name: legenda-entrar-plana;
+  .capitulos__teste {
+    margin-top: var(--sp-7);
   }
 }
 
-@keyframes legenda-entrar-plana {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
+/* Celular: a gravação sobe para antes do título da seção. É o produto de
+   verdade, e quem chega pelo celular (muitas vezes quem cuida e decide) o vê
+   na primeira tela, sem rolar. A ordem de leitura e de foco não muda: só o
+   título e o texto, que não recebem foco, trocam de lugar com o monitor
+   (auditoria de 21/10/2026, P2-7). */
+@media (max-width: 720px) {
+  .capitulos {
+    padding-block: var(--sp-4) var(--faixa);
   }
-  to {
-    opacity: 1;
-    transform: none;
+  .capitulos__grade {
+    grid-template-areas:
+      'palco'
+      'cabeca'
+      'passos';
+    row-gap: var(--sp-6);
+  }
+}
+
+/* Movimento reduzido: o aro que enche nem aparece; o círculo fica como sempre. */
+@media (prefers-reduced-motion: reduce) {
+  .capitulos__fixa {
+    display: none;
   }
 }

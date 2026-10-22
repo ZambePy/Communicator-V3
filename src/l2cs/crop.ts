@@ -70,17 +70,25 @@ export function computeSquareBBox(
   return { x: cx - side / 2, y: cy - side / 2, side };
 }
 
-/** RGBA HWC → RGB CHW normalizado ImageNet. Puro, sem DOM. */
+/**
+ * RGBA HWC → RGB CHW normalizado ImageNet. Puro, sem DOM.
+ *
+ * `destino`: um buffer do tamanho certo para escrever no lugar de alocar um
+ * novo (falha #13 da auditoria de 18/10/2026 — em 448² eram 2,4 MB novos por
+ * inferência). Todo valor é sobrescrito, então o conteúdo antigo não importa.
+ * Tamanho errado: ignorado, e um novo é alocado.
+ */
 export function preprocessFromRGBA(
   rgba: Uint8Array | Uint8ClampedArray,
   size: number = INPUT_SIZE,
+  destino?: Float32Array,
 ): Float32Array {
   const px = size * size;
   const expected = px * 4;
   if (rgba.length !== expected) {
     throw new Error(`preprocessFromRGBA: esperava ${expected} bytes RGBA, recebeu ${rgba.length}`);
   }
-  const out = new Float32Array(3 * px);
+  const out = destino && destino.length === 3 * px ? destino : new Float32Array(3 * px);
   const [meanR, meanG, meanB] = IMAGENET_MEAN;
   const [stdR, stdG, stdB] = IMAGENET_STD;
   for (let i = 0; i < px; i++) {
@@ -135,6 +143,8 @@ export interface CropOptions {
    * Ausente ou não finito: nenhuma rotação, comportamento idêntico ao anterior.
    */
   rollRad?: number | null;
+  /** Buffer a reaproveitar (do pool do client); ver `preprocessFromRGBA`. */
+  destino?: Float32Array;
 }
 
 /** Transformação afim do recorte, na convenção de `setTransform`. */
@@ -239,5 +249,5 @@ export function cropFaceToTensor(source: CropSource, opts: CropOptions): Float32
   g.setTransform(1, 0, 0, 1, 0, 0);
 
   const imgData = (g as CanvasRenderingContext2D).getImageData(0, 0, size, size);
-  return preprocessFromRGBA(imgData.data, size);
+  return preprocessFromRGBA(imgData.data, size, opts.destino);
 }

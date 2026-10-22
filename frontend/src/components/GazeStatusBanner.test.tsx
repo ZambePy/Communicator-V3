@@ -73,7 +73,7 @@ describe('a ordem de precedência', () => {
         distanceAdvice={mensagemPara('perto')}
       />
     );
-    expect(screen.getByText(/câmera não está disponível/i)).toBeInTheDocument();
+    expect(screen.getByText(/não estou conseguindo usar a câmera/i)).toBeInTheDocument();
     expect(screen.queryByText(/afaste-se/i)).not.toBeInTheDocument();
   });
 

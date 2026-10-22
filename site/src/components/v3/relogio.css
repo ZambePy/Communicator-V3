@@ -1,0 +1,28 @@
+/* O relógio ao vivo do rodapé (RelogioAoVivo.tsx): uma linha pequena, a hora e
+   o rótulo lado a lado. Auditoria P2-17 (21/10/2026): com 96 px a 1440 ele fazia
+   o papel da marca d'água gigante que o dono recusou; o coordenador manteve o
+   relógio de Brasília, mas discreto.
+   Dígitos tabulares: a largura não dança quando o segundo troca. */
+
+.v3-relogio {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--sp-3);
+  margin: 0;
+}
+
+.v3-relogio__hora {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--v3-papel);
+}
+
+.v3-relogio__rotulo {
+  font-size: var(--fs-sm);
+  color: var(--v3-texto-2);
+}

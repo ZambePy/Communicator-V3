@@ -1,8 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState as EstadoDoApp } from 'react-native';
 import { useData } from '@/data/DataContext';
-import { obterTokenDoAparelho, type FalhaPush } from '@/hooks/usePushNotifications';
+import { obterTokenDoAparelho, sincronizarAlarmesLocais, type FalhaPush, type PedidoDoAlarme } from '@/hooks/usePushNotifications';
 import { haptics } from '@/lib/haptics';
+import { firstName, helpKindLabel, textoLegivel } from '@/utils/format';
 import {
   AuthUser,
   Beneficiary,
@@ -133,25 +134,39 @@ export const JANELA_DO_ALERTA_MS = 6 * 60 * 60_000;
 
 const urgente = (h: HelpRequest) => h.kind === 'emergencia' || h.kind === 'ajuda';
 
-/** Quanto um pedido pede a tela: socorro/ajuda sem resposta > aviso sem resposta > já confirmado > nada. */
+/**
+ * Quanto um pedido pede a tela: socorro sem resposta > pedido de ajuda sem
+ * resposta > aviso sem resposta > já confirmado > nada.
+ *
+ * Revisão de UX de 19/10/2026 (achado 6): socorro e ajuda tinham o mesmo peso
+ * e, no empate, fica o pedido que já está na tela — um socorro novo ficava
+ * escondido atrás de um "Chamar atenção" (ajuda, da tela Sim · Não do
+ * computador) aberto ou minimizado, e o "Estou indo!" tocado ali confirmava o
+ * pedido errado.
+ */
 function pesoDoAlerta(h: HelpRequest | null): number {
   if (!h || h.resolved_at) return 0;
   if (h.acknowledged_at) return 1;
-  return urgente(h) ? 3 : 2;
+  if (h.kind === 'emergencia') return 4;
+  if (h.kind === 'ajuda') return 3;
+  return 2;
+}
+
+/** O pedido ainda é "agora"? Ver `JANELA_DO_ALERTA_MS`. */
+function dentroDaJanela(h: HelpRequest, agoraMs: number): boolean {
+  const recebido = Date.parse(h.received_at ?? h.created_at);
+  return !Number.isFinite(recebido) || agoraMs - recebido <= JANELA_DO_ALERTA_MS;
 }
 
 /**
  * O pedido que deve ocupar a tela ao abrir o app (ou ao recarregar): entre os
- * abertos, sem confirmação e dentro da janela, socorro/ajuda antes de aviso e,
- * entre iguais, o mais recente. Sem isto, um socorro acionado com o app
- * fechado (push tocado, ou app aberto minutos depois) ficava só na lista.
+ * abertos, sem confirmação e dentro da janela, socorro antes de ajuda, ajuda
+ * antes de aviso e, entre iguais, o mais recente. Sem isto, um socorro
+ * acionado com o app fechado (push tocado, ou app aberto minutos depois)
+ * ficava só na lista.
  */
 export function derivePendingAlert(helpRequests: HelpRequest[], agoraMs: number = Date.now()): HelpRequest | null {
-  const abertos = helpRequests.filter((h) => {
-    if (h.resolved_at || h.acknowledged_at) return false;
-    const recebido = Date.parse(h.received_at ?? h.created_at);
-    return !Number.isFinite(recebido) || agoraMs - recebido <= JANELA_DO_ALERTA_MS;
-  });
+  const abertos = helpRequests.filter((h) => !h.resolved_at && !h.acknowledged_at && dentroDaJanela(h, agoraMs));
   if (abertos.length === 0) return null;
   return [...abertos].sort((a, b) => pesoDoAlerta(b) - pesoDoAlerta(a) || b.created_at.localeCompare(a.created_at))[0];
 }
@@ -163,8 +178,8 @@ export function derivePendingAlert(helpRequests: HelpRequest[], agoraMs: number 
  * - O mesmo pedido: a versão nova substitui (resolvido → sai da tela).
  * - Outro pedido: entra só se pede MAIS atenção que o da tela. Um aviso de
  *   postura não cobre um socorro sem resposta; um socorro novo cobre um
- *   pedido já confirmado. Empate fica com o da tela — o alerta não troca
- *   debaixo do dedo de quem está respondendo.
+ *   pedido de ajuda sem resposta e um pedido já confirmado. Empate fica com o
+ *   da tela — o alerta não troca debaixo do dedo de quem está respondendo.
  * - Sem nada na tela, um pedido já confirmado (por outro celular) não abre
  *   alerta nenhum.
  */
@@ -174,6 +189,31 @@ export function escolherAlerta(atual: HelpRequest | null, candidato: HelpRequest
   if (vivo && candidato.id === vivo.id) return candidato.resolved_at ? null : candidato;
   if (!vivo) return pesoDoAlerta(candidato) >= 2 ? candidato : null;
   return pesoDoAlerta(candidato) > pesoDoAlerta(vivo) ? candidato : vivo;
+}
+
+/**
+ * O alerta da tela passa a ser `proximo`. Se é OUTRO pedido, o "minimizado"
+ * do anterior não vale para ele (revisão de UX de 19/10/2026, achado 6): um
+ * pedido mais grave que toma o lugar entra em tela cheia, vibrando — e não
+ * escondido na faixa do topo —, e o pedido que esperava, quando volta, volta
+ * em tela cheia também.
+ */
+function trocarAlerta(s: AppState, proximo: HelpRequest | null): Pick<AppState, 'pendingAlert' | 'minimizedAlertKey'> {
+  const mesmo = Boolean(proximo && s.pendingAlert && proximo.id === s.pendingAlert.id);
+  return { pendingAlert: proximo, minimizedAlertKey: mesmo ? s.minimizedAlertKey : null };
+}
+
+/**
+ * Os pedidos para os quais o alarme local do celular toca: socorro e ajuda
+ * abertos, sem confirmação e dentro da janela do alerta — TODOS, e não só o da
+ * tela (revisão de UX de 19/10/2026, achado 6: um socorro que chegava com
+ * outro pedido na tela, ou com o alerta minimizado, não tocava). Avisos da
+ * sessão (postura, fadiga…) não tocam. O alerta da tela conta mesmo se não
+ * estiver na lista (o cuidador trocou de paciente com ele aberto).
+ */
+export function pedidosQueTocam(helpRequests: HelpRequest[], pendingAlert: HelpRequest | null, agoraMs: number = Date.now()): HelpRequest[] {
+  const todos = pendingAlert && !helpRequests.some((h) => h.id === pendingAlert.id) ? [pendingAlert, ...helpRequests] : helpRequests;
+  return todos.filter((h) => urgente(h) && !h.acknowledged_at && !h.resolved_at && dentroDaJanela(h, agoraMs));
 }
 
 /**
@@ -520,9 +560,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // resolvido em outro celular enquanto este estava sem conexão) e cede
         // o lugar a um pedido que peça mais atenção — antes ele ficava, e um
         // socorro novo esperava atrás de um aviso já confirmado.
-        pendingAlert: escolherAlerta(
-          s.pendingAlert ? helpRequests.find((h) => h.id === s.pendingAlert?.id) ?? s.pendingAlert : null,
-          derivePendingAlert(helpRequests),
+        ...trocarAlerta(
+          s,
+          escolherAlerta(s.pendingAlert ? helpRequests.find((h) => h.id === s.pendingAlert?.id) ?? s.pendingAlert : null, derivePendingAlert(helpRequests)),
         ),
         patientLoaded: true,
         patientVerified: true,
@@ -612,8 +652,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (!exists) {
             if (urgente(h)) haptics.erro();
             else haptics.aviso();
-            // Um aviso (postura, fadiga...) não cobre um socorro sem resposta.
-            return { helpRequests: [h, ...s.helpRequests], pendingAlert: escolherAlerta(s.pendingAlert, h) };
+            // Um aviso (postura, fadiga...) não cobre um socorro sem resposta;
+            // um socorro cobre um "Chamar atenção" — e sai da faixa minimizada.
+            return { helpRequests: [h, ...s.helpRequests], ...trocarAlerta(s, escolherAlerta(s.pendingAlert, h)) };
           }
           const helpRequests = s.helpRequests.map((x) => (x.id === h.id ? h : x));
           if (s.pendingAlert?.id !== h.id) {
@@ -621,7 +662,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // pede mais atenção que o da tela, ele entra.
             const proximo = escolherAlerta(s.pendingAlert, h);
             if (proximo?.id === h.id && h.escalated_at) haptics.erro();
-            return { helpRequests, pendingAlert: proximo };
+            return { helpRequests, ...trocarAlerta(s, proximo) };
           }
           // Escalou agora (o prazo passou sem ninguém confirmar): vibra de novo,
           // como o push que o servidor reenviou — mas sem trocar o alerta em tela.
@@ -630,7 +671,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           // Resolvido em outro aparelho: o overlay não tem mais o que pedir — e
           // o próximo pedido aberto, se houver, assume a tela.
-          return { helpRequests, pendingAlert: h.resolved_at ? derivePendingAlert(helpRequests) : h };
+          return { helpRequests, ...trocarAlerta(s, h.resolved_at ? derivePendingAlert(helpRequests) : h) };
         }),
       onSession: (sess) => {
         // A sessão ao vivo encerrou: recarrega a atual pelo servidor.
@@ -655,6 +696,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
     return off;
   }, [data, patientId, patch, loadPatient, recarregarSessao]);
+
+  // ----- alarme local -----
+  // Revisão de UX de 19/10/2026 (achados 6 e 11): o som que o celular faz
+  // quando o push não vem tocava só para o alerta em tela cheia — um socorro
+  // escondido atrás de outro pedido, ou com o alerta minimizado, ficava mudo —
+  // e uma vez só. Agora vale para todo pedido urgente sem confirmação, repete
+  // até alguém confirmar ou resolver, toca de novo no escalonamento e para ao
+  // sair da conta (a lista esvazia). Cadência e teto: `sincronizarAlarmesLocais`.
+  const alarmes = useMemo<PedidoDoAlarme[]>(() => {
+    const nome = (beneficiaryId: string) => {
+      const b = state.beneficiaries.find((x) => x.id === beneficiaryId) ?? state.patient;
+      return b ? firstName(b.user_name) : 'Paciente';
+    };
+    return pedidosQueTocam(state.helpRequests, state.pendingAlert).map((h) => ({
+      id: h.id,
+      titulo: `${helpKindLabel[h.kind]}${h.escalated_at ? ' sem resposta' : ''} — ${nome(h.beneficiary_id)}`,
+      corpo: h.message?.trim() ? textoLegivel(h.message) : 'Pedido sem confirmação',
+      escalado: h.escalated_at,
+      beneficiaryId: h.beneficiary_id,
+    }));
+  }, [state.helpRequests, state.pendingAlert, state.beneficiaries, state.patient]);
+  // Só quando muda o que toca (pedido entrou, saiu ou escalou): cada
+  // sincronização consulta as notificações do sistema.
+  const chaveDosAlarmes = alarmes.map((p) => `${p.id}:${p.escalado ?? ''}`).join('|');
+  const alarmesAtuais = useRef(alarmes);
+  alarmesAtuais.current = alarmes;
+  useEffect(() => {
+    void sincronizarAlarmesLocais(alarmesAtuais.current);
+  }, [chaveDosAlarmes]);
 
   /**
    * Uma gravação de ajustes, já na vez dela na fila: calcula a mudança sobre o
@@ -777,11 +847,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const helpRequests = s.helpRequests.map((h) => (h.id === id && !h.acknowledged_at ? { ...h, acknowledged_at: now } : h));
           if (s.pendingAlert?.id !== id) return { helpRequests };
           // Confirmado: se há OUTRO socorro/ajuda aberto sem resposta, ele
-          // assume a tela; senão fica o "Confirmado às …" deste (um aviso de
-          // postura não interrompe quem acabou de responder a um socorro).
+          // assume a tela (socorro primeiro); senão fica o "Confirmado às …"
+          // deste (um aviso de postura não interrompe quem acabou de
+          // responder a um socorro).
           const proximo = derivePendingAlert(helpRequests);
           const confirmado = { ...s.pendingAlert, acknowledged_at: now };
-          return { helpRequests, pendingAlert: proximo && pesoDoAlerta(proximo) === 3 ? proximo : confirmado };
+          return { helpRequests, ...trocarAlerta(s, proximo && urgente(proximo) ? proximo : confirmado) };
         });
       },
       async resolveAlert(id) {
@@ -790,13 +861,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const now = new Date().toISOString();
         patch((s) => {
           const helpRequests = s.helpRequests.map((h) => (h.id === id ? { ...h, acknowledged_at: h.acknowledged_at ?? now, resolved_at: now } : h));
-          return { helpRequests, pendingAlert: s.pendingAlert?.id === id ? derivePendingAlert(helpRequests) : s.pendingAlert };
+          return { helpRequests, ...trocarAlerta(s, s.pendingAlert?.id === id ? derivePendingAlert(helpRequests) : s.pendingAlert) };
         });
       },
       dismissPendingAlert() {
         // "Ver depois" de um pedido já confirmado: outro aberto sem resposta,
         // se houver, assume a tela.
-        patch((s) => ({ pendingAlert: derivePendingAlert(s.helpRequests.filter((h) => h.id !== s.pendingAlert?.id)) }));
+        patch((s) => trocarAlerta(s, derivePendingAlert(s.helpRequests.filter((h) => h.id !== s.pendingAlert?.id))));
       },
       minimizePendingAlert() {
         patch((s) => ({ minimizedAlertKey: s.pendingAlert ? chaveDoAlerta(s.pendingAlert) : null }));

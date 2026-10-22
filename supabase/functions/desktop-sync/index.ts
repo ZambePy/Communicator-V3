@@ -27,7 +27,9 @@
 // vale a hora do servidor.
 //
 //   heartbeat          { app_version, camera_ok, tracker_ok, calibrated, session_id? }
-//                      → { ok, pending_messages, sessao_aberta? }
+//                      → { ok, pending_messages, sessao_aberta?, reconhecimentos }
+//                      (`reconhecimentos`: confirmações do cuidador das últimas
+//                       6 h, socorro e ajuda — reserva do realtime, 19/10/2026)
 //                      (também carimba sessions.last_heartbeat_at — migração
 //                       20260923022642_sessoes_orfas: só da `session_id` enviada;
 //                       com `session_id: null`, de nenhuma; sem o campo (desktops
@@ -43,13 +45,36 @@
 //                       não grava a mensagem duas vezes)
 //   message.spoken     { message_id, occurred_at?, sent_at? }  → { ok }       (msg do cuidador vocalizada)
 //   messages.pending   {}                            → { messages } (do cuidador, ainda não faladas)
-//   help.create        { id?, kind, message, session_id, occurred_at?, sent_at? } → { ok, id }   + push
+//   help.create        { id?, kind, message, session_id, occurred_at?, sent_at? } → { ok, id, push? }   + push
+//                      (`push`: { avisados, recusados, motivos } nos tipos que vão
+//                       por push — socorro, ajuda e dispositivo; 19/10/2026)
 //                      (`id`: UUID gerado no computador; um reenvio com o mesmo id
-//                       não cria outro pedido nem outro push)
+//                       não cria outro pedido nem outro push → { ok, id,
+//                       repetido: true, push? } — `push` com `avisados: 0` se a
+//                       conta não tem celular cadastrado, `null` se não dá para
+//                       saber se o push do primeiro envio foi aceito (ele não
+//                       fica gravado); revisão de UX de 19/10/2026)
+//                      (`dispositivo` e `ajuda` passam pelo limite do banco, por
+//                       computador e sob trava — registrar_aviso_com_limite,
+//                       21/10/2026: dispositivo, o mesmo texto no máximo a cada
+//                       15 min e 4 por hora; ajuda, 6 a cada 10 min. Acima disso
+//                       → { ok, limitado, push: { avisados: 0, motivos: ['limite'] } },
+//                       sem gravar nem mandar push — o computador mostra "nenhum
+//                       celular avisado". O socorro NUNCA é limitado. Ver ./limites.ts)
 //   voice.status       { voice }                     → { ok, stored }  (rótulo da voz em uso)
 //   report.send        { report, motivo?, resumo? }     → { ok, stored }  (opt-in; só números)
 //   settings.get       {}                            → { settings, phrases }
 //   device.info        {}                            → { device, beneficiary, license, devices_active }
+//   pairing.create     {}                            → { ok, id, codigo, expira_em, restante_s, validade_s }
+//                      (código do QR que conecta o celular do cuidador sem senha,
+//                       19/10/2026: vale 3 min e uma vez só; o banco guarda só o
+//                       hash — migração 20261019200000_pareamento_do_celular.
+//                       429 `limite` (5 em 10 min, com `tente_em`), 409
+//                       `email_nao_confirmado`)
+//   pairing.status     { id }                        → { ok, estado, restante_s?, usado_em?, conectado_em? }
+//                      (`estado`: aguardando | usado | conectado | vencido |
+//                       cancelado | desconhecido — ver ./pareamento.ts)
+//   pairing.cancel     { id }                        → { ok }  (a tela do QR fechou: o código para de valer)
 //
 // Erros: 401/403 só quando a chave não existe ou foi revogada — o desktop
 // apaga o vínculo e a fila ao receber. Falha do banco ao CONFERIR a chave é
@@ -60,11 +85,17 @@
 // customizado, então o navegador faz preflight: CORS liberado abaixo.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { chegouComAtraso, horaDeBrasilia, horarioDoEvento } from './horario.ts';
-import { exigeAcao, mensagensDePush, TITULOS } from './push.ts';
-import { idDoCliente, sessoesDoHeartbeat, statusDoErroDoBanco } from './respostas.ts';
+import { corpoDoPedido, horarioDoEvento } from './horario.ts';
+import { pedidoComLimite, registroComIntervalo } from './limites.ts';
+import { avisaPorPush, celularesParaAvisar, mensagensDePush, pushDoReenvio, resumoDosTickets, TITULOS, type ResumoDoPush } from './push.ts';
+import { avisoDeDispositivoExcedido, idDoCliente, sessoesDoHeartbeat, statusDoErroDoBanco } from './respostas.ts';
+import { estadoDoPareamento, respostaDaCriacao } from './pareamento.ts';
+import { gerarCodigo, hashDoCodigo } from './codigoDoCelular.ts';
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+
+/** Log do limite de avisos: uma linha por motivo a cada minuto (ver ./limites.ts). */
+const logDoLimite = registroComIntervalo(60_000, (linha) => console.warn(`[desktop-sync] ${linha}`));
 
 const CORS = {
   'access-control-allow-origin': '*',
@@ -115,26 +146,72 @@ function pickSession(input: Record<string, unknown>) {
   return out;
 }
 
-async function notifyCaregiver(beneficiaryId: string, kind: string, body: string) {
-  const { data: ben } = await supabase.from('beneficiaries').select('profile_id, user_name').eq('id', beneficiaryId).single();
-  if (!ben) return;
-  const { data: tokens } = await supabase.from('push_tokens').select('token').eq('profile_id', ben.profile_id);
-  if (!tokens?.length) return;
-  const messages = mensagensDePush(tokens.map((t) => t.token as string), kind, ben.user_name, body, beneficiaryId);
+/**
+ * Avisa os celulares da conta. Devolve quantos a Expo aceitou e quantos
+ * recusou (com os motivos), para o computador dizer a verdade na tela de
+ * emergência — "o celular do cuidador foi avisado" só quando foi — e ligar o
+ * alarme local na hora quando nenhum celular foi avisado. Tokens que a Expo diz
+ * que não existem mais (`DeviceNotRegistered`) saem da tabela.
+ */
+async function notifyCaregiver(beneficiaryId: string, kind: string, body: string, helpRequestId?: string): Promise<ResumoDoPush> {
+  const nenhum = (motivo: string): ResumoDoPush => ({ avisados: 0, recusados: 0, motivos: [motivo], tokensInvalidos: [] });
+  // Falha de leitura do banco não é "sem celular" (revisão final de 22/10/2026):
+  // tem uma segunda tentativa e, se persistir, aparece no log da função. O
+  // computador liga o alarme local (avisados 0) e o escalonamento reenvia.
+  const celulares = await celularesParaAvisar({
+    beneficiario: () => supabase.from('beneficiaries').select('profile_id, user_name').eq('id', beneficiaryId).maybeSingle(),
+    tokens: (perfil) => supabase.from('push_tokens').select('token').eq('profile_id', perfil),
+  });
+  if (celulares.tipo === 'erro') {
+    console.error('[desktop-sync] não deu para ler os celulares da conta; o escalonamento reenvia', celulares.mensagem);
+    return nenhum('erro_banco');
+  }
+  if (celulares.tipo === 'nenhum') return nenhum(celulares.motivo);
+  const { nome, tokens } = celulares;
+  const messages = mensagensDePush(tokens, kind, nome, body, beneficiaryId, helpRequestId);
+  let resumo: ResumoDoPush;
   try {
-    await fetch('https://exp.host/--/api/v2/push/send', {
+    const res = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
+        accept: 'application/json',
         ...(Deno.env.get('EXPO_ACCESS_TOKEN') ? { authorization: `Bearer ${Deno.env.get('EXPO_ACCESS_TOKEN')}` } : {}),
       },
       body: JSON.stringify(messages),
       signal: AbortSignal.timeout(PRAZO_DO_PUSH_MS),
     });
+    let corpo: unknown = null;
+    try { corpo = await res.json(); } catch { /* sem corpo */ }
+    resumo = resumoDosTickets(tokens, corpo, res.ok);
   } catch (e) {
     // O alerta já está no banco (e chega por realtime); o push é o segundo canal.
     console.error('[desktop-sync] push falhou', e);
+    return { avisados: 0, recusados: tokens.length, motivos: ['rede'], tokensInvalidos: [] };
   }
+  if (resumo.recusados) {
+    // Nos logs da função: é aqui que aparece "InvalidCredentials" quando o
+    // FCM (Android) ainda não foi configurado no EAS.
+    console.error(`[desktop-sync] push recusado para ${resumo.recusados} celular(es): ${resumo.motivos.join(', ')}`);
+  }
+  if (resumo.tokensInvalidos.length) {
+    const { error } = await supabase.from('push_tokens').delete().in('token', resumo.tokensInvalidos);
+    if (error) console.error('[desktop-sync] tokens inválidos não removidos', error.message);
+  }
+  return resumo;
+}
+
+/**
+ * Quantos celulares a conta do paciente tem cadastrados agora (`push_tokens`).
+ * `null` se não deu para conferir — quem lê trata como "não se sabe".
+ */
+async function celularesDaConta(beneficiaryId: string): Promise<number | null> {
+  const { data: ben, error } = await supabase.from('beneficiaries').select('profile_id').eq('id', beneficiaryId).maybeSingle();
+  if (error || !ben?.profile_id) return null;
+  const { count, error: erroDosTokens } = await supabase
+    .from('push_tokens').select('token', { count: 'exact', head: true }).eq('profile_id', ben.profile_id);
+  if (erroDosTokens || typeof count !== 'number') return null;
+  return count;
 }
 
 Deno.serve(async (req) => {
@@ -208,7 +285,20 @@ Deno.serve(async (req) => {
         .from('messages')
         .select('id', { count: 'exact', head: true })
         .eq('beneficiary_id', b).eq('sender', 'cuidador').eq('spoken', false);
-      return json({ ok: true, pending_messages: count ?? 0, sessao_aberta: sessaoAberta });
+      // Confirmações recentes do cuidador (socorro e ajuda), a reserva do
+      // realtime: com o websocket bloqueado (rede de hospital, proxy) o
+      // computador só ficava sabendo do "Estou indo" por ali, e o alarme
+      // continuava tocando. Erro aqui não derruba o heartbeat.
+      const { data: reconhecimentos } = await supabase
+        .from('help_requests')
+        .select('id, kind, created_at, acknowledged_at, resolved_at')
+        .eq('beneficiary_id', b)
+        .in('kind', ['emergencia', 'ajuda'])
+        .not('acknowledged_at', 'is', null)
+        .gt('acknowledged_at', new Date(agora.getTime() - 6 * 3600_000).toISOString())
+        .order('acknowledged_at', { ascending: false })
+        .limit(5);
+      return json({ ok: true, pending_messages: count ?? 0, sessao_aberta: sessaoAberta, reconhecimentos: reconhecimentos ?? [] });
     }
 
     case 'session.upsert': {
@@ -299,9 +389,14 @@ Deno.serve(async (req) => {
 
     case 'message.spoken': {
       if (typeof body.message_id !== 'string') return json({ error: 'message_id obrigatório' }, 400);
-      await supabase.from('messages')
+      // O erro volta ao computador (revisão final de 22/10/2026): com `ok` mesmo
+      // sem gravar, a mensagem seguia "não falada" no banco — o cuidador a via
+      // sem voz para sempre e o computador a falava de novo na volta. Com 503 a
+      // fila offline reenvia a marcação.
+      const { error } = await supabase.from('messages')
         .update({ spoken: true, read_at: quando })
         .eq('id', body.message_id).eq('beneficiary_id', b);
+      if (error) return erroDoBanco(error);
       return json({ ok: true });
     }
 
@@ -327,9 +422,47 @@ Deno.serve(async (req) => {
           .eq('id', body.session_id).eq('beneficiary_id', b).maybeSingle();
         sessionId = sess?.id ?? null;
       }
+      // Ajuda e aviso de dispositivo passam pelo limite atômico do banco, por
+      // computador (decisão 2 da rodada 3, 21/10/2026 — ver ./limites.ts). O
+      // socorro NUNCA: volta como 'direto' e segue o caminho de sempre, abaixo.
+      const comLimite = await pedidoComLimite(
+        { deviceId: device.id, kind, message, sessionId, quando, id: idDoCliente(body.id), agora },
+        {
+          registrar: async (args) => {
+            const { data, error } = await supabase.rpc('registrar_aviso_com_limite', args);
+            return { data, error };
+          },
+          avisar: (k, corpo, id) => notifyCaregiver(b, k, corpo, id),
+          celulares: () => celularesDaConta(b),
+          registrarLog: (chave, linha) => logDoLimite(chave, linha, Date.now()),
+        },
+      );
+      if (comLimite.tipo === 'resposta') return json(comLimite.corpo, comLimite.status);
+      // Daqui em diante: o socorro (e postura, fadiga, recalibração), ou um
+      // aviso cuja função de limite ainda não existe no banco (migração
+      // 20261021120000 não aplicada) — este segue como antes da rodada 3.
+      //
       // created_at = quando aconteceu (a fila offline pode entregar horas
       // depois); received_at, a chegada, é o default do banco e é dela que o
       // prazo de escalonamento conta.
+      // Aviso de dispositivo (o olhar parou e o problema durou), só sem a
+      // função do banco: o limite antigo, por consulta — ver
+      // avisoDeDispositivoExcedido. Erro na consulta não bloqueia o aviso
+      // (falha aberta: é um aviso de cuidado).
+      if (kind === 'dispositivo') {
+        const { data: recentes, error: erroDoLimite } = await supabase
+          .from('help_requests')
+          .select('message, received_at')
+          .eq('beneficiary_id', b)
+          .eq('kind', 'dispositivo')
+          .gt('received_at', new Date(agora.getTime() - 60 * 60_000).toISOString())
+          .order('received_at', { ascending: false })
+          .limit(10);
+        if (!erroDoLimite && avisoDeDispositivoExcedido(recentes ?? [], message, agora.getTime())) {
+          console.warn('[desktop-sync] aviso de dispositivo acima do limite: descartado sem push');
+          return json({ ok: true, limitado: true });
+        }
+      }
       const linha = { beneficiary_id: b, kind, message, session_id: sessionId, created_at: quando };
       let id: string | null = null;
       const idPedido = idDoCliente(body.id);
@@ -347,9 +480,16 @@ Deno.serve(async (req) => {
           id = gravado[0].id as string;
         } else {
           const { data: existente, error: erroDaBusca } = await supabase
-            .from('help_requests').select('beneficiary_id').eq('id', idPedido).maybeSingle();
+            .from('help_requests').select('beneficiary_id, kind').eq('id', idPedido).maybeSingle();
           if (erroDaBusca) return erroDoBanco(erroDaBusca);
-          if (existente?.beneficiary_id === b) return json({ ok: true, id: idPedido, repetido: true });
+          if (existente?.beneficiary_id === b) {
+            // O reenvio diz o que se sabe do push (revisão de UX de 19/10/2026):
+            // sem o campo, o computador afirmava "o celular do cuidador foi
+            // avisado". Ver pushDoReenvio em ./push.ts.
+            const kindGravado = String(existente.kind ?? kind);
+            const push = pushDoReenvio(kindGravado, avisaPorPush(kindGravado) ? await celularesDaConta(b) : null);
+            return json({ ok: true, id: idPedido, repetido: true, ...(push !== undefined ? { push } : {}) });
+          }
           // Id já usado por OUTRO paciente (um UUID aleatório não repete; seria
           // um cliente adulterado): o pedido é gravado com id do servidor.
         }
@@ -359,14 +499,14 @@ Deno.serve(async (req) => {
         if (error) return erroDoBanco(error);
         id = data.id as string;
       }
-      // Push só nos tipos que exigem ação imediata; avisos de sistema chegam
-      // pelo realtime e ficam no histórico de alertas. Um pedido que chega
-      // atrasado diz a hora em que foi feito, para não passar por novo.
-      if (exigeAcao(kind)) {
-        const corpo = chegouComAtraso(quando, agora)
-          ? [message, `pedido às ${horaDeBrasilia(quando)}, chegou com atraso`].filter(Boolean).join(' — ')
-          : message;
-        await notifyCaregiver(b, kind, corpo);
+      // Push no socorro, na ajuda e no aviso de dispositivo; os outros avisos de
+      // sistema chegam pelo realtime e ficam no histórico de alertas. Um pedido
+      // que chega atrasado diz a hora em que foi feito, para não passar por novo.
+      if (avisaPorPush(kind)) {
+        const push = await notifyCaregiver(b, kind, corpoDoPedido(message, quando, agora), id);
+        // `push` diz ao computador se algum celular foi avisado (ver
+        // frontend/src/cloud/eventos.ts → `sem_push`).
+        return json({ ok: true, id, push: { avisados: push.avisados, recusados: push.recusados, motivos: push.motivos } });
       }
       return json({ ok: true, id });
     }
@@ -449,6 +589,52 @@ Deno.serve(async (req) => {
         license,
         devices_active: count ?? 0,
       });
+    }
+
+    case 'pairing.create': {
+      // Código do QR que conecta o celular do cuidador (pedido de 19/10/2026).
+      // Sorteado AQUI; o banco recebe só o hash. O código volta uma vez, nesta
+      // resposta, para o computador desenhar o QR — e não entra em log nenhum.
+      // Limite, validade, "um ativo por computador" e conta sem e-mail
+      // confirmado ficam no banco (criar_codigo_de_pareamento).
+      const codigo = gerarCodigo();
+      const { data, error } = await supabase.rpc('criar_codigo_de_pareamento', {
+        p_device_id: device.id,
+        p_token_hash: await hashDoCodigo(codigo),
+      });
+      if (error) return erroDoBanco(error);
+      const criacao = respostaDaCriacao(data, agora.getTime());
+      if (criacao.status !== 200) return json(criacao.corpo, criacao.status);
+      return new Response(JSON.stringify({ ...criacao.corpo, codigo }), {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...CORS },
+      });
+    }
+
+    case 'pairing.status': {
+      // O computador pergunta a cada poucos segundos, enquanto mostra o QR, se
+      // um celular já usou o código — e se ele confirmou que entrou.
+      const id = idDoCliente(body.id);
+      if (!id) return json({ error: 'id obrigatório' }, 400);
+      const { data, error } = await supabase.from('pareamentos_de_celular')
+        .select('id, expira_em, usado_em, conectado_em, cancelado_em')
+        .eq('id', id).eq('device_id', device.id)
+        .maybeSingle();
+      if (error) return erroDoBanco(error);
+      return json({ ok: true, ...estadoDoPareamento(data, agora.getTime()) });
+    }
+
+    case 'pairing.cancel': {
+      // A tela do QR fechou (ou o cuidador desistiu): uma foto do QR tirada
+      // antes para de valer na hora, sem esperar os 3 minutos.
+      const id = idDoCliente(body.id);
+      if (!id) return json({ error: 'id obrigatório' }, 400);
+      const { error } = await supabase.from('pareamentos_de_celular')
+        .update({ cancelado_em: now })
+        .eq('id', id).eq('device_id', device.id)
+        .is('usado_em', null).is('cancelado_em', null);
+      if (error) return erroDoBanco(error);
+      return json({ ok: true });
     }
 
     default:

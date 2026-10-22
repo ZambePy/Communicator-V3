@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react'
 
-/** Progresso vertical da página, de 0 a 1. Alimenta a barra de leitura e o parallax. */
+/**
+ * A página já rolou do topo? Alimenta o fio do cabeçalho.
+ *
+ * Até 19/10/2026 devolvia também o progresso de leitura (0 a 1), para a barra
+ * do cabeçalho; a barra saiu no redesenho e, com ela, o estado que mudava a
+ * cada quadro de rolagem e redesenhava o cabeçalho inteiro à toa. Agora o
+ * cabeçalho só redesenha quando cruza a linha dos 24 px.
+ */
 export function useScrollProgress() {
-  const [progress, setProgress] = useState(0)
   const [scrolled, setScrolled] = useState(false)
 
   useEffect(() => {
@@ -10,12 +16,7 @@ export function useScrollProgress() {
 
     const update = () => {
       cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        const y = window.scrollY
-        const max = document.documentElement.scrollHeight - window.innerHeight
-        setProgress(max > 0 ? Math.min(y / max, 1) : 0)
-        setScrolled(y > 24)
-      })
+      raf = requestAnimationFrame(() => setScrolled(window.scrollY > 24))
     }
 
     update()
@@ -28,5 +29,5 @@ export function useScrollProgress() {
     }
   }, [])
 
-  return { progress, scrolled }
+  return { scrolled }
 }

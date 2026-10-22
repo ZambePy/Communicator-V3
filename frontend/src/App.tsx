@@ -7,6 +7,12 @@ import { ProtectedRoute } from './components/ui/ProtectedRoute';
 import { SoComLazer } from './components/ui/SoComLazer';
 import { TransicaoDeRota } from './components/ui/TransicaoDeRota';
 import { FechaPaineisAoNavegar } from './components/FechaPaineisAoNavegar';
+import { VarreduraComAcionador } from './components/VarreduraComAcionador';
+// A tela de emergência NÃO é carregada sob demanda: se o pedaço de código dela
+// falhasse ao baixar (disco cheio, antivírus, atualização pela metade), a rota
+// do socorro virava a fronteira de erro (auditoria de 18/10/2026, item 6). O
+// envio e o alarme já não dependem dela, mas o paciente precisa VER o estado.
+import { EmergencyEscalation } from './pages/output/EmergencyEscalation';
 import { PreparoGate } from './pages/setup/PreparoGate';
 import { GraceBanner } from './components/ui/GraceBanner';
 import { AvisoDeBloqueio } from './components/AvisoDeBloqueio';
@@ -17,17 +23,25 @@ import { ToastProvider } from './context/ToastContext';
 import { FaixaDeApresentacao } from './components/FaixaDeApresentacao';
 import { ConviteDeRelatos } from './components/ConviteDeRelatos';
 import { FaixaDeAtualizacao } from './components/FaixaDeAtualizacao';
+import { AvisoDeFalaQueNaoSaiu } from './components/AvisoDeFalaQueNaoSaiu';
+import { AvisoDeGravacao } from './components/AvisoDeGravacao';
+import { AvisoDaSaidaDaVoz } from './components/AvisoDaSaidaDaVoz';
 import { ReminderProvider } from './context/ReminderContext';
 import { EmergencyProvider } from './context/EmergencyContext';
 import { CloudProvider } from './cloud/CloudContext';
 import { CloudBanners } from './cloud/CloudBanners';
+import { PerguntaDoCuidador } from './components/PerguntaDoCuidador';
 import { DebugHUD } from './components/DebugHUD';
 import { PreflightPanel } from './components/PreflightPanel';
 import { FatigueIndicator } from './components/FatigueIndicator';
+import { RegistroDeUso } from './components/RegistroDeUso';
 
 // Ondas de onboarding carregadas cedo — poucas telas, alta chance de uso imediato
 import { InitialSplash } from './pages/onboarding/InitialSplash';
 import { LoginScreen } from './pages/auth/LoginScreen';
+// /menu, /menu-completo e /hospital. O desvio do /menu para a tela do hospital é
+// minúsculo, e é ele que decide se o MainMenu (lazy, abaixo) chega a ser baixado.
+import { rotasDoInicio } from './pages/core/rotasDoInicio';
 
 // Lazy loading — Vite fatia o bundle por rota.
 // Os módulos exportam como named export; envolvemos para satisfazer o contrato do lazy().
@@ -50,6 +64,13 @@ const QuickPhrasesScreen = lazyNamed(
   () => import('./pages/QuickPhrasesScreen'),
   'QuickPhrasesScreen'
 );
+const ComunicacaoScreen = lazyNamed(() => import('./pages/core/ComunicacaoScreen'), 'ComunicacaoScreen');
+const SimNaoScreen = lazyNamed(() => import('./pages/core/SimNaoScreen'), 'SimNaoScreen');
+const TecladoLateral = lazyNamed(() => import('./pages/core/TecladoLateral'), 'TecladoLateral');
+const MapaDaDorScreen = lazyNamed(() => import('./pages/core/MapaDaDorScreen'), 'MapaDaDorScreen');
+const HospitalScreen = lazyNamed(() => import('./pages/core/HospitalScreen'), 'HospitalScreen');
+const MinhaVozScreen = lazyNamed(() => import('./pages/core/MinhaVozScreen'), 'MinhaVozScreen');
+const GravarVozScreen = lazyNamed(() => import('./pages/core/GravarVozScreen'), 'GravarVozScreen');
 const SettingsScreen = lazyNamed(() => import('./pages/SettingsScreen'), 'SettingsScreen');
 const GamesMenu = lazyNamed(() => import('./pages/GamesMenu'), 'GamesMenu');
 const BubblePopGame = lazyNamed(() => import('./pages/BubblePopGame'), 'BubblePopGame');
@@ -88,6 +109,14 @@ const HistoricoDeSessoes = lazyNamed(
   () => import('./pages/historico/HistoricoDeSessoes'),
   'HistoricoDeSessoes'
 );
+const EvolucaoScreen = lazyNamed(
+  () => import('./pages/evolucao/EvolucaoScreen'),
+  'EvolucaoScreen'
+);
+const ConsultaScreen = lazyNamed(
+  () => import('./pages/consulta/ConsultaScreen'),
+  'ConsultaScreen'
+);
 const CalibrationCheck = lazyNamed(
   () => import('./pages/onboarding/CalibrationCheck'),
   'CalibrationCheck'
@@ -98,10 +127,6 @@ const DrawingGame = lazyNamed(() => import('./pages/games/DrawingGame'), 'Drawin
 const MyOptionsScreen = lazyNamed(() => import('./pages/core/MyOptionsScreen'), 'MyOptionsScreen');
 const PictogramScreen = lazyNamed(() => import('./pages/core/PictogramScreen'), 'PictogramScreen');
 const RestScreen = lazyNamed(() => import('./pages/core/RestScreen'), 'RestScreen');
-const EmergencyEscalation = lazyNamed(
-  () => import('./pages/output/EmergencyEscalation'),
-  'EmergencyEscalation'
-);
 const GalleryScreen = lazyNamed(
   () => import('./pages/entertainment/GalleryScreen'),
   'GalleryScreen'
@@ -196,14 +221,27 @@ function App() {
                       <FaixaDeApresentacao />
                       <ConviteDeRelatos />
                       <FaixaDeAtualizacao />
+                      {/* Falhas que antes só iam para o console (auditoria de
+                          18/10/2026, itens 5 e 15): a frase que não saiu em voz
+                          alta, em letra grande, e o que não pôde ser salvo. */}
+                      <AvisoDeFalaQueNaoSaiu />
+                      <AvisoDeGravacao />
+                      <AvisoDaSaidaDaVoz />
                       <GraceBanner />
                       <AvisoDeBloqueio />
                       <TravaDoCuidador />
                       <CloudBanners />
+                      {/* Pergunta sim/não do cuidador (21/10/2026): espera
+                          fora da emergência e da calibração, e fica sempre
+                          abaixo da Emergência. */}
+                      <PerguntaDoCuidador />
                       <FechaPaineisAoNavegar />
+                      {/* Plano B: varredura com acionador (só com o ajuste ligado). */}
+                      <VarreduraComAcionador />
                       <DebugHUD />
                       <PreflightPanel />
                       <FatigueIndicator />
+                      <RegistroDeUso />
                       <Suspense fallback={<RouteFallback />}>
                         {/* A troca de tela ganha uma entrada curta (fade +
                           deslize). O contêiner é irmão do botão de emergência
@@ -282,6 +320,22 @@ function App() {
                               }
                             />
                             <Route
+                              path="/evolucao"
+                              element={
+                                <ProtectedRoute requireCaregiver>
+                                  <EvolucaoScreen />
+                                </ProtectedRoute>
+                              }
+                            />
+                            <Route
+                              path="/consulta"
+                              element={
+                                <ProtectedRoute>
+                                  <ConsultaScreen />
+                                </ProtectedRoute>
+                              }
+                            />
+                            <Route
                               path="/setup"
                               element={
                                 <ProtectedRoute>
@@ -298,15 +352,10 @@ function App() {
                               }
                             />
 
-                            {/* Menu Principal */}
-                            <Route
-                              path="/menu"
-                              element={
-                                <ProtectedRoute>
-                                  <MainMenu />
-                                </ProtectedRoute>
-                              }
-                            />
+                            {/* Menu Principal (/menu, que com o modo hospital ligado leva à tela do
+                                quarto), menu completo (/menu-completo) e tela do hospital
+                                (/hospital): rodada 3, 21/10/2026. Ver `rotasDoInicio`. */}
+                            {rotasDoInicio({ MenuCompleto: MainMenu, Hospital: HospitalScreen, Portao: ProtectedRoute })}
 
                             {/* Modo Descanso */}
                             <Route
@@ -332,6 +381,56 @@ function App() {
                               element={
                                 <ProtectedRoute>
                                   <QuickPhrasesScreen />
+                                </ProtectedRoute>
+                              }
+                            />
+                            <Route
+                              path="/comunicacao"
+                              element={
+                                <ProtectedRoute>
+                                  <ComunicacaoScreen />
+                                </ProtectedRoute>
+                              }
+                            />
+                            <Route
+                              path="/sim-nao"
+                              element={
+                                <ProtectedRoute>
+                                  <SimNaoScreen />
+                                </ProtectedRoute>
+                              }
+                            />
+                            {/* Modo só horizontal (21/10/2026): o alfabeto por divisão binária. */}
+                            <Route
+                              path="/teclado-lateral"
+                              element={
+                                <ProtectedRoute>
+                                  <TecladoLateral />
+                                </ProtectedRoute>
+                              }
+                            />
+                            {/* Mapa da dor e voz guardada (19/10/2026), pelo hub da Comunicação. */}
+                            <Route
+                              path="/dor"
+                              element={
+                                <ProtectedRoute>
+                                  <MapaDaDorScreen />
+                                </ProtectedRoute>
+                              }
+                            />
+                            <Route
+                              path="/minha-voz"
+                              element={
+                                <ProtectedRoute>
+                                  <MinhaVozScreen />
+                                </ProtectedRoute>
+                              }
+                            />
+                            <Route
+                              path="/minha-voz/gravar"
+                              element={
+                                <ProtectedRoute>
+                                  <GravarVozScreen />
                                 </ProtectedRoute>
                               }
                             />

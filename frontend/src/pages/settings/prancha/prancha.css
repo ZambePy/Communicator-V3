@@ -1,0 +1,196 @@
+/* Prancha de letras impressa (19/10/2026) — ver `montarPrancha.ts`.
+ *
+ * Medidas em milímetros: a mesma página serve para a impressora, para o PDF
+ * e para a prévia nas Configurações (reduzida por `transform`). Preto sobre
+ * branco, com cores só de apoio: numa impressora sem cor, NÃO e SIM continuam
+ * escritos por extenso, e os quadros se separam pela borda e pelo número. */
+
+.prancha {
+  box-sizing: border-box;
+  /* 1 mm abaixo da altura do A4 deitado: um arredondamento de meio
+     milímetro não pode empurrar a prancha para uma segunda folha. */
+  width: 297mm;
+  height: 209mm;
+  padding: 8mm 9mm 6mm;
+  background: #ffffff;
+  color: #111111;
+  font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 4mm;
+  overflow: hidden;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.prancha__topo {
+  display: grid;
+  grid-template-columns: 64mm minmax(0, 1fr) 64mm;
+  gap: 5mm;
+  height: 30mm;
+  flex-shrink: 0;
+}
+
+/* NÃO à esquerda e SIM à direita: o mesmo lado da tela Sim · Não. */
+.prancha__resposta {
+  border: 1.2mm solid #111111;
+  border-radius: 4mm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3mm;
+  font-weight: 900;
+  font-size: 16mm;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.prancha__resposta--nao { background: #fde2e1; }
+.prancha__resposta--sim { background: #dcfce7; }
+.prancha__sinal { font-size: 13mm; }
+
+.prancha__titulo {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  min-width: 0;
+}
+.prancha__titulo h1 {
+  margin: 0;
+  font-size: 7.5mm;
+  font-weight: 900;
+}
+.prancha__titulo p {
+  margin: 1.2mm 0 0;
+  font-size: 3.7mm;
+  line-height: 1.3;
+}
+
+.prancha__grade {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 4mm;
+}
+
+.prancha__quadro {
+  position: relative;
+  border: 0.9mm solid #111111;
+  border-radius: 4mm;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.prancha__numero {
+  position: absolute;
+  top: 1.2mm;
+  left: 2mm;
+  font-size: 3.8mm;
+  font-weight: 800;
+  color: #444444;
+}
+.prancha__itens {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+.prancha__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1mm;
+  min-width: 0;
+  border-right: 0.3mm solid #b5b5b5;
+  border-bottom: 0.3mm solid #b5b5b5;
+}
+.prancha__item:nth-child(3n) { border-right: none; }
+.prancha__item:nth-child(n + 4) { border-bottom: none; }
+
+.prancha__letra {
+  font-size: 21mm;
+  font-weight: 800;
+  line-height: 1;
+}
+.prancha__acao {
+  font-size: 6mm;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.prancha__dica {
+  margin-top: 1mm;
+  font-size: 3.3mm;
+  font-weight: 600;
+  color: #333333;
+}
+.prancha__frase {
+  font-size: 5.1mm;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.prancha__rodape {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 6mm;
+  font-size: 3.4mm;
+  line-height: 1.35;
+  color: #222222;
+}
+.prancha__rodape p { margin: 0; }
+/* O nome do produto, discreto: a folha é do paciente, não propaganda. */
+.prancha__marca {
+  font-size: 3.2mm;
+  color: #7a7a7a;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+/* Prévia nas Configurações: a página inteira, reduzida. */
+.prancha-previa {
+  --escala: 0.38;
+  width: calc(297mm * var(--escala));
+  height: calc(209mm * var(--escala));
+  overflow: hidden;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+.prancha-previa > .prancha {
+  transform: scale(var(--escala));
+  transform-origin: top left;
+}
+
+/* Na tela a cópia de impressão não aparece; ao imprimir, só ela aparece. A
+   classe no <html> vale só durante "Imprimir prancha" / "Salvar em PDF". */
+.prancha-impressao { display: none; }
+
+@media print {
+  html.imprimindo-prancha,
+  html.imprimindo-prancha body {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    /* O brilho reduzido e o filtro âmbar da tela não vão para o papel. */
+    filter: none !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  html.imprimindo-prancha::before,
+  html.imprimindo-prancha::after {
+    content: none !important;
+    display: none !important;
+  }
+  html.imprimindo-prancha body > *:not(.prancha-impressao) { display: none !important; }
+  html.imprimindo-prancha .prancha-impressao { display: block !important; }
+  html.imprimindo-prancha .prancha {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

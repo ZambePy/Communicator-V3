@@ -5,7 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { EtiquetaLancamento } from './EtiquetaLancamento'
 
-/* A etiqueta vermelha da beta: o dia até o lançamento e, depois, que a beta
+/* O selo da beta (azul desde 21/10/2026, o vermelho é da emergência): o dia até o lançamento e, depois, que a beta
    foi liberada (a beta abriu em 29/09/2026, antes marcada para 10/11). Quem
    lê a tela ouve a frase inteira, não "10 barra 11". */
 
@@ -49,14 +49,11 @@ describe('<EtiquetaLancamento />', () => {
     expect(screen.getByText('Liberada')).toBeInTheDocument()
   })
 
-  it('o CSS mantém o vermelho e o ponto de "no ar" só anima transform e opacity', () => {
-    const css = readFileSync(resolve(AQUI, 'etiqueta-lancamento.css'), 'utf8')
-    expect(css).toContain('background: #d6293a')
-    const blocos = css.match(/@keyframes[^{]+\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g) ?? []
-    expect(blocos.length).toBeGreaterThan(0)
-    for (const bloco of blocos) {
-      const props = Array.from(bloco.matchAll(/([a-z-]+)\s*:/g)).map((m) => m[1])
-      expect(props.every((p) => p === 'transform' || p === 'opacity')).toBe(true)
-    }
+  it('o selo é azul da marca, sem vermelho (que é da emergência) e sem pulsar', () => {
+    const css = readFileSync(resolve(AQUI, 'etiqueta-lancamento.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(css).not.toMatch(/#d6293a|var\(--danger|var\(--ok|teal/i)
+    expect(css).toContain('var(--accent-line)')
+    expect(css).not.toContain('@keyframes')
+    expect(css).not.toContain('animation')
   })
 })

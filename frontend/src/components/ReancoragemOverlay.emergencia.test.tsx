@@ -106,7 +106,7 @@ import {
   EMERGENCIA_LARGURA_PX,
   Z_EMERGENCIA_NO_REAJUSTE,
 } from '../context/EmergencyContext';
-import { LADO_DO_ALVO_PX, PONTOS_DA_RECALIBRACAO_RAPIDA, Z_DO_REAJUSTE } from './ReancoragemOverlay';
+import { ID_DA_EMERGENCIA, LADO_DO_ALVO_PX, PONTOS_DA_RECALIBRACAO_RAPIDA, Z_DO_REAJUSTE } from './ReancoragemOverlay';
 
 const NOME_DA_EMERGENCIA = 'Disparar Emergência Médica';
 
@@ -195,8 +195,12 @@ describe('reajuste rápido: a Emergência continua por cima', () => {
     expect(caixa.style.visibility).not.toBe('hidden');
     expect(botao).not.toBeDisabled();
     expect(botao.getAttribute('data-no-dwell')).toBeNull();
-    // Não é modal: a Emergência continua existindo para o leitor de tela.
-    expect(overlay.getAttribute('aria-modal')).not.toBe('true');
+    // Modal (revisão de UX de 19/10/2026, item 17: a varredura com acionador
+    // passava pelos botões escondidos debaixo dele) — e a Emergência continua
+    // existindo para o leitor de tela: o diálogo a adota pelo `aria-owns`.
+    expect(overlay.getAttribute('aria-modal')).toBe('true');
+    expect(botao.id).toBe(ID_DA_EMERGENCIA);
+    expect(overlay.getAttribute('aria-owns')).toBe(ID_DA_EMERGENCIA);
   });
 
   it('pelo OLHAR (dwell): cancela o reajuste, descarta as amostras e abre a confirmação', async () => {

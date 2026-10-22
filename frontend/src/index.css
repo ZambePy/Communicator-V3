@@ -699,7 +699,9 @@ select:focus-visible,
   position: fixed;
   inset: 0;
   z-index: 9998;
-  background: #000000;
+  /* O fundo da calibração (#091B33): o mesmo alvo sobre o mesmo fundo, para
+     os dois medirem a mesma fixação. */
+  background: #091b33;
   color: #ffffff;
   overflow: hidden;
   animation: fadeIn 0.3s ease-out both;
@@ -728,16 +730,121 @@ select:focus-visible,
 }
 
 .accuracy-dot {
+  /* Só posiciona: o alvo é o mesmo da calibração (o bloco "Alvo de fixação
+     ABC" logo abaixo) e é ele que se contrai na chegada. */
   position: absolute;
   transform: translate(-50%, -50%);
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Alvo de fixação ABC — o MESMO na calibração e no teste de precisão
+ * (src/alvoDeFixacao.ts; pedido de 19/10/2026).
+ *
+ * Bull's eye com cruz, nas proporções do alvo "ABC" de Thaler, Schütz, Goodale
+ * & Gegenfurtner (2013, Vision Research 76:31–42) — a forma de fixação mais
+ * estável entre as sete do estudo: disco de 3 unidades, cruz de 1 recortada
+ * na cor do fundo e ponto central de 1. Disco azul da marca sobre o
+ * azul-marinho; ponto central vermelho, o lugar exato para onde olhar.
+ *
+ * Chega 1,5× maior e se contrai em 560 ms — dentro da acomodação descartada
+ * (800 ms na calibração, 600 ms no teste): nenhuma amostra medida vê o alvo
+ * mudando de tamanho. Confirmar um ponto muda só a COR do disco.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.alvo-abc {
+  --alvo-cor: #1b54a8;
+  --alvo-fundo: #091b33;
+  --alvo-centro: #ef4444;
+  position: relative;
+  display: block;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  transform: scale(1);
+  transition: transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.alvo-abc--chegando {
+  transform: scale(1.5);
+}
+.alvo-abc--confirmado {
+  --alvo-cor: #22c55e;
+}
+.alvo-abc__disco {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background-color: var(--alvo-cor);
+  /* Halo na própria cor: sobre o azul-marinho o disco precisa dele para ser
+     achado com o canto do olho, do outro lado da tela. */
+  box-shadow: 0 0 18px var(--alvo-cor);
+  transition:
+    background-color 260ms ease,
+    box-shadow 260ms ease;
+}
+/* A cruz passa 1 px da borda do disco de cada lado: o recorte sai limpo. */
+.alvo-abc__cruz {
+  position: absolute;
+  inset: -1px;
+}
+.alvo-abc__cruz::before,
+.alvo-abc__cruz::after {
+  content: '';
+  position: absolute;
+  background: var(--alvo-fundo);
+}
+.alvo-abc__cruz::before {
+  left: calc(50% - 6px);
+  top: 0;
+  width: 12px;
+  height: 100%;
+}
+.alvo-abc__cruz::after {
+  top: calc(50% - 6px);
+  left: 0;
+  height: 12px;
+  width: 100%;
+}
+.alvo-abc__centro {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--alvo-centro);
+}
+/* Quem pediu menos movimento recebe um alvo de um tamanho só, sem transição. */
+@media (prefers-reduced-motion: reduce) {
+  .alvo-abc,
+  .alvo-abc__disco {
+    transition: none !important;
+  }
+  .alvo-abc--chegando {
+    transform: scale(1) !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * O estímulo do teste de ANTES de 19/10/2026 (flag `estimuloAntigo`, revisão
+ * do pipeline de 19/10/2026; ver src/alvoDeFixacao.ts): o fundo preto e o
+ * círculo azul-claro de 26 px com cruz, anel pulsante e ponto escuro no
+ * centro — copiados de `pc-atual`. Só valem com a flag: sem ela, nenhum
+ * elemento recebe estas classes.
+ * ──────────────────────────────────────────────────────────────────────────── */
+.accuracy-overlay.accuracy-overlay--antigo {
+  background: #000000;
+}
+.accuracy-dot.accuracy-dot--antigo {
   width: 80px;
   height: 80px;
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
 }
-.accuracy-dot::before {
+.accuracy-dot--antigo::before {
   content: '';
   position: absolute;
   width: 100%;
@@ -746,42 +853,38 @@ select:focus-visible,
   border: 2px solid rgba(56, 189, 248, 0.4);
   animation: accuracyRingPulse 1.6s ease-in-out infinite;
 }
-/* Crosshair do alvo de fixação: bullseye + cruz reduz a dispersão da fixação
-   e a taxa de microssacadas frente a um círculo simples (Thaler et al., 2013). */
-.accuracy-dot .dot-cross {
+.accuracy-dot--antigo .dot-cross {
   position: absolute;
   width: 100%;
   height: 100%;
   pointer-events: none;
 }
-.accuracy-dot .dot-cross::before,
-.accuracy-dot .dot-cross::after {
+.accuracy-dot--antigo .dot-cross::before,
+.accuracy-dot--antigo .dot-cross::after {
   content: '';
   position: absolute;
   background: rgba(56, 189, 248, 0.75);
 }
-.accuracy-dot .dot-cross::before {
+.accuracy-dot--antigo .dot-cross::before {
   left: 50%;
   top: 0;
   width: 2px;
   height: 100%;
   transform: translateX(-50%);
 }
-.accuracy-dot .dot-cross::after {
+.accuracy-dot--antigo .dot-cross::after {
   top: 50%;
   left: 0;
   height: 2px;
   width: 100%;
   transform: translateY(-50%);
 }
-
-.accuracy-dot .dot-inner {
+.accuracy-dot--antigo .dot-inner {
   position: relative;
   width: 26px;
   height: 26px;
   border-radius: 50%;
   background: #38bdf8;
-  /* Ponto escuro no centro: é ele que dá o lugar exato para fixar. */
   border: 6px solid #38bdf8;
   box-sizing: border-box;
   box-shadow:
@@ -789,7 +892,7 @@ select:focus-visible,
     0 0 60px rgba(56, 189, 248, 0.5);
   animation: accuracyDotPulse 1.2s ease-in-out infinite alternate;
 }
-.accuracy-dot .dot-inner::after {
+.accuracy-dot--antigo .dot-inner::after {
   content: '';
   position: absolute;
   left: 50%;
@@ -1002,6 +1105,27 @@ select:focus-visible,
 }
 .diagnostic-advice p {
   margin: 0.25rem 0 0;
+}
+
+/* Painel do teste em linguagem simples: a palavra e uma frase do que fazer. */
+.diagnostic-card--simples {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+}
+.diagnostic-palavra {
+  font-family: var(--font-display);
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1.1;
+  margin: 0.25rem 0 0.75rem;
+}
+.diagnostic-frase {
+  margin: 0 auto 1.5rem;
+  max-width: 34rem;
+  font-size: 1.2rem;
+  line-height: 1.55;
+  color: #e2e8f0;
 }
 
 .diagnostic-hitrate {
@@ -2149,6 +2273,49 @@ html[data-emergencia='topo'] .coluna-livre-da-emergencia {
   max-width: min(
     var(--coluna-largura, 640px),
     calc(100vw - 2 * var(--reserva-emergencia-x))
+  ) !important;
+}
+
+/* ── Modo só horizontal (21/10/2026): a Emergência é a faixa da borda direita ──
+ *
+ * A faixa ocupa 8 % da largura, da altura toda, mas nunca menos que o alvo
+ * mínimo de 5° (FaixaLateralDaEmergencia, que escreve a medida exata em px no
+ * `<html>`; o padrão aqui é o mesmo cálculo). O EmergencyProvider escreve
+ * `html[data-emergencia='faixa']`. As telas param antes dela, com a mesma folga
+ * da Emergência do topo (maior que duas zonas de acerto somadas): o lado
+ * direito de uma escolha lateral não encosta no socorro. */
+:root {
+  --faixa-da-emergencia-largura: max(8vw, var(--gaze-target-min, 198px));
+}
+html[data-emergencia='faixa'] .gaze-pagina {
+  padding-right: calc(var(--faixa-da-emergencia-largura) + var(--emergencia-folga)) !important;
+}
+html[data-emergencia='faixa'] .reserva-emergencia {
+  padding-right: max(0px, calc(var(--faixa-da-emergencia-largura) + var(--emergencia-folga) - var(--reserva-margem))) !important;
+}
+html[data-emergencia='faixa'] .reserva-emergencia--caixa {
+  margin-right: max(0px, calc(var(--faixa-da-emergencia-largura) + var(--emergencia-folga) - var(--reserva-margem))) !important;
+}
+/* Revisão final, rodada 1 (M3, 21/10/2026). Com a faixa em 198 px ou mais, a
+   coluna centralizada das telas do cuidador (Consulta, Evolução, Relatório,
+   Conta: 980 px) e o corpo do `CaregiverPageLayout` passavam por baixo dela:
+   a 1024 px, ~176 px de conteúdo cobertos, e o clique do cuidador nessa borda
+   abria a contagem da Emergência. A coluna desconta a faixa dos DOIS lados (fica
+   centralizada, como na Emergência do topo). */
+html[data-emergencia='faixa'] .coluna-livre-da-emergencia {
+  max-width: min(
+    var(--coluna-largura, 640px),
+    calc(100vw - 2 * (var(--faixa-da-emergencia-largura) + var(--emergencia-folga)))
+  ) !important;
+}
+/* O corpo do cuidador (até 1200 px, centralizado): reserva só o que falta — a
+   faixa e a folga menos a sobra que a janela mais larga que 1200 px já deixa à
+   direita. Num monitor de 1920 px a sobra (360 px) cobre a faixa e nada
+   encolhe. `--reserva-margem` é o padding de 2,5 rem que ele já tinha. */
+html[data-emergencia='faixa'] .reserva-da-faixa {
+  padding-right: max(
+    2.5rem,
+    calc(var(--faixa-da-emergencia-largura) + var(--emergencia-folga) - max(0px, (100vw - 1200px) / 2))
   ) !important;
 }
 

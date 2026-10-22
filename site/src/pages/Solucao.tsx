@@ -1,7 +1,6 @@
 import { PageHead } from '@/components/layout/PageHead'
 import { ExploradorDeModulos } from '@/components/produto/ExploradorDeModulos'
 import { Capitulo, Detalhe, Recursos } from '@/components/pagina/Blocos'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Comparison } from '@/components/sections/Comparison'
 import { CallToAction } from '@/components/sections/CallToAction'
 import { Button } from '@/components/ui/Button'
@@ -9,6 +8,7 @@ import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { BETA, BETA_CTA } from '@/data/content'
 import { ADOCAO, DECISOES, LIMITES, MODULOS_EM_TELA } from '@/data/produto'
 import './solucao.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 /**
  * /solucao — o produto. A abertura já é o app: a lista de módulos com a tela
@@ -21,17 +21,20 @@ export default function Solucao() {
 
   return (
     <>
+      <FundoDaPagina />
       <PageHead
-        eyebrow="IrisFlow Communicator"
-        title="Tudo o que a pessoa precisa, pelo olhar."
-        highlight={['olhar.']}
-        lead="Escrever e falar, usar o computador inteiro, conversar com a família e pedir ajuda. Um app no computador, com a webcam que já existe."
+        title="Escrever, falar e pedir ajuda só com o olhar."
+        lead="O IrisFlow Communicator é um aplicativo para Windows. Ele usa a webcam do computador para a pessoa escrever, falar em voz alta, usar o computador e chamar quem cuida."
         visual={<ExploradorDeModulos modulos={MODULOS_EM_TELA} />}
       >
         {BETA.ativo && !lancou ? (
-          <Button to={BETA_CTA.to}>{BETA_CTA.label}</Button>
+          <Button to={BETA_CTA.to} chamada>
+            {BETA_CTA.label}
+          </Button>
         ) : (
-          <Button to="/baixar">Baixar grátis</Button>
+          <Button to="/baixar" chamada>
+            Baixar grátis
+          </Button>
         )}
         <Button to="/planos" variant="ghost">
           Ver os planos
@@ -42,15 +45,14 @@ export default function Solucao() {
         <div className="container">
           <Capitulo
             id="decisoes-titulo"
-            titulo="Seis decisões que fazem diferença no dia a dia."
-            texto="Cada uma responde a um problema que aparece em casa: cansaço, postura, luz ruim, internet instável e privacidade."
+            titulo="Pensado para o dia a dia em casa."
+            texto="Cansaço, postura, luz ruim, internet instável: cada detalhe responde a um problema real."
           />
           <Recursos itens={DECISOES} />
         </div>
       </section>
 
       <section className="faixa on-dark" aria-labelledby="adocao-titulo">
-        <AmbientBackground variante="suave" />
         <div className="container">
           <Capitulo
             id="adocao-titulo"
@@ -73,7 +75,10 @@ export default function Solucao() {
         </Comparison>
       </div>
 
-      <CallToAction />
+      <CallToAction
+        titulo="Veja no seu computador."
+        texto="Baixe a beta, faça a calibração e veja se funciona no seu caso. É grátis e não pede cartão."
+      />
     </>
   )
 }

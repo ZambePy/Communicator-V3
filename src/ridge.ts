@@ -194,8 +194,8 @@ export interface RidgeTrainOptions {
    *  intra-fixação. Ausente → `λI` isotrópico. */
   groups?: string[];
   /** Σ_W já calculada. Σ_W não depende de λ, então o CV a computa UMA vez por
-   *  fold e reusa nas 22 tentativas de λ — sem isto, o custo O(m·d²) dominaria
-   *  o treino (22× desperdício). `null` força a penalidade isotrópica. */
+   *  fold e reusa nas 25 tentativas de λ — sem isto, o custo O(m·d²) dominaria
+   *  o treino (25× desperdício). `null` força a penalidade isotrópica. */
   penaltyMatrix?: number[][] | null;
   /** Peso de cada amostra nas equacoes normais. Ausente = todas iguais.
    *  Ver o bloco em `trainRidgeModel`. */

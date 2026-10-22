@@ -9,15 +9,31 @@ import './explorador.css'
  * tela de verdade no monitor (e, quando o módulo também vive no celular, o
  * IrisFlow Cuidador na frente). Abas do WAI-ARIA: setas trocam, Home e End
  * vão às pontas, e só a aba ativa entra no Tab.
+ *
+ * As capturas pesam de 22 a 78 KB cada e só uma aparece por vez. Por isso só
+ * entra no HTML a imagem do módulo ativo e a dos que a pessoa já viu ou está
+ * prestes a abrir (ponteiro ou foco na aba): a página abria com 12 imagens
+ * (auditoria de 21/10/2026, P2-5).
  */
 export function ExploradorDeModulos({ modulos }: { modulos: ModuloEmTela[] }) {
   const [ativo, setAtivo] = useState(0)
+  // Posições já vistas, na ordem em que apareceram. Só cresce no fim: assim as
+  // imagens que já estão na tela mantêm a posição (e a chave) e a troca continua
+  // sendo um esmaecer, sem remontar a moldura.
+  const [vistas, setVistas] = useState<number[]>([0])
   const base = useId()
   const abas = useRef<(HTMLButtonElement | null)[]>([])
   const m = modulos[ativo]
 
-  const escolher = (i: number) => {
+  const marcarVista = (i: number) => setVistas((v) => (v.includes(i) ? v : [...v, i]))
+
+  const ativar = (i: number) => {
+    marcarVista(i)
     setAtivo(i)
+  }
+
+  const escolher = (i: number) => {
+    ativar(i)
     abas.current[i]?.focus()
   }
 
@@ -54,7 +70,9 @@ export function ExploradorDeModulos({ modulos }: { modulos: ModuloEmTela[] }) {
             aria-controls={`${base}-painel`}
             tabIndex={i === ativo ? 0 : -1}
             className={`explorador__aba${i === ativo ? ' is-ativa' : ''}`}
-            onClick={() => setAtivo(i)}
+            onClick={() => ativar(i)}
+            onPointerEnter={() => marcarVista(i)}
+            onFocus={() => marcarVista(i)}
             onKeyDown={(e) => teclado(e, i)}
           >
             <Icon name={mod.icone} size={20} />
@@ -65,11 +83,13 @@ export function ExploradorDeModulos({ modulos }: { modulos: ModuloEmTela[] }) {
 
       <div className="explorador__painel" role="tabpanel" id={`${base}-painel`} aria-labelledby={`${base}-aba-${m.id}`}>
         <div className={`explorador__palco${m.celular ? ' tem-celular' : ''}`}>
-          <MonitorTelas telas={modulos.map((x) => x.tela)} ativa={ativo} />
+          <MonitorTelas telas={vistas.map((i) => modulos[i].tela)} ativa={vistas.indexOf(ativo)} />
           <div className="explorador__celulares">
             {comCelular.map((x) => (
               <div key={x.id} className={`explorador__celular${x.id === m.id ? ' is-ativo' : ''}`}>
-                <CelularTela src={x.celular!.src} alt={x.celular!.alt} decorativa={x.id !== m.id} />
+                {vistas.includes(modulos.indexOf(x)) && (
+                  <CelularTela src={x.celular!.src} alt={x.celular!.alt} decorativa={x.id !== m.id} />
+                )}
               </div>
             ))}
           </div>

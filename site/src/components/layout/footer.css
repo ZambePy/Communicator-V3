@@ -1,32 +1,39 @@
+/* Rodapé (Footer.tsx): a frase da marca grande, as colunas de links em caixa
+   normal e, embaixo, a ressalva sobre as medições. */
 .footer {
   position: relative;
   z-index: 1;
-  padding-top: var(--sp-8);
+  padding-top: clamp(64px, 10vh, 112px);
+  box-shadow: inset 0 1px 0 var(--line);
 }
 
 .footer__inner {
   display: grid;
-  grid-template-columns: 1.7fr repeat(3, 1fr);
-  gap: var(--sp-6);
-  padding-bottom: var(--sp-7);
+  grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+  gap: var(--sp-7) var(--sp-6);
+  padding-bottom: var(--sp-8);
 }
 
 .footer__tagline {
   font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
   color: var(--text);
-  margin: var(--sp-4) 0 var(--sp-3);
+  margin: var(--sp-5) 0 var(--sp-4);
 }
 
 .footer__note {
-  font-size: 0.94rem;
-  max-width: 42ch;
+  font-size: var(--fs-sm);
+  max-width: 44ch;
   color: var(--text-dim);
 }
 
 .footer__social {
   display: flex;
-  gap: var(--sp-4);
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-5);
   margin-top: var(--sp-4);
 }
 
@@ -34,24 +41,27 @@
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  font-size: 0.9rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-soft);
-  transition: color var(--dur) var(--ease-out);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 4px;
+  transition: color var(--dur-fast) ease;
 }
 
 .footer__social a:hover {
-  color: var(--teal-300);
+  color: var(--text);
+  text-decoration-color: currentColor;
 }
 
 .footer__col h2 {
   font-family: var(--font-body);
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0;
   color: var(--text-dim);
-  margin-bottom: var(--sp-4);
+  margin-bottom: var(--sp-3);
 }
 
 .footer__col ul {
@@ -71,9 +81,9 @@
   align-items: center;
   /* alvo de toque de 44 px sem mudar o ritmo visual da coluna */
   min-height: 44px;
-  font-size: 0.96rem;
+  font-size: 1rem;
   color: var(--text-soft);
-  transition: color var(--dur) var(--ease-out);
+  transition: color var(--dur-fast) ease;
 }
 
 .footer__linkbtn {
@@ -90,9 +100,56 @@
   color: var(--text);
 }
 
+/* ---------- ao vivo: o relógio de Brasília e a beta ----------
+   Uma faixa fina, uma linha: a hora de Brasília à esquerda e desde quando a beta
+   está no ar à direita (P2-17, 21/10/2026: o relógio gigante saiu; o brilho azul
+   que subia da borda de baixo saiu antes, a pedido do dono). */
+.footer__ao-vivo {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-6);
+  padding-block: var(--sp-4);
+}
+
+/* O fio de cima das duas faixas do pé (relógio e ressalva) vai de uma borda do
+   texto à outra, não da borda do contêiner: com `border-top` ele passava
+   da coluna do texto por uma margem de cada lado (conferido em captura, 21/10/2026). */
+.footer__ao-vivo::before,
+.footer__bottom::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--gutter);
+  right: var(--gutter);
+  height: 1px;
+  background: var(--line);
+}
+
+.footer__beta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-soft);
+}
+
+/* O ponto teal: no ar, confirmado (a cor da confirmação, como no app). */
+.footer__beta-ponto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--teal-300);
+  box-shadow: 0 0 0 4px rgba(67, 214, 195, 0.16);
+}
+
 .footer__bottom {
-  border-top: 1px solid var(--line);
-  padding-block: var(--sp-5);
+  position: relative;
+  padding-block: var(--sp-5) var(--sp-6);
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
@@ -100,34 +157,32 @@
 
 .footer__bottom p {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.875rem;
   color: var(--text-dim);
 }
 
 .footer__disclaimer {
   max-width: 96ch;
   line-height: 1.6;
-  opacity: 0.85;
 }
 
 @media (max-width: 900px) {
   .footer__inner {
     grid-template-columns: 1fr 1fr;
   }
+  .footer__brand {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 560px) {
   .footer__inner {
     grid-template-columns: 1fr;
+    gap: var(--sp-6);
   }
 }
 
 /* Com a altura de 44 px, o sublinhado sobe para perto do texto. */
 .footer__col .underline-grow::after {
   bottom: 10px;
-}
-
-.footer__social a {
-  min-width: 44px;
-  justify-content: center;
 }

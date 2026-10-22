@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
@@ -18,6 +17,7 @@ import { isEmail } from '@/utils/format'
 import { motivoDoLinkNaUrl } from '@/utils/linkDeEmail'
 import './checkout.css'
 import './beta.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 /* ============================================================
    /confirmar-email — destino do link de confirmação do cadastro.
@@ -87,7 +87,7 @@ export default function ConfirmarEmail() {
   if (estado === 'verificando' || (loading && estado === 'parado')) {
     return (
       <div className="flow">
-        <AmbientBackground variante="suave" />
+        <FundoDaPagina variante="calmo" />
         <div className="container container--narrow flow__inner">
           <div className="flow__card panel confirmar__carregando" role="status">
             <Spinner size={28} />
@@ -145,7 +145,7 @@ function Obrigado({
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
+      <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel">
           <Stepper steps={ETAPAS_DA_BETA} current={inscricaoCompleta ? 3 : 2} />
@@ -171,7 +171,7 @@ function Obrigado({
             .{' '}
             {inscricaoCompleta
               ? 'Sua inscrição na beta está completa: o perfil mostra seus dados e o download.'
-              : 'Falta só a pesquisa rápida sobre quem vai usar — leva cerca de 1 minuto.'}
+              : 'Falta só a pesquisa rápida sobre quem vai usar. Leva cerca de 1 minuto.'}
           </p>
 
           <div className="beta__confirme-acoes">
@@ -226,7 +226,7 @@ function LinkInvalido({ motivo }: { motivo: string }) {
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
+      <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel">
           <span className="beta__icone-grande" aria-hidden="true">
@@ -277,7 +277,7 @@ function LinkInvalido({ motivo }: { motivo: string }) {
 function SemLink() {
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
+      <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
         <div className="flow__card panel">
           <span className="beta__icone-grande" aria-hidden="true">

@@ -16,8 +16,12 @@
 export const CANTHAL_DISTANCE_CM = 9.0;
 
 // Índices da topologia de 478 pontos do MediaPipe (468 do mesh + 10 de íris).
-// "Esquerdo"/"direito" seguem a convenção do MediaPipe: o lado da PESSOA — numa
-// imagem não espelhada o olho esquerdo dela aparece à direita do quadro.
+// ATENÇÃO ao nome: aqui "esquerdo" é o olho que aparece à ESQUERDA de uma
+// imagem não espelhada — o olho DIREITO da pessoa, que o próprio MediaPipe
+// chama de RIGHT_EYE (33/133, íris 468–472). Conferido em 19/10/2026 contra
+// `FaceLandmarksConnections` do MediaPipe e em fotos (o 33 cai à esquerda do
+// quadro). O vetor não depende disso (cada olho tem o seu Ridge); o espelho
+// do recorte da EyeNet, que dependia, decide pela geometria (olho/recorte.ts).
 
 /** Canto externo do olho esquerdo. */
 export const LM_CANTO_EXTERNO_ESQUERDO = 33;
