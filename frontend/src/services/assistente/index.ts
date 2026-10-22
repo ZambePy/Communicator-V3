@@ -8,9 +8,11 @@
 
 import {
   assistenteAtivo,
+  MAXIMO_DE_RESPOSTAS,
   palavraConhecida as palavraConhecidaNoNucleo,
   sugerirFrases as sugerirFrasesNoNucleo,
   sugerirPalavras as sugerirPalavrasNoNucleo,
+  sugerirRespostas as sugerirRespostasNoNucleo,
   type EstadoDoAssistente,
   type ModoDoAssistente,
   type SugestaoDeFrase,
@@ -23,6 +25,7 @@ export {
   apagarModelo,
   carregarModelo,
   descarregar,
+  esquecerSemGravar,
   registrarBigrama,
   registrarFala,
   registrarPalavra,
@@ -115,19 +118,46 @@ export function sugerirFrases(
 }
 
 /**
+ * Respostas curtas para o que o cuidador acabou de perguntar (a faixa
+ * "Respostas sugeridas", roadmap 1 da rodada 3). As que o paciente já deu a
+ * essa pergunta vêm na frente; completam as respostas-padrão da intenção. Lista
+ * vazia com o assistente desligado, e quando não há o que sugerir.
+ *
+ * Sugerir não aprende nem fala: quem aprende é `registrarFalaDoPaciente`, e só
+ * quando o paciente ESCOLHE uma resposta.
+ */
+export function sugerirRespostas(pergunta: string, maximo: number = MAXIMO_DE_RESPOSTAS): string[] {
+  if (!assistenteEstaAtivo()) return [];
+  return sugerirRespostasNoNucleo(pergunta, carregarModelo(), { maximo });
+}
+
+/**
  * A última coisa que o cuidador disse — é o contexto que transforma predição
  * de palavra em resposta. Uma mensagem do próprio paciente depois dela encerra
  * o assunto: responder de novo à mesma pergunta seria repetir a conversa.
+ *
+ * Devolve a mensagem inteira (e não só o texto) porque a faixa de respostas
+ * precisa do `id` para contar uma vez por mensagem e do `kind` para saber se
+ * cabe sugestão. As mensagens do sistema (`kind: 'sistema'`) vêm do servidor,
+ * não de uma pessoa esperando resposta: são puladas, e a pergunta anterior do
+ * cuidador continua no ar.
  */
-export function ultimaPerguntaDoCuidador(
-  mensagens: readonly { sender: string; text: string }[],
-): string | undefined {
+export function ultimaMensagemDoCuidador<M extends { sender: string; text: string; kind?: string }>(
+  mensagens: readonly M[],
+): M | undefined {
   for (let i = mensagens.length - 1; i >= 0; i--) {
     const m = mensagens[i];
-    if (m.sender === 'cuidador') return m.text;
     if (m.sender === 'paciente') return undefined;
+    if (m.sender === 'cuidador' && m.kind !== 'sistema') return m;
   }
   return undefined;
+}
+
+/** O texto da pergunta no ar (ver `ultimaMensagemDoCuidador`). */
+export function ultimaPerguntaDoCuidador(
+  mensagens: readonly { sender: string; text: string; kind?: string }[],
+): string | undefined {
+  return ultimaMensagemDoCuidador(mensagens)?.text;
 }
 
 /**

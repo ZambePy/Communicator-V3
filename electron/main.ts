@@ -10,14 +10,23 @@ import {
   permitirPermissao, permitirNavegacao, permitirAberturaExterna, hostDoSite, CSP, CSP_DEV, cspComNuvem,
   preferenciasWebSeguras, atalhoBloqueadoEmProducao, alternaTelaCheia, decidirRecarga, RECARGA_JANELA_MS,
   argumentoDeDepuracao, SWITCHES_DE_DEPURACAO, SWITCH_DO_WEBGL_POR_SOFTWARE, papeisDoMenuEmpacotado,
+  urlDoDesenvolvimento,
 } from '../src/electronSecurity';
 import { registrarModoComputador } from './computador/sessao';
 import { registrarVoz } from './voz';
+import { registrarVozGuardada } from './voz/guardadas';
+import { registrarPranchaEmPdf } from './prancha';
+import { registrarCopiaDeSeguranca } from './copiaDeSeguranca';
+import { dialog as dialogoDoSistema } from 'electron';
 import { segurarSaidaAteOMotorSair } from './voz/sidecar';
 import { registrarAtualizacao } from './atualizacao';
 import { iniciarDiagnostico, pastaDosLogs, registrarNoLog } from './diagnostico';
 import { chaveDoMonitor, esquecerTamanhosDosMonitores, lerTamanhosDosMonitores } from './monitores';
 import { criarCofre, type Cofre } from './cofre';
+import { CANAL_DO_ALARME, criarAlarmeDoSistema } from './alarme';
+import { vigiarRendererTravado } from './vigiaDoRenderer';
+import { vigiaLigado } from '../src/vigiaDoRenderer';
+import { registrarSemDerrubar } from '../src/electronInicio';
 
 // ---------------------------------------------------------------------
 // Antes de qualquer outra coisa.
@@ -159,16 +168,54 @@ ipcMain.handle('irisflow:secure-get', (e, chave: unknown): string | null => {
 ipcMain.handle('irisflow:secure-set', (e, chave: unknown, valor: unknown): boolean => {
   // 2 MB: a fila offline pode acumular relatórios; safeStorage lida com isso.
   if (!daJanelaPrincipal(e) || !chaveValida(chave) || typeof valor !== 'string' || valor.length > 2_000_000) return false;
-  if (safeStorage.isEncryptionAvailable()) {
-    return cofre().definir(chave, { enc: true, v: safeStorage.encryptString(valor).toString('base64') });
+  // Nunca lança (relato de 18/10/2026, auditoria de falhas silenciosas, item
+  // 7): `encryptString` lança quando o chaveiro do sistema recusa, e o
+  // `invoke` rejeitado no renderer deixava a licença presa em "Carregando…".
+  // `false` é a resposta que o contrato já tem para "não gravou".
+  try {
+    if (safeStorage.isEncryptionAvailable()) {
+      return cofre().definir(chave, { enc: true, v: safeStorage.encryptString(valor).toString('base64') });
+    }
+    console.warn('[cofre] safeStorage indisponível neste sistema — gravando sem cifra');
+    return cofre().definir(chave, { enc: false, v: valor });
+  } catch (erro) {
+    console.warn('[cofre] não foi possível gravar', chave, erro);
+    return false;
   }
-  console.warn('[cofre] safeStorage indisponível neste sistema — gravando sem cifra');
-  return cofre().definir(chave, { enc: false, v: valor });
 });
 
 ipcMain.handle('irisflow:secure-remove', (e, chave: unknown): boolean => {
   if (!daJanelaPrincipal(e) || !chaveValida(chave)) return false;
-  return cofre().remover(chave);
+  try {
+    return cofre().remover(chave);
+  } catch (erro) {
+    console.warn('[cofre] não foi possível remover', chave, erro);
+    return false;
+  }
+});
+
+// Alarme de emergência do lado do sistema: janela na frente, por cima de tudo,
+// piscando, e o volume do Windows no máximo (devolvido no fim) — ver
+// `electron/alarme.ts`. Só a janela principal liga ou desliga.
+const alarmeDoSistema = criarAlarmeDoSistema({ janela: () => janelaPrincipal, log: registrarNoLog });
+ipcMain.handle(CANAL_DO_ALARME, async (e, ligar: unknown, opcoes: unknown): Promise<boolean> => {
+  if (!daJanelaPrincipal(e) || typeof ligar !== 'boolean') return false;
+  const volumeMaximo = !(opcoes && typeof opcoes === 'object' && (opcoes as { volumeMaximo?: unknown }).volumeMaximo === false);
+  return ligar ? alarmeDoSistema.ligar({ volumeMaximo }) : alarmeDoSistema.desligar();
+});
+// Fechar o app com o alarme ligado não pode deixar o volume no máximo. O
+// `will-quit` não espera promessa: segura a saída até o volume voltar e sai de
+// novo (revisão de segurança de 19/10/2026; antes a devolução nem começava).
+// Quanto esperar o alarme decide na hora (revisão de segurança de 20/10/2026):
+// no máximo 8 s; com a subida do volume ainda rodando, o prazo do PowerShell
+// mais a devolução (18 s) — com os 8 s fixos, uma subida lenta terminava
+// depois de o app sair e deixava o Windows em 100%.
+let devolvendoVolumeAoSair = false;
+app.on('will-quit', (evento) => {
+  if (devolvendoVolumeAoSair || !alarmeDoSistema.precisaDesligarAoSair) return;
+  evento.preventDefault();
+  devolvendoVolumeAoSair = true;
+  void alarmeDoSistema.encerrar().finally(() => app.quit());
 });
 
 // Identidade do computador para o pareamento (nome exibido no app do cuidador).
@@ -294,12 +341,15 @@ const TELA_CHEIA = process.env.IRISFLOW_FULLSCREEN !== '0';
  * Pedido de teste: testar o fluxo de calibração com um perfil salvo é testar
  * outra coisa — o app pula a coleta, carrega o modelo de ontem e esconde
  * qualquer regressão no caminho que se queria exercitar. `?calib=0` é a
- * porta que `sessionFromUrl.ts` já entende (vale só para aquela abertura e
- * NÃO apaga nada do disco). O app empacotado persiste normalmente: uma
- * pessoa com ELA não refaz nove pontos a cada abertura.
- * `IRISFLOW_DEV_CALIB=1` religa a persistência no dev.
+ * porta que `sessionFromUrl.ts` já entende (NÃO apaga nada do disco). O app
+ * empacotado persiste normalmente: uma pessoa com ELA não refaz treze pontos
+ * a cada abertura.
+ *
+ * `IRISFLOW_DEV_CALIB=1` religa a persistência no dev — abrindo com
+ * `?calib=1`: o parâmetro fica gravado no `localStorage`, e sem o `=1`
+ * explícito o `false` da abertura anterior continuava valendo (A6).
  */
-const URL_DE_DEV = process.env.IRISFLOW_DEV_CALIB === '1' ? DEV_SERVER_URL : `${DEV_SERVER_URL}?calib=0`;
+const URL_DE_DEV = urlDoDesenvolvimento(DEV_SERVER_URL, process.env.IRISFLOW_DEV_CALIB);
 
 /** Hosts extras que podem abrir no navegador do sistema (site configurado no build). */
 function hostsExtrasDoSite(): string[] {
@@ -409,6 +459,24 @@ function avisarQuedasRepetidas(esperaMs: number, agora: number): void {
   }
 }
 
+/**
+ * Um recurso opcional não registrou na abertura (ver `registrarOpcional`): UMA
+ * notificação do sistema que não bloqueia nada, e o motivo já foi para o log.
+ */
+function avisarRecursosQueNaoIniciaram(nomes: string[]): void {
+  try {
+    if (!Notification.isSupported()) return;
+    new Notification({
+      title: 'IrisFlow',
+      body:
+        `O IrisFlow abriu, mas ${nomes.join(', ')} não iniciou. O restante funciona normalmente. ` +
+        'Se continuar assim, reinicie o computador e envie a pasta de registros ao suporte.',
+    }).show();
+  } catch (erro) {
+    console.warn('[inicio] aviso de recurso que não iniciou não pôde ser mostrado:', erro);
+  }
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -488,6 +556,12 @@ function createWindow(): void {
   });
   win.on('unresponsive', () => registrarNoLog('aviso', '[janela] a página não responde há alguns segundos'));
   win.on('responsive', () => registrarNoLog('info', '[janela] a página voltou a responder'));
+  // O `unresponsive` acima depende de entrada física sem resposta, que quem
+  // usa só o olhar não gera, e só registra. O vigia ouve a batida da página e,
+  // sem ela por 30 s (janela visível, rastreamento ligado), derruba o processo
+  // da página para a recarga acima reabri-la (auditoria de 18/10/2026, item
+  // 4; limiar justificado em `src/vigiaDoRenderer.ts`).
+  vigiarRendererTravado(win, { ligado: vigiaLigado(app.isPackaged, process.env.IRISFLOW_VIGIA) });
 
   if (!app.isPackaged) {
     win.loadURL(URL_DE_DEV);
@@ -592,26 +666,56 @@ if (PRIMEIRA_INSTANCIA) {
     screen.on('display-removed', esquecerTamanhosDosMonitores);
     screen.on('display-metrics-changed', esquecerTamanhosDosMonitores);
 
+    // Cada recurso abaixo é OPCIONAL: se um lançar ao registrar, o app abre sem
+    // ele e o cuidador é avisado (revisão final de 22/10/2026). Antes, a exceção
+    // rejeitava este `whenReady` e `createWindow()` nunca rodava — app vivo e
+    // invisível, com a instância única impedindo abrir outro.
+    const recursosQueNaoIniciaram: string[] = [];
+    const registrarOpcional = <T,>(nome: string, registrar: () => T): T | undefined =>
+      registrarSemDerrubar(nome, registrar, (n, erro) => {
+        recursosQueNaoIniciaram.push(n);
+        registrarNoLog('erro', `[inicio] ${n} não iniciou; o app abre sem ele:`, erro);
+      });
+
     // Modo Computador: cursor do IrisFlow sobre o sistema. A sobreposição é a
     // página `overlay.html` do mesmo build do frontend, com preload próprio.
-    registrarModoComputador({
+    registrarOpcional('o Modo Computador', () => registrarModoComputador({
       janelaPrincipal: () => janelaPrincipal,
       preloadDaSobreposicao: path.join(__dirname, 'overlayPreload.cjs'),
       carregarSobreposicao: (janela) =>
         app.isPackaged
           ? janela.loadFile(path.join(__dirname, '..', 'frontend', 'dist', 'overlay.html'))
           : janela.loadURL(`${DEV_SERVER_URL}/overlay.html`),
-    });
+    }));
 
     // Voz clonada local (sidecar Python / executável em resources/voice-engine).
-    const voz = registrarVoz({ raizDoProjeto: RAIZ_DO_PROJETO, janelaPrincipal: () => janelaPrincipal });
-    registrarAtualizacao(() => janelaPrincipal);
+    const voz = registrarOpcional('a voz personalizada', () => registrarVoz({ raizDoProjeto: RAIZ_DO_PROJETO, janelaPrincipal: () => janelaPrincipal }));
+    // Voz guardada (19/10/2026): frases gravadas pelo próprio paciente, em
+    // `userData/voz/guardadas/`; uma delas pode virar a base da voz clonada
+    // pelo mesmo caminho da importação. Sem o motor de voz, as gravações
+    // continuam; só "usar como voz" responde que o motor não iniciou.
+    registrarOpcional('as frases gravadas', () => registrarVozGuardada({
+      janelaPrincipal: () => janelaPrincipal,
+      importarDeArquivo: voz?.importarDeArquivo ?? (async () => ({ ok: false as const, erro: 'O motor de voz não iniciou neste computador.' })),
+    }));
+    // Backup completo (rodada 3, 21/10/2026): antes de restaurar, a cópia do estado de
+    // agora é guardada AQUI, em `userData/copias-de-seguranca/` — não por um download da
+    // página, que abre o "Salvar como" e pode ser cancelado pela recarga que vem depois.
+    registrarOpcional('a cópia de segurança', () => registrarCopiaDeSeguranca({
+      ipcMain,
+      janelaPrincipal: () => janelaPrincipal,
+      pasta: () => path.join(app.getPath('userData'), 'copias-de-seguranca'),
+    }));
+    // Prancha de letras impressa (plano C): "Salvar em PDF" nas Configurações.
+    registrarOpcional('a prancha impressa', () => registrarPranchaEmPdf({ ipcMain, dialog: dialogoDoSistema, janelaPrincipal: () => janelaPrincipal, pastaPadrao: () => app.getPath('documents') }));
+    registrarOpcional('a atualização automática', () => registrarAtualizacao(() => janelaPrincipal));
     // Fechar o app espera o motor de voz sair (no máximo a cortesia e o kill).
     // Sem isso o Electron saía antes do kill e o motor seguia órfão até o fim
     // do comando em curso — síntese, carga do modelo ou download.
-    segurarSaidaAteOMotorSair(app, voz);
+    if (voz) registrarOpcional('o encerramento do motor de voz', () => segurarSaidaAteOMotorSair(app, voz));
 
     createWindow();
+    if (recursosQueNaoIniciaram.length > 0) avisarRecursosQueNaoIniciaram(recursosQueNaoIniciaram);
 
     // macOS: clicar no ícone do Dock com o app aberto e sem janela recria a
     // janela; com janela, só a traz para a frente.

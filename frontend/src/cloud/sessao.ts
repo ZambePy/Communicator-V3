@@ -49,12 +49,21 @@ export function resumoDoRelatorio(result: AccuracyResult, meta: RunMeta | null):
   };
 }
 
-/** Colunas de `sessions` preenchidas ao fim da calibração + teste. */
+/**
+ * Colunas de `sessions` preenchidas ao fim da calibração + teste.
+ *
+ * `filtroEmVigor`: o filtro que governa o cursor (`oneEuro`, `fixacao`,
+ * `kalman`…), gravado nas condições de captura (auditoria A2, 19/10/2026). O
+ * `capture_conditions` daqui SUBSTITUI o da abertura da sessão, então o filtro
+ * precisa vir junto, ou o relatório perde o que estava em vigor.
+ */
 export function camposDeCalibracao(
   result: AccuracyResult,
   meta: RunMeta | null,
   duracaoCalibracaoS: number | null,
+  filtroEmVigor?: string | null,
 ): SessaoRemota {
+  const filtro = filtroEmVigor ? { filtro: filtroEmVigor } : {};
   return {
     calibration_error_px: arred(result.meanError),
     calibration_error_deg: arred(result.meanErrorDeg, 2),
@@ -72,7 +81,8 @@ export function camposDeCalibracao(
           telaPolegadas: meta.telaPolegadas,
           luxAmbiente: meta.luxAmbiente ?? null,
           blocoDeMedicao: meta.blocoDeMedicao ?? 1,
+          ...filtro,
         }
-      : {},
+      : { ...filtro },
   };
 }

@@ -133,6 +133,24 @@ describe('aplicarSessaoDaUrl', () => {
       expect(avisos.join(' ')).toContain('suavizacaoDoLandmarker=1');
     });
 
+    // Revisão do pipeline de 19/10/2026: o estímulo de antes de 19/10 é condição
+    // de medição fora do V3, aceita pela mesma sintaxe e com a mesma validação.
+    it('?exp.estimuloAntigo=1|0 liga e desliga o estímulo de antes; outro valor não grava nada', () => {
+      const avisos: string[] = [];
+      vi.spyOn(console, 'warn').mockImplementation((m: unknown) => { avisos.push(String(m)); });
+      expect(aplicarSessaoDaUrl('?exp.estimuloAntigo=1', '')).toBe(true);
+      expect(exp().estimuloAntigo).toBe(true);
+      expect(aplicarSessaoDaUrl('?exp.estimuloAntigo=0', '')).toBe(true);
+      expect(exp().estimuloAntigo).toBe(false);
+      expect(aplicarSessaoDaUrl('?exp.estimuloAntigo=sim', '')).toBe(false);
+      expect(exp().estimuloAntigo).toBe(false);
+      expect(avisos.join(' ')).toContain('estimuloAntigo=sim');
+      // `?pipeline=base` não a liga: não é flag do V3.
+      localStorage.clear();
+      aplicarSessaoDaUrl('?pipeline=base', '');
+      expect(exp().estimuloAntigo).toBeUndefined();
+    });
+
     it('só flags do V3 passam por ?exp. — nem outras flags, nem chaves herdadas do objeto', () => {
       const avisos: string[] = [];
       vi.spyOn(console, 'warn').mockImplementation((m: unknown) => { avisos.push(String(m)); });

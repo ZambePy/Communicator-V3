@@ -43,6 +43,7 @@ import {
 import { definirModoApresentacao, modoApresentacaoAtivo } from '../services/apresentacao';
 import { baixarRelatorio, montarRelatorio } from '../services/diagnostico/relatorioDeSuporte';
 import { useConfirmacao } from '../components/ui/DialogoDeConfirmacao';
+import { AjustesDoPlanoB } from '../components/AjustesDoPlanoB';
 import { definirRelatosAutomaticos, relatosAutomaticosLigados } from '../services/diagnostico/relatosAutomaticos';
 import {
   ESTADO_SEM_PONTE,
@@ -85,9 +86,21 @@ import { getCalibrationTimestampMs } from '@tracker/calibration';
 import { ControleDeDwell } from '../components/ui/ControleDeDwell';
 import { AtalhoDeTutorial } from './tutorial/AtalhoDeTutorial';
 import { AtalhoDeCalibracao } from './calibration/AtalhoDeCalibracao';
+import { AjusteDaLinguagem } from './calibration/EscolhaDaLinguagem';
 import { AtalhoDePerfilEConta } from './conta/AtalhoDePerfilEConta';
+import { ParearCelular } from '../components/ParearCelular';
 import { SobreOIrisFlow } from './settings/SobreOIrisFlow';
 import { LeiturasSection } from './settings/LeiturasSection';
+import { AbreviacoesSection } from './settings/AbreviacoesSection';
+import { AjusteDaPressaoLonga } from './settings/AjusteDaPressaoLonga';
+import { ModoHorizontalSection } from './settings/ModoHorizontalSection';
+import { AjustesDeEmergenciaEHospital } from './settings/AjustesDeEmergenciaEHospital';
+import { SaidaDaVozSection } from './settings/SaidaDaVozSection';
+import { textoDoPresetSemEfeito } from './settings/presetSemEfeito';
+import { DoresRelatadas } from './settings/DoresRelatadas';
+import { BackupSection } from './settings/BackupSection';
+import { PranchaImpressa } from './settings/prancha/PranchaImpressa';
+import { AtalhoDeEvolucaoEConsulta } from './evolucao/AtalhoDeEvolucaoEConsulta';
 import { PrimaryButton } from '../components/ui/PrimaryButton';
 
 const cardStyle: React.CSSProperties = {
@@ -387,9 +400,16 @@ export const SettingsScreen: React.FC = () => {
     toast.success('Gravação descartada.');
   };
 
+  /**
+   * O preset escolhido NÃO governa o cursor agora (auditoria A2, 19/10/2026):
+   * com o estimador de fixação (M9) ou a cadeia Kalman em vigor, ele fica
+   * guardado no One Euro, que está fora do caminho do cursor. Antes a tela
+   * marcava o botão como se valesse.
+   */
+  const [presetSemEfeito, setPresetSemEfeito] = useState<string | null>(null);
   const chooseFilterPreset = (preset: FilterPresetV2) => {
     setFilterPresetState(preset);
-    setFilterPreset(preset);
+    setPresetSemEfeito(textoDoPresetSemEfeito(setFilterPreset(preset)));
   };
   const [accuracyRunning, setAccuracyRunning] = useState(false);
   const [lastAccuracy, setLastAccuracy] = useState<AccuracyResult | null>(null);
@@ -518,7 +538,9 @@ export const SettingsScreen: React.FC = () => {
       },
       metaWithUptime,
       buildRuntimeInfo(getDiagnostics()),
-      { modo }
+      // A mesma escolha da tela de resultado da calibração (19/10/2026): em
+      // palavras simples, o painel do teste mostra a palavra e uma frase.
+      { modo, linguagem: settings.linguagemDoRelatorio }
     );
   };
 
@@ -541,18 +563,6 @@ export const SettingsScreen: React.FC = () => {
     if (currentProfile) limparTutorial(currentProfile.id);
     updateSettings({ dicasVistas: [] });
     navigate('/intro');
-  };
-
-  const handleBackup = () => {
-    const data = JSON.stringify(settings, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'irisflow_backup.json';
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Backup exportado.');
   };
 
   if (!isCaregiver) {
@@ -626,10 +636,19 @@ export const SettingsScreen: React.FC = () => {
             app; sem o segundo, so se descobria que a licenca venceu quando
             tudo parou. */}
         <AtalhoDePerfilEConta />
+        <ParearCelular />
 
         <AtalhoDePreparo />
 
         <AtalhoDeCalibracao />
+
+        {/* Como o resultado da calibração e do teste de precisão aparece: a
+            pergunta é feita uma vez, no começo da calibração; aqui ela muda. */}
+        <AjusteDaLinguagem
+          valor={settings.linguagemDoRelatorio}
+          aoEscolher={(l) => updateSettings({ linguagemDoRelatorio: l })}
+          cardStyle={cardStyle}
+        />
 
         <AtalhoDeTutorial />
 
@@ -736,6 +755,52 @@ export const SettingsScreen: React.FC = () => {
             {t(settings.soundEnabled ? 'settings.sound.on' : 'settings.sound.off')}
           </button>
         </section>
+
+        {/* Alarme de emergência (19/10/2026): o alarme existe para ser ouvido
+            de outro cômodo, à noite. Com isto ligado, o aplicativo sobe o
+            volume do Windows ao máximo enquanto o alarme toca e devolve o
+            volume de antes quando ele para (electron/alarme.ts). */}
+        <section aria-labelledby="alarme-title" style={cardStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+            <Volume2 size={28} color="var(--color-primary)" aria-hidden="true" />
+            <h2 id="alarme-title" className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}>
+              Alarme de emergência
+            </h2>
+          </div>
+          <p style={{ margin: '0 0 1.25rem 0', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+            Quando ninguém confirma um pedido de socorro, o computador toca uma sirene e traz a tela de
+            emergência para a frente. Com o volume máximo ligado, ele também sobe o volume do Windows
+            enquanto o alarme toca e devolve o volume de antes quando o alarme para.
+          </p>
+          <button
+            role="switch"
+            aria-checked={settings.alarmeComVolumeMaximo}
+            onClick={() => updateSettings({ alarmeComVolumeMaximo: !settings.alarmeComVolumeMaximo })}
+            style={{
+              padding: '1rem 1.5rem',
+              borderRadius: '1rem',
+              border: '2px solid var(--color-card-border)',
+              background: settings.alarmeComVolumeMaximo ? 'var(--color-primary)' : 'var(--color-card-bg)',
+              color: settings.alarmeComVolumeMaximo ? 'white' : 'var(--color-text-base)',
+              cursor: 'pointer',
+              fontWeight: 700,
+            }}
+          >
+            {settings.alarmeComVolumeMaximo ? 'Volume máximo no alarme: ligado' : 'Volume máximo no alarme: desligado'}
+          </button>
+        </section>
+
+        <AjustesDoPlanoB estiloDoCartao={cardStyle} />
+        <AjusteDaPressaoLonga estiloDoCartao={cardStyle} />
+        <ModoHorizontalSection estiloDoCartao={cardStyle} />
+        <AjustesDeEmergenciaEHospital estiloDoCartao={cardStyle} />
+
+        {/* Plano C (19/10/2026): a prancha de letras impressa, para quando o
+            computador não está por perto. */}
+        <PranchaImpressa estiloDoCartao={cardStyle} />
+
+        {/* Evolução semanal e consulta (21/10/2026). */}
+        <AtalhoDeEvolucaoEConsulta />
 
         {/*
           Tema — escondido enquanto `TEMA_FIXO` estiver travado.
@@ -1083,6 +1148,8 @@ export const SettingsScreen: React.FC = () => {
           </div>
         </section>
 
+        <SaidaDaVozSection cardStyle={cardStyle} />
+
         {/* Assistente de escrita — o "chatbot integrado" do roteiro de produto.
             Fica aqui, e não numa tela própria, porque não há nada para
             configurar além de ligar/desligar e apagar: ele não pede áudio, não
@@ -1163,6 +1230,8 @@ export const SettingsScreen: React.FC = () => {
             </button>
           </div>
         </section>
+
+        <AbreviacoesSection cardStyle={cardStyle} />
 
         {/* Apresentação e suporte — as duas coisas que existem para quem está
             FORA da rotina do paciente: quem demonstra o produto e quem precisa
@@ -1504,6 +1573,20 @@ export const SettingsScreen: React.FC = () => {
               }
             )}
           </div>
+          {presetSemEfeito && (
+            <p
+              role="status"
+              data-testid="preset-sem-efeito"
+              style={{
+                marginTop: '1rem',
+                color: 'var(--color-text-base)',
+                fontFamily: 'system-ui, sans-serif',
+                lineHeight: 1.6,
+              }}
+            >
+              {presetSemEfeito}
+            </p>
+          )}
         </section>
         )}
 
@@ -2590,6 +2673,9 @@ export const SettingsScreen: React.FC = () => {
                     })()
                   )}
                 </div>
+
+                {/* Cartão 4: o mapa da dor (19/10/2026). */}
+                <DoresRelatadas dores={clinicalData.dores} />
               </div>
 
               {/* Botões de Ação de Dados */}
@@ -2653,45 +2739,7 @@ export const SettingsScreen: React.FC = () => {
           )}
         </section>
 
-        {/* Backup */}
-        <section aria-labelledby="backup-title" style={cardStyle}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              marginBottom: '1.25rem',
-            }}
-          >
-            <Download size={28} color="var(--color-primary)" aria-hidden="true" />
-            <h2
-              id="backup-title"
-              className="t-h2" style={{ color: 'var(--color-text-base)', margin: 0 }}
-            >
-              {t('settings.backup.title')}
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={handleBackup}
-            aria-label={t('settings.backup.export')}
-            style={{
-              padding: '1rem 1.5rem',
-              borderRadius: '1rem',
-              border: '2px solid var(--color-card-border)',
-              background: 'var(--color-card-bg)',
-              color: 'var(--color-text-base)',
-              opacity: 0.9,
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-            }}
-          >
-            <Download size={20} aria-hidden="true" /> {t('settings.backup.export')}
-          </button>
-        </section>
+        <BackupSection cardStyle={cardStyle} />
 
         <p
           style={{

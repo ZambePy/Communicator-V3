@@ -1,0 +1,237 @@
+/* "Para quem" (ArcoDeCondicoes.tsx), rodada 3 (21/10/2026).
+
+   Um círculo enorme, do qual só aparece o topo: a borda de cima é a linha
+   curva (a borda de uma íris), um fio fino que some nas pontas, sem brilho
+   (o dono recusou o "efeito" em 21/10/2026). Os nomes ficam sobre ela, girados com a curva: cada item nasce no
+   centro do círculo e é girado até a sua posição (transform-origin no
+   centro). O ângulo de cada item vem do componente (--a) e o raio, o topo e a
+   altura também (--raio, --topo, --altura): o componente mede a caixa e os
+   itens e só usa o arco quando ele cabe inteiro (geometriaDoArco.ts); senão,
+   data-modo="lista" (revisão de 21/10/2026, I1). */
+
+.v3-para-quem {
+  position: relative;
+  padding-block: var(--faixa) clamp(32px, 6vh, 72px);
+  background: var(--v3-noite-2);
+  overflow-x: clip;
+}
+
+.v3-para-quem__cabeca {
+  max-width: 760px;
+  margin: 0 auto clamp(8px, 2vh, 24px);
+  text-align: center;
+}
+
+.v3-para-quem__titulo {
+  max-width: 20ch;
+  margin: 0 auto var(--sp-4);
+  font-size: var(--fs-h2);
+  line-height: 1.06;
+  letter-spacing: -0.032em;
+}
+
+.v3-para-quem__texto {
+  max-width: 54ch;
+  margin: 0 auto;
+  font-size: var(--fs-lead);
+  line-height: 1.55;
+  color: var(--v3-texto-2);
+}
+
+.v3-arco {
+  /* Quem manda é o componente (ArcoDeCondicoes.tsx): mede a caixa e os itens e
+     põe aqui o raio, o topo e a altura que CABEM. Estes valores só valem até a
+     primeira medida. */
+  --raio: 900px;
+  --topo: 110px;
+  --altura: 300px;
+  position: relative;
+  height: var(--altura);
+}
+
+.v3-arco__curva {
+  position: absolute;
+  inset: 0;
+  /* O círculo é enorme (2 × raio): é ELE que se corta na caixa. Os nomes não —
+     antes o corte era da caixa toda e comia ELA e Distrofias (I1, 21/10/2026). */
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* O topo do círculo: só o fio. Some nas pontas do arco. */
+.v3-arco__linha {
+  position: absolute;
+  left: 50%;
+  top: var(--topo);
+  width: calc(2 * var(--raio));
+  height: calc(2 * var(--raio));
+  /* Centrado por transform (uma margem negativa aqui seria confundida com a
+     sangria das listas que deslizam de lado; ver styles/sangria.test.ts). */
+  transform: translateX(-50%);
+  border-radius: 50%;
+  border-top: 1.5px solid rgba(169, 198, 247, 0.55);
+  -webkit-mask-image: linear-gradient(to right, transparent 19%, #000 31%, #000 69%, transparent 81%);
+  mask-image: linear-gradient(to right, transparent 19%, #000 31%, #000 69%, transparent 81%);
+}
+
+.v3-arco__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.v3-arco__item {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--topo) + var(--raio));
+  width: max-content;
+  /* Nunca mais estreito que a palavra mais longa ("encarceramento"): o
+     tamanho que o componente mede é o tamanho que se vê. */
+  min-width: min-content;
+  max-width: 14ch;
+  margin: 0;
+  text-align: center;
+  transform-origin: 0 0;
+  transform: rotate(var(--a, 0deg)) translateY(calc(-1 * var(--raio) - 16px - 100%)) translateX(-50%);
+}
+
+.v3-arco__link {
+  display: inline-block;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--v3-texto-2);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 5px;
+  transition:
+    color var(--dur-fast) ease,
+    text-decoration-color var(--dur-fast) ease;
+}
+
+.v3-arco__link:hover {
+  color: var(--v3-papel);
+  text-decoration-color: currentColor;
+}
+
+/* ---------- sem espaço para o arco: a curva em cima, os nomes numa lista ----------
+   O componente põe data-modo="lista" quando o arco não cabe inteiro (janela
+   estreita, celular, fonte grande) e antes da primeira medida. */
+.v3-arco[data-modo='lista'] {
+  --raio: 460px;
+  --topo: 24px;
+  height: auto;
+  padding-top: 92px;
+}
+
+.v3-arco[data-modo='lista'] .v3-arco__curva {
+  bottom: auto;
+  height: 112px;
+}
+
+.v3-arco[data-modo='lista'] .v3-arco__linha {
+  -webkit-mask-image: linear-gradient(to right, transparent 28%, #000 40%, #000 60%, transparent 72%);
+  mask-image: linear-gradient(to right, transparent 28%, #000 40%, #000 60%, transparent 72%);
+}
+
+.v3-arco[data-modo='lista'] .v3-arco__lista {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.v3-arco[data-modo='lista'] .v3-arco__item {
+  position: static;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  transform: none;
+}
+
+.v3-arco[data-modo='lista'] .v3-arco__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--v3-fio-forte);
+  border-radius: var(--r-pill);
+  font-size: 0.975rem;
+}
+
+/* ---------- o desenho (rodada 3, 21/10/2026) ----------
+   Quando a seção entra na tela, a linha se traça da esquerda para a direita
+   (um recorte que abre, 1,8 s, linear) e cada condição aparece quando a linha
+   passa por ela (--entra-arco, de desenhoDoArco.ts; na lista de pílulas,
+   --entra-lista). Uma vez. As classes vêm do componente, que só as põe quando
+   vai animar: sem elas nada fica escondido. --de e --ate são o trecho visível
+   da linha (o da máscara), para o traço não gastar tempo no que não se vê. */
+.v3-arco {
+  --de: 19%;
+  --ate: 81%;
+}
+
+.v3-arco[data-modo='lista'] {
+  --de: 28%;
+  --ate: 72%;
+}
+
+.v3-arco.is-preparado .v3-arco__linha {
+  clip-path: inset(0 calc(100% - var(--de)) 0 var(--de));
+}
+
+.v3-arco.is-desenhando .v3-arco__linha {
+  animation: arco-tracar 1800ms linear both;
+}
+
+.v3-arco.is-preparado .v3-arco__link {
+  opacity: 0;
+}
+
+.v3-arco.is-desenhando .v3-arco__link {
+  animation: arco-aparece 520ms var(--ease-out) var(--entra-arco, 0ms) both;
+}
+
+.v3-arco[data-modo='lista'].is-desenhando .v3-arco__link {
+  animation-delay: var(--entra-lista, 0ms);
+}
+
+@keyframes arco-tracar {
+  from {
+    clip-path: inset(0 calc(100% - var(--de)) 0 var(--de));
+  }
+  to {
+    clip-path: inset(0 calc(100% - var(--ate)) 0 var(--de));
+  }
+}
+
+/* Um passo de 6 px para fora do arco (a direção "para cima" do item girado). */
+@keyframes arco-aparece {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Movimento reduzido: o arco já desenhado. */
+@media (prefers-reduced-motion: reduce) {
+  .v3-arco.is-preparado .v3-arco__linha,
+  .v3-arco.is-desenhando .v3-arco__linha {
+    animation: none;
+    clip-path: none;
+  }
+  .v3-arco.is-preparado .v3-arco__link,
+  .v3-arco.is-desenhando .v3-arco__link {
+    animation: none;
+    opacity: 1;
+  }
+}

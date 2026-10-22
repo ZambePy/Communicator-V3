@@ -6,6 +6,7 @@ import Animated from 'react-native-reanimated';
 import { PressableScale } from './PressableScale';
 import { IconButton } from './IconButton';
 import { Text } from './Text';
+import { useEspacoDoTopo } from './EspacoDoTopo';
 import { useApp } from '@/store/AppProvider';
 import { layout, radius, shadows, sizes, spacing, useEntrada, useTheme, zIndex } from '@/theme';
 import { tipoDeFalha } from '@/utils/errors';
@@ -20,6 +21,8 @@ export function ErrorBanner() {
   const { colors, mode } = useTheme();
   const entrada = useEntrada();
   const insets = useSafeAreaInsets();
+  // Abaixo da faixa do alerta minimizado, que fica no mesmo topo (revisão de UX de 19/10/2026).
+  const faixa = useEspacoDoTopo();
   const [busy, setBusy] = useState(false);
 
   if (!error) return null;
@@ -44,7 +47,7 @@ export function ErrorBanner() {
       entering={entrada.suave()}
       exiting={entrada.saida()}
       pointerEvents="box-none"
-      style={[styles.wrap, { top: insets.top + spacing.sm }]}
+      style={[styles.wrap, { top: insets.top + spacing.sm + faixa }]}
       accessibilityLiveRegion="polite"
       testID="error-banner"
     >

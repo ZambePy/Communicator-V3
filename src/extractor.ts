@@ -334,7 +334,7 @@ export function getRecentBlinkRatePerMinute(windowMs: number = 60000): number {
 //   [37..43] bloco L2CS — só quando o engine passa gaze
 //
 // O modelo usa `irisAbs` por default (+ as duas dims angulares do L2CS);
-// `irisCore` é a variante com `dimsDaIris: 'relativas'`. Medido em
+// `irisCore` é a variante com `dimsDaIris: 'ambas'`. Medido em
 // gravações reais: 9 alvos não determinam 45 parâmetros por olho, e as
 // dimensões extras dão ao Ridge liberdade para memorizar aglomerados
 // (140 px com 12 dims contra 322 px com 44). A pose fica fora do vetor de
@@ -369,8 +369,9 @@ const FEATURE_SET_INDICES: Record<Exclude<FeatureSet, 'compact'>, readonly numbe
    * que são justamente os que carregam geometria: o mesmo ângulo de olhar
    * aponta para lugares diferentes conforme a cabeça esteja perto ou longe.
    *
-   * Onze dimensões viram 77 depois da expansão, contra 27 hoje. Com nove alvos
-   * e ~15 amostras por alvo isso é território de decorar, e a validação cruzada
+   * Onze dimensões viram 77 na expansão completa (21 colunas na parcial),
+   * contra 7 no padrão de hoje. Com 13 alvos e ~15 amostras por alvo isso é
+   * território de decorar, e a validação cruzada
    * leave-one-target-out é a única defesa. Se o λ escolhido encostar no teto da
    * grade (1e3), o modelo está dizendo que não quer estas dimensões — e a
    * resposta certa é aceitar, não insistir.
@@ -886,8 +887,10 @@ export function extractCompactFeatures(
         '[extractor] bloco ocular exige o bloco L2CS antes dele (passe l2csGaze inválido com l2cs=off).',
       );
     }
-    const be = buildBlocoOcular(ramoOcular.esquerdo);
-    const bd = buildBlocoOcular(ramoOcular.direito);
+    // Com o instante do quadro, cada olho reutiliza o seu último ângulo válido
+    // (com rampa) em vez de zerar no primeiro quadro sem leitura — A4.
+    const be = buildBlocoOcular(ramoOcular.esquerdo, 'esquerdo', ramoOcular.nowMs);
+    const bd = buildBlocoOcular(ramoOcular.direito, 'direito', ramoOcular.nowMs);
     compLeft.push(...be.valores);
     compRight.push(...bd.valores);
   }

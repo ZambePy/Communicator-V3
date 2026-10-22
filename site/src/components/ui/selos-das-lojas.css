@@ -4,7 +4,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-4) var(--sp-3);
+  /* O "em breve" sobe acima do selo: reserva o lugar dele, para não cobrir
+     a linha de cima (cobria o tamanho do APK em /baixar). */
+  padding-top: 14px;
 }
 
 .selo {
@@ -94,13 +97,16 @@
   position: absolute;
   top: -9px;
   right: -8px;
-  padding: 2px 8px;
+  padding: 2px 9px;
+  border: 1px solid var(--v3-fio-forte);
   border-radius: var(--r-pill);
-  /* Branco sobre teal-700: 5,9:1 (sobre o teal da marca dava 3,05:1). */
-  background: var(--teal-700);
-  color: #fff;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
+  /* Neutro: "em breve" diz que o botão ainda não funciona, o contrário de uma
+     confirmação, então não leva o teal (auditoria de 21/10/2026, P2-12). Papel
+     sobre #1d3966: 10,3:1. Doze pixels: é informação, não enfeite (P3-4). */
+  background: var(--v3-superficie-3);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
   white-space: nowrap;
 }

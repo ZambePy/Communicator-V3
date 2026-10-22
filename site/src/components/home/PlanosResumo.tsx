@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { usePlans } from '@/hooks/usePlans'
 import { BETA, type PlanId } from '@/data/content'
@@ -14,16 +13,15 @@ const DESTAQUES: Partial<Record<PlanId, string[]>> = {
 export function PlanosResumo() {
   const { plans } = usePlans()
   return (
-    <section className="planos-resumo on-raised com-fundo" aria-labelledby="planos-resumo-titulo">
-      <AmbientBackground variante="particulas" />
+    <section className="planos-resumo on-raised" aria-labelledby="planos-resumo-titulo">
       <div className="container">
-        <Reveal anim="up">
+        <Reveal anim="up" className="capitulo">
           <h2 id="planos-resumo-titulo" className="titulo-capitulo">
             {BETA.ativo ? 'Na beta, tudo é grátis.' : 'Um plano para cada momento.'}
           </h2>
           <p className="texto-capitulo">
             {BETA.ativo
-              ? 'Sem cartão e sem cobrança durante o programa. Estes são os planos previstos para depois dele.'
+              ? 'Sem cartão e sem cobrança na beta. Estes são os preços previstos para depois.'
               : 'Todos com 15 dias para testar antes de pagar e cancelamento a qualquer momento.'}
           </p>
         </Reveal>

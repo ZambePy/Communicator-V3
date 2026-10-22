@@ -19,7 +19,7 @@ export function PasswordStrength({ value, id }: { value: string; id?: string }) 
       </div>
       <p className="pw-strength__text" aria-live="polite">
         Força da senha: <strong>{rotulo}</strong>
-        {dica && <span> — {dica}</span>}
+        {dica && <span>. {dica}</span>}
       </p>
     </div>
   )

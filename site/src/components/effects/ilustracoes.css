@@ -1,7 +1,7 @@
-/* Ilustrações animadas (Ilustracoes.tsx). Só `transform` e `opacity` animam
-   (o teste confere), e só com a ilustração na tela (`.is-rodando`). Com
-   movimento reduzido, a regra global de global.css encurta cada animação para
-   um quadro e o desenho fica no repouso. */
+/* Ilustrações (Ilustracoes.tsx). Só `transform`, `opacity` e o traço do anel
+   (`stroke-dashoffset`) animam (o teste confere), e só com a ilustração na
+   tela (`.is-rodando`). Com movimento reduzido, a regra global de global.css
+   encurta cada animação para um quadro e o desenho fica no repouso. */
 
 .ilustracao {
   display: inline-block;
@@ -70,7 +70,7 @@
 }
 
 .cofre__selo-fundo {
-  fill: #0b1f3a;
+  fill: var(--navy);
   stroke: var(--teal-300);
   stroke-width: 2;
 }
@@ -111,5 +111,94 @@
   }
   to {
     transform: none;
+  }
+}
+
+/* ---------- a tela da calibração (chamada final) ----------
+   Traço branco translúcido sobre o azul da faixa; o alvo do centro, aceso,
+   com o aro menta fechado — a fixação completa. */
+.ilustracao--alvos {
+  color: #fff;
+}
+
+.ilustracao--alvos svg {
+  width: 100%;
+  height: auto;
+}
+
+.alvos__tela {
+  fill: rgba(8, 21, 48, 0.28);
+  stroke: rgba(255, 255, 255, 0.4);
+  stroke-width: 1.5;
+}
+
+.alvos__aro {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1.5;
+}
+
+.alvos__ponto {
+  fill: rgba(255, 255, 255, 0.75);
+}
+
+.alvos__alvo--fixado .alvos__aro {
+  stroke: var(--teal-300);
+  stroke-width: 3;
+}
+
+.alvos__alvo--fixado .alvos__ponto {
+  fill: #fff;
+}
+
+/* ---------- o anel que percorre os 13 pontos (chamada final) ----------
+   Rodada 3, 21/10/2026. O anel de fixação (teal) viaja de ponto em ponto
+   (transform, 260 ms) na ordem da calibração e enche como o dwell
+   (stroke-dashoffset, --fixacao); o ponto que ele deixa fica marcado (mais
+   claro). Quem decide o ponto é o componente (percursoDaChamada.ts). Com
+   movimento reduzido nem existe: o desenho de repouso tem o centro aceso. */
+.alvos__anel {
+  transition: transform 260ms var(--ease-out);
+}
+
+.alvos__anel.is-completo {
+  opacity: 0;
+  transition:
+    transform 260ms var(--ease-out),
+    opacity 400ms ease;
+}
+
+.alvos__anel-aro {
+  fill: none;
+  stroke: var(--teal-300);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  /* O traço do círculo começa às 3 horas; o aro do app começa às 12. */
+  transform: rotate(-90deg);
+  animation: alvo-fixa var(--fixacao, 1000ms) linear both;
+}
+
+.alvos__alvo--feito .alvos__aro {
+  stroke: rgba(255, 255, 255, 0.9);
+}
+
+.alvos__alvo--feito .alvos__ponto {
+  fill: #fff;
+}
+
+@keyframes alvo-fixa {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alvos__anel {
+    display: none;
   }
 }

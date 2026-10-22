@@ -8,8 +8,7 @@ export type ItemDaNav = {
   label: string
   selo?: ReactNode
   destaque?: boolean
-  /** Ação da conta ("Entrar"): fica no fim, um pouco afastada das abas, e a
-   *  pílula chega até ela do mesmo jeito. */
+  /** Ação da conta ("Entrar"): fica no fim, um pouco afastada das abas. */
   acao?: boolean
 }
 
@@ -23,8 +22,6 @@ function classeDoLink(item: ItemDaNav) {
     .join(' ')
 }
 
-/** Folga da pílula além da área do link (que já tem o próprio respiro), em px. */
-const FOLGA = 0
 /** Mola da borda que vai na frente (chega primeiro) e da que vem atrás. */
 const K_FRENTE = 620
 const K_ATRAS = 260
@@ -33,13 +30,15 @@ const AMORTECIMENTO = 0.8
 type Borda = { x: number; v: number; alvo: number }
 
 /**
- * Navegação com uma pílula de vidro que vai até o link sob o mouse (ou com o
- * foco) e descansa no link da página atual. Cada borda da pílula tem a sua
- * mola: a da frente é mais firme e chega antes, então a pílula estica no
- * caminho e se recolhe ao chegar. Por baixo dela o rótulo acende — a camada
- * acesa é recortada exatamente pelas bordas da pílula, quadro a quadro.
+ * Navegação com um traço que vai até o link sob o mouse (ou com o foco) e
+ * descansa no link da página atual. Cada ponta do traço tem a sua mola: a da
+ * frente é mais firme e chega antes, então o traço estica no caminho e se
+ * recolhe ao chegar.
  *
- * Com movimento reduzido, a pílula só troca de lugar, sem trajeto.
+ * Até 19/10/2026 era uma pílula de vidro com uma segunda cópia dos rótulos,
+ * acesa, recortada por ela. O redesenho trocou o vidro por um traço sob o
+ * texto — o mesmo movimento, sem a cópia (que o leitor de tela tinha de
+ * ignorar). Com movimento reduzido, o traço só troca de lugar, sem trajeto.
  */
 export function NavPilula({ itens, rotulo }: { itens: ItemDaNav[]; rotulo: string }) {
   const navRef = useRef<HTMLElement>(null)
@@ -103,13 +102,14 @@ export function NavPilula({ itens, rotulo }: { itens: ItemDaNav[]; rotulo: strin
       pintar()
       return
     }
+    // O traço mede o TEXTO do link, não a área de toque: fica sob a palavra.
+    const texto = link.querySelector('.nav-pilula__texto') ?? link
     const rn = nav.getBoundingClientRect()
-    const rl = link.getBoundingClientRect()
-    const alvoEsq = rl.left - rn.left - FOLGA
-    const alvoDir = rl.right - rn.left + FOLGA
+    const rl = texto.getBoundingClientRect()
+    const alvoEsq = rl.left - rn.left
+    const alvoDir = rl.right - rn.left
     esq.current.alvo = alvoEsq
     dir.current.alvo = alvoDir
-    // Aparecendo agora, ou sem movimento: vai direto, sem trajeto.
     if (!visivel.current || reduzido) {
       esq.current = { x: alvoEsq, v: 0, alvo: alvoEsq }
       dir.current = { x: alvoDir, v: 0, alvo: alvoDir }
@@ -150,7 +150,6 @@ export function NavPilula({ itens, rotulo }: { itens: ItemDaNav[]; rotulo: strin
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setSobre(null)
       }}
     >
-      <span className="nav-pilula__vidro" aria-hidden="true" />
       <div className="nav-pilula__links">
         {itens.map((item, i) => (
           <NavLink
@@ -168,15 +167,7 @@ export function NavPilula({ itens, rotulo }: { itens: ItemDaNav[]; rotulo: strin
           </NavLink>
         ))}
       </div>
-      {/* A mesma fileira, acesa, recortada pela pílula. Só visual. */}
-      <div className="nav-pilula__links nav-pilula__links--aceso" aria-hidden="true">
-        {itens.map((item) => (
-          <span key={item.to} className={classeDoLink(item)}>
-            <span className="nav-pilula__texto">{item.label}</span>
-            {item.selo}
-          </span>
-        ))}
-      </div>
+      <span className="nav-pilula__traco" aria-hidden="true" />
     </nav>
   )
 }

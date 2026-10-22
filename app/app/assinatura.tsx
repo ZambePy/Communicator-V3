@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Card, PressableScale, Screen, ScreenHeader, SectionTitle, StatusPill, Text } from '@/components';
 import { useData } from '@/data/DataContext';
 import { BetaRegistration, isBetaPlan } from '@/data/types';
 import { siteRoute } from '@/lib/config';
 import { useApp } from '@/store/AppProvider';
-import { radius, shadows, sizes, spacing, useTheme } from '@/theme';
+import { radius, sizes, spacing, useTheme } from '@/theme';
 import { brl, formatDate } from '@/utils/format';
 
 /**
@@ -34,13 +33,13 @@ const BETA_FEATURES: { label: string; icon: keyof typeof Ionicons.glyphMap; pend
   { label: 'Comunicação, Emergência e Cuidador', icon: 'chatbubbles-outline' },
   { label: 'Relatórios e histórico para a família', icon: 'stats-chart-outline' },
   { label: 'Assistente de conversação', icon: 'sparkles-outline' },
-  { label: 'Clonagem de voz · quando disponível', icon: 'mic-outline', pending: true },
+  { label: 'Clonagem de voz, quando estiver disponível', icon: 'mic-outline', pending: true },
 ];
 
 const INDISPONIVEL = 'Indisponível durante a beta';
 
 export default function Assinatura() {
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
   const router = useRouter();
   const data = useData();
   const { plan, subscription } = useApp();
@@ -72,36 +71,36 @@ export default function Assinatura() {
 
       {beta && subscription ? (
         <>
-          <View style={[styles.heroWrap, shadows.glow(colors.accentStrong)]}>
-            <LinearGradient colors={colors.gradientHero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+          {/* Sem brilho nem degradê (19/10/2026): o painel da beta é a única
+              superfície da tela, no tom do painel. */}
+          <View style={[styles.hero, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: mode === 'light' ? sizes.border : 0 }]}>
               <View style={styles.rowBetween}>
-                <Ionicons name="sparkles" size={sizes.icon.lg} color={colors.onDark} />
-                <StatusPill label="Sem cobrança" tone="accent" onDark />
+                <Ionicons name="sparkles" size={sizes.icon.lg} color={colors.primary} />
+                <StatusPill label="Sem cobrança" tone="accent" />
               </View>
-              <Text variant="caption" tone="onDarkMuted" style={styles.gapTop}>
+              <Text variant="caption" tone="muted" style={styles.gapTop}>
                 Acesso beta ativo até
               </Text>
-              <Text variant="h1" tone="onDark">
+              <Text variant="h1">
                 {formatDate(subscription.next_charge_at)}
               </Text>
               {registration ? (
-                <Text variant="caption" tone="onDarkMuted">
+                <Text variant="caption" tone="muted">
                   Inscrição em {formatDate(registration.registered_at)}
                 </Text>
               ) : null}
               <View style={styles.features}>
                 {BETA_FEATURES.map((f) => (
                   <View key={f.label} style={styles.featureRow}>
-                    <Ionicons name={f.pending ? 'time-outline' : 'checkmark-circle'} size={sizes.icon.sm} color={f.pending ? colors.onDarkMuted : colors.accent} />
-                    <Text variant="bodySmall" tone={f.pending ? 'onDarkMuted' : 'onDark'} style={styles.flex}>
+                    <Ionicons name={f.pending ? 'time-outline' : 'checkmark-circle'} size={sizes.icon.sm} color={f.pending ? colors.textMuted : colors.accentText} />
+                    <Text variant="bodySmall" tone={f.pending ? 'muted' : 'default'} style={styles.flex}>
                       {f.label}
                     </Text>
                   </View>
                 ))}
               </View>
-              <Button title="Baixar no computador" variant="light" icon="download-outline" onPress={() => abrir(siteRoute('/beta'))} style={styles.gapTopLg} />
-              <Button title="Minha conta no site" variant="glass" icon="person-circle-outline" onPress={() => abrir(siteRoute('/conta'))} style={styles.gapTopSm} />
-            </LinearGradient>
+              <Button title="Baixar no computador" icon="download-outline" onPress={() => abrir(siteRoute('/beta'))} style={styles.gapTopLg} />
+              <Button title="Minha conta no site" variant="outline" icon="person-circle-outline" onPress={() => abrir(siteRoute('/conta'))} style={styles.gapTopSm} />
           </View>
 
           <PressableScale onPress={() => abrir(siteRoute('/contato'))} accessibilityRole="link" style={[styles.feedback, { backgroundColor: colors.primaryTint }]}>
@@ -159,7 +158,7 @@ export default function Assinatura() {
                 <View style={[styles.tag, { backgroundColor: colors.accentTint }]}>
                   <Ionicons name="checkmark-circle" size={sizes.icon.sm} color={colors.accentText} />
                   <Text variant="bodySmall" weight="semibold" tone="accent">
-                    Seu plano atual{subscription?.status === 'avaliacao' ? ' · em avaliação' : ''}
+                    Seu plano atual{subscription?.status === 'avaliacao' ? ', em avaliação' : ''}
                   </Text>
                 </View>
               ) : (
@@ -192,8 +191,7 @@ const styles = StyleSheet.create({
   gapTop: { marginTop: spacing.md },
   gapTopSm: { marginTop: spacing.sm },
   gapTopLg: { marginTop: spacing.xl },
-  heroWrap: { borderRadius: radius.xl },
-  hero: { borderRadius: radius.xl, padding: spacing.xl, overflow: 'hidden' },
+  hero: { borderRadius: radius.lg, padding: spacing.xl },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.md },
   features: { marginTop: spacing.lg, gap: spacing.sm },
   featureRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },

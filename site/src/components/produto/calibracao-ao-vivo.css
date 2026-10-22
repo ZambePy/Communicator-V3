@@ -1,0 +1,239 @@
+/* A calibração, ponto a ponto (CalibracaoAoVivo.tsx).
+
+   A tela 16:9 da bancada de referência, no marinho da abertura; o alvo é o
+   "ABC" do app (disco azul da marca, a cruz recortada na cor da tela e o
+   ponto no meio), nas proporções 3 : 1 : 1. Ele viaja e encolhe por
+   transform (escrito a cada quadro pelo componente); o ponto que fica e o
+   resultado entram com uma animação curta, uma vez. Só transform e opacity. */
+
+.calib {
+  margin: 0;
+}
+
+.calib__tela {
+  --calib-fundo: var(--navy-deep);
+  --calib-alvo: clamp(18px, 4.4cqw, 30px);
+
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r-lg);
+  background: var(--calib-fundo);
+  box-shadow:
+    0 0 0 1px rgba(169, 198, 247, 0.2),
+    0 40px 80px -40px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+/* A tela de verdade fica dentro de uma folga do tamanho do alvo: os pontos
+   a 5 % da borda são da área de dentro, e o alvo que chega 1,5× maior cabe
+   inteiro na moldura. */
+.calib__area {
+  position: absolute;
+  inset: calc(var(--calib-alvo) * 0.8);
+}
+
+/* O ponto que fica depois de cada coleta: pequeno, menta (a confirmação). */
+.calib__ponto {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: var(--teal-300);
+  opacity: 0;
+  transform: scale(0.2);
+}
+
+.calib__ponto.is-feito {
+  animation: calib-fica 260ms var(--ease-out) both;
+}
+
+/* O alvo ABC. O de fora posiciona, o de dentro muda de escala: num nó só,
+   um transform apagaria o outro (o mesmo cuidado do app). */
+.calib__alvo {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--calib-alvo);
+  height: var(--calib-alvo);
+  margin: calc(var(--calib-alvo) / -2) 0 0 calc(var(--calib-alvo) / -2);
+  opacity: 0;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.calib__abc {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.calib__disco {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 0 1.5px var(--blue-400);
+}
+
+.calib__cruz::before,
+.calib__cruz::after {
+  content: '';
+  position: absolute;
+  background: var(--calib-fundo);
+}
+
+.calib__cruz::before {
+  left: calc(50% - var(--calib-alvo) / 6);
+  top: -1px;
+  width: calc(var(--calib-alvo) / 3);
+  height: calc(100% + 2px);
+}
+
+.calib__cruz::after {
+  top: calc(50% - var(--calib-alvo) / 6);
+  left: -1px;
+  height: calc(var(--calib-alvo) / 3);
+  width: calc(100% + 2px);
+}
+
+.calib__cruz {
+  position: absolute;
+  inset: 0;
+}
+
+.calib__centro {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--calib-alvo) / 3);
+  height: calc(var(--calib-alvo) / 3);
+  border-radius: 50%;
+  background: var(--papel);
+  transform: translate(-50%, -50%);
+}
+
+/* O resultado em palavras, entre a linha do meio e a de baixo, onde não há ponto. */
+.calib__resultado {
+  position: absolute;
+  left: 50%;
+  top: 66%;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  width: min(86%, 30ch);
+  margin: 0;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  animation: calib-resultado 360ms var(--ease-out) both;
+}
+
+.calib__resultado strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 5.4cqw, 2.25rem);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--ok);
+}
+
+.calib__resultado span {
+  font-size: clamp(0.75rem, 2.3cqw, 0.9375rem);
+  line-height: 1.35;
+  color: var(--text-soft);
+}
+
+/* Na tela estreita a faixa livre entre as linhas de pontos é baixa demais
+   para a frase: fica só a palavra. */
+@container (max-width: 460px) {
+  .calib__resultado span {
+    display: none;
+  }
+}
+
+.calib__legenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-3);
+  font-size: 0.875rem;
+  color: var(--text-dim);
+}
+
+.calib__controle {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-soft);
+  font-family: var(--font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.calib__controle:hover {
+  border-color: var(--papel);
+  color: var(--text);
+}
+
+@keyframes calib-fica {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes calib-resultado {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 8px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* Com movimento reduzido: os 13 pontos e o resultado, parados. */
+@media (prefers-reduced-motion: reduce) {
+  .calib__ponto.is-feito {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .calib__resultado {
+    animation: none;
+  }
+}
+
+/* ---------- a faixa da página Como funciona ---------- */
+.calib-faixa__grade {
+  display: grid;
+  gap: var(--sp-6);
+  align-items: center;
+}
+
+.calib-faixa__nota {
+  margin: var(--sp-4) 0 0;
+  max-width: 46ch;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+@media (min-width: 1000px) {
+  .calib-faixa__grade {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: var(--sp-8);
+  }
+}

@@ -4,6 +4,7 @@ import {
   PREFERENCIAS_WEB_SEGURAS, preferenciasWebSeguras, permitirAberturaExterna, hostDoSite,
   atalhoBloqueadoEmProducao, alternaTelaCheia, decidirRecarga, RECARGA_JANELA_MS, RECARGA_MAXIMO, RECARGA_ESPERAS_LONGAS_MS,
   HOSTS_EXTERNOS_PERMITIDOS, argumentoDeDepuracao, SWITCHES_DE_DEPURACAO, SWITCH_DO_WEBGL_POR_SOFTWARE, papeisDoMenuEmpacotado,
+  urlDoDesenvolvimento,
 } from './electronSecurity';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
@@ -322,17 +323,24 @@ describe('links externos: só no navegador do sistema, só para a lista', () => 
     expect(permitirAberturaExterna('https://github.com/dono/repositorio-de-releases/releases')).toBe(true);
   });
 
-  it('a lista fixa não carrega domínio próprio nem nome de repositório', () => {
-    // Domínio próprio entra por VITE_SITE_URL (teste abaixo); repositório não
-    // entra em lista nenhuma — o host github.com basta.
+  it('a lista fixa tem o domínio oficial e os endereços do Pages, e nenhum nome de repositório', () => {
+    // O repositório não entra em lista nenhuma — o host github.com basta.
     expect([...HOSTS_EXTERNOS_PERMITIDOS].sort()).toEqual([
       'github.com',
       'irisflow-communicator.pages.dev',
+      'irisflow.ia.br',
       'irisflow.pages.dev',
     ]);
   });
 
-  it('domínio próprio só abre quando o build o configura (VITE_SITE_URL)', () => {
+  it('o domínio oficial abre mesmo sem VITE_SITE_URL no build', () => {
+    expect(permitirAberturaExterna('https://irisflow.ia.br/recuperar-senha')).toBe(true);
+    expect(permitirAberturaExterna('https://www.irisflow.ia.br/')).toBe(true);
+    expect(permitirAberturaExterna('http://irisflow.ia.br/')).toBe(false);
+    expect(permitirAberturaExterna('https://irisflow.ia.br.evil.com/')).toBe(false);
+  });
+
+  it('outro domínio só abre quando o build o configura (VITE_SITE_URL)', () => {
     expect(permitirAberturaExterna('https://irisflow.com.br/conta')).toBe(false);
     expect(permitirAberturaExterna('https://www.irisflow.tech/')).toBe(false);
     const extras = [hostDoSite('https://irisflow.com.br')!];
@@ -548,5 +556,24 @@ describe('recarga depois de o renderer cair', () => {
     expect(main).not.toMatch(/dialog\.showMessageBox/);
     // O aviso é notificação do sistema (não modal).
     expect(main).toMatch(/new Notification\(/);
+  });
+});
+
+describe('URL do electron:dev (A6)', () => {
+  // Relato de 19/10/2026: os parâmetros de URL ficam gravados no
+  // `localStorage` (`sessionFromUrl.ts`). Abrir SEM o parâmetro não religava a
+  // persistência: o `?calib=0` da abertura anterior continuava valendo.
+  it('por padrão abre sem calibração salva; IRISFLOW_DEV_CALIB=1 religa com ?calib=1 explícito', () => {
+    expect(urlDoDesenvolvimento('http://localhost:5173', undefined)).toBe('http://localhost:5173?calib=0');
+    expect(urlDoDesenvolvimento('http://localhost:5173', '0')).toBe('http://localhost:5173?calib=0');
+    expect(urlDoDesenvolvimento('http://localhost:5173', 'sim')).toBe('http://localhost:5173?calib=0');
+    expect(urlDoDesenvolvimento('http://localhost:5173', '1')).toBe('http://localhost:5173?calib=1');
+  });
+
+  it('o main usa a função, com a variável de ambiente', () => {
+    const main = fonte('electron/main.ts');
+    expect(main).toMatch(/urlDoDesenvolvimento\(DEV_SERVER_URL, process\.env\.IRISFLOW_DEV_CALIB\)/);
+    // E não sobrou a forma antiga, que abria sem o parâmetro.
+    expect(main).not.toMatch(/IRISFLOW_DEV_CALIB === '1' \? DEV_SERVER_URL/);
   });
 });

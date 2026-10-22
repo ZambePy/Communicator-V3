@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { useId, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Spinner } from './Skeleton'
 import './button.css'
@@ -14,6 +14,20 @@ type Common = {
   loading?: boolean
   icon?: ReactNode
   className?: string
+  /**
+   * Chamada principal da página (baixar, entrar na beta): ganha o aro de
+   * fixação — o retorno do clique pelo olhar, mostrado no gesto de quem visita
+   * (button.css). Só nos botões de chamada, não em todo botão principal.
+   */
+  chamada?: boolean
+  /**
+   * Por que o botão está desabilitado, em uma frase ("Falta marcar que você leu
+   * os termos."). Só vale em `<button>` com `disabled`: o botão continua no Tab
+   * (`aria-disabled` no lugar de `disabled`), não dispara o clique, e o motivo
+   * aparece logo abaixo e descreve o botão para o leitor de tela. Um botão
+   * apagado que não diz por quê deixa a pessoa sem saber o que fazer.
+   */
+  motivo?: string
 }
 
 type ButtonProps = Common &
@@ -38,8 +52,11 @@ type AnchorProps = Common & {
 type Props = ButtonProps | LinkProps | AnchorProps
 
 /**
- * Botão com brilho que acompanha o ponteiro e resposta tátil ao
- * pressionar.
+ * Botão do site. As chamadas principais (`chamada`) têm o retorno do próprio
+ * produto: com o ponteiro parado em cima, ou com o foco do teclado, um aro de
+ * fixação fecha em volta delas, e fecha de vez no clique — é o "clique pelo
+ * olhar" mostrado no gesto de quem visita. O clique funciona na hora, sem
+ * esperar o aro (button.css).
  */
 export function Button(props: Props) {
   const {
@@ -50,40 +67,35 @@ export function Button(props: Props) {
     loading,
     icon,
     className = '',
+    chamada,
+    motivo,
     ...rest
   } = props as Common & Record<string, unknown>
+  const idDoMotivo = useId()
 
   const cls = [
     'btn',
     `btn--${variant}`,
     `btn--${size}`,
     full ? 'btn--full' : '',
+    chamada ? 'btn--chamada' : '',
     loading ? 'is-loading' : '',
     className,
   ]
     .filter(Boolean)
     .join(' ')
 
-  const onMove = (e: React.MouseEvent<HTMLElement>) => {
-    const r = e.currentTarget.getBoundingClientRect()
-    e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`)
-    e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`)
-  }
-
   const inner = (
-    <>
-      <span className="btn__shine" aria-hidden="true" />
-      <span className="btn__content">
-        {loading && <Spinner />}
-        {!loading && icon}
-        {children}
-      </span>
-    </>
+    <span className="btn__content">
+      {loading && <Spinner />}
+      {!loading && icon}
+      {children}
+    </span>
   )
 
   if ('to' in props && props.to) {
     return (
-      <Link to={props.to} className={cls} onMouseMove={onMove} onClick={props.onClick}>
+      <Link to={props.to} className={cls} onClick={props.onClick}>
         {inner}
       </Link>
     )
@@ -95,7 +107,6 @@ export function Button(props: Props) {
       <a
         href={props.href}
         className={cls}
-        onMouseMove={onMove}
         onClick={props.onClick}
         {...(externo ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
       >
@@ -109,12 +120,38 @@ export function Button(props: Props) {
   void _to
   void _href
 
+  const desabilitado = (buttonRest as { disabled?: boolean }).disabled
+
+  // Desabilitado COM motivo: o botão fica focável (aria-disabled) e o motivo
+  // está na tela e na descrição. `loading` não entra aqui: carregando é outro estado.
+  if (motivo && desabilitado && !loading) {
+    const { disabled: _disabled, onClick: _onClick, ...semOClique } = buttonRest as Record<string, unknown>
+    void _disabled
+    void _onClick
+    return (
+      <span className={`btn-com-motivo${full ? ' btn-com-motivo--full' : ''}`}>
+        <button
+          {...(semOClique as ButtonHTMLAttributes<HTMLButtonElement>)}
+          className={cls}
+          aria-disabled="true"
+          aria-describedby={idDoMotivo}
+          onClick={(e) => e.preventDefault()}
+        >
+          {inner}
+        </button>
+        <span id={idDoMotivo} className="btn__motivo">
+          {motivo}
+        </span>
+      </span>
+    )
+  }
+
   return (
     <button
       {...(buttonRest as ButtonHTMLAttributes<HTMLButtonElement>)}
       className={cls}
-      onMouseMove={onMove}
-      disabled={loading || (buttonRest as { disabled?: boolean }).disabled}
+      disabled={loading || desabilitado}
+      aria-busy={loading ? true : undefined}
     >
       {inner}
     </button>

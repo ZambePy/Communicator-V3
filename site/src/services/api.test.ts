@@ -30,6 +30,7 @@ const { auth, fake, clientMock, estado } = vi.hoisted(() => {
   type Resposta = Promise<{ data: unknown; error: unknown }>
   const auth = {
     signInWithPassword: vi.fn(),
+    signOut: vi.fn(async (): Promise<{ error: unknown }> => ({ error: null })),
     getSession: vi.fn(async () => ({ data: { session: null } })),
     signUp: vi.fn(),
     resend: vi.fn(async () => ({ data: { user: null, session: null }, error: null })),
@@ -40,6 +41,18 @@ const { auth, fake, clientMock, estado } = vi.hoisted(() => {
     })),
   }
   const estado = {
+    // A leitura pública (REST) das duas tabelas abertas, montada sobre as
+    // mesmas respostas: erro ou corpo vazio rejeitam, como o lerLinhasPublicas.
+    leituraPublica: (async (tabela: string): Promise<unknown[]> => {
+      if (tabela === 'plans') {
+        const { data, error } = await estado.respostaPlans()
+        if (error || !data) throw new Error('leitura recusada')
+        return data as unknown[]
+      }
+      const { data, error } = await estado.respostaSingle(tabela)
+      if (error) throw new Error('leitura recusada')
+      return data ? [data] : []
+    }) as (tabela: string) => Promise<unknown[]>,
     respostaUpdate: (async () => ({ data: null, error: null })) as () => Resposta,
     respostaPlans: (async () => ({ data: [], error: null })) as () => Resposta,
     respostaSingle: (async (_tabela: string) => ({ data: null, error: null })) as (
@@ -74,10 +87,18 @@ vi.mock('../lib/supabase', async (importOriginal) => {
   return {
     ...real,
     isSupabaseConfigured: true,
-    supabase: fake,
-    client: () => clientMock(),
+    // async como o de verdade: o supabase-js é carregado sob demanda
+    client: async () => clientMock(),
   }
 })
+
+// As leituras públicas (planos e programa beta) vão direto ao REST, sem o
+// cliente: aqui o teste decide o que o REST devolveu.
+vi.mock('../lib/leituraPublica', () => ({
+  lerLinhasPublicas: vi.fn((tabela: string) => estado.leituraPublica(tabela)),
+}))
+
+const estadoOriginal = { leituraPublica: estado.leituraPublica }
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -87,6 +108,7 @@ beforeEach(() => {
   estado.respostaPlans = async () => ({ data: [], error: null })
   estado.respostaSingle = async () => ({ data: null, error: null })
   estado.respostaUpdate = async () => ({ data: null, error: null })
+  estado.leituraPublica = estadoOriginal.leituraPublica
 })
 
 describe('signIn', () => {
@@ -159,7 +181,8 @@ describe('fetchPlans', () => {
     expect(planos[1].includes).toEqual(PLANS[1].includes)
     expect(planos[1].recommended).toBe(true)
     expect(planos[2].note).toBe(PLANS[2].note)
-    expect(fake.from).toHaveBeenCalledWith('plans')
+    // a leitura vai direto ao REST, sem o supabase-js
+    expect(clientMock).not.toHaveBeenCalled()
     // sem a coluna purchasable (banco anterior à migração da beta) = pode contratar
     expect(planos[0].purchasable).toBe(true)
   })
@@ -210,11 +233,11 @@ describe('fetchPlans', () => {
     await expect(api.fetchPlans()).resolves.toBe(PLANS)
   })
 
-  it('cai na reserva quando o cliente não está configurado', async () => {
-    clientMock.mockImplementation(() => {
-      throw new Error('Supabase não configurado.')
-    })
+  it('cai na reserva quando o build não tem configuração ou o banco pendura (tempo esgotado)', async () => {
+    estado.leituraPublica = () => Promise.reject(new Error('Supabase sem configuração.'))
+    await expect(api.fetchPlans()).resolves.toBe(PLANS)
 
+    estado.leituraPublica = () => Promise.reject(new DOMException('aborted', 'AbortError'))
     await expect(api.fetchPlans()).resolves.toBe(PLANS)
   })
 
@@ -298,7 +321,7 @@ describe('criarContaBeta (etapa 1: só a conta)', () => {
     const chamada = auth.signUp.mock.calls[0][0]
     expect(chamada.email).toBe('maria@exemplo.com.br')
     expect(chamada.password).toBe('segredo123')
-    expect(chamada.options.emailRedirectTo).toBe('https://irisflow-communicator.pages.dev/confirmar-email')
+    expect(chamada.options.emailRedirectTo).toBe('https://irisflow.ia.br/confirmar-email')
     expect(chamada.options.data.buyer_name).toBe('Maria Aparecida Souza')
     expect(chamada.options.data.newsletter).toBe(false)
     expect(Number.isNaN(Date.parse(chamada.options.data.terms_accepted_at))).toBe(false)
@@ -582,7 +605,7 @@ describe('fetchBetaProgram', () => {
       maxRegistrations: 50,
       launchAt: '2026-11-10T03:00:00+00:00',
     })
-    expect(fake.from).toHaveBeenCalledWith('beta_program')
+    expect(clientMock).not.toHaveBeenCalled()
   })
 
   it('banco sem a coluna launch_at (migração não aplicada): a data vem da reserva', async () => {
@@ -600,9 +623,7 @@ describe('fetchBetaProgram', () => {
     estado.respostaSingle = async () => ({ data: null, error: null })
     await expect(api.fetchBetaProgram()).resolves.toBe(api.BETA_PROGRAM_RESERVA)
 
-    clientMock.mockImplementation(() => {
-      throw new Error('Supabase não configurado.')
-    })
+    estado.leituraPublica = () => Promise.reject(new Error('Supabase sem configuração.'))
     await expect(api.fetchBetaProgram()).resolves.toBe(api.BETA_PROGRAM_RESERVA)
     expect(api.BETA_PROGRAM_RESERVA.open).toBe(true)
     expect(api.BETA_PROGRAM_RESERVA.endsAt).toBe(BETA.fimReserva)
@@ -617,7 +638,7 @@ describe('e-mails de conta (confirmação e nova senha)', () => {
     expect(auth.resend).toHaveBeenCalledWith({
       type: 'signup',
       email: 'maria@exemplo.com.br',
-      options: { emailRedirectTo: 'https://irisflow-communicator.pages.dev/confirmar-email' },
+      options: { emailRedirectTo: 'https://irisflow.ia.br/confirmar-email' },
     })
   })
 
@@ -640,11 +661,11 @@ describe('e-mails de conta (confirmação e nova senha)', () => {
     await api.requestPasswordReset('maria@exemplo.com.br')
 
     expect(auth.resetPasswordForEmail).toHaveBeenCalledWith('maria@exemplo.com.br', {
-      redirectTo: 'https://irisflow-communicator.pages.dev/nova-senha',
+      redirectTo: 'https://irisflow.ia.br/nova-senha',
     })
     expect(api.AUTH_REDIRECT).toEqual({
-      confirmacao: 'https://irisflow-communicator.pages.dev/confirmar-email',
-      novaSenha: 'https://irisflow-communicator.pages.dev/nova-senha',
+      confirmacao: 'https://irisflow.ia.br/confirmar-email',
+      novaSenha: 'https://irisflow.ia.br/nova-senha',
     })
   })
 
@@ -763,5 +784,21 @@ describe('markBetaDownload', () => {
       throw new Error('Supabase não configurado.')
     })
     await expect(api.markBetaDownload('macos')).resolves.toBeUndefined()
+  })
+})
+
+/* Revisão final (22/10/2026): o supabase-js apaga a sessão deste navegador ANTES de devolver o
+   erro do `signOut({ scope: 'local' })` (auth-js, _signOut). Sem rede, o erro vinha para a tela
+   como promessa rejeitada sem ninguém para tratar (o "Sair" do perfil não tem catch), embora a
+   pessoa já estivesse fora da conta neste aparelho. */
+describe('signOut', () => {
+  it('sai só deste navegador', async () => {
+    await api.signOut()
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: 'local' })
+  })
+
+  it('sem rede, o supabase-js já apagou a sessão daqui: não rejeita', async () => {
+    auth.signOut.mockResolvedValueOnce({ error: { name: 'AuthRetryableFetchError', message: 'Failed to fetch', status: 0 } })
+    await expect(api.signOut()).resolves.toBeUndefined()
   })
 })

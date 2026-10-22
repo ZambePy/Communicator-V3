@@ -1,18 +1,22 @@
 /**
  * Tokens de design da IrisFlow — derivados do tópico 2.3 (Branding) do Plano de Negócios 2026.
  *
- *  • Azul institucional #1B54A8  → cor primária: símbolo, títulos, destaques (confiança, seriedade clínica)
- *  • Azul-marinho profundo #091B33 → pupila do símbolo e tipografia do logotipo (ancoragem e contraste)
- *  • Verde-teal #00A693          → confirmação e indicadores positivos (vitalidade, cuidado)
- *  • Vermelho de perigo           → só emergência e ações destrutivas
- *  • Branco e neutros claros     → fundos, clareza e respiro visual
+ * Redesenho de 19/10/2026 (pedido do dono: "mais bonito, sem cara de feito por IA"),
+ * alinhado ao do site. O app do cuidador é bipe, caderno e painel ao mesmo tempo, e é
+ * muito usado de noite. Regras:
  *
- * Regra tipográfica do plano: nenhum texto essencial em corpo reduzido, nenhum texto em baixo
- * contraste e hierarquia visual explícita.
+ *  • Noite primeiro: o fundo escuro é o marinho da marca (#0B1B3A, o mesmo do site), as
+ *    superfícies são chapadas (sem degradê, sem sombra "glow") e no máximo UMA por tela
+ *    sobe do fundo — a que importa naquela tela.
+ *  • Cor é estado, nunca enfeite: azul = agir · menta = feito/confirmado · âmbar = confira ·
+ *    vermelho = alguém precisa de você. O vermelho da emergência é chapado e mais fundo
+ *    (#9E1B16, branco a 8:1) para não ofuscar quem acorda com o alarme.
+ *  • As palavras do paciente são o texto mais alto do app (variante `fala`, Sora 600) —
+ *    fora a manchete da emergência (variante `alarme`).
  *
  * Contraste: toda combinação texto/fundo usada nas telas passa de 4,5:1 (AA) nos dois
- * temas; ícones e contornos de campo passam de 3:1. Por isso cada cor da marca tem
- * papéis separados — `accent` (#00A693) é ótimo para ícone e gráfico, mas como texto
+ * temas; ícones e contornos de campo passam de 3:1. Cada cor da marca tem papéis
+ * separados — `accent` (#00A693) é ótimo para ícone e gráfico, mas como texto
  * sobre branco fica em 3:1; o texto teal usa `accentText`, e o botão teal, `accentStrong`.
  *
  * NADA de cor, tamanho ou espaçamento solto nas telas: tudo sai daqui.
@@ -25,7 +29,8 @@ export const brand = {
   blueDeep: '#143F80',
   /** Halo do símbolo (IrisLogo). */
   azure: '#4F86D9',
-  navy: '#091B33',
+  /** O fundo do tema escuro e a pupila do símbolo — o mesmo marinho do site. */
+  navy: '#0B1B3A',
   abyss: '#050B1B',
   teal: '#00A693',
   tealDeep: '#00796A',
@@ -105,37 +110,39 @@ export const lightColors: ThemeColors = {
   mode: 'light',
   background: '#F4F6FA',
   surface: '#FFFFFF',
-  surfaceAlt: '#EDF1F7',
+  surfaceAlt: '#EBF0F7',
   surfaceElevated: '#FFFFFF',
-  border: '#E1E7F0',
+  border: '#DCE3EE',
   borderStrong: '#7A889C',
   text: brand.navy,
-  textMuted: '#52627A',
+  textMuted: '#4A5B78',
   primary: brand.blue,
   primaryStrong: brand.blue,
-  primaryTint: '#E4EDF9',
+  primaryTint: '#E6EEFA',
   onPrimary: brand.white,
   accent: brand.teal,
   accentText: '#00705F',
   accentStrong: brand.tealDeep,
-  accentTint: '#DCF3EF',
+  accentTint: '#DDF4F0',
   danger: '#D23B3B',
   dangerText: '#B3261E',
   dangerStrong: '#C62828',
-  dangerTint: '#FCE8E6',
+  dangerTint: '#FCE9E7',
   warning: '#C77C02',
   warningText: '#8A5200',
-  warningTint: '#FFF1DA',
+  warningTint: '#FFF2DC',
   onDark: brand.white,
-  onDarkMuted: 'rgba(255,255,255,0.88)',
+  onDarkMuted: 'rgba(255,255,255,0.86)',
   onDarkFill: 'rgba(255,255,255,0.14)',
-  onDarkBorder: 'rgba(255,255,255,0.24)',
-  scrim: 'rgba(9,27,51,0.55)',
-  gradientBrand: [brand.abyss, brand.navy, brand.blue],
-  gradientHero: ['#0B2A55', brand.blue],
-  gradientDanger: ['#B3261E', '#7F1A15'],
-  chartBar: brand.blue,
-  chartToday: brand.teal,
+  onDarkBorder: 'rgba(255,255,255,0.32)',
+  scrim: 'rgba(11,27,58,0.55)',
+  // Sem degradê decorativo (19/10/2026): os pares guardam o mesmo tom nas duas
+  // pontas — quem ainda usa LinearGradient desenha uma superfície chapada.
+  gradientBrand: [brand.navy, brand.navy, brand.navy],
+  gradientHero: [brand.navy, brand.navy],
+  gradientDanger: ['#9E1B16', '#9E1B16'],
+  chartBar: '#7FA3DB',
+  chartToday: brand.blue,
   shadow: brand.navy,
   tabBar: '#FFFFFF',
   skeleton: '#E4E9F1',
@@ -143,42 +150,45 @@ export const lightColors: ThemeColors = {
 
 export const darkColors: ThemeColors = {
   mode: 'dark',
-  background: '#081221',
-  surface: '#0F1C31',
-  surfaceAlt: '#17273F',
-  surfaceElevated: '#1A2C48',
-  border: '#22344F',
-  borderStrong: '#5A6F8E',
-  text: '#F1F5FB',
-  textMuted: '#A3B2C7',
-  primary: '#8AB0F0',
-  primaryStrong: '#2A62BA',
-  primaryTint: '#172C4F',
+  background: brand.navy,
+  surface: '#12284A',
+  surfaceAlt: '#17305A',
+  surfaceElevated: '#1D3966',
+  border: 'rgba(169,198,247,0.16)',
+  borderStrong: '#6B83A8',
+  text: '#F3F6FB',
+  textMuted: '#A9B9D0',
+  primary: '#A9C6F7',
+  primaryStrong: '#2F66C2',
+  primaryTint: 'rgba(169,198,247,0.12)',
   onPrimary: brand.white,
-  accent: '#2CC3AE',
-  accentText: '#4FD6C1',
-  accentStrong: brand.tealDeep,
-  accentTint: '#0D3A36',
-  danger: '#FF6B6B',
-  dangerText: '#FF8A80',
+  accent: '#43D6C3',
+  accentText: '#43D6C3',
+  accentStrong: '#016F63',
+  // No escuro, os blocos de estado não são tingidos (vermelho ou âmbar
+  // translúcido sobre o marinho virava um roxo ou um marrom sujos): o bloco é
+  // neutro e o estado vem do fio à esquerda, do ícone e do título coloridos.
+  accentTint: '#163056',
+  danger: '#FF8A8E',
+  dangerText: '#FF9A9D',
   dangerStrong: '#C62828',
-  dangerTint: '#3F1A1D',
-  warning: '#F2B24A',
-  warningText: '#F7C46C',
-  warningTint: '#3B2C12',
+  dangerTint: '#163056',
+  warning: '#F0C46B',
+  warningText: '#F0C46B',
+  warningTint: '#163056',
   onDark: brand.white,
-  onDarkMuted: 'rgba(255,255,255,0.88)',
+  onDarkMuted: 'rgba(255,255,255,0.86)',
   onDarkFill: 'rgba(255,255,255,0.14)',
-  onDarkBorder: 'rgba(255,255,255,0.24)',
-  scrim: 'rgba(0,0,0,0.62)',
-  gradientBrand: [brand.abyss, brand.navy, brand.blueDeep],
-  gradientHero: ['#0E2A52', '#1A4C9A'],
-  gradientDanger: ['#B3261E', '#7F1A15'],
-  chartBar: '#6F9BE6',
-  chartToday: '#2CC3AE',
+  onDarkBorder: 'rgba(255,255,255,0.32)',
+  scrim: 'rgba(4,10,24,0.62)',
+  gradientBrand: [brand.navy, brand.navy, brand.navy],
+  gradientHero: [brand.navy, brand.navy],
+  gradientDanger: ['#9E1B16', '#9E1B16'],
+  chartBar: '#4D86E0',
+  chartToday: '#A9C6F7',
   shadow: '#000000',
-  tabBar: '#0C182B',
-  skeleton: '#1B2E4B',
+  tabBar: brand.navy,
+  skeleton: '#17305A',
 };
 
 /** Escala de espaçamento (múltiplos de 4). */
@@ -209,12 +219,13 @@ export const layout = {
   textMax: 320,
 } as const;
 
+/** Raio por hierarquia: controles pequenos (sm/md), o painel da tela (lg), a folha de alerta (xl). */
 export const radius = {
   xs: 6,
   sm: 10,
   md: 14,
-  lg: 20,
-  xl: 28,
+  lg: 22,
+  xl: 30,
   pill: 999,
 } as const;
 
@@ -279,19 +290,25 @@ export const fonts = {
 export type FontWeight = 'regular' | 'medium' | 'semibold' | 'bold' | 'display' | 'heading' | 'headingSemibold';
 
 /**
- * Escala tipográfica (tamanho / altura de linha / tracking). Corpo mínimo de 15 px e
- * legenda de 14 px — o público é de cuidadores, muitos idosos. As únicas exceções são o
- * rótulo da barra de abas (13 px, limitado pelo espaço de cinco abas) e o número do selo.
+ * Escala tipográfica (tamanho / altura de linha / tracking), nas proporções clássicas
+ * (16 · 18 · 21 · 24 · 28 · 36). Corpo mínimo de 15 px e legenda de 14 px — o público é
+ * de cuidadores, muitos idosos. As únicas exceções são o rótulo da barra de abas (13 px,
+ * limitado pelo espaço de cinco abas) e o número do selo.
+ *
+ * `fala`: o que o paciente escreveu com os olhos — o texto mais alto do app.
+ * `alarme`: a manchete da emergência (o motivo do pedido), legível ao acordar.
  */
 export const typeScale = {
-  display: { fontSize: 34, lineHeight: 40, letterSpacing: -1 },
+  alarme: { fontSize: 44, lineHeight: 50, letterSpacing: -1.2 },
+  display: { fontSize: 36, lineHeight: 42, letterSpacing: -0.9 },
   h1: { fontSize: 28, lineHeight: 34, letterSpacing: -0.6 },
-  h2: { fontSize: 22, lineHeight: 28, letterSpacing: -0.3 },
+  fala: { fontSize: 24, lineHeight: 32, letterSpacing: -0.3 },
+  h2: { fontSize: 21, lineHeight: 28, letterSpacing: -0.3 },
   h3: { fontSize: 18, lineHeight: 24, letterSpacing: -0.1 },
   body: { fontSize: 16, lineHeight: 24, letterSpacing: 0 },
   bodySmall: { fontSize: 15, lineHeight: 22, letterSpacing: 0 },
   caption: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1 },
-  label: { fontSize: 14, lineHeight: 20, letterSpacing: 0.6 },
+  label: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1 },
   tab: { fontSize: 13, lineHeight: 16, letterSpacing: 0 },
   badge: { fontSize: 12, lineHeight: 14, letterSpacing: 0 },
 } as const;
@@ -304,7 +321,9 @@ export type TypeVariant = keyof typeof typeScale;
  * não quebrar — os contêineres crescem na vertical em vez de cortar texto.
  */
 export const fontScaleCap: Record<TypeVariant, number> = {
+  alarme: 1.25,
   display: 1.3,
+  fala: 1.6,
   h1: 1.4,
   h2: 1.5,
   h3: 1.6,

@@ -1,61 +1,46 @@
-/* Etiqueta vermelha da beta: "10/11" até o lançamento, "Liberada" depois.
-   Vermelho #d6293a com texto branco: 4,96:1 (AA para texto pequeno), e
-   3,8:1 contra o azul-marinho do fundo (limite de 3:1 para componente). */
+/* O selo da beta ("Beta liberada", ou o dia do lançamento até ele chegar).
+   Azul da marca sobre o marinho, em contorno: o vermelho é só da emergência e
+   do erro (decisão de 21/10/2026, auditoria P2-6), e o teal é só do que se
+   confirma. Texto claro sobre o azul translúcido: 12:1 ou mais sobre o marinho.
+   O ponto de "no ar" ficou parado: um pulso sem fim, em toda página, chamava a
+   atenção para o que já está dito. */
 .etiqueta-lancamento {
   display: inline-flex;
   align-items: center;
-  gap: 0.35em;
-  padding: 3px 10px;
+  gap: 0.5em;
+  padding: 4px 12px;
+  border: 1px solid var(--accent-line);
   border-radius: var(--r-pill);
-  background: #d6293a;
-  color: #fff;
+  /* Opaco: o campo dos 13 pontos passa por trás do selo na abertura da home, e
+     um fundo translúcido deixava o círculo aparecer através dele. */
+  background: var(--v3-superficie);
+  color: var(--text);
   font-size: var(--fs-min);
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font-weight: 600;
   line-height: 1.4;
-  text-transform: uppercase;
   white-space: nowrap;
   vertical-align: middle;
-  box-shadow: 0 0 0 3px rgba(214, 41, 58, 0.18);
 }
 
 .etiqueta-lancamento strong {
-  font-weight: 800;
+  font-weight: 600;
 }
 
-/* No menu: mesmo tamanho do antigo selo "novo". */
 .etiqueta-lancamento--curta {
   margin-left: 6px;
-  padding: 2px 8px;
-  letter-spacing: 0.04em;
-  box-shadow: none;
+  padding: 2px 10px;
 }
 
 .etiqueta-lancamento--longa {
-  font-size: 0.8rem;
+  font-size: 0.875rem;
 }
 
-/* Depois do lançamento: "Liberada", com um ponto que pulsa devagar — o sinal
-   de "no ar". Só transform e opacity animam; com movimento reduzido, a regra
-   global de global.css deixa o ponto parado. */
+/* Depois do lançamento: o ponto de "no ar", no azul claro da marca. */
 .etiqueta-lancamento--liberada::before {
   content: '';
   flex: none;
   width: 0.5em;
   height: 0.5em;
   border-radius: 50%;
-  background: currentColor;
-  animation: etiqueta-no-ar 2.4s var(--ease-in-out) infinite;
-}
-
-@keyframes etiqueta-no-ar {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.45;
-    transform: scale(0.8);
-  }
+  background: var(--accent);
 }

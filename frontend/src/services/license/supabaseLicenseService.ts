@@ -268,17 +268,34 @@ export function createSupabaseLicenseService(op: OpcoesDoServico = {}): LicenseS
       const lic = corpo.license ?? null;
       if (lic && !lic.allowed) return { ok: false, reason: 'expired' };
 
-      const vinculo = await cofre.lerJson<VinculoLocal>(CHAVES.vinculo);
+      // O servidor já confirmou a licença: daqui para baixo nada pode
+      // transformar esse "sim" numa exceção (relato de 18/10/2026, item 7).
+      // Antes, um cofre que recusava a leitura ou a gravação (chaveiro do
+      // sistema indisponível) fazia `verify` lançar, e o app ficava em
+      // "Carregando…" em todo boot.
+      let vinculo: VinculoLocal | null = null;
+      try {
+        vinculo = await cofre.lerJson<VinculoLocal>(CHAVES.vinculo);
+      } catch (e) {
+        console.warn('[licenca] não foi possível ler o vínculo do cofre:', e);
+      }
       const email = vinculo?.email ?? '';
       const beneficiaryName = corpo.beneficiary?.user_name ?? vinculo?.beneficiary_name ?? '';
       const beneficiaryId = corpo.beneficiary?.id ?? vinculo?.beneficiary_id;
       if (beneficiaryId && (!vinculo || vinculo.device_key !== token || vinculo.beneficiary_id !== beneficiaryId)) {
         // O cofre ficou para trás (outro login neste PC) ou foi limpo: realinha
         // com o que o servidor acabou de confirmar. O CloudProvider lê daqui.
-        await cofre.gravarJson(CHAVES.vinculo, {
-          device_id: corpo.device.id, device_key: token, beneficiary_id: beneficiaryId,
-          beneficiary_name: beneficiaryName, email, pareado_em: vinculo?.pareado_em ?? new Date().toISOString(),
-        } satisfies VinculoLocal);
+        // Se o cofre recusar, a licença vale do mesmo jeito; o realinhamento é
+        // tentado de novo na próxima verificação.
+        try {
+          const gravou = await cofre.gravarJson(CHAVES.vinculo, {
+            device_id: corpo.device.id, device_key: token, beneficiary_id: beneficiaryId,
+            beneficiary_name: beneficiaryName, email, pareado_em: vinculo?.pareado_em ?? new Date().toISOString(),
+          } satisfies VinculoLocal);
+          if (!gravou) console.warn('[licenca] o cofre recusou o realinhamento do vínculo; tenta de novo na próxima verificação.');
+        } catch (e) {
+          console.warn('[licenca] não foi possível realinhar o vínculo no cofre:', e);
+        }
       }
       return {
         ok: true,

@@ -1,0 +1,72 @@
+/* O anel de fixação que acompanha o ponteiro (CursorDeFixacao.tsx).
+   Fixo, por cima de tudo (até do cabeçalho), sem receber clique. A posição
+   vem do componente (transform); o centro do anel fica na ponta da seta.
+   Sobre o que é clicável o anel cresce e o aro teal enche em 800 ms — o
+   menor tempo de fixação do app —; no clique, fecha de vez. */
+
+.v3-cursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 140;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.v3-cursor.is-visivel {
+  opacity: 1;
+}
+
+.v3-cursor svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: rotate(-90deg) scale(0.8);
+  transition: transform 260ms var(--ease-out);
+}
+
+.v3-cursor.is-sobre svg,
+.v3-cursor.is-sobre-chamada svg {
+  transform: rotate(-90deg) scale(1.2);
+}
+
+.v3-cursor__trilho,
+.v3-cursor__aro {
+  fill: none;
+  stroke-width: 1.6;
+}
+
+.v3-cursor__trilho {
+  stroke: rgba(169, 198, 247, 0.55);
+}
+
+.v3-cursor__aro {
+  stroke: var(--v3-fixacao);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.v3-cursor.is-sobre .v3-cursor__aro {
+  animation: v3-cursor-fixa 800ms linear forwards;
+}
+
+.v3-cursor.is-confirmado .v3-cursor__aro {
+  animation: none;
+  stroke-dashoffset: 0;
+}
+
+@keyframes v3-cursor-fixa {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}

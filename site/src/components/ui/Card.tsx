@@ -6,41 +6,19 @@ type Props = {
   className?: string
   /** Mantido por compatibilidade: a superfície já se adapta ao fundo. */
   glass?: boolean
-  /** Ativa elevação e brilho no hover. */
+  /** Mantido por compatibilidade: desde o redesenho de 19/10/2026 nenhum
+   *  cartão sobe ou brilha sob o ponteiro — cartão não é botão. */
   interactive?: boolean
   as?: 'div' | 'article' | 'li' | 'section'
 }
 
 /**
- * Cartão base do site. A classe .panel lê os tokens do contexto: numa
- * faixa elevada (.on-raised) é um cartão sólido com sombra; dentro de uma
- * faixa .on-dark vira um painel translúcido, sem nenhuma troca de prop.
+ * Cartão base do site: a superfície da faixa em que está, com borda. Usado só
+ * para o que é um objeto (um plano, um canal de contato), não para cada item
+ * de lista — essas ficam separadas por fios (components/pagina/Blocos).
  */
-export function Card({
-  children,
-  className = '',
-  glass: _glass,
-  interactive = true,
-  as: Tag = 'div',
-}: Props) {
-  void _glass
-  const onMove = (e: React.MouseEvent<HTMLElement>) => {
-    if (!interactive) return
-    const r = e.currentTarget.getBoundingClientRect()
-    e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`)
-    e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`)
-  }
-
-  return (
-    <Tag
-      className={['card', 'panel', interactive ? 'lift hover-glow' : '', className]
-        .filter(Boolean)
-        .join(' ')}
-      onMouseMove={onMove}
-    >
-      {children}
-    </Tag>
-  )
+export function Card({ children, className = '', as: Tag = 'div' }: Props) {
+  return <Tag className={['card', 'panel', className].filter(Boolean).join(' ')}>{children}</Tag>
 }
 
 export function CardIcon({ children, tone = 'blue' }: { children: ReactNode; tone?: 'blue' | 'teal' }) {

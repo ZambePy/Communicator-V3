@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import * as api from '@/services/api'
 import { formatDate } from '@/utils/format'
@@ -44,24 +44,39 @@ export function LinkedDevices() {
   const [falha, setFalha] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState<string | null>(null)
 
+  /** Quando a última consulta começou: voltar à aba logo depois dela não repete o pedido. */
+  const ultimaConsulta = useRef(0)
+
   const carregar = useCallback(async () => {
-    setFalha(null)
+    ultimaConsulta.current = Date.now()
     try {
       const [l, d] = await Promise.all([api.fetchAppLicense(), api.fetchDevices()])
       setLicense(l)
       setDevices(d)
+      setFalha(null)
     } catch (e) {
       // A migração 20260923022507_integracao_ecossistema ainda não foi aplicada, ou a rede caiu: o painel
-      // explica em vez de sumir.
+      // explica em vez de sumir. A lista que já estava na tela fica (revisão final de 22/10/2026):
+      // trocá-la por [] dizia "Nenhum computador vinculado" por causa de uma oscilação da internet.
       setFalha(e instanceof Error ? e.message : 'Não foi possível carregar.')
-      setDevices([])
     }
   }, [])
 
+  // Relê a cada minuto, mas só com a aba à vista (revisão final de 22/10/2026): escondida, ninguém vê
+  // o resultado. Ao voltar, relê na hora se já passou um minuto da última consulta.
   useEffect(() => {
     void carregar()
-    const id = window.setInterval(carregar, 60_000)
-    return () => window.clearInterval(id)
+    const id = window.setInterval(() => {
+      if (!document.hidden) void carregar()
+    }, 60_000)
+    const aoMudarAba = () => {
+      if (!document.hidden && Date.now() - ultimaConsulta.current >= 60_000) void carregar()
+    }
+    document.addEventListener('visibilitychange', aoMudarAba)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', aoMudarAba)
+    }
   }, [carregar])
 
   const desvincular = async (d: api.LinkedDevice) => {
@@ -87,7 +102,7 @@ export function LinkedDevices() {
           <h2 className="devices__title">Aplicativo e computadores</h2>
           <p className="devices__lead">
             O mesmo e-mail e senha desta conta abrem o aplicativo no computador e o app do cuidador
-            no celular. O que o paciente escreve com os olhos chega ao celular; o que a família
+            no celular. O que a pessoa escreve com os olhos chega ao celular; o que a família
             responde é falado na tela.
           </p>
         </div>
@@ -117,11 +132,12 @@ export function LinkedDevices() {
       )}
 
       {devices === null ? (
-        <p className="devices__empty">Carregando…</p>
+        // Primeira leitura: ou ainda carrega, ou falhou (o aviso acima diz o que houve; nunca "nenhum computador").
+        falha ? null : <p className="devices__empty">Carregando…</p>
       ) : ativos.length === 0 ? (
         <p className="devices__empty">
           Nenhum computador vinculado ainda. Instale o aplicativo, abra-o e entre com o e-mail e a
-          senha desta conta — o vínculo é automático.
+          senha desta conta. O vínculo é automático.
         </p>
       ) : (
         <ul className="devices__list">
@@ -132,10 +148,10 @@ export function LinkedDevices() {
                 <strong>{d.name}</strong>
                 <span>
                   {OS_LABEL[d.os] ?? d.os}
-                  {d.appVersion ? ` · IrisFlow ${d.appVersion}` : ''}
-                  {' · '}
+                  {d.appVersion ? `, IrisFlow ${d.appVersion}` : ''}
+                  {', '}
                   {d.online ? 'online agora' : `visto ${vistoHa(d.lastSeenAt)}`}
-                  {' · '}
+                  {', '}
                   {d.calibrated ? 'calibrado' : 'sem calibração'}
                 </span>
               </div>

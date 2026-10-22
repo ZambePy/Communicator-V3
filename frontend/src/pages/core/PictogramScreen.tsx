@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { emitirFalaDoPaciente } from '../../cloud/eventos';
-import { falar } from '../../services/voz';
+import { falarDoPaciente, falaFalhou, falaSaiu } from '../../services/voz/falaDoPaciente';
 import { Utensils, Droplets, Smile, Frown, Home, Phone, AlertCircle, Heart, ChevronRight, ChevronLeft, Play } from 'lucide-react';
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeGrid } from '../../components/ui/GazeGrid';
@@ -21,13 +21,34 @@ const PICTOGRAMS = [
 /** Só os textos, para a tela de Voz pré-sintetizar no cache da voz clonada. */
 export const TEXTOS_DOS_PICTOGRAMAS = PICTOGRAMS.map((p) => p.label);
 
+/** O que a faixa de cima diz sobre a última escolha, conforme a voz. */
+type EstadoDaFala = 'falando' | 'falou' | 'nao_saiu' | null;
+
+const ROTULO_DA_FALA: Record<NonNullable<EstadoDaFala>, string> = {
+  falando: 'Falando…',
+  falou: 'Última fala',
+  nao_saiu: 'Não saiu em voz alta',
+};
+
 export const PictogramScreen: React.FC = () => {
   const [selectedText, setSelectedText] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
+  /**
+   * "Última fala" só quando a fala SAIU (relato de 18/10/2026, item 5): antes
+   * a faixa dizia "Última fala" no toque, com ou sem som.
+   */
+  const [estadoDaFala, setEstadoDaFala] = useState<EstadoDaFala>(null);
+  const falaAtual = useRef(0);
 
   const handleSpeak = (text: string) => {
     setSelectedText(text);
-    void falar(text, { rate: 0.9 }).catch((e) => console.warn('[voz] falha ao falar:', e));
+    const minha = ++falaAtual.current;
+    setEstadoDaFala('falando');
+    void falarDoPaciente(text, { rate: 0.9 }).then((r) => {
+      // Outra escolha veio depois: o rótulo é dela.
+      if (falaAtual.current !== minha) return;
+      setEstadoDaFala(falaSaiu(r) ? 'falou' : falaFalhou(r) ? 'nao_saiu' : null);
+    });
     emitirFalaDoPaciente(text, 'pictograma');
   };
 
@@ -69,7 +90,9 @@ export const PictogramScreen: React.FC = () => {
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', minWidth: 0 }}>
-            <span className="t-overline">{selectedText ? 'Última fala' : 'Nada dito ainda'}</span>
+            <span className="t-overline" data-testid="rotulo-da-fala">
+              {selectedText ? (estadoDaFala ? ROTULO_DA_FALA[estadoDaFala] : 'Última escolha') : 'Nada dito ainda'}
+            </span>
             <span
               style={{
                 fontFamily: 'var(--font-display)',

@@ -1,0 +1,49 @@
+/* O botão do APK do app do cuidador (BaixarApk.tsx). */
+.baixar-apk {
+  display: grid;
+  gap: var(--sp-3);
+  justify-items: start;
+}
+
+.baixar-apk__tamanho {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-dim);
+}
+
+.baixar-apk__aviso {
+  margin: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border-left: 2px solid var(--warn);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--warn-soft);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.baixar-apk__passos {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.baixar-apk__espera {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+/* Release publicado sem o APK: o aviso no lugar do botão. */
+.baixar-apk__fora {
+  margin: 0;
+  padding-left: var(--sp-4);
+  border-left: 2px solid var(--warn);
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}

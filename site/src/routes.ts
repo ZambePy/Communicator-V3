@@ -18,6 +18,7 @@ export const ROUTE_LOADERS: Record<string, Loader> = {
   '/contato': () => import('@/pages/Contato'),
   '/cuidador': () => import('@/pages/Cuidador'),
   '/baixar': () => import('@/pages/Baixar'),
+  '/meu-computador': () => import('@/pages/MeuComputador'),
   '/app': () => import('@/pages/AbrirApp'),
   '/beta': () => import('@/pages/Beta'),
   '/cadastro': () => import('@/pages/Cadastro'),

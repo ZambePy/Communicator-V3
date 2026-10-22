@@ -4,10 +4,12 @@
  * rótulos de dia que não repetem a chave (APP-10).
  */
 import React from 'react';
-import { AppState } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
 import { act, render, screen } from '@testing-library/react-native';
 import Conversa from '../../app/(tabs)/conversa';
+import { EspacoDoTopoProvider, useDefinirEspacoDoTopo } from '@/components';
 import type { Message } from '@/data/types';
+import { spacing } from '@/theme';
 import { agruparPorDia } from '@/utils/conversa';
 
 jest.mock('expo-router', () => {
@@ -88,6 +90,31 @@ describe('Conversa — carga', () => {
     await render(<Conversa />);
     expect(screen.queryByText('Nenhuma mensagem ainda')).toBeNull();
     expect(screen.getByText('Não deu para carregar a conversa')).toBeTruthy();
+  });
+});
+
+// Revisão de UX de 19/10/2026 (achado 20): a faixa do alerta minimizado fica no
+// topo da janela, onde também está o cabeçalho fixo da Conversa (perfil e
+// "Frases rápidas").
+describe('Conversa — faixa do alerta minimizado', () => {
+  function ComFaixa({ altura }: { altura: number }) {
+    const definir = useDefinirEspacoDoTopo();
+    React.useEffect(() => definir(altura), [definir, altura]);
+    return null;
+  }
+
+  it('com a faixa no topo, o cabeçalho fixo desce e não fica coberto', async () => {
+    const altura = 76;
+    await render(
+      <EspacoDoTopoProvider>
+        <ComFaixa altura={altura} />
+        <Conversa />
+      </EspacoDoTopoProvider>,
+    );
+    // A faixa fica em `insets.top + spacing.sm` (o mock da área segura tem topo 0).
+    const topoDoCabecalho = StyleSheet.flatten(screen.getByTestId('cabecalho-da-conversa').props.style).paddingTop as number;
+    expect(topoDoCabecalho).toBeGreaterThanOrEqual(spacing.sm + altura);
+    expect(screen.getByLabelText('Frases rápidas')).toBeTruthy();
   });
 });
 

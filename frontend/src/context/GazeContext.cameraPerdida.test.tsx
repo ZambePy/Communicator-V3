@@ -155,8 +155,8 @@ describe('câmera perdida no meio da sessão (CORE-1)', () => {
     proximoGum = ['NotFoundError', 'NotFoundError', 'NotFoundError'];
     await act(async () => { streams[0].tracks[0].cair(); });
     await passar(0);
-    expect(gaze!.cameraError).toMatch(/Nenhuma câmera encontrada/);
-    expect(gaze!.cameraError).toMatch(/tenta de novo/);
+    expect(gaze!.cameraError).toMatch(/Não encontrei nenhuma câmera/);
+    expect(gaze!.cameraError).toMatch(/Tento de novo em \d+ s/);
     expect(gaze!.cameraError).not.toMatch(/recarregue/i);
     expect(gaze!.cameraAtiva()).toBe(false);
 
@@ -172,7 +172,7 @@ describe('câmera perdida no meio da sessão (CORE-1)', () => {
     proximoGum = ['NotFoundError', 'NotFoundError', 'NotFoundError'];
     const { unmount } = await montar();
     expect(engineStart).not.toHaveBeenCalled();
-    expect(gaze!.cameraError).toMatch(/Nenhuma câmera encontrada/);
+    expect(gaze!.cameraError).toMatch(/Não encontrei nenhuma câmera/);
 
     await act(async () => { devices.dispatchEvent(new Event('devicechange')); });
     await passar(0);

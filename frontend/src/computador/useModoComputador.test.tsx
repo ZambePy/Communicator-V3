@@ -11,7 +11,7 @@ import type { PonteDoModoComputador } from './ponte';
 const assinantes = new Set<(s: GazeSample) => void>();
 const suspenderDwell = vi.fn();
 vi.mock('../context/GazeContext', () => ({
-  suspenderDwell: (v: boolean) => suspenderDwell(v),
+  suspenderDwell: (v: boolean, motivo?: string) => suspenderDwell(v, motivo),
   useGaze: () => ({
     subscribe: (cb: (s: GazeSample) => void) => {
       assinantes.add(cb);
@@ -46,6 +46,7 @@ function pontoFalsa() {
     simularSelecao: (s: SelecaoDaSobreposicao) => void;
     olhares: unknown[];
     iniciar: ReturnType<typeof vi.fn>;
+    parar: ReturnType<typeof vi.fn>;
   } = {
     onSelecao: (cb) => { aoSelecionar = cb; return () => { aoSelecionar = null; }; },
     simularSelecao: (sel) => aoSelecionar?.(sel),
@@ -101,14 +102,14 @@ describe('useModoComputador', () => {
     expect(ponte.olhares[0]).toMatchObject({ x: 10, y: 50, t: 1010, hasFace: true, eyeState: 'open', degraded: false, uncalibrated: false });
 
     // Enquanto ativo, o dwell do app fica suspenso (a janela está oculta).
-    expect(suspenderDwell).toHaveBeenLastCalledWith(true);
+    expect(suspenderDwell).toHaveBeenLastCalledWith(true, 'modo_computador');
 
     fireEvent.click(screen.getByText('desligar'));
     await waitFor(() => expect(screen.getByTestId('ativo').textContent).toBe('false'));
     act(() => { for (const cb of assinantes) cb(amostra(20)); });
     expect(ponte.olhares).toHaveLength(1);
     expect(ponte.parar).toHaveBeenCalled();
-    expect(suspenderDwell).toHaveBeenLastCalledWith(false);
+    expect(suspenderDwell).toHaveBeenLastCalledWith(false, 'modo_computador');
   });
 
   it('desmontar a tela com o modo ligado encerra no sistema também', async () => {
@@ -118,7 +119,7 @@ describe('useModoComputador', () => {
     await waitFor(() => expect(screen.getByTestId('ativo').textContent).toBe('true'));
     unmount();
     expect(ponte.parar).toHaveBeenCalled();
-    expect(suspenderDwell).toHaveBeenLastCalledWith(false);
+    expect(suspenderDwell).toHaveBeenLastCalledWith(false, 'modo_computador');
   });
 
   it('recusa do sistema vira erro na tela, sem ligar', async () => {
@@ -128,6 +129,33 @@ describe('useModoComputador', () => {
     fireEvent.click(screen.getByText('ligar'));
     await waitFor(() => expect(screen.getByTestId('erro').textContent).toBe('Sessão Wayland.'));
     expect(screen.getByTestId('ativo').textContent).toBe('false');
+  });
+
+  it('o IPC de iniciar que REJEITA vira erro na tela e destrava o botão — não fica "iniciando" para sempre (relato de 22/10/2026)', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ponte = pontoFalsa();
+    ponte.iniciar.mockRejectedValueOnce(new Error('Error invoking remote method'));
+    montar(ponte);
+    fireEvent.click(screen.getByText('ligar'));
+    await waitFor(() => expect(screen.getByTestId('erro').textContent).not.toBe(''));
+    expect(screen.getByTestId('ativo').textContent).toBe('false');
+    // Destravou: o clique seguinte chega ao sistema de novo (antes `iniciando` seguia verdadeiro e `iniciar` voltava logo no início).
+    fireEvent.click(screen.getByText('ligar'));
+    await waitFor(() => expect(screen.getByTestId('ativo').textContent).toBe('true'));
+    expect(ponte.iniciar).toHaveBeenCalledTimes(2);
+    aviso.mockRestore();
+  });
+
+  it('o IPC de parar que REJEITA não deixa a tela dizendo que o modo segue ligado (relato de 22/10/2026)', async () => {
+    const aviso = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ponte = pontoFalsa();
+    ponte.parar.mockRejectedValueOnce(new Error('Error invoking remote method'));
+    montar(ponte);
+    fireEvent.click(screen.getByText('ligar'));
+    await waitFor(() => expect(screen.getByTestId('ativo').textContent).toBe('true'));
+    fireEvent.click(screen.getByText('desligar'));
+    await waitFor(() => expect(screen.getByTestId('ativo').textContent).toBe('false'));
+    aviso.mockRestore();
   });
 
   it('"Socorro" na sobreposição abre a tela de emergência do app', async () => {

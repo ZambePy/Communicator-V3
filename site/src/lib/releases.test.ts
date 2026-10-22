@@ -87,6 +87,16 @@ describe('URLs dos instaladores (GitHub Releases)', () => {
     expect(platformsText(['windows']).long).toBe('Windows 10 e 11 (macOS e Linux em preparação)')
     expect(platformsText(['windows', 'macos', 'linux']).long).toBe('Windows 10 e 11, macOS e Linux')
   })
+
+  it('na frase de requisito o computador tem um sistema só: "Windows 10 ou 11"', () => {
+    // Revisão do texto no ar (19/10/2026): "Basta um computador com Windows 10
+    // e 11" pedia os dois. O rótulo curto continua "Windows 10 e 11".
+    expect(platformsText(['windows']).requisito).toBe('Windows 10 ou 11 (macOS e Linux em preparação)')
+    expect(platformsText(['windows', 'macos']).requisito).toBe('Windows 10 ou 11 ou macOS (Linux em preparação)')
+    expect(platformsText(['windows', 'macos', 'linux']).requisito).toBe('Windows 10 ou 11, macOS ou Linux')
+    expect(platformsText(['windows']).short).toBe('Windows 10 e 11')
+    expect(platformsText([]).requisito).toBe('Windows 10 e 11, macOS e Linux (em preparação)')
+  })
 })
 
 describe('último release pela API do GitHub: arquivos mapeados pela extensão', () => {

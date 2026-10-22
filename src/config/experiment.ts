@@ -24,7 +24,7 @@ export interface ExperimentConfig {
    *             O provider efetivo fica em `EngineDiagnostics.l2cs.executionProvider`
    *             e no relatório de precisão.
    *  - `webgpu` / `wasm`  forçam um provider (para medição). Sem fallback.
-   *  - `off`    não inicia o worker; o modelo usa só as 4 features de íris.
+   *  - `off`    não inicia o worker; o modelo usa só as features de íris (`irisAbs`, 2 por olho).
    */
   l2cs: 'auto' | 'webgpu' | 'wasm' | 'off';
   /** Expansão polinomial de grau 2 das features antes do StandardScaler. */
@@ -48,7 +48,7 @@ export interface ExperimentConfig {
    * Quais dimensões de íris entram no vetor.
    *
    * O vetor histórico leva as quatro: `offsetX`/`offsetY` (íris menos centro
-   * do olho, em unidades de imagem) e `relX`/`relY` (as mesmas divididas pela
+   * do olho, em distâncias cantais) e `relX`/`relY` (as mesmas divididas pela
    * largura/altura do olho). As duas famílias diferem por um divisor que varia
    * pouco entre quadros — medido em simulação com ±5 % de variação de largura,
    * a correlação entre `offsetX` e `relX` é 0,9996. São duas dimensões
@@ -66,10 +66,12 @@ export interface ExperimentConfig {
    *  - PTOSE (pálpebra caída, comum em ELA) corrompe a ALTURA do olho, que é
    *    o divisor de `relY`. Em simulação com a altura oscilando, `absolutas`
    *    fica imune e `normalizadas` degrada. Nada no pipeline compensa isso.
-   *  - DISTÂNCIA diferente da calibração escala `offsetX`/`offsetY` e não
-   *    escala `relX`/`relY`. Aqui `normalizadas` fica perfeitamente plana e
-   *    `absolutas` degrada um pouco — mas a distância JÁ tem compensação
-   *    dedicada a jusante (`distanceCompensation.ts`), e a ptose não tem.
+   *  - DISTÂNCIA diferente da calibração: como `offsetX`/`offsetY` já são
+   *    medidos em distâncias cantais, ela não os escala mais do que escala
+   *    `relX`/`relY` (correção da documentação de 19/10/2026: o argumento de
+   *    antes, de que só as absolutas sentiam a distância, não vale). E a
+   *    distância JÁ tem compensação dedicada a jusante
+   *    (`distanceCompensation.ts`); a ptose não tem.
    *
    * Muda o `FEATURE_VECTOR_ID` e portanto invalida perfis salvos, por
    * construção — a troca deste default obriga todo mundo a recalibrar uma vez.
@@ -149,7 +151,13 @@ export interface ExperimentConfig {
    * o Ridge aprendeu os ângulos de um modelo e preveria deslocado com outro.
    */
   modeloDoRosto: 'gaze360' | 'gazegene';
-  /** Filtro temporal. `oneEuro` é o de produção; os outros existem para o benchmark. */
+  /**
+   * Filtro temporal. `oneEuro` é o caminho de produção; os outros existem para
+   * o benchmark. Dentro dele, com o estimador de fixação (M9, padrão do V3) e o
+   * ruído medido pela calibração, quem suaviza o cursor é o ESTIMADOR, não o
+   * One Euro — os presets (`setFilterPreset`, "Suavização" do cuidador) não o
+   * parametrizam, e o engine diz isso a quem pede (auditoria A2, 19/10/2026).
+   */
   filterMode: 'oneEuro' | 'kalman' | 'kalmanEma';
   /**
    * Estabilizador por estado do olho (sprint S5): durante a fixação a saída
@@ -162,23 +170,24 @@ export interface ExperimentConfig {
    */
   estabilizarFixacao: boolean;
   /**
-   * Cancela o roll da cabeça no recorte do L2CS (sprint S6).
+   * Gira o recorte do L2CS com o roll da cabeça (sprint S6).
    *
-   * LIGADA por padrão desde 22/09 (Etapa 0 da compensação de cabeça). Ficou
-   * desligada por uma cautela específica — "só ganha se for a mesma
-   * normalização do treino" — que não se sustenta para o checkpoint
-   * empacotado: ele foi treinado no Gaze360, cujos recortes vêm com toda
-   * inclinação natural de cabeça, inclusive nivelada. Rosto nivelado está
-   * DENTRO da distribuição de treino; a rede não vê nada estranho. E a saída
-   * é contra-rotacionada pelo vetor 3D (`roll.ts`), então a geometria fecha
-   * exatamente. Sem isto, cada grau de cabeça inclinada entrava no L2CS como
-   * imagem torta e saía como erro de olhar — numa cadeira reclinável, o estado
-   * normal. O roll que vai para o recorte é SUAVIZADO (`rollSuave.ts`, τ =
-   * 150 ms) para o tremor do MediaPipe não virar tremor de imagem.
+   * LIGADA por padrão desde 22/09 (Etapa 0 da compensação de cabeça). A ideia
+   * era nivelar o rosto: o Gaze360 tem recortes com toda inclinação natural,
+   * inclusive nivelada, e o rosto nivelado está dentro da distribuição de
+   * treino. **Mas com o sinal de hoje o recorte DOBRA a inclinação em vez de
+   * cancelá-la** (auditoria A1, 19/10/2026; docs/PESQUISA.md §1.8, F1): o
+   * recorte espera o ângulo da linha dos olhos NA IMAGEM (y para baixo) e
+   * recebe o roll da matriz facial (y para cima). Com a cabeça a 10°, a rede vê
+   * o rosto a 20°. A saída é contra-rotacionada pelo mesmo ângulo (`roll.ts`),
+   * então a geometria fecha; o que muda é a imagem que a rede vê. Quem nivela
+   * de fato é a M13 (`nivelarRecorteCorrigido`), desligada até a medição. O
+   * roll que vai para o recorte é SUAVIZADO (`rollSuave.ts`, τ = 150 ms) para
+   * o tremor do MediaPipe não virar tremor de imagem.
    *
-   * O que ainda falta é a MEDIÇÃO em vídeo real: duas sessões, uma com e outra
-   * sem, cabeça inclinada ~15°, comparando erro médio e BCEA no teste de
-   * precisão. Desligar: `__irisflowExp.set('normalizarRollNoCrop', false)`.
+   * O que ainda falta é a MEDIÇÃO em vídeo real, com a cabeça inclinada ~15°:
+   * sem normalização, com a de hoje e com a M13, comparando erro médio e BCEA
+   * no teste de precisão. Desligar: `__irisflowExp.set('normalizarRollNoCrop', false)`.
    */
   normalizarRollNoCrop: boolean;
   /**
@@ -239,7 +248,9 @@ export interface ExperimentConfig {
    * engano é exatamente o acidente que este projeto não pode ter.
    *
    * Console: `__irisflowExp.set('persistirCalibracao', false)` + recarregar.
-   * URL: `?calib=0` (uma rodada) ou `?calib=1` para religar.
+   * URL: `?calib=0` desliga e `?calib=1` religa — como todo parâmetro de URL,
+   * fica GRAVADO no `localStorage` e vale nas aberturas seguintes até ser
+   * trocado (não é "uma rodada"; ver `urlDoDesenvolvimento`, A6 de 19/10/2026).
    */
   persistirCalibracao: boolean;
   /** Piscada longa como clique. Desligado por default: piscar é involuntário. */
@@ -288,7 +299,7 @@ export interface ExperimentConfig {
   l2csNaCabeca: boolean;
   /** M5 — pose da matriz facial suavizada, com rampa contínua, na compensação e na rotação. */
   poseSuavizada: boolean;
-  /** M6 — calibração robusta: peso por quadro, centro robusto por alvo, Huber entre alvos. */
+  /** M6 — calibração robusta: peso por quadro (quadros fora da mediana saem ou pesam menos) e Huber entre alvos. */
   calibracaoRobusta: boolean;
   /**
    * M7 — 14º alvo no meio da borda de baixo, no perfil padrão completo.
@@ -361,6 +372,46 @@ export interface ExperimentConfig {
   recalibracaoRapidaAfim: boolean;
   /** M21 — perda curta de rosto pausa o dwell em vez de zerar. */
   pausaNaPerdaCurta: boolean;
+  /**
+   * Recoleta dos alvos ruins logo depois da calibração (item 7, pedido de
+   * 19/10/2026; `calibration/recoletaDeAlvos.ts`).
+   *
+   * Terminados os 13 pontos, os alvos com erro fora da amostra (LOTO) ou
+   * dispersão acima de 2× a dos pares e de um piso em graus — ou com poucas
+   * amostras — são coletados de novo NA HORA, as amostras novas SUBSTITUEM as
+   * antigas e o treino é refeito do zero (scaler, λ, Huber, cantos). No máximo
+   * uma rodada automática por calibração e quatro alvos por rodada. A tela de
+   * resultado oferece a mesma rodada, à mão, para os pontos ruins.
+   *
+   * LIGADA por padrão, e é a exceção consciente à regra de padrão igual ao
+   * comportamento de antes: a trava de aceitação só deixa o modelo novo ficar
+   * se o LOTO médio dos alvos não piorar — senão volta o antigo, inteiro.
+   * Sem alvo ruim nada acontece e a saída é idêntica à de antes
+   * (`calibration.recoleta.test.ts`). O que ainda falta é a MEDIÇÃO com
+   * pessoas: ver o relatório da calibração (`calibrationFit.recoleta`).
+   * Desligar: `__irisflowExp.set('recoletaDeAlvosRuins', false)` ou
+   * `?pipeline=base`.
+   */
+  recoletaDeAlvosRuins: boolean;
+  /**
+   * O ESTÍMULO de antes de 19/10/2026 na calibração e no teste de precisão
+   * (revisão do pipeline de 19/10/2026): a bola azul lisa de 36 px que pulsava
+   * na coleta e ficava verde, sobre fundo PRETO, e no teste o círculo azul-claro
+   * com cruz e anel pulsante. O padrão (`false`) é o de hoje, pedido pelo dono:
+   * o alvo ABC de Thaler et al. (2013) igual nos dois, sobre o azul-marinho
+   * #091B33 (`src/alvoDeFixacao.ts`).
+   *
+   * Existe para MEDIR a troca: as sessões de antes de 19/10 usaram o outro
+   * estímulo, e um "antes" que só existe noutro build mistura o estímulo com
+   * todo o resto que mudou entre os dois. Com a flag, o antes e o depois do
+   * estímulo saem do MESMO build, em blocos alternados na mesma pessoa.
+   *
+   * Fora do interruptor do V3 (`?pipeline=base` não a liga): o estímulo é
+   * condição de medição, não do rastreamento, e ligá-la junto com a base
+   * misturaria as duas comparações. URL `?exp.estimuloAntigo=1` (e `=0` para
+   * voltar); console `__irisflowExp.set('estimuloAntigo', true)` + recarregar.
+   */
+  estimuloAntigo: boolean;
 }
 
 /** Os padrões do código. `DEFAULTS` (abaixo) é isto com os padrões de build aplicados. */
@@ -413,7 +464,16 @@ const DEFAULTS_DO_CODIGO: ExperimentConfig = {
   toleranciaIntrusoes: true,
   recalibracaoRapidaAfim: true,
   pausaNaPerdaCurta: true,
+  recoletaDeAlvosRuins: true,
+  estimuloAntigo: false,
 };
+
+/**
+ * Flags booleanas de CONDIÇÃO DE MEDIÇÃO fora do interruptor do V3 que a URL
+ * aceita como `?exp.<flag>=0|1` (revisão do pipeline de 19/10/2026). As do V3
+ * são as chaves de `VALORES_DA_BASE`.
+ */
+export const FLAGS_DE_MEDICAO_NA_URL = ['estimuloAntigo'] as const satisfies readonly (keyof ExperimentConfig)[];
 
 export const VALORES_ACEITOS = {
   l2cs: ['auto', 'webgpu', 'wasm', 'off'],
@@ -456,6 +516,7 @@ export const VALORES_DA_BASE = {
   toleranciaIntrusoes: false,
   recalibracaoRapidaAfim: false,
   pausaNaPerdaCurta: false,
+  recoletaDeAlvosRuins: false,
 } as const satisfies Partial<ExperimentConfig>;
 
 /** Aplica o interruptor único: com `base`, todas as flags do V3 voltam ao valor anterior. */

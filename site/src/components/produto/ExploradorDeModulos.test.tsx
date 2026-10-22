@@ -23,6 +23,44 @@ describe('<ExploradorDeModulos />', () => {
     expect(within(painel).queryByAltText(MODULOS_EM_TELA[1].tela.alt)).not.toBeInTheDocument()
   })
 
+  it('só carrega a captura do módulo ativo e a dos que a pessoa já viu (auditoria P2-5)', () => {
+    const { container } = render(<ExploradorDeModulos modulos={MODULOS_EM_TELA} />)
+    const imagens = () => container.querySelectorAll('img.monitor__imagem')
+    const emergencia = MODULOS_EM_TELA.findIndex((m) => m.id === 'emergencia')
+    expect(emergencia).toBeGreaterThan(0)
+
+    // Na abertura: uma tela só, e nenhum celular.
+    expect(imagens()).toHaveLength(1)
+    expect(container.querySelectorAll('img.celular__video')).toHaveLength(0)
+
+    // Passar o ponteiro por cima da aba já separa a imagem, antes do clique.
+    const abas = screen.getAllByRole('tab')
+    fireEvent.pointerEnter(abas[2])
+    expect(imagens()).toHaveLength(2)
+    expect(imagens()[1]).not.toHaveClass('is-ativa')
+
+    // Ao abrir, a tela chega e a anterior continua montada (a troca é um esmaecer).
+    fireEvent.click(abas[2])
+    expect(imagens()).toHaveLength(2)
+    expect(imagens()[1]).toHaveClass('is-ativa')
+    expect(imagens()[0]).not.toHaveClass('is-ativa')
+
+    // O celular de um módulo só entra quando o módulo é visto.
+    const celulares = () => container.querySelectorAll('img.celular__video').length
+    const comCelular = (vistos: number[]) => vistos.filter((i) => MODULOS_EM_TELA[i].celular).length
+    expect(celulares()).toBe(comCelular([0, 2]))
+    fireEvent.click(abas[emergencia])
+    expect(imagens()).toHaveLength(3)
+    expect(celulares()).toBe(comCelular([0, 2, emergencia]))
+    expect(celulares()).toBeLessThan(MODULOS_EM_TELA.filter((m) => m.celular).length)
+
+    // Voltar a um que já foi visto não monta nada de novo, e a ativa é a certa.
+    fireEvent.click(abas[0])
+    expect(imagens()).toHaveLength(3)
+    expect(imagens()[0]).toHaveClass('is-ativa')
+    expect(container.querySelectorAll('img.monitor__imagem.is-ativa')).toHaveLength(1)
+  })
+
   it('setas, Home e End trocam a aba e levam o foco junto', () => {
     render(<ExploradorDeModulos modulos={MODULOS_EM_TELA} />)
     const abas = screen.getAllByRole('tab')

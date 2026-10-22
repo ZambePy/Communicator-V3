@@ -15,10 +15,10 @@ describe('Pricing — hierarquia dos títulos', () => {
     BETA.ativo = ativo
   })
 
-  it('na beta: o plano Beta e "Depois da beta" são h2; os planos pagos, h3 abaixo deles', () => {
+  it('na beta: o plano Beta e "Preços previstos para depois da beta" são h2; os planos pagos, h3 abaixo deles', () => {
     BETA.ativo = true
     render(<MemoryRouter><Pricing /></MemoryRouter>)
-    expect(nomes(2)).toEqual([BETA_PLAN.name, 'Depois da beta · preços previstos'])
+    expect(nomes(2)).toEqual([BETA_PLAN.name, 'Preços previstos para depois da beta'])
     expect(nomes(3)).toEqual(expect.arrayContaining(['Essencial', 'Completo', 'Voz']))
   })
 

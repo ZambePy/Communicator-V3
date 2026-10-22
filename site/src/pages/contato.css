@@ -67,3 +67,9 @@
   height: 1px;
   overflow: hidden;
 }
+
+/* Os links dos canais chegam a 44 px de alto sem mexer na linha: o espaço vem
+   do preenchimento do próprio link (P3-3, 21/10/2026). */
+.contact__canais a {
+  padding-block: 13px;
+}

@@ -42,7 +42,7 @@ export function Notice({ tone = 'info', title, text, icon, action, style, testID
   return (
     <Animated.View
       entering={entrada.suave()}
-      style={[styles.box, { backgroundColor: cor.bg }, style]}
+      style={[styles.box, { backgroundColor: cor.bg, borderLeftColor: cor.fg }, style]}
       accessibilityLiveRegion={tone === 'danger' ? 'assertive' : 'polite'}
       accessibilityRole={tone === 'danger' ? 'alert' : undefined}
       testID={testID}
@@ -68,7 +68,8 @@ export function Notice({ tone = 'info', title, text, icon, action, style, testID
 }
 
 const styles = StyleSheet.create({
-  box: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg, borderRadius: radius.md },
+  // O fio à esquerda é o mesmo sinal dos pedidos abertos: a cor do estado.
+  box: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg, borderRadius: radius.md, borderLeftWidth: sizes.accentBar },
   icon: { marginTop: spacing.xxs },
   texts: { flex: 1, gap: spacing.xxs },
   action: { alignSelf: 'flex-start', minHeight: sizes.touch, justifyContent: 'center', marginBottom: -spacing.sm },

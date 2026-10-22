@@ -13,7 +13,7 @@
     "modulos": {
       "communication": {
         "title": "Comunicação",
-        "description": "Frases rápidas e pictogramas"
+        "description": "Frases, sim e não, pictogramas"
       },
       "keyboard": {
         "title": "Teclado Virtual",
@@ -143,10 +143,6 @@
       "onlyDesktop": "Disponível no aplicativo instalado",
       "lgpd": "LGPD: a voz é dado biométrico sensível. O áudio de referência, o modelo e as frases geradas ficam exclusivamente neste computador, para uso assistivo do paciente, e podem ser apagados a qualquer momento."
     },
-    "backup": {
-      "title": "Backup de Configurações",
-      "export": "Exportar Backup (JSON)"
-    },
     "dashboardLink": {
       "button": "Abrir Painel de Acompanhamento"
     },
@@ -156,13 +152,19 @@
       "title": "Idioma",
       "pt-BR": "Português (Brasil)",
       "en": "English"
+    },
+    "linguagem": {
+      "titulo": "Resultado da calibração",
+      "descricao": "Como os resultados da calibração e do teste de precisão aparecem.",
+      "simples": "Em palavras simples",
+      "tecnica": "Com os números"
     }
   },
   "emergency": {
     "title": "URGÊNCIA MÉDICA",
     "alertSent": "ALERTA ENVIADO!",
     "waiting": "Sinal de {{label}} disparado. Aguarde.",
-    "cancelAndReturn": "Parar o alarme e voltar",
+    "cancelAndReturn": "Parar o alarme",
     "chooseType": "Selecione o tipo de urgência",
     "items": {
       "pain": "DOR MUITO FORTE",
@@ -182,7 +184,7 @@
       },
       "na_fila": {
         "titulo": "SEM INTERNET",
-        "detalhe": "O alarme está tocando aqui. O aviso ao celular do cuidador sai assim que a internet voltar."
+        "detalhe": "Sem internet agora. O alarme toca aqui, e o aviso ao celular do cuidador sai assim que a internet voltar."
       },
       "sem_nuvem": {
         "titulo": "ALARME LOCAL",
@@ -190,12 +192,48 @@
       },
       "falhou": {
         "titulo": "ALARME LOCAL",
-        "detalhe": "Não foi possível avisar o celular do cuidador. O alarme está tocando aqui."
+        "detalhe": "Não foi possível avisar o celular do cuidador. O alarme toca aqui."
       },
       "ensaio": {
         "titulo": "MODO APRESENTAÇÃO",
         "detalhe": "Nada foi enviado ao celular do cuidador: o modo apresentação está ligado."
+      },
+      "sem_push": {
+        "titulo": "ALARME LOCAL",
+        "detalhe": "O pedido chegou ao servidor, mas nenhum celular de cuidador foi avisado. O alarme toca aqui."
+      },
+      "limitado": {
+        "titulo": "ALARME LOCAL",
+        "detalhe": "O servidor deixou de avisar o celular do cuidador porque houve muitos chamados seguidos. O alarme toca aqui."
+      },
+      "push_incerto": {
+        "titulo": "ALARME LOCAL",
+        "detalhe": "O pedido chegou ao servidor, mas não deu para confirmar se o celular do cuidador recebeu o aviso. O alarme toca aqui."
+      },
+      "sem_resposta": {
+        "titulo": "SEM RESPOSTA DO SERVIDOR",
+        "detalhe": "O envio ao celular do cuidador não foi confirmado. O alarme toca aqui."
       }
+    },
+    "escalado": {
+      "titulo": "ALERTA ESCALADO",
+      "detalhe": "Ninguém confirmou ainda. O alarme está tocando neste computador."
+    },
+    "visto": {
+      "titulo": "SEU CUIDADOR VIU",
+      "detalhe": "Seu cuidador viu o pedido às {{hora}}. Ajuda a caminho."
+    },
+    "voltarAoMenu": "Voltar ao menu",
+    "voltar": "Voltar",
+    "horizontal": {
+      "parar": "Para parar o alarme, olhe para a esquerda.",
+      "pergunta": "Olhe para a esquerda para continuar pedindo ajuda, ou para a direita para parar o alarme.",
+      "voltar": "Para voltar, olhe para a esquerda."
+    },
+    "pararAlarme": {
+      "pergunta": "Parar o alarme? Seu cuidador ainda não confirmou que viu.",
+      "sim": "Sim, parar o alarme",
+      "nao": "Não, continuar pedindo ajuda"
     }
   },
   "onboarding": {
@@ -287,7 +325,8 @@
     "start": "Iniciar sessão",
     "remove": "Remover",
     "removeConfirmTitle": "Remover o perfil de {{name}}?",
-    "removeConfirmBody": "O perfil e as frases que o assistente aprendeu com essa pessoa saem deste computador, e não há como desfazer. Para usar o IrisFlow Communicator de novo com essa pessoa, será preciso criar outro perfil e calibrar outra vez.",
+    "removeConfirmBody": "O perfil sai deste computador, e não há como desfazer. Saem junto: as frases que o assistente aprendeu, a calibração, o diário e as perguntas para o médico, o que o cuidador anotou, os favoritos, o progresso do tutorial, as gravações da voz dele e o termo que ele aceitou. A voz personalizada importada neste computador também sai, mas só se foi criada com o termo dele; se for de outro paciente, ela continua no computador. Para usar o IrisFlow Communicator de novo com essa pessoa, será preciso criar outro perfil e calibrar outra vez.",
+    "removeNoticeDismiss": "Entendi",
     "removeConfirm": "Remover perfil",
     "form": {
       "title": "Novo paciente",
@@ -559,12 +598,6 @@
     },
     "resultado": {
       "title": "Resultado da calibração",
-      "bom": "Boa calibração.",
-      "aceitavel": "Calibração aceitável.",
-      "refazer": "Vale refazer.",
-      "bomBody": "O sistema aprendeu bem o seu olhar. Pode seguir.",
-      "aceitavelBody": "Dá para usar. Refazer pode melhorar, se você tiver tempo.",
-      "refazerBody": "O resultado ficou abaixo do que dá para conseguir.",
       "motivo": {
         "sessaoRuim": "A leitura ficou instável na tela inteira — normalmente é luz ou distância.",
         "alvoInaprendivel": "Um dos pontos não foi aprendido, e isso atrapalha os outros.",
@@ -579,8 +612,58 @@
       "refazerBtn": "Refazer a calibração",
       "semObrigacao": "Refazer é sempre opcional — quem decide é você.",
       "tituloPaciente": "Seu olhar foi configurado.",
-      "qualidade": "Qualidade do rastreamento: {{n}} de {{total}}",
-      "qualidadeAria": "Qualidade do rastreamento: nível {{n}} de {{total}}"
+      "palavra": {
+        "otima": "Ótima",
+        "boa": "Boa",
+        "refazerCantos": "Refazer os cantos",
+        "refazerBordas": "Refazer as bordas",
+        "refazerPontos": "Refazer alguns pontos",
+        "refazerTudo": "Vale refazer a calibração"
+      },
+      "frase": {
+        "otima": "O sistema entendeu bem o seu olhar. Pode usar.",
+        "boa": "Dá para usar. Se quiser mais precisão, refaça a calibração com calma outra hora.",
+        "refazerCantos": "O meio da tela ficou bom; os cantos ficaram imprecisos. Dá para refazer só os cantos, sem repetir tudo.",
+        "refazerBordas": "O meio da tela ficou bom; as bordas ficaram imprecisas. Dá para refazer só esses pontos, sem repetir tudo.",
+        "refazerPontos": "Alguns pontos ficaram imprecisos. Dá para refazer só esses pontos, sem repetir tudo.",
+        "refazerCantosSemBotao": "O meio da tela ficou bom; os cantos ficaram imprecisos. Dá para usar assim; para melhorar os cantos, refaça a calibração.",
+        "refazerBordasSemBotao": "O meio da tela ficou bom; as bordas ficaram imprecisas. Dá para usar assim; para melhorar as bordas, refaça a calibração.",
+        "refazerTudo": "O olhar ficou impreciso no meio da tela. Vale refazer a calibração com calma, com o rosto bem iluminado.",
+        "refazerTudoDeriva": "A cabeça mudou de posição durante a calibração. Apoie bem a cabeça e refaça.",
+        "refazerTudoLuz": "A leitura ficou instável na tela toda. Melhore a luz no rosto e refaça a calibração.",
+        "refazerTudoPonto": "Um dos pontos não foi aprendido e atrapalhou os outros. Vale refazer a calibração com calma.",
+        "refazerTudoDistancia": "Os cantos pediram mais giro de olho do que dá para medir. Sente um pouco mais longe da tela e refaça."
+      },
+      "refazerCantosBtn": "Refazer só os cantos",
+      "refazerPontosBtn": "Refazer só os pontos imprecisos",
+      "loto": "Erro fora da amostra de todos os pontos (LOTO): {{px}} px",
+      "precisao": "Tremor da fixação (mediana dos pontos): {{px}} px · {{g}}°",
+      "pontoRuim": "{{lugar}}: erro fora da amostra {{erro}} px, tremor {{tremor}} px, {{n}} amostras",
+      "lugar": {
+        "cima": {
+          "esquerda": "Alto à esquerda",
+          "centro": "Alto, no meio",
+          "direita": "Alto à direita"
+        },
+        "meio": {
+          "esquerda": "Meio à esquerda",
+          "centro": "Centro",
+          "direita": "Meio à direita"
+        },
+        "baixo": {
+          "esquerda": "Embaixo à esquerda",
+          "centro": "Embaixo, no meio",
+          "direita": "Embaixo à direita"
+        }
+      },
+      "recoleta": {
+        "aceita": "Os pontos refeitos ficaram melhores, e a calibração foi atualizada.",
+        "recusada": "Os pontos refeitos não ficaram melhores. A calibração de antes continua valendo.",
+        "semAmostras": "Não deu para medir os pontos de novo agora. A calibração de antes continua valendo.",
+        "tecnica": "Recoleta de {{n}} ponto(s): LOTO {{antes}} → {{depois}} px — {{decisao}}",
+        "decisaoAceita": "modelo novo em uso",
+        "decisaoRecusada": "mantida a calibração de antes"
+      }
     },
     "relatorio": {
       "title": "Relatório da sessão",
@@ -609,6 +692,22 @@
       "sem": "Nenhuma calibração em uso — o olhar não seleciona nada até calibrar.",
       "why": "Calibre de novo quando o cursor deixar de acompanhar o olhar, ou depois de mudar a posição do paciente, da câmera ou do monitor.",
       "button": "Calibrar o olhar"
+    },
+    "linguagem": {
+      "titulo": "Antes de começar",
+      "pergunta": "Quando a calibração terminar, como você prefere ver o resultado?",
+      "simples": "Em palavras simples",
+      "simplesDica": "\"Ótima\", \"Boa\" ou o que refazer, e uma frase do que fazer.",
+      "tecnica": "Com os números",
+      "tecnicaDica": "Erro em pixels e em graus, para quem acompanha de perto.",
+      "nota": "É só desta vez. Dá para mudar depois em Configurações."
+    },
+    "recoleta": {
+      "avisoUm": "Vamos refazer 1 ponto que ficou impreciso. É rapidinho.",
+      "avisoVarios": "Vamos refazer {{n}} pontos que ficaram imprecisos. É rapidinho.",
+      "nenhum": "Não há pontos para refazer agora. Se quiser, refaça a calibração inteira.",
+      "atualizando": "Atualizando a calibração",
+      "atualizandoDica": "Só um instante: os pontos refeitos estão sendo conferidos."
     }
   },
   "sessao": {

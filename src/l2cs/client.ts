@@ -5,7 +5,7 @@
 // último resultado envelheceu demais, `valid` cai para false e o extractor
 // recebe o bloco angular zerado. O loop rAF nunca espera pelo worker.
 
-import type { L2CSGaze, L2CSModelMeta, L2CSWorkerRequest, L2CSWorkerResponse, VerificacaoDoModelo } from './types';
+import type { EntradaDeTeste, L2CSGaze, L2CSModelMeta, L2CSWorkerRequest, L2CSWorkerResponse, VerificacaoDoModelo } from './types';
 import { fichaDoModelo, type FichaDoModelo } from './proveniencia';
 import { EXPERIMENT, type ExperimentConfig } from '../config/experiment';
 import { descricaoDoModelo, ladoAceito, type LadoDoRecorte } from './modelos';
@@ -69,13 +69,82 @@ export interface L2CSClientOptions {
    *  rede do rosto); o ramo ocular passa `[olho esquerdo]`/`[olho direito]`,
    *  para o console não anunciar uma L2CS-Net que não está rodando. */
   rotulo?: string;
+  /**
+   * Tensor retangular `[altura, largura]` que este cliente vai submeter (ramo
+   * ocular, 64×96). Vai para a inferência de teste do `init`. Ausente = recorte
+   * quadrado do rosto, com o lado da política por provider.
+   */
+  dimsDoTensor?: [number, number];
+  /**
+   * Chamado UMA vez quando o worker, depois do `ready`, deixou de servir: morreu
+   * (`error`), errou `INFERENCIAS_FALHAS_PARA_DESISTIR` inferências seguidas ou
+   * ficou sem responder duas vezes seguidas. O worker já foi encerrado; quem
+   * chama decide reiniciar (relato de 19/10/2026). Antes nada disso chegava ao
+   * engine: o status seguia `ready` com o bloco angular zerado para sempre.
+   */
+  aoFalhar?: (motivo: MotivoDaFalhaDoWorker, detalhe: string) => void;
+  /**
+   * Lado do recorte FIXO, qualquer que seja o provider que subir (revisão do
+   * pipeline de 19/10/2026). O engine passa no REINÍCIO do worker do rosto com
+   * uma calibração em uso (ou uma coleta em curso): o modelo dela foi treinado
+   * num lado, e 224² e 448² dão ângulos diferentes para o mesmo olhar. Antes o
+   * reinício que subia em WASM trocava para 224² e a calibração de 448² era
+   * apagada — sem calibração nada aciona pelo olhar, nem a Emergência. O ONNX
+   * aceita os dois lados; em WASM a 448² só a latência muda (medida no
+   * comentário de `iniciarClienteDoRosto`, no engine).
+   *
+   * A cadência continua a do provider (a política). Um lado que o modelo não
+   * aceita (o GazeGene só aceita 224) cai no aceito, como sempre — aí o lado
+   * muda e a calibração fica suspensa (`setL2csInputSizeEfetivo`). Ausente, a
+   * política por provider decide o lado, como antes.
+   */
+  ladoFixo?: LadoDoRecorte;
+  /**
+   * Vigia das PRIMEIRAS respostas (revisão do pipeline de 20/10/2026). O engine
+   * liga no reinício com `ladoFixo`: a 448² o WASM é ~3,2× mais lento que a 224²
+   * (medido em 20/10/2026), e uma resposta que chega mais velha que a tolerância
+   * de idade (no máximo `MAX_STALE_MS`) é descartada — o bloco angular vai
+   * zerado com o status em `ready`, e ninguém fica sabendo.
+   *
+   * Conta a idade de cada resposta (da captura até a chegada, a mesma régua do
+   * `getLatestGaze`). Duas das três primeiras acima de `limiteMs` = lento: chama
+   * `aoPassar` UMA vez, com a mediana das idades medidas. Duas abaixo = rápido:
+   * a vigia acaba sem chamar nada. Uma resposta lenta isolada (uma pausa do
+   * coletor de lixo) não decide sozinha. Ausente = nenhuma vigia, como antes.
+   */
+  vigiaDaLatencia?: {
+    limiteMs: number;
+    aoPassar: (latenciaMs: number) => void;
+  };
 }
+
+/** Por que um worker que já estava pronto deixou de servir. */
+export type MotivoDaFalhaDoWorker = 'inferencia' | 'worker_morreu' | 'sem_resposta';
+
+/**
+ * Inferências com erro, SEGUIDAS (sem um resultado no meio), a partir das quais
+ * o worker é dado como perdido. Perder o dispositivo WebGPU (sono e volta do
+ * notebook, reinício do driver) faz TODO `session.run` falhar; um erro isolado
+ * (um tensor ruim) não. Oito seguidos são ~1 s na cadência do rosto e ~0,3 s na
+ * do olho — longe de um soluço, perto o bastante para o paciente não ficar
+ * minutos com a mira piorada sem ninguém saber.
+ */
+export const INFERENCIAS_FALHAS_PARA_DESISTIR = 8;
+
+/** Intervalo mínimo entre dois avisos de erro de inferência no console. */
+const INTERVALO_DO_LOG_DE_ERRO_MS = 5000;
 
 export interface L2CSClient {
   start(): Promise<void>;
   stop(): void;
   /** `dims = [altura, largura]` só para tensor não quadrado (ramo ocular). */
   submitTensor(tensor: Float32Array, dims?: [number, number]): boolean;
+  /**
+   * Um buffer de `comprimento` floats devolvido pelo worker, para o próximo
+   * recorte escrever no lugar de alocar (falha #13, 18/10/2026). `undefined`
+   * quando não há nenhum guardado — aí o recorte aloca, como antes.
+   */
+  emprestarTensor(comprimento: number): Float32Array | undefined;
   /** true se um `submitTensor` agora seria aceito (worker pronto, slot livre e
    *  cadência satisfeita). Permite ao engine pular o crop quando não vai adiantar. */
   canSubmit(nowMs?: number): boolean;
@@ -98,6 +167,8 @@ export interface L2CSClient {
   getAverageConfidence(): number;
   /** Inferências submetidas e ainda sem resposta (0 ou 1). */
   getPendingCount(): number;
+  /** Por que o worker deixou de servir depois do `ready` (`null` = não deixou). */
+  getFalha(): { motivo: MotivoDaFalhaDoWorker; detalhe: string } | null;
 }
 
 // Resolvidos contra a página, não contra a origem: sob `file://` no Electron
@@ -119,6 +190,20 @@ const DEFAULT_ORT_PATH = 'ort/';
  */
 export const DEFAULT_STALE_MS = 400;
 export const MAX_STALE_MS = 2500;
+
+/**
+ * Demora máxima de uma resposta no REINÍCIO com o lado da calibração mantido
+ * (`ladoFixo` + `vigiaDaLatencia`; revisão do pipeline de 20/10/2026): metade
+ * do teto de idade de uma leitura (`MAX_STALE_MS`, 2,5 s), ou seja 1,25 s.
+ *
+ * A conta, sem fórmula: com uma inferência por vez, a leitura que chegou com L
+ * de atraso só é trocada pela próxima L depois — no fim ela tem 2·L de idade.
+ * Se 2·L cabe nos 2,5 s (L até 1,25 s), há sempre uma leitura valendo. Acima
+ * disso, parte do tempo fica sem ângulo (a 1,8 s, 62 % do tempo, na simulação
+ * da revisão); acima de 2,5 s, o tempo todo. Medido em 20/10/2026 num
+ * contêiner de 2 CPUs: 448² em WASM levou 2,74–2,75 s; 224², 0,74–0,96 s.
+ */
+export const LATENCIA_MAXIMA_DO_LADO_FIXO_MS = MAX_STALE_MS / 2;
 
 /** Tolerância de idade derivada da latência média: 3 inferências mais a cadência. */
 export function staleMsParaLatencia(latenciaMs: number, cadenceMs: number): number {
@@ -142,11 +227,69 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
   // Cadência explícita (testes, harness) vence a política; sem ela, a
   // cadência nasce em `EXPERIMENT` e é trocada no `ready` pelo provider.
   const cadenciaFixa = opts.cadenceMs;
-  let politica: PoliticaL2cs = politicaPorProvider(null, EXPERIMENT, lados);
+  // A política por provider, com o lado fixo de quem chama por cima (o
+  // reinício com calibração em uso; ver `ladoFixo`).
+  const ladoFixo = opts.ladoFixo;
+  const politicaDe = (p: 'webgpu' | 'wasm' | null): PoliticaL2cs => {
+    const base = politicaPorProvider(p, EXPERIMENT, lados);
+    if (ladoFixo === undefined) return base;
+    return { ...base, inputSize: lados && lados.length > 0 ? ladoAceito(lados, ladoFixo) : ladoFixo };
+  };
+  let politica: PoliticaL2cs = politicaDe(null);
   let cadenceMs = cadenciaFixa ?? politica.cadenceMs;
   const staleFixo = opts.staleMs;
   const provider: L2CSProviderRequest =
     opts.provider ?? (EXPERIMENT.l2cs === 'off' ? 'auto' : EXPERIMENT.l2cs);
+  // O que a inferência de teste do `init` vai rodar: o tensor do olho, ou o
+  // recorte do rosto no lado que a política escolheria para cada provider (o
+  // lado fixo, quando há, para os dois). Com a cadência fixa de quem chama
+  // (testes, harness) a política não muda o lado, e o pedido vale para os dois.
+  const testeDoInit: EntradaDeTeste = opts.dimsDoTensor
+    ? { dims: opts.dimsDoTensor }
+    : {
+        porProvider: {
+          webgpu: politicaDe('webgpu').inputSize,
+          wasm: politicaDe('wasm').inputSize,
+        },
+      };
+  // ── Saúde do worker depois do `ready` (relato de 19/10/2026) ──────────────
+  let inferenciasFalhasSeguidas = 0;
+  let semRespostaSeguidas = 0;
+  let falha: { motivo: MotivoDaFalhaDoWorker; detalhe: string } | null = null;
+  /** Erros de inferência ainda não contados num aviso do console. */
+  let errosNaoAvisados = 0;
+  let ultimoLogDeErroMs = -Infinity;
+  // ── Vigia das primeiras respostas (ver `vigiaDaLatencia`) ─────────────────
+  const vigia = opts.vigiaDaLatencia ?? null;
+  /** Idades (ms) das respostas medidas pela vigia; `null` = vigia encerrada. */
+  let idadesDaVigia: number[] | null = vigia ? [] : null;
+
+  /** Uma resposta chegou com `idadeMs`: a vigia decide quando der. */
+  function vigiar(idadeMs: number): void {
+    if (!vigia || idadesDaVigia === null) return;
+    idadesDaVigia.push(idadeMs);
+    const lentas = idadesDaVigia.filter((t) => t > vigia.limiteMs).length;
+    const rapidas = idadesDaVigia.length - lentas;
+    if (lentas < 2 && rapidas < 2) return;
+    const ordenadas = idadesDaVigia.slice().sort((a, b) => a - b);
+    const meio = ordenadas.length >> 1;
+    const mediana = ordenadas.length % 2 ? ordenadas[meio] : (ordenadas[meio - 1] + ordenadas[meio]) / 2;
+    idadesDaVigia = null;
+    if (lentas >= 2) vigia.aoPassar(mediana);
+  }
+
+  /**
+   * O worker deixou de servir: encerra a thread (ela não vai mais responder
+   * nada útil, e cada submissão custaria ~5 ms de `getImageData` à toa) e
+   * avisa quem pode reiniciar. Uma vez por cliente — o engine cria outro.
+   */
+  function falhar(motivo: MotivoDaFalhaDoWorker, detalhe: string): void {
+    if (falha) return;
+    falha = { motivo, detalhe };
+    derrubarWorker();
+    latest = { yaw: 0, pitch: 0, timestamp: latest.timestamp, valid: false };
+    opts.aoFalhar?.(motivo, detalhe);
+  }
 
   let worker: Worker | null = null;
   let ready = false;
@@ -214,8 +357,46 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       if (now - capturaMs > IN_FLIGHT_TIMEOUT_MS) {
         inFlight.delete(id);
         console.warn(`${rotulo} inferência ${id} sem resposta há ${((now - capturaMs) / 1000).toFixed(1)} s — slot liberado.`);
+        // Um worker travado sem `error` nunca mais responde: liberar o slot só
+        // adiava em 8 s a próxima espera. Duas seguidas = worker perdido.
+        semRespostaSeguidas++;
+        if (semRespostaSeguidas >= 2) {
+          falhar('sem_resposta', `${semRespostaSeguidas} inferências seguidas sem resposta em ${IN_FLIGHT_TIMEOUT_MS / 1000} s`);
+          return;
+        }
       }
     }
+  }
+
+  /** Erro de inferência no console: o primeiro na hora, depois um resumo a cada 5 s. */
+  function avisarErroDeInferencia(erro: string): void {
+    errosNaoAvisados++;
+    const agora = performance.now();
+    if (agora - ultimoLogDeErroMs < INTERVALO_DO_LOG_DE_ERRO_MS) return;
+    ultimoLogDeErroMs = agora;
+    console.warn(
+      `${rotulo} erro de inferência` +
+      (errosNaoAvisados > 1 ? ` (${errosNaoAvisados} desde o último aviso; ${inferenciasFalhasSeguidas} seguidos)` : '') +
+      ':',
+      erro,
+    );
+    errosNaoAvisados = 0;
+  }
+
+  /**
+   * Buffers de tensor devolvidos pelo worker, por comprimento (falha #13,
+   * 18/10/2026). Até dois por tamanho: com uma inferência em voo, um está no
+   * worker e outro espera o próximo recorte — mais que isso seria memória
+   * parada.
+   */
+  const reserva = new Map<number, Float32Array[]>();
+  const RESERVA_POR_TAMANHO = 2;
+  function guardarDevolvido(buf: Float32Array | undefined): void {
+    if (!(buf instanceof Float32Array) || buf.byteLength === 0) return;
+    const lista = reserva.get(buf.length) ?? [];
+    if (lista.length >= RESERVA_POR_TAMANHO) return;
+    lista.push(buf);
+    reserva.set(buf.length, lista);
   }
 
   function handleMessage(ev: MessageEvent<L2CSWorkerResponse>): void {
@@ -229,7 +410,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       fallback = msg.fallback;
       // Primeiro status com provider: a política entra AQUI, antes de
       // `readyResolve`, para quem ouve o `ready` já ler o valor em vigor.
-      politica = politicaPorProvider(msg.executionProvider, EXPERIMENT, lados);
+      politica = politicaDe(msg.executionProvider);
       if (cadenciaFixa === undefined) cadenceMs = politica.cadenceMs;
       if (fallback) {
         console.warn(`${rotulo} WebGPU indisponível — rodando em '${msg.executionProvider}'. Latência e staleness maiores; o relatório registra o provider.`);
@@ -247,6 +428,7 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       // inferência nenhuma; segurá-lo só custa memória. Ver `derrubarWorker`.
       derrubarWorker();
     } else if (msg.type === 'result') {
+      guardarDevolvido(msg.devolvido);
       const capturaMs = inFlight.get(msg.id);
       inFlight.delete(msg.id);
       if (capturaMs === undefined) {
@@ -266,9 +448,21 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       if (recentLatencies.length > 20) recentLatencies.shift();
       recentConfidences.push(msg.confidence);
       if (recentConfidences.length > 20) recentConfidences.shift();
+      // Um resultado bom encerra qualquer sequência de falhas.
+      inferenciasFalhasSeguidas = 0;
+      semRespostaSeguidas = 0;
+      // Por último: quem ouve a vigia pode encerrar este cliente (o engine
+      // refaz o worker em outro lado), e nada aqui roda depois disso.
+      vigiar(performance.now() - capturaMs);
     } else if (msg.type === 'infer_error') {
+      guardarDevolvido(msg.devolvido);
       inFlight.delete(msg.id);
-      console.warn(`${rotulo} infer error:`, msg.error);
+      inferenciasFalhasSeguidas++;
+      // Antes: um aviso por inferência (~70/s com a EyeNet) e nada mais.
+      avisarErroDeInferencia(msg.error);
+      if (inferenciasFalhasSeguidas >= INFERENCIAS_FALHAS_PARA_DESISTIR) {
+        falhar('inferencia', `${inferenciasFalhasSeguidas} inferências seguidas falharam; a última: ${msg.error}`);
+      }
     }
   }
 
@@ -279,18 +473,22 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       worker.addEventListener('message', handleMessage);
       worker.addEventListener('error', (e) => {
         console.error(`${rotulo} Worker execution error:`, e.message, e.filename, e.lineno);
+        const estavaPronto = ready;
         readyReject?.(new Error('Worker execution error: ' + e.message));
         // Um worker que morreu depois do `ready` nunca vai responder o que
         // está em voo; `derrubarWorker` libera os slots e ainda termina a
         // thread, que antes ficava viva com o runtime ONNX carregado.
         derrubarWorker();
+        // Depois do `ready`, ninguém mais esperava pela promessa: sem este
+        // aviso o engine seguia em `ready` com o bloco angular zerado.
+        if (estavaPronto) falhar('worker_morreu', e.message || 'o worker encerrou com erro');
       });
 
       readyPromise = new Promise<void>((resolve, reject) => {
         readyResolve = resolve;
         readyReject = reject;
       });
-      post({ type: 'init', modelUrl, metaUrl, provider, ortBaseUrl, rotulo });
+      post({ type: 'init', modelUrl, metaUrl, provider, ortBaseUrl, rotulo, teste: testeDoInit });
       return readyPromise;
     },
 
@@ -304,19 +502,28 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       readyPromise = null;
       readyResolve = null;
       readyReject = null;
-      politica = politicaPorProvider(null, EXPERIMENT, lados);
+      politica = politicaDe(null);
       cadenceMs = cadenciaFixa ?? politica.cadenceMs;
       lastSubmitMs = 0;
       latest = { yaw: 0, pitch: 0, timestamp: 0, valid: false };
       recentLatencies = [];
       recentConfidences = [];
       inFlight.clear();
+      reserva.clear();
+      inferenciasFalhasSeguidas = 0;
+      semRespostaSeguidas = 0;
+      falha = null;
+      errosNaoAvisados = 0;
+      ultimoLogDeErroMs = -Infinity;
+      idadesDaVigia = vigia ? [] : null;
     },
 
     canSubmit(nowMs?: number): boolean {
       if (!ready || !worker) return false;
       const now = nowMs ?? performance.now();
       liberarSlotsPresos(now);
+      // A liberação pode ter dado o worker por perdido (`falhar`).
+      if (!worker) return false;
       if (inFlight.size >= MAX_IN_FLIGHT) return false;
       return now - lastSubmitMs >= cadenceMs;
     },
@@ -325,12 +532,13 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       if (!ready || !worker) return false;
       const now = performance.now();
       liberarSlotsPresos(now);
+      if (!worker) return false;
       if (inFlight.size >= MAX_IN_FLIGHT) return false;
       if (now - lastSubmitMs < cadenceMs) return false;
       const id = ++pendingId;
       try {
-        // O buffer é transferido, não copiado: o caller aloca um tensor novo
-        // por submissão.
+        // O buffer é transferido, não copiado; o worker o devolve com o
+        // resultado e ele volta à `reserva` (ver `emprestarTensor`).
         post(dims ? { type: 'infer', id, tensor, dims } : { type: 'infer', id, tensor }, [tensor.buffer]);
       } catch (e) {
         // Buffer já destacado ou worker indisponível: nada foi enviado, então o
@@ -341,6 +549,11 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
       lastSubmitMs = now;
       inFlight.set(id, now);
       return true;
+    },
+
+    emprestarTensor(comprimento: number): Float32Array | undefined {
+      const lista = reserva.get(comprimento);
+      return lista && lista.length > 0 ? lista.pop() : undefined;
     },
 
     getLatestGaze(nowMs?: number): L2CSGaze {
@@ -393,6 +606,10 @@ export function createL2CSClient(opts: L2CSClientOptions = {}): L2CSClient {
 
     getPendingCount(): number {
       return inFlight.size;
+    },
+
+    getFalha() {
+      return falha;
     },
   };
 }

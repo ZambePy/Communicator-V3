@@ -7,7 +7,7 @@ import { spacing } from '@/theme';
 interface Props {
   /** Opcional: telas com destaque próprio (ex.: perfil do paciente) mostram só voltar/fechar. */
   title?: string;
-  /** Linha pequena acima do título (ex.: o nome do paciente). */
+  /** Complemento logo abaixo do título (ex.: o nome do paciente). */
   eyebrow?: string;
   subtitle?: string;
   /** Acessório à direita do título (selo de estado, botão de ícone). */
@@ -33,14 +33,16 @@ export function ScreenHeader({ title, eyebrow, subtitle, right, onBack, onClose 
       {title ? (
         <View style={styles.row}>
           <View style={styles.texts}>
-            {eyebrow ? (
-              <Text variant="caption" tone="muted" numberOfLines={1}>
-                {eyebrow}
-              </Text>
-            ) : null}
             <Text variant="h1" accessibilityRole="header">
               {title}
             </Text>
+            {/* O nome do paciente vem depois do título, como complemento — não
+                como sobrelinha (19/10/2026). */}
+            {eyebrow ? (
+              <Text variant="bodySmall" tone="muted" numberOfLines={1}>
+                {eyebrow}
+              </Text>
+            ) : null}
           </View>
           {right ? <View style={styles.right}>{right}</View> : null}
         </View>

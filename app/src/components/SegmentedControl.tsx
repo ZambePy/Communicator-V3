@@ -3,7 +3,7 @@ import { LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Text } from './Text';
 import { haptics } from '@/lib/haptics';
-import { motion, opacity, radius, shadows, sizes, spacing, useTheme } from '@/theme';
+import { motion, opacity, radius, sizes, spacing, useTheme } from '@/theme';
 
 interface Option<T extends string | number> {
   value: T;
@@ -30,7 +30,7 @@ interface Props<T extends string | number> {
  * Com "reduzir movimento", o indicador pula direto para o lugar.
  */
 export function SegmentedControl<T extends string | number>({ options, value, onChange, accessibilityLabel, disabled = false }: Props<T>) {
-  const { colors, mode, reduceMotion } = useTheme();
+  const { colors, reduceMotion } = useTheme();
   const [width, setWidth] = useState(0);
   const found = options.findIndex((o) => o.value === value);
   const idx = Math.max(0, found);
@@ -53,7 +53,7 @@ export function SegmentedControl<T extends string | number>({ options, value, on
       accessibilityState={disabled ? { disabled: true } : undefined}
     >
       {width > 0 && !semSelecao && (
-        <Animated.View style={[styles.indicator, { width: segW, backgroundColor: colors.surface, borderColor: colors.border }, mode === 'light' && shadows.card(colors.shadow), indicator]} />
+        <Animated.View style={[styles.indicator, { width: segW, backgroundColor: colors.primaryStrong }, indicator]} />
       )}
       {options.map((o) => {
         const active = o.value === value;
@@ -71,11 +71,11 @@ export function SegmentedControl<T extends string | number>({ options, value, on
             accessibilityState={{ selected: active, checked: active, disabled }}
             accessibilityLabel={[o.accessibilityLabel ?? o.label, o.hint].filter(Boolean).join(', ')}
           >
-            <Text variant="bodySmall" weight={active ? 'semibold' : 'medium'} tone={active ? 'primary' : 'muted'} center>
+            <Text variant="bodySmall" weight={active ? 'semibold' : 'medium'} tone={active ? 'onPrimary' : 'muted'} center>
               {o.label}
             </Text>
             {o.hint ? (
-              <Text variant="caption" tone="muted" center>
+              <Text variant="caption" tone={active ? 'onDarkMuted' : 'muted'} center>
                 {o.hint}
               </Text>
             ) : null}
@@ -88,6 +88,6 @@ export function SegmentedControl<T extends string | number>({ options, value, on
 
 const styles = StyleSheet.create({
   track: { flexDirection: 'row', borderRadius: radius.md, padding: spacing.xs },
-  indicator: { position: 'absolute', top: spacing.xs, bottom: spacing.xs, left: spacing.xs, borderRadius: radius.sm, borderWidth: sizes.hairline },
+  indicator: { position: 'absolute', top: spacing.xs, bottom: spacing.xs, left: spacing.xs, borderRadius: radius.sm },
   seg: { flex: 1, minHeight: sizes.touch, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
 });

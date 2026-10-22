@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { emitirFalaDoPaciente } from '../../cloud/eventos';
-import { falar } from '../../services/voz';
+import { falarDoPaciente } from '../../services/voz/falaDoPaciente';
 import { Heart, Plus, Trash2, Volume2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
@@ -27,7 +27,9 @@ const loadFavorites = (userId: string): Favorite[] => {
 
 const speak = (text: string) => {
   emitirFalaDoPaciente(text, 'frase');
-  void falar(text, { rate: 0.9 }).catch((e) => console.warn('[voz] falha ao falar:', e));
+  // Se nada sair em voz alta, a frase aparece em letra grande na tela
+  // (relato de 18/10/2026, item 5) — antes sumia com um aviso só no console.
+  void falarDoPaciente(text, { rate: 0.9 });
 };
 
 export const MyOptionsScreen: React.FC = () => {

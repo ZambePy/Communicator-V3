@@ -204,16 +204,21 @@ export function preferenciasWebSeguras(empacotado: boolean): typeof PREFERENCIAS
 
 /**
  * Sites que um link do app pode abrir NO NAVEGADOR DO SISTEMA (nunca dentro
- * do app). Domínio e subdomínios. Fixos só o site oficial (Cloudflare Pages)
- * e o GitHub (página dos instaladores; o repositório de releases é trocável
- * no build, por isso a lista não carrega nome de repositório).
+ * do app). Domínio e subdomínios. Fixos o site oficial — o domínio próprio
+ * `irisflow.ia.br`, registrado e nosso desde set/2026, e os dois endereços do
+ * Cloudflare Pages, que versões antigas do app ainda abrem e que o site leva
+ * para o domínio (site/src/seo/hostCanonico.ts) — e o GitHub (página dos
+ * instaladores; o repositório de releases é trocável no build, por isso a
+ * lista não carrega nome de repositório).
  *
- * O domínio próprio, quando existir, NÃO entra aqui: vem de `VITE_SITE_URL`
- * no build do instalador (`extras` em `permitirAberturaExterna`, lido por
- * `electron/main.ts`). Um domínio cravado na lista e ainda não registrado
- * mandaria o cuidador para o site de um estranho.
+ * Outro domínio do site, se um dia houver, vem de `VITE_SITE_URL` no build do
+ * instalador (`extras` em `permitirAberturaExterna`, lido por
+ * `electron/main.ts`). Só entra nesta lista fixa domínio já registrado: um
+ * nome cravado aqui antes do registro mandaria o cuidador para o site de um
+ * estranho.
  */
 export const HOSTS_EXTERNOS_PERMITIDOS = [
+  'irisflow.ia.br',
   'irisflow-communicator.pages.dev',
   // Endereço anterior do site (outro projeto do Cloudflare Pages, nosso): hoje
   // só redireciona para o de cima, mas links antigos continuam abrindo.
@@ -379,6 +384,19 @@ export function papeisDoMenuEmpacotado(plataforma: string): readonly PapelDoMenu
 /** Janela da política de recarga após queda do renderer. */
 export const RECARGA_JANELA_MS = 10 * 60_000;
 export const RECARGA_MAXIMO = 3;
+
+/**
+ * URL da página no `electron:dev`.
+ *
+ * Por padrão `?calib=0`: cada abertura de desenvolvimento começa sem
+ * calibração salva. `IRISFLOW_DEV_CALIB=1` precisa abrir com `?calib=1`, e não
+ * só sem o parâmetro (relato de 19/10/2026, auditoria A6): os parâmetros de URL
+ * ficam GRAVADOS no `localStorage` (`sessionFromUrl.ts`), então o `false` de
+ * uma abertura anterior continuava valendo e a variável não religava nada.
+ */
+export function urlDoDesenvolvimento(base: string, devCalib: string | undefined): string {
+  return `${base}?calib=${devCalib === '1' ? '1' : '0'}`;
+}
 /**
  * Esperas depois do limite da janela: 1, 2 e 5 minutos (o último se repete).
  * Longas o bastante para a tela não piscar em laço; curtas o bastante para

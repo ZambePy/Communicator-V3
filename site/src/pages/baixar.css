@@ -3,36 +3,36 @@
 .baixar-hero {
   position: relative;
   overflow: hidden;
-  padding-top: calc(var(--header-h) + clamp(40px, 7vh, 80px));
-  padding-bottom: clamp(48px, 8vh, 88px);
-  background: var(--navy-deep);
+  padding-top: calc(var(--header-h) + clamp(48px, 9vh, 104px));
+  padding-bottom: clamp(56px, 9vh, 104px);
+  background: var(--v3-noite);
 }
 
+/* Alinhada à esquerda, como as outras aberturas do site. */
 .baixar-hero__inner {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
+  align-items: flex-start;
 }
 
 .baixar-hero__titulo {
-  font-size: clamp(2.4rem, 5.6vw, 4.2rem);
-  letter-spacing: -0.036em;
+  font-size: var(--fs-h1);
+  letter-spacing: -0.038em;
   line-height: 1.02;
-  margin-bottom: var(--sp-4);
+  margin-bottom: var(--sp-5);
 }
 
 .baixar-hero__lead {
   font-size: var(--fs-lead);
-  max-width: 50ch;
+  max-width: 52ch;
   margin: 0;
 }
 
 /* ---------- os dois apps ---------- */
 .baixar-apps {
-  padding-block: clamp(48px, 8vh, 96px);
+  padding-block: clamp(56px, 9vh, 104px);
 }
 
 .baixar-apps__lista {
@@ -45,7 +45,6 @@
   border-radius: var(--r-xl);
   background: var(--surface);
   border: 1px solid var(--line);
-  box-shadow: var(--shadow-sm);
 }
 
 .baixar-app__cabeca {
@@ -63,11 +62,10 @@
 
 .baixar-app__icone {
   border-radius: 12px;
-  box-shadow: 0 4px 12px -4px rgba(2, 7, 16, 0.6);
 }
 
 .baixar-app__nome {
-  font-size: 1.35rem;
+  font-size: 1.5rem;
   margin: 0;
 }
 
@@ -80,7 +78,7 @@
 .baixar-app__lojas {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--sp-5);
 }
@@ -108,8 +106,8 @@
 .baixar-passos {
   position: relative;
   overflow: hidden;
-  padding-block: clamp(64px, 10vh, 112px);
-  background: var(--navy-deep);
+  padding-block: var(--faixa);
+  background: var(--v3-noite);
 }
 
 .baixar-passos__inner {
@@ -137,6 +135,15 @@
 .abrir-app__selos {
   justify-content: center;
   margin-top: var(--sp-5);
+}
+
+/* Android sem Google Play: o botão do APK, com o passo a passo alinhado à
+   esquerda dentro de um bloco centralizado. */
+.abrir-app__apk {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--sp-5);
+  text-align: left;
 }
 
 @media (min-width: 960px) {

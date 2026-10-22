@@ -60,3 +60,33 @@ export function sessoesDoHeartbeat(body: Record<string, unknown>): SessoesDoHear
   const id = idDoCliente(body.session_id);
   return id ? { tipo: 'uma', id } : { tipo: 'nenhuma' };
 }
+
+/** Avisos de dispositivo: no máximo um do MESMO texto nesta janela, por computador. */
+export const JANELA_DO_MESMO_AVISO_MS = 15 * 60_000;
+/** E no máximo este número de avisos de dispositivo por hora, de qualquer texto. */
+export const AVISOS_DE_DISPOSITIVO_POR_HORA = 4;
+
+/**
+ * O aviso de dispositivo (o olhar parou de funcionar e o problema durou) deve
+ * ser descartado? Revisão de segurança de 19/10/2026: o computador já se
+ * limita (um aviso por tipo a cada 15 min), mas o limite dele vive na memória
+ * e uma chave tirada do PC mandaria push sem fim para os celulares da família.
+ * `recentes` são os avisos de dispositivo deste computador na última hora.
+ * Socorro e ajuda NUNCA passam por aqui.
+ *
+ * Desde a rodada 3 (21/10/2026) isto é só a reserva: o limite de verdade é
+ * registrar_aviso_com_limite, no banco, sob trava (ver ./limites.ts). Este
+ * vale enquanto a migração 20261021120000 não estiver aplicada.
+ */
+export function avisoDeDispositivoExcedido(
+  recentes: ReadonlyArray<{ message: string | null; received_at: string | null }>,
+  mensagem: string,
+  agoraMs: number,
+): boolean {
+  const naUltimaHora = recentes.filter((r) => {
+    const t = r.received_at ? Date.parse(r.received_at) : NaN;
+    return Number.isFinite(t) && agoraMs - t < 60 * 60_000;
+  });
+  if (naUltimaHora.length >= AVISOS_DE_DISPOSITIVO_POR_HORA) return true;
+  return naUltimaHora.some((r) => r.message === mensagem && agoraMs - Date.parse(r.received_at!) < JANELA_DO_MESMO_AVISO_MS);
+}

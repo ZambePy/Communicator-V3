@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { StickyCta } from './StickyCta'
 import { esquecerBetaProgram } from '@/hooks/useBetaProgram'
@@ -53,5 +53,52 @@ describe('<StickyCta />', () => {
     const { container } = montar('/baixar')
     await new Promise((r) => setTimeout(r, 0))
     expect(container.querySelector('.sticky-cta')).toBeNull()
+  })
+})
+
+/* P1-2 da auditoria de 21/10/2026: no celular a barra (75 px) cobria o
+   elemento com o foco do teclado, e o contorno de 3 px da página de
+   acessibilidade ficava escondido (WCAG 2.4.11, foco não obscurecido). A barra
+   sai da frente quando o foco visível está no conteúdo, e só volta quando ele
+   sai de lá. */
+describe('<StickyCta /> e o foco do teclado', () => {
+  function montarComConteudo() {
+    apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: '2020-11-10T03:00:00Z' }
+    Object.defineProperty(window, 'scrollY', { value: 600, configurable: true })
+    return render(
+      <MemoryRouter initialEntries={['/planos']} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <main>
+          <button type="button">Pergunta do FAQ</button>
+        </main>
+        <StickyCta />
+      </MemoryRouter>,
+    )
+  }
+  const visivel = (c: HTMLElement) => c.querySelector('.sticky-cta')?.classList.contains('is-visible')
+
+  it('com a página rolada e o foco fora do conteúdo, a barra aparece', async () => {
+    const { container } = montarComConteudo()
+    await waitFor(() => expect(visivel(container)).toBe(true))
+  })
+
+  it('o foco do teclado num elemento do conteúdo tira a barra da frente, e ela volta quando o foco sai', async () => {
+    const { container } = montarComConteudo()
+    await waitFor(() => expect(visivel(container)).toBe(true))
+
+    const pergunta = screen.getByRole('button', { name: 'Pergunta do FAQ' })
+    act(() => pergunta.focus())
+    await waitFor(() => expect(visivel(container)).toBe(false))
+
+    act(() => pergunta.blur())
+    await waitFor(() => expect(visivel(container)).toBe(true))
+  })
+
+  it('o foco na própria barra não a esconde (senão não dá para chegar ao botão)', async () => {
+    const { container } = montarComConteudo()
+    await waitFor(() => expect(visivel(container)).toBe(true))
+
+    act(() => screen.getByRole('link', { name: 'Baixar grátis' }).focus())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(visivel(container)).toBe(true)
   })
 })

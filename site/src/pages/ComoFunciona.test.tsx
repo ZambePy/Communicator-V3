@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import ComoFunciona from './ComoFunciona'
 import { esquecerBetaProgram } from '@/hooks/useBetaProgram'
 import { BETA_PROGRAM_RESERVA, type BetaProgram } from '@/services/api'
+import { ESCRITA_PELO_OLHAR } from '@/data/produto'
 
 /* As "três perguntas" terminam na chamada certa para o momento da beta: a
    inscrição antes do lançamento, o download depois (como na Solução). E o
@@ -15,6 +16,21 @@ vi.mock('@/services/api', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/services/api')>()
   return { ...real, fetchBetaProgram: async () => apiFake.programa ?? real.BETA_PROGRAM_RESERVA }
 })
+
+// O teclado animado (que veio da abertura da home) chega com o motor sob
+// demanda; aqui ele não precisa tocar.
+vi.mock('@/components/home/olhar/motorDoOlhar', () => ({
+  ligarMotor: () => ({
+    agendar: () => {},
+    parar: () => {},
+    recomecar: () => {},
+    assumir: () => {},
+    mover: () => {},
+    soltar: () => {},
+    acionar: () => {},
+    desligar: () => {},
+  }),
+}))
 
 function montar() {
   return render(
@@ -45,5 +61,14 @@ describe('<ComoFunciona />', () => {
     montar()
     expect(screen.getByText(/uma rede neural de pesquisa, a\s+L2CS-Net/)).toBeInTheDocument()
     expect(screen.queryByText(/roda sem o modelo de pesquisa/)).not.toBeInTheDocument()
+  })
+
+  it('recebe o teclado animado que saiu da abertura da home (rodada 3, 21/10/2026)', () => {
+    montar()
+    const secao = screen.getByRole('heading', { level: 2, name: ESCRITA_PELO_OLHAR.titulo }).closest('section')!
+    const figura = secao.querySelector('figure')!
+    expect(figura).not.toBeNull()
+    expect(figura.querySelectorAll('.olhar__grade [data-tecla]')).toHaveLength(6)
+    expect(within(figura).getByText(/o ponto é o olhar/)).toBeInTheDocument()
   })
 })

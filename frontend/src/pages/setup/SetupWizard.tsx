@@ -40,9 +40,17 @@ import { VerificacaoDoMonitor } from './steps/VerificacaoDoMonitor';
  * transição — segundos de tela preta num fluxo cujo objetivo é justamente medir
  * estabilidade.
  *
- * O wizard é dono de três coisas: o passo atual, o stream de preview, e a
+ * O wizard é dono de três coisas: o passo atual, o preview da câmera, e a
  * amostragem de prontidão. As telas de passo são puras sobre props, e é por
  * isso que dá para testá-las sem câmera.
+ *
+ * **O preview é a câmera do RASTREADOR.** Relato de 18/10/2026 (auditoria de
+ * falhas silenciosas, item 3): o wizard abria uma segunda captura, da câmera
+ * escolhida, enquanto o rastreador — que é quem mede os checks de posição e
+ * depois calibra — seguia na câmera padrão. O Preparo mostrava uma câmera e
+ * media outra. Agora escolher a câmera é `trocarCamera` (grava nos ajustes e
+ * reabre a câmera do rastreador), e o `<video>` daqui só aponta para a mesma
+ * stream (`getCameraStream`), sem um segundo `getUserMedia`.
  */
 
 /** 2 Hz, como o `ReadinessPanel`: a 30 Hz os textos piscam e ninguém lê. */
@@ -55,21 +63,28 @@ export const SetupWizard: React.FC = () => {
   const navigate = useNavigate();
   const { currentProfile } = useAuth();
   const { settings, updateSettings } = useSettings();
-  const { getDiagnostics } = useGaze();
+  const { getDiagnostics, getCameraStream, getCameraAtual, trocarCamera, versaoDaCamera } = useGaze();
 
   const [passo, setPasso] = useState<PassoId>('permissao');
 
-  // ── Permissão e stream ───────────────────────────────────────────────────
+  // ── Permissão e preview ──────────────────────────────────────────────────
   const [permissao, setPermissao] = useState<EstadoDaPermissao>('explicando');
   const [erroDeCamera, setErroDeCamera] = useState<string | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // As funções do contexto em refs, fora das deps: a identidade delas muda a
+  // cada transição de estado do engine (ver `diagRef` abaixo).
+  const streamDoRastreadorRef = useRef(getCameraStream);
+  streamDoRastreadorRef.current = getCameraStream;
+  const cameraAtualRef = useRef(getCameraAtual);
+  cameraAtualRef.current = getCameraAtual;
 
   // ── Câmeras ──────────────────────────────────────────────────────────────
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   const [cameraSelecionada, setCameraSelecionada] = useState<string | null>(null);
   const [capacidade, setCapacidade] = useState<CameraCapacidade | null>(null);
   const [medindo, setMedindo] = useState(false);
+  /** A escolhida não abriu e o rastreador está em outra câmera (ou não abriu nenhuma). */
+  const [avisoDaEscolha, setAvisoDaEscolha] = useState<string | null>(null);
 
   // ── Prontidão ────────────────────────────────────────────────────────────
   const [checks, setChecks] = useState<ReadinessCheck[]>([]);
@@ -83,72 +98,95 @@ export const SetupWizard: React.FC = () => {
   const [origemDaDiagonal, setOrigemDaDiagonal] = useState<'edid' | 'manual'>('edid');
 
   /**
-   * Geração da abertura de câmera em curso.
+   * Geração do pedido de câmera em curso.
    *
    * Trocar de câmera enquanto a anterior ainda está abrindo é fácil: os botões
-   * de escolha não se desabilitam durante o pedido, e `getUserMedia` demora.
-   * Sem esta marca, as duas chamadas paravam o MESMO stream antigo, as duas
-   * escreviam em `streamRef.current`, e o stream perdedor ficava órfão — com a
-   * luz da webcam acesa pelo resto do processo, que é exatamente o que a
-   * limpeza abaixo existe para evitar (ela só para o que estiver no ref).
-   * A `setCameraSelecionada` atrasada também podia desfazer a escolha nova.
+   * de escolha não se desabilitam durante o pedido, e abrir uma câmera demora.
+   * A resposta atrasada de um pedido antigo não pode desfazer a escolha nova
+   * nem o aviso dela. (Quem abre e fecha a câmera agora é o rastreador; ele
+   * mesmo serializa as aberturas — ver `trocarCamera`.)
    */
   const geracaoDaCamera = useRef(0);
 
-  const abrirStream = useCallback(async (deviceId?: string) => {
+  /** O `deviceId` da câmera em que o rastreador está agora. */
+  const cameraDoRastreador = useCallback((): string | null => {
+    const doContexto = cameraAtualRef.current()?.deviceId ?? null;
+    if (doContexto) return doContexto;
+    const track = streamDoRastreadorRef.current()?.getVideoTracks?.()[0];
+    return track?.getSettings?.().deviceId || null;
+  }, []);
+
+  /**
+   * "Permitir a câmera". No app a permissão já vem concedida pelo processo
+   * principal e o rastreador abriu a câmera no boot: se ela está viva, não há
+   * nada a pedir. Se não está (sem câmera, câmera ocupada), o rastreador tenta
+   * abrir de novo AGORA, e a resposta dele é a resposta desta tela.
+   */
+  const pedirCamera = useCallback(async () => {
     const geracao = ++geracaoDaCamera.current;
     const atual = () => geracaoDaCamera.current === geracao;
     setPermissao('pedindo');
     setErroDeCamera(null);
-    try {
-      streamRef.current?.getTracks().forEach((tk) => tk.stop());
-      streamRef.current = null;
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: deviceId ? { deviceId: { exact: deviceId } } : true,
-      });
-      // Perdeu a corrida (ou o componente saiu): o stream é DESTE pedido, e
-      // ninguém mais vai usá-lo. Fechar aqui é o único lugar que ainda o tem.
-      if (!atual()) {
-        stream.getTracks().forEach((tk) => tk.stop());
+    const track = streamDoRastreadorRef.current()?.getVideoTracks?.()[0];
+    if (!track || track.readyState !== 'live') {
+      const r = await trocarCamera(settings.cameraDeviceId ?? null);
+      if (!atual()) return;
+      if (!r.ok) {
+        setPermissao('negada');
+        setErroDeCamera(r.erro ?? null);
         return;
       }
-      streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setPermissao('concedida');
-
-      // Os labels só aparecem depois da permissão concedida.
-      const lista = await listarCameras();
-      if (!atual()) return;
-      setCameras(lista);
-      const ativo =
-        stream.getVideoTracks()[0]?.getSettings().deviceId ?? lista[0]?.deviceId ?? null;
-      setCameraSelecionada(deviceId ?? ativo);
-    } catch (e) {
-      if (!atual()) return;
-      setPermissao('negada');
-      setErroDeCamera(e instanceof Error ? e.message : String(e));
     }
-  }, []);
+    setPermissao('concedida');
+    // Os labels só aparecem depois da permissão concedida.
+    const lista = await listarCameras();
+    if (!atual()) return;
+    setCameras(lista);
+    setCameraSelecionada(cameraDoRastreador() ?? lista[0]?.deviceId ?? null);
+  }, [trocarCamera, settings.cameraDeviceId, cameraDoRastreador]);
 
-  // Fecha o stream ao sair. Sem isto a luz da webcam fica acesa depois do
-  // preparo, e o usuário-alvo não tem como investigar por quê.
+  /** O cuidador escolheu outra câmera: o rastreador passa a usar ESTA. */
+  const escolherCamera = useCallback(
+    (deviceId: string) => {
+      const geracao = ++geracaoDaCamera.current;
+      setCameraSelecionada(deviceId);
+      setCapacidade(null);
+      setAvisoDaEscolha(null);
+      void trocarCamera(deviceId).then((r) => {
+        if (geracaoDaCamera.current !== geracao) return;
+        if (!r.ok) {
+          setAvisoDaEscolha(
+            `Esta câmera não abriu agora (${r.erro ?? 'sem resposta'}). Escolha outra ou confira se ela está ligada.`
+          );
+        } else if (r.caiuParaOutra) {
+          setAvisoDaEscolha(
+            'Esta câmera não abriu agora, e o IrisFlow está usando outra no lugar. ' +
+              'Confira se ela está ligada no computador, ou escolha outra.'
+          );
+        }
+      });
+    },
+    [trocarCamera]
+  );
+
+  // Ao sair, o preview só solta a stream: quem fecha a câmera é o rastreador,
+  // que continua usando ela.
   useEffect(
     () => () => {
-      // Invalida qualquer abertura em voo ANTES de parar o que existe: sem
-      // isto, um `getUserMedia` que resolvesse depois do unmount escreveria no
-      // ref já limpo e deixaria a câmera ligada.
       geracaoDaCamera.current++;
-      streamRef.current?.getTracks().forEach((tk) => tk.stop());
-      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
     },
     []
   );
 
-  // Mede o que a câmera entrega quando o passo 2 abre com o vídeo tocando.
+  // Aponta o preview para a stream do rastreador e mede o que ela entrega,
+  // quando o passo 2 abre e a cada stream nova (troca de câmera, reabertura).
   useEffect(() => {
     if (passo !== 'camera' || !videoRef.current || permissao !== 'concedida') return;
     const video = videoRef.current;
-    video.srcObject = streamRef.current;
+    const stream = streamDoRastreadorRef.current();
+    video.srcObject = stream;
+    if (!stream) return;
     let vivo = true;
     setMedindo(true);
     void medirFps(video).then((fps) => {
@@ -159,7 +197,7 @@ export const SetupWizard: React.FC = () => {
     return () => {
       vivo = false;
     };
-  }, [passo, permissao, cameraSelecionada]);
+  }, [passo, permissao, versaoDaCamera]);
 
   // Amostragem de prontidão. `getDiagnostics` numa ref, fora das deps: a
   // identidade dela é refeita a cada transição de estado do engine, e nas deps
@@ -250,6 +288,12 @@ export const SetupWizard: React.FC = () => {
     passo === 'posicionamento' && liberadoPorEspera(estabilidade, agora, desdeQuandoTenta);
 
   const concluir = () => {
+    // Terminar o Preparo é aceitar a câmera mostrada: sem escolha gravada
+    // ainda, ela passa a ser a escolhida — e a próxima abertura do app abre
+    // esta, e não a que o sistema achar padrão naquele dia.
+    if (cameraSelecionada && !settings.cameraDeviceId && !avisoDaEscolha) {
+      updateSettings({ cameraDeviceId: cameraSelecionada });
+    }
     if (currentProfile) {
       gravarPreparo(currentProfile.id, {
         cameraDeviceId: cameraSelecionada,
@@ -331,7 +375,7 @@ export const SetupWizard: React.FC = () => {
             <PermissaoCamera
               estado={permissao}
               erro={erroDeCamera}
-              aoPedir={() => void abrirStream()}
+              aoPedir={() => void pedirCamera()}
             />
           )}
           {passo === 'camera' && (
@@ -340,12 +384,9 @@ export const SetupWizard: React.FC = () => {
               selecionada={cameraSelecionada}
               capacidade={capacidade}
               medindo={medindo}
-              aoSelecionar={(id) => {
-                setCameraSelecionada(id);
-                setCapacidade(null);
-                void abrirStream(id);
-              }}
-              aoRecarregar={() => void abrirStream(cameraSelecionada ?? undefined)}
+              aviso={avisoDaEscolha}
+              aoSelecionar={escolherCamera}
+              aoRecarregar={() => void pedirCamera()}
               videoRef={videoRef}
               posicaoDaCamera={settings.posicaoDaCamera}
               aoEscolherPosicao={EXPERIMENT.saida6DoF

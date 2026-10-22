@@ -1,64 +1,128 @@
-/* Abertura da home (HeroProduto.tsx): a mensagem à esquerda e a gravação
-   real à direita, num retângulo arredondado com o brilho da marca
-   (`.video-moldura`, em aparelhos.css), com o halo e os anéis por trás,
-   sobre o fundo de partículas. Nunca mais alta que a janela: as chamadas
-   cabem na primeira dobra também em 1280 × 720 e 1366 × 768. */
+/* Abertura da home (HeroProduto.tsx).
+
+   Sem efeito nenhum (pedido do dono de 21/10/2026): o fundo é o marinho da
+   marca, chapado, e a altura é a do conteúdo — não a da tela. O que ocupa o
+   resto da primeira tela é o topo do monitor com a gravação real do app, na
+   seção seguinte (Capitulos).
+
+   Computador: duas colunas, 5 : 7 como em Capitulos. O título grande na
+   esquerda; na direita, alinhados pela base dele, o parágrafo, as chamadas e
+   os fatos. Celular: uma coluna. */
 
 .hero-produto {
   position: relative;
-  overflow: hidden;
-  min-height: min(100vh, 880px);
-  min-height: min(100svh, 880px);
-  display: flex;
-  align-items: center;
-  /* O cabeçalho é transparente e flutua sobre esta faixa: a altura dele
-     entra no respiro de cima. */
-  padding-block: calc(var(--header-h) + var(--sp-5)) var(--sp-8);
-  background: var(--navy-deep);
-  isolation: isolate;
+  padding-block: calc(var(--header-h) + clamp(16px, 4vh, 48px)) clamp(32px, 5vh, 56px);
 }
 
 .hero-produto__grade {
+  /* Por cima do campo de pontos (CampoDeCalibracao), que fica atrás de tudo. */
   position: relative;
-  z-index: 2;
+  z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
-  gap: clamp(32px, 5vw, 72px);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--sp-5);
 }
 
-.hero-produto__texto {
-  max-width: 600px;
+.hero-produto__aviso {
+  margin: 0;
+  justify-self: start;
 }
 
-/* Título curto ("Seu olhar tem voz"), em duas linhas no computador. Sobe
-   de dentro de uma máscara, como nos títulos da versão anterior. */
+/* ---------- o título: pesos misturados ----------
+   "Seu olhar" em Inter 400 e "tem voz" em Sora 700, uma linha cada, no
+   tamanho de exibição. Entrelinha colada; a Inter fecha um pouco mais (é
+   mais larga que a Sora nesse tamanho). */
 .hero-produto__titulo {
-  font-size: clamp(2.6rem, 5.2vw, 4.4rem);
-  line-height: 1.04;
-  letter-spacing: -0.035em;
-  max-width: 12ch;
-  margin: 0 0 var(--sp-4);
+  margin: 0;
+  font-size: clamp(3.5rem, 15.5vw, 5.25rem);
+  line-height: 0.96;
+  letter-spacing: -0.045em;
+  max-width: none;
+  text-wrap: nowrap;
 }
 
-.hero-produto__titulo-mascara {
+.hero-produto__leve,
+.hero-produto__forte {
   display: block;
-  overflow: hidden;
-  padding-bottom: 0.14em;
-  margin-bottom: -0.08em;
 }
 
-.hero-produto__titulo-linha {
-  display: block;
-  animation: word-rise 1s var(--ease-out) 120ms both;
+.hero-produto__leve {
+  font-family: var(--font-body);
+  font-weight: 400;
+  letter-spacing: -0.06em;
+}
+
+.hero-produto__forte {
+  font-family: var(--font-display);
+  font-weight: 700;
+  /* O espaço entre letras fechado encolhe também o espaço entre as palavras. */
+  word-spacing: 0.06em;
+}
+
+/* ---------- a entrada do título (rodada 3, 21/10/2026) ----------
+   Uma vez, ao carregar. "Seu olhar" aparece; "tem voz" se fecha da esquerda
+   para a direita em 600 ms, como o anel de fixação que fecha — o gesto do
+   produto. É um recorte (clip-path), não uma cor: a palavra é a mesma desde o
+   primeiro quadro, só vai aparecendo. O recorte passa um pouco da caixa do
+   texto (-12 %): o espaço entre letras fechado faria a ponta de uma letra ser
+   cortada. O h1 continua sendo a frase inteira para o leitor de tela. */
+.hero-produto__leve {
+  animation: titulo-aparece 420ms var(--ease-out) both;
+}
+
+.hero-produto__forte {
+  animation: titulo-fecha 600ms var(--ease-in-out) 380ms both;
+}
+
+@keyframes titulo-aparece {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes titulo-fecha {
+  from {
+    clip-path: inset(-12% 100% -12% -4%);
+  }
+  to {
+    clip-path: inset(-12% -4% -12% -4%);
+  }
+}
+
+/* Movimento reduzido: o título já inteiro, sem esperar atraso nenhum. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-produto__leve,
+  .hero-produto__forte {
+    animation: none;
+  }
+}
+
+/* ---------- o apoio: parágrafo, chamadas e fatos ---------- */
+.hero-produto__apoio {
+  display: grid;
+  gap: var(--sp-5);
+  justify-items: start;
 }
 
 .hero-produto__lead {
-  font-size: clamp(1.05rem, 1.4vw, 1.25rem);
-  line-height: 1.6;
-  color: var(--text-soft);
-  max-width: 46ch;
-  margin: 0 0 var(--sp-5);
+  max-width: 50ch;
+  margin: 0;
+  font-size: var(--fs-lead);
+  line-height: 1.55;
+  color: var(--v3-texto-2);
+}
+
+/* Para quem é: a primeira frase, em papel e um pouco mais firme. Responde à
+   pergunta que a pessoa traz ao chegar, antes de saber como funciona
+   (auditoria de 21/10/2026, P1-1). */
+.hero-produto__publico {
+  font-weight: 500;
+  color: var(--v3-papel);
 }
 
 .hero-produto__acoes {
@@ -67,157 +131,96 @@
   gap: var(--sp-3);
 }
 
+/* Os fatos: uma lista simples, sem marcador nem cartão. Cada um separado do
+   seguinte por um fio fino. */
 .hero-produto__fatos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--sp-2) var(--sp-5);
-  list-style: none;
-  margin: var(--sp-5) 0 0;
-  padding: 0;
-  font-size: 0.92rem;
-  color: var(--text-dim);
+  gap: var(--sp-1) 0;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  color: var(--v3-texto-2);
 }
 
 .hero-produto__fatos li {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
   margin: 0;
+  padding: 0 var(--sp-4);
+  border-left: 1px solid var(--v3-fio-forte);
 }
 
-.hero-produto__fatos li::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--teal-300);
-  opacity: 0.8;
+.hero-produto__fatos li:first-child {
+  padding-left: 0;
+  border-left: 0;
 }
 
-/* ---------- o vídeo, com o halo e os anéis ---------- */
-.hero-produto__aparelho {
-  position: relative;
-  display: grid;
-  place-items: center;
-  padding-block: var(--sp-6);
-  animation: zoom-in 1100ms var(--ease-out) 260ms both;
-}
-
-/* A aura azul e teal por trás: sem ela o vídeo escuro some no marinho. */
-.hero-produto__halo {
-  position: absolute;
-  inset: 2% -4%;
-  border-radius: 50%;
-  background: radial-gradient(
-    closest-side,
-    rgba(47, 102, 194, 0.55) 0%,
-    rgba(47, 102, 194, 0.3) 55%,
-    rgba(63, 214, 194, 0.12) 78%,
-    transparent 100%
-  );
-  filter: blur(26px);
-  animation: iris-pulse 6s var(--ease-in-out) infinite paused;
-  pointer-events: none;
-}
-
-/* Anéis concêntricos que se expandem a partir do centro do vídeo. */
-.hero-produto__anel {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(74%, 440px);
-  aspect-ratio: 1;
-  translate: -50% -50%;
-  border-radius: 50%;
-  border: 1px solid var(--accent-line);
-  animation: ring-expand 5s var(--ease-out) infinite paused;
-  pointer-events: none;
-}
-
-.hero-produto__anel--2 {
-  animation-delay: 2.5s;
-  border-color: var(--ok-line);
-}
-
-/* O vídeo flutua devagar, de frente para quem chega. */
-.hero-produto__video {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  animation: float-slow 9s var(--ease-in-out) infinite paused;
-}
-
-/* Aura, anéis e flutuação só com o aparelho na tela (IntersectionObserver,
-   em HeroProduto.tsx). */
-.hero-produto__aparelho.is-rodando :is(.hero-produto__halo, .hero-produto__anel, .hero-produto__video) {
-  animation-play-state: running;
-}
-
-/* ---------- convite para rolar ---------- */
-.hero-produto__rolar {
-  position: absolute;
-  bottom: var(--sp-5);
-  left: 50%;
-  translate: -50% 0;
-  z-index: 2;
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-}
-
-.hero-produto__rolar-linha {
-  width: 1px;
-  height: 44px;
-  background: linear-gradient(180deg, transparent, var(--teal-300));
-  animation: float-slow 3s var(--ease-in-out) infinite;
-}
-
-.hero-produto__rolar-texto {
-  font-size: var(--fs-min);
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-/* ---------- tablet e celular: o texto primeiro, o vídeo embaixo ---------- */
-@media (max-width: 1023px) {
-  .hero-produto {
-    min-height: auto;
-    padding-block: calc(var(--header-h) + var(--sp-6)) var(--sp-8);
-  }
+/* ---------- computador ---------- */
+@media (min-width: 961px) {
   .hero-produto__grade {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-6);
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    grid-template-areas:
+      'aviso  aviso'
+      'titulo apoio';
+    column-gap: clamp(40px, 6vw, 96px);
+    align-items: end;
   }
-  .hero-produto__texto {
-    max-width: 640px;
-  }
-  .hero-produto__rolar {
-    display: none;
-  }
-}
-
-@media (max-width: 720px) {
-  .hero-produto {
-    padding-block: calc(var(--header-h) + var(--sp-4)) var(--sp-7);
+  .hero-produto__aviso {
+    grid-area: aviso;
   }
   .hero-produto__titulo {
-    font-size: clamp(2.3rem, 11vw, 3rem);
-    margin-bottom: var(--sp-3);
+    grid-area: titulo;
+    font-size: clamp(4.25rem, 7.2vw, 7rem);
+  }
+  .hero-produto__apoio {
+    grid-area: apoio;
+    /* A base do último item cai na base do título (a entrelinha deixa ~0,1 em de ar). */
+    padding-bottom: 0.4rem;
+  }
+}
+
+/* ---------- celular ----------
+   A primeira tela tem de mostrar o produto, não só texto (auditoria de
+   21/10/2026, P2-7: a gravação começava a ~900 px). Por isso a abertura fica
+   mais compacta e a gravação, na seção seguinte, sobe para antes do título
+   dela (capitulos.css): o topo do monitor já aparece na primeira tela. */
+@media (max-width: 720px) {
+  .hero-produto {
+    padding-block: calc(var(--header-h) + 8px) 8px;
+  }
+  .hero-produto__grade {
+    row-gap: var(--sp-3);
+  }
+  .hero-produto__aviso {
+    margin-bottom: 0;
+  }
+  .hero-produto__titulo {
+    font-size: clamp(3rem, 13.4vw, 3.75rem);
+  }
+  .hero-produto__apoio {
+    gap: var(--sp-4);
   }
   .hero-produto__lead {
-    font-size: 1rem;
-    line-height: 1.55;
-    margin-bottom: var(--sp-4);
+    font-size: 1.0625rem;
+    line-height: 1.5;
   }
   .hero-produto__acoes {
     flex-direction: column;
+    width: 100%;
     gap: var(--sp-2);
   }
   .hero-produto__acoes .btn {
     width: 100%;
   }
-  .hero-produto__aparelho {
-    padding-block: var(--sp-4);
+  .hero-produto__fatos {
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.875rem;
+  }
+  .hero-produto__fatos li,
+  .hero-produto__fatos li:first-child {
+    padding: 0 0 0 var(--sp-3);
+    border-left: 1px solid var(--v3-fio-forte);
   }
 }

@@ -1,9 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
-import { Platform } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
-import { NavigationBar } from 'expo-navigation-bar';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold } from '@expo-google-fonts/inter';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -13,7 +10,8 @@ import { AppProvider, useApp } from '@/store/AppProvider';
 import { PushPayload, usePushNotifications } from '@/hooks/usePushNotifications';
 import { EmergencyOverlay } from '@/features/EmergencyOverlay';
 import { ServicoIndisponivel } from '@/features/ServicoIndisponivel';
-import { ErrorBanner } from '@/components';
+import { ErrorBanner, EspacoDoTopoProvider } from '@/components';
+import { BarrasDoSistema } from '@/components/BarrasDoSistema';
 import { hasSupabaseConfig } from '@/lib/supabase';
 import { initSentry, wrapRoot } from '@/lib/sentry';
 
@@ -87,6 +85,10 @@ function Navigation() {
   // Guarda de autenticação: redireciona conforme o estado de login.
   useEffect(() => {
     if (!ready) return;
+    // `parear` (código QR do computador, 19/10/2026) vale com e sem conta: a
+    // própria tela decide para onde ir — sem conta ela não pode cair nas
+    // boas-vindas, e depois de entrar mostra a confirmação antes do início.
+    if (segments[0] === 'parear') return;
     const inAuth = segments[0] === '(auth)' || segments[0] === 'onboarding';
     if (!user && !inAuth) router.replace('/onboarding');
     if (user && inAuth) router.replace('/(tabs)');
@@ -96,12 +98,13 @@ function Navigation() {
   const telaEscura = segments[0] === 'onboarding';
 
   return (
-    <>
-      <StatusBar style={telaEscura || mode === 'dark' ? 'light' : 'dark'} />
-      {/* Barra de navegação do Android VISÍVEL: o app do cuidador é um app
-          comum (esconder a barra é coisa da tela do paciente, em quiosque).
-          Só o estilo dos botões acompanha o tema. */}
-      {Platform.OS === 'android' && <NavigationBar hidden={false} style={mode === 'dark' ? 'dark' : 'light'} />}
+    // A faixa do alerta minimizado informa a altura dela; as telas e o aviso
+    // de erro descem por baixo (revisão de UX de 19/10/2026: ela cobria o
+    // Voltar/Fechar das telas).
+    <EspacoDoTopoProvider>
+      {/* A barra de navegação do Android fica escondida e só aparece quando a
+          pessoa arrasta a borda de baixo (ver BarrasDoSistema). */}
+      <BarrasDoSistema fundoEscuro={telaEscura || mode === 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'fade_from_bottom' }}>
         <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
         <Stack.Screen name="(auth)/login" options={{ animation: 'slide_from_right' }} />
@@ -114,6 +117,6 @@ function Navigation() {
       {user && <ErrorBanner />}
       {/* Por último: o alerta de emergência fica acima de tudo, inclusive dos modais. */}
       <EmergencyOverlay />
-    </>
+    </EspacoDoTopoProvider>
   );
 }

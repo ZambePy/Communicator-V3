@@ -43,10 +43,12 @@ export function Text({ variant = 'body', tone = 'default', weight, center, style
 
 function defaultWeight(v: TypeVariant): TextWeight {
   switch (v) {
+    case 'alarme':
     case 'display':
     case 'h1':
     case 'h2':
       return 'heading';
+    case 'fala':
     case 'h3':
       return 'headingSemibold';
     case 'label':
@@ -60,8 +62,10 @@ function defaultWeight(v: TypeVariant): TextWeight {
   }
 }
 
+// Sem `textTransform: 'uppercase'` no rótulo (19/10/2026): caixa alta em selo é
+// mais difícil de ler e era o único texto do app que gritava sem motivo.
 const styles = StyleSheet.create({
   base: { includeFontPadding: false },
   center: { textAlign: 'center' },
-  label: { textTransform: 'uppercase' },
+  label: {},
 });

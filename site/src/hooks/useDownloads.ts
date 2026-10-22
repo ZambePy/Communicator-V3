@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  apkDoCuidador,
+  apkVemDoRelease,
   availableOS,
   buildDownloads,
   buildDownloadsFromRelease,
@@ -13,6 +15,7 @@ import {
   type ReleaseSnapshot,
 } from '@/lib/releases'
 import { fetchLatestRelease, readCachedRelease } from '@/lib/latestRelease'
+import { LOJAS } from '@/lib/lojas'
 
 /**
  * De onde veio a disponibilidade dos instaladores (sempre limitada aos
@@ -22,6 +25,21 @@ import { fetchLatestRelease, readCachedRelease } from '@/lib/latestRelease'
  * - `pending`: a consulta ainda não voltou; enquanto isso, também o estático.
  */
 export type DownloadsStatus = 'github' | 'fallback' | 'pending'
+
+/**
+ * O APK do app do cuidador (Android), na mesma lógica dos instaladores
+ * (relato de 19/10/2026: o painel de download ignorava o .apk do release, e
+ * no /perfil não havia como baixar o app do celular):
+ * - `nao-oferecido`: o site não oferece o APK (VITE_APP_CUIDADOR_URL vazia);
+ * - `disponivel`: o link — o do último release, quando a consulta voltou;
+ *   enquanto ela não volta (ou se falhar), o de VITE_APP_CUIDADOR_URL;
+ * - `fora-do-release`: o último release saiu sem o APK (o release.yml avisa,
+ *   mas publica assim mesmo). O link fixo daria 404: no lugar dele, um aviso.
+ */
+export type ApkDoCuidador =
+  | { situacao: 'disponivel'; url: string }
+  | { situacao: 'fora-do-release' }
+  | { situacao: 'nao-oferecido' }
 
 export type Downloads = {
   /** Windows, macOS e Linux, com o sistema do visitante primeiro. */
@@ -33,6 +51,16 @@ export type Downloads = {
   status: DownloadsStatus
   /** Frases de plataforma coerentes com os botões ("Windows 10 e 11 (macOS e Linux em preparação)"). */
   platformsText: ReturnType<typeof platformsText>
+  /** O APK do app do cuidador, com a mesma fonte de verdade dos instaladores. */
+  apk: ApkDoCuidador
+}
+
+/** O APK, pelo que o release diz (quando ele já respondeu) e pela configuração. */
+export function apkDoRelease(snapshot: ReleaseSnapshot | null, configurado: string | null): ApkDoCuidador {
+  if (!configurado) return { situacao: 'nao-oferecido' }
+  if (!snapshot || !apkVemDoRelease(configurado, RELEASES_REPO)) return { situacao: 'disponivel', url: configurado }
+  const arquivo = apkDoCuidador(snapshot.files)
+  return arquivo ? { situacao: 'disponivel', url: arquivo.url } : { situacao: 'fora-do-release' }
 }
 
 /** Leitura do navegador isolada, para os testes poderem trocar. */
@@ -88,6 +116,7 @@ export function useDownloads(): Downloads {
       releasesPage: RELEASES_PAGE,
       status: estado.status,
       platformsText: platformsText(availableOS(all)),
+      apk: apkDoRelease(estado.snapshot, LOJAS.apk),
     }
   }, [estado, detected])
 }

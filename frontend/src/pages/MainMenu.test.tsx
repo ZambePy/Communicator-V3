@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import i18n from '../i18n';
 import { MainMenu } from './MainMenu';
+import { SettingsProvider } from '../context/SettingsContext';
 import { guardarPasso, limparMissoes } from './tutorial/missao';
 
 /**
@@ -71,5 +72,48 @@ describe('MainMenu', () => {
     expect(screen.getByRole('button', { name: 'Continuar o tutorial' })).toBeInTheDocument();
     act(() => limparMissoes());
     expect(screen.queryByRole('button', { name: 'Continuar o tutorial' })).toBeNull();
+  });
+});
+
+/**
+ * No modo hospital (rodada 3, 21/10/2026) a tela de onde se parte é a do quarto
+ * (`/hospital`), e este menu é o "Mais opções" dela: precisa de um Voltar. Fora
+ * do modo hospital continua sem, como sempre foi: é a tela inicial.
+ */
+describe('MainMenu e o modo hospital', () => {
+  const VOLTAR = /Voltar para a tela anterior/;
+  const montarComAjustes = () =>
+    render(
+      <SettingsProvider>
+        <MemoryRouter>
+          <MainMenu />
+        </MemoryRouter>
+      </SettingsProvider>
+    );
+
+  beforeEach(async () => {
+    await i18n.changeLanguage('pt-BR');
+    navigate.mockClear();
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+  afterEach(() => localStorage.clear());
+
+  it('sem o modo hospital não há botão Voltar: é a tela inicial', () => {
+    montarComAjustes();
+    expect(screen.queryByRole('button', { name: VOLTAR })).toBeNull();
+  });
+
+  it('com o modo hospital E o só horizontal, o menu é a tela inicial: sem Voltar para a grade do hospital (M8)', () => {
+    localStorage.setItem('irisflow_settings', JSON.stringify({ modoHospital: true, modoHorizontal: true, schemaVersion: 1 }));
+    montarComAjustes();
+    expect(screen.queryByRole('button', { name: VOLTAR })).toBeNull();
+  });
+
+  it('com o modo hospital há um Voltar, e ele leva à tela do hospital', () => {
+    localStorage.setItem('irisflow_settings', JSON.stringify({ modoHospital: true, schemaVersion: 1 }));
+    montarComAjustes();
+    fireEvent.click(screen.getByRole('button', { name: VOLTAR }));
+    expect(navigate).toHaveBeenCalledWith('/hospital');
   });
 });

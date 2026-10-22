@@ -89,6 +89,8 @@ vi.mock('@/hooks/useDownloads', async () => {
       releasesPage: 'https://github.com/dono/repo/releases',
       status: 'github',
       platformsText: platformsText(['windows']),
+      // APP_CUIDADOR_URL vazio (abaixo): sem APK configurado, nada a oferecer
+      apk: { situacao: 'nao-oferecido' },
     }),
   }
 })
@@ -153,6 +155,14 @@ describe('etapa 1 — criar conta (sem sessão)', () => {
     // a conta é só nome, e-mail e senha: nada de pesquisa nesta etapa
     expect(screen.queryByText('Quem vai usar o IrisFlow?')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('CPF')).not.toBeInTheDocument()
+  })
+
+  it('o título já diz "beta": não há rótulo "Programa beta" repetindo a ideia acima dele (auditoria P3-9)', async () => {
+    programa(ANTES)
+    montar()
+    await screen.findByText(/A beta fica disponível em/)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/de graça na beta/)
+    expect(document.querySelector('.beta__pitch .eyebrow')).toBeNull()
   })
 
   it('enviar vazio não trava: mostra o que falta, os erros e leva o foco ao primeiro campo', async () => {

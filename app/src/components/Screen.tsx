@@ -2,6 +2,7 @@ import React from 'react';
 import { Platform, RefreshControl, ScrollView, ScrollViewProps, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layout, spacing, useTheme, zIndex } from '@/theme';
+import { useEspacoDoTopo } from './EspacoDoTopo';
 
 interface Props extends ScrollViewProps {
   children: React.ReactNode;
@@ -24,8 +25,12 @@ interface Props extends ScrollViewProps {
 export function Screen({ children, refreshing, onRefresh, padded = true, modal = false, contentContainerStyle, ...rest }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  // Faixa do alerta minimizado no topo (revisão de UX de 19/10/2026): o
+  // conteúdo desce por baixo dela, senão ela cobria o Voltar/Fechar. A folha
+  // do iOS abre por cima da janela e não fica embaixo da faixa.
+  const faixa = useEspacoDoTopo();
   const folhaIos = modal && Platform.OS === 'ios';
-  const topo = folhaIos ? spacing.lg : insets.top + spacing.sm;
+  const topo = folhaIos ? spacing.lg : insets.top + spacing.sm + faixa;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -43,7 +48,8 @@ export function Screen({ children, refreshing, onRefresh, padded = true, modal =
       >
         {children}
       </ScrollView>
-      {!folhaIos && <View pointerEvents="none" style={[styles.statusBackdrop, { height: insets.top, backgroundColor: colors.background }]} />}
+      {/* Com a faixa, o fundo opaco vai até o fim dela: o conteúdo rolado não aparece em volta da faixa. */}
+      {!folhaIos && <View pointerEvents="none" style={[styles.statusBackdrop, { height: insets.top + faixa, backgroundColor: colors.background }]} />}
     </View>
   );
 }

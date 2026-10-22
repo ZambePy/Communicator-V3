@@ -91,6 +91,9 @@ export default function Login() {
           <Text variant="body" tone="muted">
             Entre com a sua conta IrisFlow.
           </Text>
+          <Text variant="bodySmall" tone="muted">
+            Também dá para entrar sem senha: no computador do paciente, abra Configurações, clique em Mostrar o código e aponte a câmera do celular para ele.
+          </Text>
         </View>
 
         <View style={styles.form}>

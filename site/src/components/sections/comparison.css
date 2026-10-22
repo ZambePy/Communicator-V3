@@ -28,7 +28,7 @@
 }
 
 .cmp__wrap:focus-visible {
-  outline: 3px solid var(--blue-500);
+  outline: 3px solid var(--teal-300);
   outline-offset: 3px;
 }
 
@@ -49,10 +49,8 @@
 
 .cmp thead th {
   font-family: var(--font-body);
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: var(--fs-sm);
+  font-weight: 600;
   color: var(--text-dim);
   background: var(--bg-soft);
   position: sticky;

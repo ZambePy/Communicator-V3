@@ -30,7 +30,7 @@ export default function Paciente() {
   };
 
   const ativos = devices.filter((d) => !d.revoked_at);
-  const detalhes = patient ? [relationLabel[patient.relation], conditionLabel[patient.condition]].filter(Boolean).join(' · ') : '';
+  const detalhes = patient ? [relationLabel[patient.relation], conditionLabel[patient.condition]].filter(Boolean).join(', ') : '';
 
   return (
     <Screen modal>
@@ -73,7 +73,7 @@ export default function Paciente() {
 
       <SectionTitle title="Detalhes" />
       <Card padding={0}>
-        <ListRow icon="medical-outline" title="Profissional que acompanha" subtitle={patient?.prescriber_name ? `${patient.prescriber_name}${patient.prescriber_role ? ` · ${patient.prescriber_role}` : ''}` : 'Não informado'} tone="accent" />
+        <ListRow icon="medical-outline" title="Profissional que acompanha" subtitle={patient?.prescriber_name ? `${patient.prescriber_name}${patient.prescriber_role ? `, ${patient.prescriber_role}` : ''}` : 'Não informado'} tone="accent" />
         <ListRow icon="laptop-outline" title="Sistema do computador" subtitle={!patient || patient.os === 'nao-sei' ? 'Não informado' : patient.os === 'macos' ? 'macOS' : patient.os === 'windows' ? 'Windows' : 'Linux'} tone="muted" last />
       </Card>
 
@@ -90,7 +90,7 @@ export default function Paciente() {
               key={d.id}
               icon={d.revoked_at ? 'close-circle-outline' : 'desktop-outline'}
               title={d.name}
-              subtitle={d.revoked_at ? `Desvinculado ${timeAgo(d.revoked_at)}` : `${d.app_version ? `Versão ${d.app_version} · ` : ''}${d.online ? 'ligado agora' : `visto ${timeAgo(d.last_seen_at)}`}`}
+              subtitle={d.revoked_at ? `Desvinculado ${timeAgo(d.revoked_at)}` : `${d.online ? 'Ligado agora' : `Visto ${timeAgo(d.last_seen_at)}`}${d.app_version ? `, versão ${d.app_version}` : ''}`}
               tone={d.revoked_at ? 'muted' : d.online ? 'accent' : 'muted'}
               onPress={d.revoked_at ? undefined : () => confirmarDesvinculo(d.id, d.name)}
               accessibilityHint={d.revoked_at ? undefined : 'Toque para desvincular'}

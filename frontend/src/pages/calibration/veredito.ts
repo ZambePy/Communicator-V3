@@ -1,4 +1,5 @@
 import type { CalibrationFitDiagnostics } from '@tracker/calibration';
+import { palavraDoResultado, type PalavraDoResultado } from '@tracker/resultadoSimples';
 
 /**
  * Traduz o diagnóstico de ajuste da calibração para linguagem de cuidador.
@@ -115,24 +116,110 @@ export function lerCalibracao(
 }
 
 /**
- * Qualidade em cinco degraus, para o PACIENTE.
+ * A PALAVRA do resultado (pedido de 19/10/2026): "Ótima", "Boa" ou
+ * "Refazer…", e a chave da frase do que fazer. É o que a tela mostra primeiro,
+ * em linguagem simples E na técnica — a mesma calibração não pode ser "Boa"
+ * num modo e "aceitável" no outro.
  *
- * "87 px de erro LOO" não diz nada a quem está do outro lado da câmera — e o
- * número muda de significado com a tela e a distância. Cinco níveis, sem
- * unidade, comunicam o que importa: dá para usar, ou vale refazer. Os limiares
- * seguem `LOO_BOM_PX` para o nível 3 ser exatamente a fronteira do "bom".
+ * Os limiares são os do teste de precisão (`@tracker/resultadoSimples`, a
+ * mesma função que dá Excelente/Bom/Regular/Ruim): Excelente e Bom → Ótima,
+ * Regular → Boa, Ruim → refazer. O erro é o do teste de precisão quando ele
+ * mediu ESTE modelo (o painel do teste, que acabou de aparecer, disse a mesma
+ * palavra); senão, o LOTO da grade interna da calibração — as duas medidas
+ * estimam o erro num lugar em que o modelo não treinou, e a classe das duas
+ * bateu em 8 das 9 sessões de `docs/medicoes/historico/`.
+ *
+ * Os pontos ruins vêm de `alvosParaRecoletar` (o teste, quando existe; senão a
+ * qualidade de cada alvo da calibração): são exatamente os que o botão "Refazer
+ * só…" refaz. Sem como refazer (flag desligada, calibração carregada do disco),
+ * a lista vem vazia — e então, com o teste medido contra este modelo, valem os
+ * cantos que ELE mediu como "Ruim" (`validacao.cantosRuins`): o painel do
+ * teste, que acabou de aparecer, disse "Refazer os cantos", e a tela não pode
+ * dizer "Ótima" logo depois (revisão do pipeline de 19/10/2026). Nesse caso a
+ * frase é a sem o botão (`…SemBotao`): a tela não promete o que não pode fazer.
  */
-export type NivelDeQualidade = 1 | 2 | 3 | 4 | 5;
+export interface PalavraDaCalibracao {
+  palavra: PalavraDoResultado;
+  /** Sufixo das chaves `calib.resultado.palavra.*` e `.frase.*`. */
+  titulo: string;
+  frase: string;
+  /** Os pontos ruins são todos de canto (o texto diz "os cantos", não "as bordas"). */
+  soCantos: boolean;
+  /** De onde veio o erro interior. */
+  fonte: 'teste' | 'calibracao' | 'nenhuma';
+}
 
-export const NIVEIS_DE_QUALIDADE = 5;
+/** Um canto da tela (e não o meio de uma borda): longe do centro nos dois eixos. */
+export function ehCanto(p: { x: number; y: number }): boolean {
+  return Math.abs(p.x - 0.5) > 0.4 && Math.abs(p.y - 0.5) > 0.4;
+}
 
-export function nivelDeQualidade(leitura: LeituraDaCalibracao): NivelDeQualidade {
-  if (leitura.veredicto === 'refazer') return 1;
-  const px = leitura.looErrorPx;
-  if (px === null) return leitura.veredicto === 'bom' ? 4 : 3;
-  if (px <= LOO_BOM_PX * 0.4) return 5;
-  if (px <= LOO_BOM_PX * 0.7) return 4;
-  if (px <= LOO_BOM_PX) return 3;
-  if (px <= LOO_BOM_PX * 1.6) return 2;
-  return 1;
+export function palavraDaCalibracao(
+  leitura: LeituraDaCalibracao,
+  diag: CalibrationFitDiagnostics | null,
+  entrada: {
+    validacao: {
+      erroInternoPx: number | null;
+      /** Os cantos que o teste mediu como "Ruim" (`getValidacaoDoModelo`). */
+      cantosRuins?: readonly { x: number; y: number }[];
+    } | null;
+    pontosRuins: readonly { x: number; y: number; borda: boolean }[];
+  },
+): PalavraDaCalibracao {
+  const doTeste = entrada.validacao?.erroInternoPx ?? null;
+  const erroInternoPx = doTeste ?? leitura.looErrorPx;
+  const fonte = doTeste !== null ? 'teste' : erroInternoPx !== null ? 'calibracao' : 'nenhuma';
+  // Sem o botão, os cantos ruins do TESTE entram na palavra (ver acima).
+  const semBotao = entrada.pontosRuins.length === 0 && (entrada.validacao?.cantosRuins?.length ?? 0) > 0;
+  const pontosDaPalavra: readonly { x: number; y: number; borda: boolean }[] = semBotao
+    ? (entrada.validacao?.cantosRuins ?? []).map((p) => ({ x: p.x, y: p.y, borda: true }))
+    : entrada.pontosRuins;
+  const borda = pontosDaPalavra.filter((p) => p.borda);
+  const grade = diag?.gridDiagnosis?.veredicto;
+  const palavra = palavraDoResultado({
+    erroInternoPx,
+    pontosRuins: { borda: borda.length, interno: pontosDaPalavra.length - borda.length },
+    // Com o teste medido, a classe dele já diz se o miolo ficou ruim; o
+    // veredito da grade é da calibração e só decide sem o teste. O alvo
+    // inaprendível também reprova — o core diz que ele corrompe o ajuste dos
+    // outros —, a não ser que esteja na lista para refazer: aí refazer SÓ ele
+    // é a resposta certa, e a palavra vira "Refazer alguns pontos".
+    sessaoRuim:
+      fonte !== 'teste' &&
+      (grade === 'sessao_ruim' || (grade === 'alvo_inaprendivel' && entrada.pontosRuins.length === 0)),
+  });
+  // TODOS os pontos da lista, não só os de borda: com um ponto do miolo junto,
+  // o botão não pode dizer "só os cantos".
+  const soCantos = pontosDaPalavra.length > 0 && pontosDaPalavra.every((p) => p.borda && ehCanto(p));
+
+  let titulo: string = palavra;
+  let frase: string = palavra;
+  if (palavra === 'refazerCantos' && !soCantos) {
+    titulo = 'refazerBordas';
+    frase = 'refazerBordas';
+  }
+  if (semBotao && palavra === 'refazerCantos') {
+    // A mesma palavra do painel do teste, sem prometer o botão que não existe
+    // (`refazerCantosSemBotao` ou `refazerBordasSemBotao`).
+    frase = `${frase}SemBotao`;
+  } else if (palavra === 'refazerTudo') {
+    frase =
+      leitura.motivo === 'derivaPostural'
+        ? 'refazerTudoDeriva'
+        : leitura.motivo === 'sessaoRuim'
+          ? 'refazerTudoLuz'
+          : leitura.motivo === 'alvoInaprendivel'
+            ? 'refazerTudoPonto'
+            : leitura.motivo === 'periferia'
+              ? 'refazerTudoDistancia'
+              : 'refazerTudo';
+  }
+  return { palavra, titulo, frase, soCantos, fonte };
+}
+
+/** Onde fica um ponto, em palavras (chave `calib.resultado.lugar.<v>.<h>`). */
+export function lugarDoPonto(p: { x: number; y: number }): string {
+  const v = p.y < 1 / 3 ? 'cima' : p.y > 2 / 3 ? 'baixo' : 'meio';
+  const h = p.x < 1 / 3 ? 'esquerda' : p.x > 2 / 3 ? 'direita' : 'centro';
+  return `${v}.${h}`;
 }

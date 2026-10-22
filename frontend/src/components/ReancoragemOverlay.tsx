@@ -34,6 +34,13 @@ export const DURACAO_DO_REAJUSTE_MS = 2000;
  */
 export const Z_DO_REAJUSTE = 1000001;
 
+/**
+ * `id` do botão de Emergência (o `EmergencyProvider` o põe no botão). Mora aqui,
+ * e não lá, porque o provider já importa este arquivo: o caminho inverso faria
+ * um ciclo de imports. O diálogo do reajuste o adota pelo `aria-owns`.
+ */
+export const ID_DA_EMERGENCIA = 'botao-de-emergencia';
+
 /** Lado do alvo (o SVG do anel), em px. */
 export const LADO_DO_ALVO_PX = 120;
 
@@ -97,10 +104,17 @@ export const ReancoragemOverlay: React.FC<Props> = ({ duracaoMs = DURACAO_DO_REA
   const circunferencia = 2 * Math.PI * raio;
 
   return (
-    // Não é `aria-modal`: a Emergência continua acessível por cima dele — para
-    // o leitor de tela e para o teclado, não só para o olhar e o mouse.
+    // MODAL (revisão de UX de 19/10/2026, item 17): sem `aria-modal`, a
+    // varredura com acionador passava pelos botões da tela de baixo, que o
+    // paciente nem vê. A Emergência continua acessível por cima dele: para o
+    // teclado, o `aria-modal` não muda nada (o Tab já vai para ela, no
+    // `EmergencyProvider`); para o leitor de tela, que esconderia o que está
+    // fora de um diálogo modal, o `aria-owns` põe o botão dela DENTRO deste
+    // diálogo na árvore de acessibilidade.
     <div
       role="dialog"
+      aria-modal="true"
+      aria-owns={ID_DA_EMERGENCIA}
       aria-label={pontoDado
         ? 'Reajuste rápido: olhe o ponto azul em cada lugar da tela'
         : 'Reajuste rápido: olhe o ponto no centro da tela'}

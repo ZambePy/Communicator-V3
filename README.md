@@ -100,9 +100,11 @@ Três coisas precisam andar junto com esse número sempre que ele for citado:
 - **Foi medido com o L2CS, em 20/09, antes do V2.** Os pesos do L2CS têm
   licença só para pesquisa; desde a 1.0.0-beta.10 eles vão no instalador, e
   por isso a beta é acadêmica e não comercial ([Pendências e riscos](#pendências-e-riscos),
-  item 1). O pipeline padrão de hoje ([V3](#pipeline-v3-m1m21)) ainda não foi
-  medido ao vivo. Para uma versão comercial, o caminho é o retreino do V2
-  (ramo ocular com UnityEyes 2, MIT; ramo facial dependente de licença).
+  item 1). O pipeline padrão de hoje ([V3](#pipeline-v3-m1m22)) ainda não foi
+  medido ao vivo, e desde 19/10/2026 a calibração e o teste usam outro alvo e
+  outro fundo (`docs/MEDICOES.md` §2): o 1,40° é de antes da troca. Para uma
+  versão comercial, o caminho é o retreino do V2 (ramo ocular com UnityEyes 2,
+  MIT; ramo facial dependente de licença).
 - **A precisão piorou** enquanto a acurácia melhorava (tremor de 21,8 → 38,1 px
   entre M1 e o baseline), e o efeito do filtro sobre o dwell não tem medida
   própria (`docs/MEDICOES.md` §14.3 e §14.4).
@@ -143,17 +145,33 @@ Webcam (getUserMedia, até 1920×1080)
   │     para o olhar, cadência vale mais que pixels, e o custo aparece como o
   │     cursor travando. (Uma câmera que já entregava 15 fps a 720p não é
   │     rebaixada por continuar em 15: o rebaixamento só desfaz o que a
-  │     subida causou.)
+  │     subida causou.) À noite a trava impediria a câmera de compensar: o
+  │     QUADRO INTEIRO é medido a cada 2 s (reduzido a 64 px de largura,
+  │     com ou sem rosto), e luminância média abaixo de 0,12 por 10 s é
+  │     pouca luz — a exposição e o balanço de branco voltam ao automático,
+  │     uma vez por episódio, e a tela diz "Está escuro para a câmera" (com
+  │     a tela escurecida ou o filtro âmbar, oferece "Clarear a tela", um
+  │     botão com o tamanho mínimo de alvo); o
+  │     aviso sai acima de 0,18 por 3 s. `src/poucaLuz.ts`; os limiares são
+  │     estimativas a conferir com webcam real
   │
   ├─ MediaPipe FaceLandmarker ─ 478 landmarks 3D + matriz de pose da cabeça
   │
   ├─ L2CS-Net (ONNX, Web Worker) ─ yaw / pitch do olhar. A política segue o
-  │     provider efetivo: WebGPU recorta em 448² e submete a cada 100 ms;
-  │     WASM cai para 224² e ~160 ms, porque lá quem manda é a latência da
-  │     rede e insistir na resolução alta só produz leitura velha. Uma
+  │     provider efetivo (com `l2cs: auto`, o padrão): WebGPU recorta em 448²
+  │     e submete a cada 100 ms; WASM cai para 224² e ~160 ms, porque lá
+  │     quem manda é a latência da rede e insistir na resolução alta só
+  │     produz leitura velha. Com o provider forçado (`webgpu`/`wasm`),
+  │     valem `l2csInputSize` e `l2csCadenceMs`. Uma
   │     inferência em voo por vez; o recorte e o tensor (Float32Array NCHW)
   │     são montados na thread principal, no laço do engine, e o worker só
-  │     roda a sessão ONNX. Enquanto o cliente ainda considera a última
+  │     roda a sessão ONNX. O tensor vai ao worker por transferência e volta
+  │     com a resposta, para o recorte seguinte escrever nele em vez de
+  │     alocar (até 2 guardados por tamanho; o mesmo na EyeNet e no buffer
+  │     de luminância do recorte dos olhos): numa medição sintética de 1 min
+  │     de pipeline, de 707 MB (224²) e 1,74 GB (448²) alocados para ~0, com
+  │     a saída idêntica (`src/reusoDeBuffers.test.ts`); o `getImageData` de
+  │     cada recorte ainda aloca. Enquanto o cliente ainda considera a última
   │     leitura válida (tolerância `max(400, 3·latência + cadência)` ms, teto
   │     2,5 s), o bloco a usa normalmente; passada essa tolerância, o último
   │     ângulo válido é REUSADO por mais 600 ms em vez de zerar o bloco —
@@ -167,10 +185,12 @@ Webcam (getUserMedia, até 1920×1080)
   │     `tan`, ângulo zero dá exatamente os mesmos sete zeros de antes. O
   │     provider efetivo, a latência, a fração de leituras obsoletas e o lado
   │     EFETIVO do recorte (224 no WASM, mesmo com a flag em 448) vão para os
-  │     diagnósticos e para o relatório. O motivo de cada bloco zerado é
-  │     agregado por alvo de calibração e aparece na mensagem de repetição da
-  │     tela de calibração — não no relatório; o peso com que o ângulo entrou
-  │     só é lido como "zerado ou não" pela calibração
+  │     diagnósticos e para o relatório. O motivo de cada bloco zerado
+  │     (leitura obsoleta, implausível, sem confiança) é contado por alvo de
+  │     calibração e vai para o console (`[calib] processStaticPoint`), não
+  │     para a tela nem para o relatório: o núcleo não refaz alvo por bloco
+  │     zerado. O peso com que o ângulo entrou só é lido como "zerado ou
+  │     atenuado" pela calibração, e a amostra vale ×0,35
   │
   ├─ Escala métrica pela íris ─ o diâmetro horizontal visível da íris é
   │     notavelmente constante (11,7 mm, ±4 %, praticamente invariante com
@@ -181,8 +201,9 @@ Webcam (getUserMedia, até 1920×1080)
   │     em centímetros: num rosto de 8,2 cm, a constante genérica faria a
   │     cadeira andar 4 cm e o cursor andar 4,4
   │
-  ├─ Vetor de features por olho ─ 2 dimensões de íris (`offsetX`/`offsetY`)
-  │     + 2 do L2CS (`tan yaw` / `tan pitch`) = 4
+  ├─ Vetor de features por olho ─ 2 dimensões de íris (`offsetX`/`offsetY`,
+  │     em distâncias cantais) + 2 do L2CS (`tan yaw` / `tan pitch`; no V3,
+  │     com os ângulos girados para o referencial da cabeça, M4) = 4
   │     expansão polinomial de grau 2 PARCIAL: o par angular fica só no termo
   │     linear, porque já chega linearizado pela tangente — a geometria de
   │     projeção é `x_tela ≈ x_olho + d·tan(yaw)`, então a 1ª ordem já é o
@@ -228,12 +249,21 @@ Webcam (getUserMedia, até 1920×1080)
   │
   ├─ Correção por dwell ─ ainda dentro de `mapGaze`, depois das compensações
   │     e da correção dos cantos, e ANTES do clamp: cada dwell concluído num alvo isolado
-  │     é um rótulo de graça — a pessoa estava olhando para onde clicou. O
-  │     resíduo de cada rótulo entra num integrador de ganho 0,05 (não numa
-  │     média) com decaimento de meia-vida de 10 min, e o deslocamento é
-  │     limitado a 8 % da tela. Recusa rótulo de quadro degradado, saturado
-  │     pelo clamp, em modo apresentação, de alvo de emergência e de dois
-  │     dwells a menos de 300 ms. No Modo Computador aprende dos alvos que a
+  │     é um rótulo de graça — a pessoa estava olhando para onde clicou. No
+  │     V3 (M15, padrão) o rótulo entra num filtro de Kalman
+  │     Ornstein–Uhlenbeck por eixo, em px (meia-vida de 10 min, σ∞ = 60 px):
+  │     a medida é em malha aberta — o centro do alvo menos a mediana da
+  │     predição ANTES desta correção e do clamp, de 200 ms depois da
+  │     entrada até 50 ms antes do disparo —, o ganho do deslocamento fica
+  │     ≤ 0,5, a inovação fora do χ² de 99 % é recusada, o rótulo espera 4 s
+  │     em quarentena (descartado se a ação seguinte for Voltar, Apagar ou
+  │     Limpar) e a correção nova entra numa rampa de 300 ms; com M16, também
+  │     um ganho por eixo, só com rótulos espalhados (`kalmanDoDwell.ts`). No
+  │     pipeline base é um integrador de ganho 0,05 (não uma média), com
+  │     meia-vida de 10 min, que recusa dois dwells a menos de 300 ms e
+  │     resíduo acima de 180 px. Nos dois, a correção aplicada é limitada a
+  │     8 % da tela e não aprende de quadro degradado, saturado pelo clamp,
+  │     em modo apresentação nem de alvo de emergência. No Modo Computador aprende dos alvos que a
   │     própria sobreposição desenha (barra e teclado flutuante, lado ≥ 52 px)
   │     — um botão de 20 px do Windows não é evidência de para onde a pessoa
   │     olhava. A aplicação vem aqui; o aprendizado acontece na conclusão do
@@ -245,8 +275,13 @@ Webcam (getUserMedia, até 1920×1080)
   │     os botões da borda da tela e 2 % de amortecimento é o que fazia o
   │     cursor "não chegar" no canto. É a última etapa dentro de `mapGaze`
   │
-  ├─ Filtro temporal ─ One Euro (produção); Kalman e Kalman+EMA disponíveis
-  │     para comparação (`filterMode`). Vem depois de tudo isso, no engine
+  ├─ Filtro temporal ─ One Euro (o do pipeline base, e o do V3 até uma
+  │     calibração medir o ruído); Kalman e Kalman+EMA disponíveis para
+  │     comparação (`filterMode`). Vem depois de tudo isso, no engine.
+  │     No V3 (M9), depois de uma calibração que mediu o ruído, quem governa
+  │     é o ESTIMADOR DE FIXAÇÃO no lugar do One Euro e do estabilizador
+  │     abaixo: os presets de "Suavização" ficam guardados e não mudam o
+  │     cursor, e o engine diz isso a quem pede (A2, 19/10/2026)
   │
   ├─ Estabilizador de fixação ─ durante uma fixação a melhor estimativa não é
   │     a última amostra: é a média da janela de 200 ms. Na sacada a média é
@@ -275,7 +310,13 @@ Webcam (getUserMedia, até 1920×1080)
   │
   └─ Interação ─ dwell, cursor, emergência, varredura opcional, fallback
         quando o olhar se perde. É na conclusão do dwell que a correção por
-        dwell (acima) recebe o rótulo
+        dwell (acima) recebe o rótulo. O dwell não conta tempo sobre posição
+        NÃO medida (`posicaoMedida: false`: a última posição repetida — a
+        predição que falhou, o vetor vazio, os primeiros 10 s de contraluz
+        forte); passados esses 10 s, a predição volta marcada como
+        degradada, e só a Emergência (dwell 2×) e os botões de recuperação
+        (2,5×) aceitam. Para quando o olhar piora, o Plano B: varredura com
+        acionador e Sim/Não por piscada longa (ver Fluxo de uso)
 ```
 
 ### Nenhum estágio comuta: todos desvanecem
@@ -305,7 +346,7 @@ referência (1920×1080, 23,6", 60 cm → 38,5 px/grau):
 | soltura da EMA angular, limiar único em 40 °/s | ~68 px | rampa de 20 a 60 °/s |
 | compensação de pose, portão em ±30° | **1273 px** | rampa de ~10° em torno do limiar |
 | estabilizador, média ↔ amostra crua | até 19 px | peso contínuo |
-| fim do reuso do bloco L2CS | vetor cheio → 7 zeros | ângulo desvanece em 200 ms |
+| fim do reuso do bloco L2CS (o bloco ocular, da EyeNet, ganhou a mesma rampa em 19/10/2026) | vetor cheio → 7 zeros | ângulo desvanece em 200 ms |
 
 Em todos, os **dois extremos são idênticos ao comportamento anterior** — a
 rejeição continua rejeitando, a sacada continua soltando — e a rampa é um
@@ -365,25 +406,59 @@ correção local deles, 40 px no replay (a expectativa realista ao vivo é de
 (os cantos da grade), e o perfil `computador` tem 13 alvos próprios, indo a
 2 % da borda, porque ali o alvo é o canto do monitor (o perfil existe no
 núcleo e tem testes, mas nenhuma tela o usa ainda: o Modo Computador calibra
-com a grade padrão). Cada alvo descarta os
-primeiros 600 ms — sacada e acomodação — e abre em seguida uma janela útil
+com a grade padrão).
+
+O alvo é o **ABC** de Thaler et al. (2013) — disco azul, cruz recortada na
+cor do fundo e ponto central vermelho, `src/alvoDeFixacao.ts` —, o MESMO do
+teste de precisão, sobre o mesmo fundo azul-marinho `#091B33`. Até 18/10/2026
+a calibração mostrava uma bola azul que pulsava, e o teste, outro alvo, os
+dois sobre preto: é mudança de estímulo, e as medições de antes não se
+comparam termo a termo com as de depois (`docs/MEDICOES.md` §2). A ordem não
+é a de leitura: no V3 (M1), uma busca determinística começa no alvo do centro
+e não correlaciona a posição do alvo com o tempo, para a deriva da cabeça não
+virar ganho (no pipeline base, linha a linha, de cima para baixo).
+
+No V3 (M8) a coleta de cada alvo abre quando a bola chega (o deslocamento
+leva 620 ms) e descarta os primeiros 800 ms — sacada e acomodação, com folga
+para a latência de sacada de quem tem ELA; no pipeline base, ela abre 1200 ms
+depois do alvo anterior e descarta 600 ms. Em seguida vem uma janela útil
 cujo TETO cresce com a distância ao centro (normalizada: 0 no centro, 1 no
 canto geométrico): `1680 + d·1120` ms, o que dá 1680 ms no centro e ~2690 ms
 nos cantos a 5 % (no `computador` um bônus por excentricidade angular leva o
 canto a até ~3900 ms). É teto, não duração fixa: o ponto fecha assim que o
-olhar estabiliza, com piso de 900 ms e 15 amostras. No pior caso os 13 alvos
-somam ~39 s na tela de referência, abaixo do teto de fadiga de 40 s que um
-teste segura.
+olhar estabiliza, com piso de 900 ms e 15 amostras. No pior caso (toda janela
+até o teto), na tela de referência, acomodação e janela somam 41,8 s no V3 e
+39,2 s no base; com a espera até cada coleta abrir, a sessão inteira dá 49,9 s
+no V3 e 54,8 s no base. `calibration.janelaDoPonto.test.ts` segura o teto de
+fadiga de 40 s só no pipeline base e, com M7 e M8 ligadas, que a sessão
+inteira não passa a do base (53,7 s com 14 alvos).
+
+Terminados os pontos, a **recoleta dos alvos ruins** (M22) refaz na hora até 4
+alvos cujo erro fora da amostra (LOTO) ou dispersão passou de 2× a mediana da
+região — miolo com miolo, borda com borda — e de um piso de 2,5° (erro) ou
+2,0° (dispersão), ou que ficaram com menos de 15 amostras; as amostras novas
+SUBSTITUEM as antigas, o treino é refeito do zero e o modelo novo só fica se
+o LOTO médio dos mesmos alvos não piorar. É uma rodada automática por
+calibração, e a tela de resultado oferece a mesma rodada, à mão, para os
+pontos ruins — com um teste de precisão medido, para os cantos que ele mediu
+como "Ruim" (`src/calibration/recoletaDeAlvos.ts`; a tabela do V3, abaixo).
 
 Amostra com bloco angular zerado **é aceita**, e isso é deliberado: rejeitá-la
 derrubava a linha inferior da grade inteira — é onde a pálpebra cobre a íris —
 e os alvos de baixo eram pulados por esgotar as tentativas, deixando o modelo
 extrapolar justamente a região onde ficam os botões mais usados. Trocamos "sem
 a linha de baixo" por "com a linha de baixo, parte dela com bloco zerado". Hoje
-nenhuma amostra da coleta é rejeitada por qualidade: o gate de qualidade e o
-bloco zerado CONTAM (e o contador vai para o diagnóstico do ponto), mas a
-amostra entra. As únicas amostras fora são as dos 600 ms de acomodação e as
-recebidas fora de um alvo.
+nenhum gate de qualidade rejeita amostra: a qualidade da imagem e o bloco
+zerado viram PESO dentro do alvo (o bloco zerado ou atenuado vale ×0,35;
+`calibration/pesoDaAmostra.ts`), o contador vai para o diagnóstico do ponto, e
+a amostra entra — mesmo um alvo com menos de 15 amostras entra (a recoleta o
+refaz). O que fica fora: os quadros da acomodação (800 ms no V3, 600 ms no
+base) e os recebidos fora de um alvo; os quadros de piscada e os de contraluz
+forte, que o engine nem manda à calibração; e, com M6 (`calibracaoRobusta`,
+padrão do V3), o quadro a mais de 4·1,4826·MAD da mediana do alvo em alguma
+feature (entre 3 e 4, ele entra com peso menor, numa rampa) — é o que tira do
+treino uma piscada mal detectada ou uma intrusão sacádica. A fração vai em
+`calibrationFit.robusto.fracaoDescartada`.
 
 O Ridge é treinado por olho, com λ escolhido por eixo em validação cruzada
 leave-one-target-out — cada fold deixa de fora um alvo inteiro, não uma
@@ -393,7 +468,8 @@ está parado por construção, logo toda variação intra-alvo é ruído, e troc
 só o jitter preenche. Sem isso, medimos ~30× de amplificação de ruído.
 
 Ao fim, um **teste de precisão** de 13 pontos (grade 3×3 interior mais 4
-cantos a 5 %) mede a qualidade do modelo. Os nove interiores ficam fora da
+cantos a 5 %) mede a qualidade do modelo, com o mesmo alvo e o mesmo fundo
+da calibração. Os nove interiores ficam fora da
 grade de calibração, para medir generalização; os quatro cantos coincidem,
 desde 23/09, com os cantos calibrados — ali o teste mede a acurácia no canto
 calibrado, que é o que o botão de canto sente. Os alvos aparecem em **ordem sorteada**,
@@ -407,7 +483,12 @@ acurácia (erro médio em px e em graus, viés por eixo), as três medidas de
 precisão que a literatura pede juntas (desvio-padrão por eixo, RMS
 amostra-a-amostra e BCEA de 68 %), perda de dados, taxa de acerto por raio de
 alvo, a distância medida durante o teste e o **tamanho mínimo de botão** que o
-erro daquela pessoa exige.
+erro daquela pessoa exige. Na tela, o resultado sai em palavras ("Ótima",
+"Boa", "Refazer os cantos", "Refazer alguns pontos", "Vale refazer a
+calibração") ou em números, conforme a pergunta feita uma vez, antes da
+primeira calibração (`linguagemDoRelatorio`; muda em Configurações). As
+palavras saem dos mesmos limiares do `score` — 30, 60 e 100 px de erro nos
+pontos interiores (`src/resultadoSimples.ts`) —, e o relatório não muda.
 
 Durante a medição **o cursor fica escondido**, e isso não é economia de tela: o
 cursor é um laço de realimentação. Vendo-o, a pessoa corrige o olhar até ele
@@ -443,12 +524,19 @@ histórico das sessões e as referências estão em
 ### Compensação de cabeça: o que existe, e para onde vai (6DoF)
 
 Hoje a cabeça é compensada por **três estágios independentes** somados na
-saída (distância, pose yaw/pitch, translação lateral), mais o **roll cancelado
-no recorte do L2CS** (ligado em 22/09: o recorte gira para nivelar o rosto, a
-rede responde no referencial nivelado e `l2cs/roll.ts` desfaz a rotação no
-vetor 3D; o roll que vai para o recorte é suavizado com τ = 150 ms para o
-tremor do MediaPipe não virar tremor de imagem). Funciona a primeira ordem, e
-tem três limites estruturais, medidos na geometria de referência:
+saída (distância, pose yaw/pitch, translação lateral; no V3, com a pose da
+matriz facial suavizada, M5). O recorte do L2CS também
+gira com o roll da cabeça (`normalizarRollNoCrop`, ligado em 22/09), mas **no
+padrão ele não nivela o rosto: DOBRA a inclinação**. O recorte espera o ângulo
+da linha dos olhos NA IMAGEM (y para baixo) e recebe o roll da matriz facial (y
+para cima): com a cabeça a 10°, a rede vê o rosto a 20°. A saída é
+contra-rotacionada pelo mesmo ângulo (`l2cs/roll.ts`), então a geometria fecha;
+o que muda é a imagem que a rede vê. O sinal certo existe atrás da M13
+(`nivelarRecorteCorrigido`), desligada até a medição em vídeo real (cabeça
+inclinada ~15°, sem normalização, com a de hoje e com a M13). O roll que vai
+para o recorte é suavizado com τ = 150 ms para o tremor do MediaPipe não virar
+tremor de imagem. Funciona a primeira ordem, e tem três limites estruturais,
+medidos na geometria de referência:
 
 - **Rotação e translação contam a mesma coisa duas vezes.** `d·tan(Δyaw)`
   assume que a cabeça gira em torno do olho; ela gira em torno do pescoço,
@@ -459,26 +547,41 @@ tem três limites estruturais, medidos na geometria de referência:
   é `P = E_xy + (D/g_z)·g_xy`: afastar-se escala o ponto em torno da PROJEÇÃO
   DO OLHO na tela, não do centro dela. Com os olhos 10 cm acima do centro e um
   recuo de 10 cm em 60, isso são 61 px. Corrigir exige saber onde a câmera
-  está em relação à tela (extrínsecos), que o app ainda não pergunta nem
-  estima — por isso não foi "consertado" com um palpite.
-- **Duas famílias de feature com leis de transformação diferentes.** O offset
-  da íris é uma medida no referencial da cabeça; o ângulo do L2CS, no da
-  câmera. Na calibração a cabeça está parada, as duas são colineares e o
-  Ridge reparte o peso entre elas de forma arbitrária; quando a cabeça gira,
-  cada uma muda de um jeito e nenhuma compensação a jusante sabe qual split
-  o Ridge escolheu.
+  está em relação à tela (extrínsecos). No caminho padrão o app não sabe — por
+  isso não foi "consertado" com um palpite —; a saída 6DoF (M12, abaixo)
+  pergunta.
+- **Duas famílias de feature com leis de transformação diferentes — no
+  pipeline base.** O offset da íris é uma medida no referencial da cabeça; o
+  ângulo do L2CS, no do raio câmera→olho (o do Gaze360). Na calibração a
+  cabeça está parada, as duas são colineares e o Ridge reparte o peso entre
+  elas de forma arbitrária; quando a cabeça gira, cada uma muda de um jeito e
+  nenhuma compensação a jusante sabe qual split o Ridge escolheu. No V3 a M4
+  (`l2csNaCabeca`, ligada) gira os ângulos do L2CS para o referencial da
+  cabeça, pela pose da matriz facial, antes das features: as duas famílias
+  passam a ter a mesma lei. O efeito não foi medido ao vivo
+  (`docs/ROTEIRO_DE_MEDICAO.md`, sessão 2).
 
 A saída estrutural é parar de prever coordenadas de tela e prever a **direção
 do olhar no referencial da cabeça**, intersectando com a tela pela pose 6DoF
 medida (`ĝ_cam = R·ĝ_h`; `P = e + (−e_z/g_z)·g_xy`). O rótulo de treino sai
 de graça de cada amostra de calibração (`ĝ_h = Rᵀ·normalize(T − e)`), o mesmo
 Ridge serve, roll fica de graça em `R`, e a calibração passa a tolerar
-movimento de cabeça. O que falta: os extrínsecos câmera→tela (uma pergunta no
-setup, refinada pela própria calibração), o FOV como dependência dura, e a
-qualidade de `R` do MediaPipe — 1° de erro em `R` é 1° de olhar (38,5 px). Por
-isso a migração é uma **mistura contínua** entre o modelo atual (perto da pose
-de calibração) e o geométrico (longe dela), bit a bit idêntica ao de hoje em
-Δ = 0. Isto é o plano, não código: nada da migração 6DoF está implementado.
+movimento de cabeça. Isso existe, atrás de flag: a **M12** (`saida6DoF`,
+desligada e fora do interruptor) reprojeta a predição do Ridge pela
+interseção do raio com o plano da tela (`src/geometria6dof.ts`) — no treino,
+leva cada alvo da postura da amostra para a de referência; na inferência,
+leva a predição da postura de referência para a de agora — e com isso faz de
+uma vez o que distância, pose e translação fazem por aproximação. É idêntica
+ao caminho clássico em Δ = 0, por construção, e se afasta dele só com o
+movimento; faltando uma peça (a pergunta, o olho, a pose), o caminho clássico
+segue valendo. Dos extrínsecos, o preparo pergunta só de que lado da tela
+fica a câmera (em cima, embaixo ou no notebook; `EscolhaDaCamera.tsx`, só com
+a flag ligada): a lente fica no meio dessa borda, sem inclinação, porque
+esses erros entram em segunda ordem (≤ 27 px numa correção de 400–590 px, em
+simulação). A posição do olho sai do pixel, do FOV (o calibrado ou os 69,7°
+padrão) e da distância cantal. Falta a qualidade de `R` do MediaPipe — 1° de
+erro em `R` é 1° de olhar (38,5 px) — e a medição: calibrar sentado e medir
+reclinado (`docs/ROTEIRO_DE_MEDICAO.md`, sessão 3).
 
 Duas notas de desenvolvimento. A janela abre em **tela cheia** — no `npm run
 electron:dev` e no app empacotado: a conversão px→cm usa o viewport contra a
@@ -487,7 +590,8 @@ paciente, além disso, barra de tarefas e bordas são alvos que ele não usa). O
 cuidador sai e volta com F11 (Ctrl+Cmd+F no macOS); `IRISFLOW_FULLSCREEN=0`
 abre em janela. E, só em desenvolvimento, cada abertura começa **sem
 calibração salva** (`?calib=0`), para o fluxo de calibração ser exercitado de
-verdade; `IRISFLOW_DEV_CALIB=1` religa a persistência. O app empacotado
+verdade; `IRISFLOW_DEV_CALIB=1` religa a persistência (abre com `?calib=1`,
+que, como todo parâmetro de URL, fica gravado). O app empacotado
 persiste a calibração — uma pessoa com ELA não refaz treze pontos a cada
 abertura.
 
@@ -502,10 +606,13 @@ src/                        núcleo do pipeline (TypeScript puro, testado com Vi
   correcaoLocal.ts          correção local dos cantos (processo gaussiano ancorado na grade)
   accuracy.ts               teste de precisão e relatório de sessão
   accuracyProtocol.ts       tempos do protocolo de medição
+  alvoDeFixacao.ts          o alvo ABC, o mesmo na calibração e no teste de precisão
+  resultadoSimples.ts       o resultado em palavras ("Ótima", "Boa", "Refazer…") e os limiares
   extractor.ts              features de íris e bloco angular; conjunto ativo
   featurePipeline.ts        fronteira consumida pelo engine
   ridge.ts, scaler.ts       Ridge anisotrópico com CV de λ; padronização
   calibration/polynomial.ts expansão polinomial de grau 2, completa ou parcial
+  calibration/recoletaDeAlvos.ts  recoleta dos alvos ruins (M22): quem refazer e a trava
   escalaMetrica.ts          a íris como régua: distância cantal desta pessoa
   referenciaLenta.ts        referência geométrica lenta (desligada por padrão; ver Pipeline)
   reancoragem.ts            acumulador do reajuste de 2 s no alvo central
@@ -516,7 +623,8 @@ src/                        núcleo do pipeline (TypeScript puro, testado com Vi
   filters/                  One Euro, Kalman 2D, EMA adaptativa, hold na piscada,
                             estabilizador de fixação (peso contínuo da média)
   interaction/              dwell, cursor, varredura, clique por piscada, fallback,
-                            correção por dwell; cursorNoCompositor.ts entrega a
+                            varredura com acionador e sim/não por piscada longa
+                            (Plano B), correção por dwell; cursorNoCompositor.ts entrega a
                             posição ao compositor (60 Hz, fora da thread do
                             MediaPipe); seguidorDeCursor.ts é a volta segura por rAF
   poseCompensation.ts       compensação geométrica de pose
@@ -524,6 +632,9 @@ src/                        núcleo do pipeline (TypeScript puro, testado com Vi
   translationCompensation.ts compensação de translação lateral do tronco
   anthropometry.ts          constantes antropométricas e seus limites
   contraluz.ts              luz atrás da pessoa: invalida o quadro, não corrige
+  poucaLuz.ts               brilho do quadro inteiro: o aviso de pouca luz e a exposição destravada
+  vigiaDoRenderer.ts        vigia de página travada: a decisão e o limiar (a fiação está em electron/)
+  trabalhoLongo.ts          aviso de trabalho síncrono longo (o treino): o vigia desarma
   cameraTuner.ts            lei de controle do ajuste da câmera
   setupReadiness.ts         prontidão do posto (distância, luz, reflexo, postura)
   qualityAnalyzer.ts        brilho, contraste, borrão e reflexo por quadro
@@ -552,7 +663,12 @@ frontend/                   interface do desktop (React 19, Tailwind v4, HashRou
   src/pages/settings/       configurações do cuidador, por seção
   src/pages/caregiver/      painel e guia do cuidador
   src/context/              GazeContext (olhar, dwell, câmera), licença, emergência
-  src/cloud/                conta IrisFlow: vínculo, fila offline, tempo real, cofre
+  src/cloud/                conta IrisFlow: vínculo, fila offline, tempo real, cofre;
+                            aviso ao cuidador quando um problema do olhar dura;
+                            pareamento.ts, o código QR do celular do cuidador
+                            (a seção é components/ParearCelular.tsx)
+  src/services/emergencia/  o pedido de socorro e o alarme, fora da tela de emergência
+  src/services/problemaDoRastreamento.ts  quando um problema do olhar DUROU (45 s)
   src/services/license/     licença real (Supabase) e simulada (sem nuvem)
   src/components/ui/        GazeButton, GazeGrid, GazePageLayout e afins
   src/overlay/              a SOBREPOSIÇÃO do Modo Computador (página própria,
@@ -568,6 +684,8 @@ frontend/                   interface do desktop (React 19, Tailwind v4, HashRou
 electron/                   processo principal, preloads e IPC de sistema
   main.ts                   janela, CSP, travas de depuração, IPC
   atualizacao.ts            atualização automática (electron-updater, GitHub)
+  alarme.ts                 alarme de emergência do sistema: janela na frente, volume do Windows
+  vigiaDoRenderer.ts        derruba a página travada, para a recarga de quedas reabri-la
   diagnostico.ts            log local e relatório de falhas
   monitores.ts              tamanho físico dos monitores: EDID do registro/WMI
                             (Windows), sysfs (Linux), ioreg/CoreGraphics (macOS)
@@ -579,13 +697,16 @@ voice-engine/               motor de voz local em Python (Chatterbox multilíngu
 build/                      ícones e entitlements do macOS, usados pelo electron-builder
 fixtures/                   contrato de recorte TS ↔ Python (gerado, não editar à mão)
 
-site/                       site (Vite + React): inscrição, conta, downloads — ver Site
-app/                        app do cuidador (Expo) — ver App do cuidador
-supabase/                   migrações, Edge Functions, seed e config do CLI — ver Supabase
+site/                       site (Vite + React): inscrição, conta, downloads, /parear — ver Site
+app/                        app do cuidador (Expo), com a rota parear do código QR — ver App do cuidador
+supabase/                   migrações, Edge Functions (desktop-sync, parear-celular), seed e
+                            config do CLI — ver Supabase
 
 scripts/
   verificar-tudo.mjs        `npm run verificar`: tipos, testes e builds do desktop, do
                             site e do app (o mesmo portão do ci.yml)
+  publicar.mjs              `npm run publicar`: publica o site com um comando (pastas, testes,
+                            commit, envio e conferência); o resto está em publicar/
   conferir-pacote.mjs       confere o app empacotado (sem source map, fuses, asar...)
   ci-segredos-opcionais.mjs repassa ao CI só os segredos que existem; confere os da nuvem
   conferir-config-publica.mjs barra segredo nos .env.production versionados (site, desktop, app)
@@ -675,6 +796,7 @@ projetos, e um `torchvision` de outra versão faz o modelo falhar ao carregar
 | `npm run dev:limpo`, `npm run electron:dev:limpo` | o mesmo, começando com o armazenamento local zerado |
 | `npm run electron:build` (`:win`, `:mac`, `:linux`) | instalador do sistema atual (ou do escolhido), na pasta temporária do sistema para escapar do OneDrive; inclui o motor de voz se `voice-engine\dist\irisflow-voz\` existir — ver [Instalador](#instalador-e-atualização-automática) |
 | `npm run verificar` | tudo o que o CI confere: tipos, testes e builds do desktop, do site e do app ([Verificação](#verificação)) |
+| `npm run publicar` | publica o site com um comando: confere as pastas, testa, commita, envia e espera o site novo no ar ([Publicar com um comando](#publicar-com-um-comando)) |
 | `voice-engine\build-voice-engine.ps1` | gera o executável do motor de voz (PyInstaller, modo pasta) para entrar no instalador |
 
 ### Modelos
@@ -684,13 +806,16 @@ projetos, e um `torchvision` de outra versão faz o modelo falhar ao carregar
 | L2CS-Net | `frontend/public/models/l2cs/l2cs_gaze360.onnx` (92 MB, não versionado) | treinado em Gaze360; 90 bins por eixo; entrada 224² ou 448² (padrão 448²). **Licença research-only: uso comercial proibido, inclusive de modelos treinados.** Vai dentro do instalador da beta desde a 1.0.0-beta.10: a beta é acadêmica e não comercial ([Pendências e riscos](#pendências-e-riscos), item 1) |
 | L2CS-Net (GazeGene v2) | `frontend/public/models/l2cs-gazegene/gazegene_l2cs_r50_v2.onnx` (95,9 MB, não versionado; a meta está no repositório) | mesma ResNet-50, treinada no GazeGene (sintético, 828 mil imagens): 3,38° de erro médio no teste do próprio GazeGene; entrada **fixa** 224²; 120 bins de 2°, decodificação linear. **Só pesquisa** (CC BY-NC-SA 4.0 + termos dos autores; a BUAA pediu para não usar comercialmente sem licença por escrito): fica fora do git e do instalador. Liga com `?rosto=gazegene` |
 | EyeNet (V2, ramo ocular) | `frontend/public/models/eyenet/eyenet.onnx` (não versionado; gerado pelo kit de treino do UnityEyes 2) | treinada nos renders próprios do UnityEyes 2 (MIT); entrada 3×64×96; liga com `?olho=onnx`, que a SOMA à rede do rosto (no lugar dela: `?ep=off&olho=onnx`). O kit grava `eyenet.onnx` e `eyenet.meta.json`: os dois vão juntos para a pasta, a meta nova por cima da de exemplo |
-| Face Landmarker | `frontend/public/mediapipe/models/face_landmarker.task` | MediaPipe Tasks Vision, 478 landmarks com íris |
+| Face Landmarker | `frontend/public/mediapipe/models/face_landmarker.task` | MediaPipe Tasks Vision, 478 landmarks com íris. O site serve a mesma cópia, com o wasm da mesma versão, em `site/public/demo/mediapipe-0.10.35/` para o "Teste com o seu olhar" (baixados só no clique; um teste confere que o wasm é o do pacote instalado). O texto da licença Apache-2.0 do MediaPipe vai junto, em `site/public/demo/mediapipe-0.10.35/LICENSE` |
 | ONNX Runtime Web | `frontend/public/ort/` | binários WASM/WebGPU carregados pelo worker |
 
-Sem o arquivo `.onnx` (ou com `?ep=off`) o vetor fica só com as duas dimensões
-absolutas da íris por olho (`irisAbs`). Foi assim que o instalador da beta rodou
-de 24/09 até a 1.0.0-beta.9; hoje é o caminho de quem escolhe "calibrar só com a
-íris" ([Pendências e riscos](#pendências-e-riscos), item 1). Com
+Com `?ep=off` (`l2cs: 'off'`) o vetor fica só com as duas dimensões absolutas
+da íris por olho (`irisAbs`). Foi assim que o instalador da beta rodou de 24/09
+até a 1.0.0-beta.9. **Sem o arquivo `.onnx`, o vetor não muda sozinho**: o
+conjunto continua `irisAbs+l2cs`, o L2CS fica em erro de carga e a calibração
+não começa; a tela oferece **"Calibrar só com a íris"**, que grava
+`l2cs: 'off'` neste computador e recarrega — só então o vetor passa a
+`irisAbs` ([Pendências e riscos](#pendências-e-riscos), item 1). Com
 `?ep=off&olho=onnx`, o vetor é íris + EyeNet (`irisCore+olho`).
 
 Cada modelo tem uma **ficha de proveniência** no seu `*.meta.json` (bloco
@@ -701,8 +826,32 @@ Cada modelo tem uma **ficha de proveniência** no seu `*.meta.json` (bloco
 Configurações ("Modelo dos olhos: …"), no item "olhos · pesos" e em
 `pipeline.runtime.olho`. A meta também
 declara a grade de bins (`outputBins`, `binWidth`, `binOffset`, `decoding`):
-um modelo retreinado em ±45° usa decodificação `linear`, e o worker recusa uma
-meta cuja grade não bate com o tensor que o modelo devolve.
+um modelo retreinado em ±45° usa decodificação `linear`, e o worker confere a
+meta numa inferência de teste, antes de se declarar pronto: meta e modelo que
+não combinam (grade de bins, nomes das saídas, lado do recorte) viram erro de
+carga, com a frase do que não bate, e a calibração não começa
+(`src/l2cs/conferenciaDoModelo.ts`). Antes de 19/10/2026 isso só aparecia na
+primeira inferência real, com o status já `ready`: o bloco angular saía sempre
+zerado e a calibração falhava culpando os óculos.
+
+**Quando o modelo cai depois de pronto.** Um worker que morre, erra 8
+inferências seguidas ou fica duas vezes sem responder (8 s cada) é encerrado;
+o status vai a `error`, o aviso diz que o IrisFlow está reiniciando o modelo e
+que o cursor segue com a íris, e o engine tenta de novo depois de 2, 5, 15, 30
+e 60 s. Da segunda tentativa em diante força o WASM — o caso típico é o
+dispositivo WebGPU perdido no sono e volta do notebook. Desde 20/10/2026 o
+reinício MANTÉM o lado da calibração em uso (o WASM roda a 448², ~3,2× mais
+devagar que a 224²) e mede as primeiras respostas: se duas das três passarem
+de 1,25 s (metade do teto de 2,5 s, acima do qual a leitura chega vencida), o
+worker é refeito a 224² e a calibração fica SUSPENSA — só a Emergência e a
+recuperação respondem, a faixa explica e o cuidador recebe o aviso "olhar em
+modo reduzido" —, a não ser que haja um perfil salvo em 224² (a chave do
+perfil leva o lado). Com o modelo pronto mas sem leitura válida por 10 s, o
+aviso "O modelo do olhar está lento neste computador" aparece (tipo
+`modelo_do_olhar`). Esgotadas as cinco
+tentativas, o modelo fica desligado até o IrisFlow reabrir, e o aviso diz
+isso. Vale para a L2CS-Net e para a EyeNet (`src/tracker/engine.ts`,
+`ESPERAS_DO_REINICIO_DO_MODELO_MS`).
 
 #### Modelos: como escolher
 
@@ -726,8 +875,10 @@ independentes e podem ser combinadas.
    | rosto GazeGene + olho UnityEyes | `?rosto=gazegene&olho=onnx` |
 
    A escolha fica gravada (`localStorage`) e vale nas próximas aberturas. Pelo
-   console: `__irisflowExp.set('modeloDoRosto', 'gazegene')` e recarregar; no
-   Electron também `IRISFLOW_EXP_MODELODOROSTO=gazegene`.
+   console: `__irisflowExp.set('modeloDoRosto', 'gazegene')` e recarregar (no
+   `npm run electron:dev`, pelo console do DevTools, que abre destacado). A
+   variável `IRISFLOW_EXP_MODELODOROSTO=gazegene` só vale no Node — testes e
+   replay —: nada leva o ambiente do Electron à página.
 3. **Calibre de novo.** A chave do perfil leva o modelo do rosto e o conjunto
    de features: um perfil do Gaze360 nunca carrega com o GazeGene, nem o
    contrário (o Ridge aprendeu os ângulos de um modelo só).
@@ -773,11 +924,14 @@ recorte e inferir com outro é o modo de falha silencioso de um retreino.
 
 Definidas em `src/config/experiment.ts` e lidas uma vez no boot, de três
 fontes: `localStorage` (`irisflow.experiment`), parâmetros de URL e variáveis
-de ambiente `IRISFLOW_EXP_<chave>` no Electron. Os parâmetros de URL são
-`?ep=`, `?l2cs=`, `?filtro=`, `?diagonal=`, `?olho=`, `?rosto=`, `?expansao=`,
-`?dimsIris=`, `?cursorNoTeste=`, `?compTranslacao=` e os booleanos (1/0)
-`?rollCrop=`, `?estabilizar=`, `?dwellCorrige=`, `?refLenta=`, `?cantos=` e
-`?calib=` — e eles **ficam gravados** no `localStorage`: a flag vale nas
+de ambiente `IRISFLOW_EXP_<chave>` — estas só no Node (vitest e o replay, ex.:
+`IRISFLOW_EXP_PIPELINE=base`): no Electron nada leva o ambiente à página (o
+renderer roda com `sandbox`, sem Node, e o preload não o expõe). Os parâmetros
+de URL são `?ep=`, `?l2cs=`, `?filtro=`, `?diagonal=`, `?olho=`, `?rosto=`,
+`?expansao=`, `?dimsIris=`, `?cursorNoTeste=`, `?compTranslacao=`, os
+booleanos (1/0) `?rollCrop=`, `?estabilizar=`, `?dwellCorrige=`, `?refLenta=`,
+`?cantos=` e `?calib=`, e os do V3, `?pipeline=` e `?exp.<flag>=` (abaixo) —
+e eles **ficam gravados** no `localStorage`: a flag vale nas
 aberturas seguintes até ser trocada ou zerada (`__irisflowExp.reset()`). Pelo
 console: `__irisflowExp.set('chave', valor)` seguido de reload; só o que
 difere do padrão é gravado, então mudar um padrão no código chega a quem
@@ -787,9 +941,10 @@ principais e avisa quando falta recarregar.
 | flag | padrão | opções |
 |---|---|---|
 | `l2cs` | `auto` | `auto` · `webgpu` · `wasm` · `off` |
-| `l2csInputSize` | `448` | `224` · `448` |
-| `l2csCadenceMs` | `100` | 33–2000 |
-| `filterMode` | `oneEuro` | `oneEuro` · `kalman` · `kalmanEma` |
+| `l2csInputSize` | `448` | `224` · `448` — só com `l2cs` forçado (`webgpu` ou `wasm`); com `auto`, 448² no WebGPU e 224² no WASM, e sempre um lado que o modelo aceita (o GazeGene, só 224) |
+| `l2csCadenceMs` | `100` | 33–2000 — idem: com `auto`, 100 ms no WebGPU e 160 ms no WASM |
+| `expandFactor` | `1.4` | 1,0–3,0: margem da caixa do rosto no recorte do L2CS; entra na chave do perfil |
+| `filterMode` | `oneEuro` | `oneEuro` · `kalman` · `kalmanEma`; no V3, depois de uma calibração que mediu o ruído, quem suaviza o cursor é o estimador de fixação (M9) |
 | `polynomialFeatures` | `true` | |
 | `formaDaExpansao` | `parcial` | `parcial` · `completa` |
 | `dimsDaIris` | `absolutas` | `absolutas` · `normalizadas` · `ambas` |
@@ -798,7 +953,7 @@ principais e avisa quando falta recarregar.
 | `referenciaLenta` | `false` | desde 23/09 — ver Pipeline e `docs/MEDICOES.md` §14.5 |
 | `correcaoLocal` | `true` | correção local dos cantos (desde 23/09) |
 | `suavizarL2csNaFixacao` | `true` | |
-| `estabilizarFixacao` | `true` | |
+| `estabilizarFixacao` | `true` | sai do caminho do cursor quando o estimador de fixação (M9) governa |
 | `correcaoPorDwell` | `true` | também é onde o reajuste de 2 s aplica o desvio do centro |
 | `normalizarRollNoCrop` | `true` | desde 22/09 — ver abaixo |
 | `blocoL2csCompleto` | `false` | ablação — ver abaixo |
@@ -806,17 +961,25 @@ principais e avisa quando falta recarregar.
 | `eyeNet` | `off` | `off` · `onnx` |
 | `modeloDoRosto` | `gaze360` | `gaze360` · `gazegene` — ver [Modelos: como escolher](#modelos-como-escolher) |
 | `cursorSizePx` | `48` | 24–128 |
+| `cursorPeloCompositor` | `true` | volta segura: `false` devolve o seguidor por rAF de antes |
 | `blinkClick`, `scanningMode`, `dwellRingOnCursor` | `false` | |
 | `gazeLostFallback` | `true` | |
 | `cursorNoTesteDePrecisao` | `false` | escotilha do operador — ver abaixo |
 
-Quatro dessas flags **invalidam perfis salvos** quando mudam, por construção:
-`dimsDaIris` e `blocoL2csCompleto` mudam o `FEATURE_VECTOR_ID`,
-`formaDaExpansao` muda o número e a ordem das colunas que o Ridge vê (os
-coeficientes são posicionais) e `modeloDoRosto` troca os ângulos que chegam ao
-vetor (entra na chave do perfil). A invalidação é proteção, não obstáculo: sem
-ela um perfil treinado num arranjo carregaria no outro sem erro nenhum e
-preveria deslocado. Ao alternar para medir, conte uma recalibração por troca.
+Várias dessas flags **invalidam perfis salvos** quando mudam, por construção.
+A chave do perfil (`buildContextKeyFrom`, em `src/calibration.ts`) leva o
+viewport; o `FEATURE_VECTOR_ID`, que muda com `l2cs: 'off'`, `dimsDaIris`,
+`blocoL2csCompleto` e `eyeNet` e com as marcas do V3 (`+iso` com a M2; com o
+L2CS no vetor, `+rl` — M3 junto com `normalizarRollNoCrop` —, `+rc` — M13
+junto com ela — e `+cab`, M4); a versão do vetor; `polynomialFeatures` e
+`formaDaExpansao` (o número e a ordem das colunas que o Ridge vê: os
+coeficientes são posicionais); `geometricPoseCompensation`; `expandFactor`; o
+lado EFETIVO do recorte do L2CS (224 ou 448 — com `l2cs: auto`, quem decide é
+o provider); `modeloDoRosto`; e o perfil de calibração (`computador`). A
+invalidação é proteção, não obstáculo: sem ela um perfil treinado num arranjo
+carregaria no outro sem erro nenhum e preveria deslocado. Ao alternar para
+medir, conte uma recalibração por troca: um protocolo que troca uma dessas
+flags "sem recalibrar" não acontece — o perfil é descartado na recarga.
 
 `cursorNoTesteDePrecisao` é escotilha de operador, não de paciente: revela o
 cursor numa rodada de **medição** para conferir ao vivo se ele acompanha o
@@ -827,21 +990,25 @@ aquela rodada deixa de ser comparável, e por isso a flag entra no
 *Verificação com cursor*, que já vem com as métricas certas e não suja a linha
 de base.
 
-`normalizarRollNoCrop` está ligada desde 22/09: o recorte do L2CS gira para
-nivelar o rosto e a saída é contra-rotacionada no vetor 3D (`l2cs/roll.ts`).
-A cautela que a mantinha desligada — "só ganha se for a mesma normalização do
-treino" — não se sustenta para o checkpoint empacotado: o Gaze360 tem recortes
-com toda inclinação natural, inclusive nivelada, então o rosto nivelado está
-dentro da distribuição de treino. Falta a medição em vídeo real (cabeça
-inclinada ~15°, com e sem). `blocoL2csCompleto` continua desligada de
+`normalizarRollNoCrop` está ligada desde 22/09: o recorte do L2CS gira com o
+roll da cabeça e a saída é contra-rotacionada no vetor 3D (`l2cs/roll.ts`).
+**No padrão o giro sai com o sinal trocado e a rede vê o DOBRO da inclinação,
+não o rosto nivelado** (ver "Compensação de cabeça", acima): o recorte espera o
+ângulo da linha dos olhos na imagem e recebe o roll da matriz facial. A M13
+(`nivelarRecorteCorrigido`) passa o sinal certo e aí, sim, o rosto chega
+nivelado — e é para ela que vale o argumento de que "o rosto nivelado está
+dentro da distribuição de treino do Gaze360". Ela continua desligada até a
+medição em vídeo real (cabeça inclinada ~15°: sem normalização, com a de hoje e
+com a M13). `blocoL2csCompleto` continua desligada de
 propósito: leva as sete dimensões do bloco angular em vez de duas, e com treze
 alvos ainda é território de decorar.
 
-#### Pipeline V3 (M1–M21)
+#### Pipeline V3 (M1–M22)
 
 As mudanças de matemática e de comportamento do V2 têm, cada uma, uma flag e o
 número da tabela de decisão de [`docs/PESQUISA.md`](docs/PESQUISA.md) §5 (M11,
-o relatório de precisão, não tem flag). Desligada, a flag devolve o
+o relatório de precisão, não tem flag; M22, de 19/10/2026, tem a pesquisa em
+§7). Desligada, a flag devolve o
 comportamento anterior bit a bit — `src/golden.pipelineBase.test.ts` confere o
 extractor, a calibração e o `mapGaze` contra os números de e731357 (a beta de
 27/09, de onde o V2 partiu). Um interruptor só troca todas:
@@ -864,7 +1031,7 @@ Como os outros parâmetros de URL, esses ficam gravados no `localStorage` até
 | M3 | `desrolarComSinalDoL2cs` | `true` | contra-rotação do roll com o sinal de yaw do L2CS; muda as features (`+rl`) |
 | M4 | `l2csNaCabeca` | `true` | ângulos do L2CS girados para o referencial da cabeça; muda as features (`+cab`) |
 | M5 | `poseSuavizada` | `true` | pose da matriz facial suavizada, com rampa contínua, na compensação e na rotação |
-| M6 | `calibracaoRobusta` | `true` | peso por quadro, centro robusto por alvo e Huber entre alvos |
+| M6 | `calibracaoRobusta` | `true` | peso por quadro (rampa entre 3 e 4·1,4826·MAD da mediana do alvo; acima disso o quadro sai do treino) e Huber entre alvos, estudentizado pela alavanca; o resíduo do alvo é a média ponderada dos quadros — o "centro robusto por alvo" da pesquisa não foi implementado |
 | M7 | `alvoInferiorCentral` | `false` ¹ | 14º alvo no meio da borda de baixo, no perfil padrão completo |
 | M8 | `assentamentoPelaChegada` | `true` | a coleta de cada alvo abre na chegada da bola e descarta 800 ms |
 | M9 | `estimadorDeFixacao` | `true` | estimador de fixação com portão de Mahalanobis no lugar de One Euro + estabilizador; o portão usa a variância da inovação com o ruído correlacionado (ρ₁ da calibração) e um detector de deslocamento reinicia a fixação em passos médios (revisão de 30/09) |
@@ -880,6 +1047,7 @@ Como os outros parâmetros de URL, esses ficam gravados no `localStorage` até
 | M19 | `toleranciaIntrusoes` | `true` | memória de dwell de 400 ms e área de acerto maior depois que o dwell começa |
 | M20 | `recalibracaoRapidaAfim` | `true` | reajuste rápido com 5 pontos (10 s), sem retreinar o modelo |
 | M21 | `pausaNaPerdaCurta` | `true` | perda curta de rosto pausa o dwell em vez de zerar |
+| M22 | `recoletaDeAlvosRuins` | `true` ² | refaz na hora os alvos com LOTO ou dispersão ruins e troca as amostras deles; o modelo novo só fica se o LOTO médio não piorar |
 
 ¹ Fora do interruptor: `?pipeline=v3` não liga. M12 e M13 nasceram assim; M2,
 M7 e M10 foram desligadas depois de implementadas — M2 e M10 porque pioraram o
@@ -890,6 +1058,17 @@ piora a linha de baixo da grade). Os números estão em
 M13 e M14 mudam o que chega à rede (o recorte e os landmarks que o
 posicionam); a rede, os pesos e o pré-processamento do L2CS não mudam, e as
 duas ficam no valor de antes até decisão do responsável.
+
+² A exceção consciente à regra de padrão igual ao de antes (pedido de
+19/10/2026): a trava de aceitação só deixa o modelo novo ficar se o LOTO
+médio dos alvos não piorar, e sem alvo ruim nada acontece — a saída é a
+mesma. O antes e o depois de cada rodada vão no relatório de precisão, em
+`calibrationFit.recoleta`. A matemática está em
+`src/calibration/recoletaDeAlvos.ts`. Na simulação do teste
+(`src/calibration.recoleta.test.ts`, um canto mal coletado), o LOTO médio foi
+de 54,4 para 6,3 px, ao custo de 0,9 s de coleta útil (`tempoUtilMs`, sem a
+viagem da bola e a acomodação). Com pessoas, não foi medida
+(`docs/ROTEIRO_DE_MEDICAO.md`, sessão 9).
 
 **Perfis salvos.** As flags que mudam o significado das features (`+iso`,
 `+rl`, `+rc`, `+cab`) entram no `FEATURE_VECTOR_ID`, que vai na chave do
@@ -933,10 +1112,18 @@ colinearidade na entrada (`offsetX` e `relX` diferem por um divisor que varia
 pouco: correlação ~0,9996) e os termos quadráticos que não pagam aluguel.
 
 `absolutas` ganhou de `normalizadas` por um critério de pior caso, não de média.
-As duas empatam no erro nominal e se separam nos dois modos de falha: a PTOSE
-corrompe a altura do olho, que é o divisor de `relY`, e nada no pipeline
-compensa isso; a DISTÂNCIA escala `offsetX`/`offsetY` e não escala `relX`/`relY`,
-mas para distância já existe compensação dedicada a jusante.
+As duas empatam no erro nominal e se separam na PTOSE: ela corrompe a altura do
+olho, que é o divisor de `relY`, e nada no pipeline compensa isso. A coluna
+"20 % mais perto" não sustenta a escolha: ela supõe que a distância escala
+`offsetX`/`offsetY` e não `relX`/`relY`, mas no vetor real os offsets já saem em
+distâncias cantais (divididos pela distância entre os cantos externos dos dois
+olhos, em `src/extractor.ts`), e as duas formas reagem do mesmo jeito à
+distância; o que a distância muda de fato, o ângulo que a tela cobre, é da
+compensação de distância, a jusante, para as duas. O teste que está no
+repositório (`src/ridge.arranjoDoVetor.test.ts`) fixa só a parte estrutural:
+varia o ruído e compara `ambas` com `normalizadas`, sem `absolutas`, ptose ou
+distância. As colunas de ptose e de distância vieram de uma simulação que não
+ficou no repositório.
 
 **O que falta medir, e é o que decide:** o teste de precisão na pessoa, com a
 câmera dela, comparando `?expansao=completa&dimsIris=ambas` contra o default.
@@ -974,7 +1161,7 @@ flowchart TD
   RE -- Seguir assim --> F{Primeira vez?}
   F -- sim --> TU[Tutorial] --> M
   F -- não --> M
-  M --> K[Teclado, frases, conversa, lazer, descanso, computador]
+  M --> K["Comunicação (frases, Sim · Não, pictogramas), teclado, conversa, lazer, descanso, computador"]
   M --> CF[Configurações: PIN do cuidador]
   CF -- Calibrar o olhar --> C
 ```
@@ -1024,17 +1211,27 @@ flowchart TD
    escura), a tela diz isso e espera: ele volta sozinho. O painel do teste ("Continuar", "Recalibrar")
    responde ao olhar, como os outros botões desta tela, e "Recalibrar" volta à
    preparação sem apagar o modelo recém-treinado. O botão de emergência fica
-   compacto e sai de cima dos alvos. A calibração é **por paciente**: cada perfil gravado leva o paciente
+   compacto e sai de cima dos alvos. Desde 19/10/2026 os alvos são o de
+   fixação ABC sobre fundo azul-marinho, os mesmos no teste; no V3, os alvos
+   ruins são refeitos na hora (M22), e o resultado sai em palavras ou em
+   números (ver [Pipeline](#pipeline), calibração e teste de precisão). A calibração é **por paciente**: cada perfil gravado leva o paciente
    que calibrou (até 3 por paciente, 12 no disco), escolher o paciente carrega a
    dele, e "Usar a calibração salva" só aparece para a do próprio paciente —
    quem ainda não calibrou calibra, sem herdar o mapeamento de outra pessoa.
-4. **Menu** (`/menu`) e telas do paciente: teclado (letras e uma segunda
+4. **Menu** (`/menu`) e telas do paciente: a **Comunicação**
+   (`/comunicacao`, desde 19/10/2026; antes o cartão abria direto as frases)
+   reúne as frases rápidas (`/phrases`, cuja última página também leva aos
+   pictogramas e às frases favoritas), a tela **Sim · Não · Chamar atenção**
+   (`/sim-nao`, descrita no Plano B, abaixo), os pictogramas, "Minhas
+   opções" (as frases favoritas), "Onde dói" (`/dor`, o mapa da dor) e "Minha
+   voz" (`/minha-voz`, as mensagens guardadas), numa grade 3 × 2; teclado (letras e uma segunda
    camada com acentos, "ç", números e pontuação — a troca fica no lugar do
-   Voltar), frases rápidas (a última página leva aos pictogramas e às frases
-   favoritas, "Minhas opções"), jogos, câmera, galeria, descanso, emergência, **conversa**
+   Voltar), jogos, câmera, galeria, descanso, emergência, **conversa**
    (`/conversation`) com o celular do cuidador e **Computador**
    (`/virtual-mouse`), que liga o Modo Computador. O botão de emergência é um
-   alerta local (som e tela) e, com a conta ligada, também chega ao celular:
+   alerta local (som e tela) e, com a conta ligada, também chega ao celular
+   (o alarme pelo estado da entrega está em
+   [Conta IrisFlow e nuvem](#conta-irisflow-e-nuvem)):
    200×96 px, na linha do cabeçalho, com a zona de acerto indo até as bordas
    de cima e da direita da janela (o olhar que passa da borda é preso nela) e
    sem crescer para baixo, onde começa o conteúdo. "Estou bem" é uma das
@@ -1087,6 +1284,86 @@ alvos, textos curtos e sem jargão. No Desenho, cor, traço e "Apagar tudo"
 ficam num painel de alvos grandes sobre o canvas (o pincel para enquanto ele
 está aberto); na Meditação, duração e controles ficam em colunas ao lado do
 círculo.
+
+**Plano B: quando o olhar piora** (desde 19/10/2026; Configurações → "Plano B:
+quando o olhar piora", em
+[`AjustesDoPlanoB.tsx`](frontend/src/components/AjustesDoPlanoB.tsx)). Dois
+caminhos que não dependem da precisão da calibração:
+
+- **Varredura com acionador** (`modoDeEntrada: 'acionador'`, desligada por
+  padrão; a lógica em `src/interaction/varreduraPorAcionador.ts`, o DOM em
+  `components/VarreduraComAcionador.tsx`, montado no app inteiro). O acionador
+  é um botão grande ligado por USB, que chega como tecla ou clique: a tela é
+  percorrida sozinha, um botão por vez, na ordem de leitura, e apertar
+  seleciona o destacado. Padrão: Espaço ou Enter ("Configurar o acionador"
+  grava outra tecla ou um botão do mouse); 1,5 s em cada botão (0,8–4 s, de
+  0,25 em 0,25 s); aperto de menos de 40 ms é ressalto do contato e não conta;
+  depois de uma seleção, 700 ms de pausa, e a volta recomeça do primeiro botão
+  da tela nova. O botão de Emergência não entra na volta (um aperto no instante
+  errado chamaria socorro): segurar o acionador — 2 s por padrão, de 1 a 4 s
+  em Configurações — abre a contagem da emergência, também com a varredura
+  pausada, na calibração, no teste de precisão e numa tecla dentro de um campo
+  de texto; e o CANCELAR dela entra na volta. Com o socorro em curso — a
+  contagem aberta, a tela do pedido em andamento —, segurar não escolhe nada:
+  cancelar e parar o alarme só com um aperto curto (soltar antes do limiar), e
+  o "Sim, parar" nunca pela pressão longa (`data-acionador-aperto-curto`); a
+  faixa de baixo diz "Para cancelar, aperte rápido" (revisão de UX de
+  20/10/2026). Sem o botão de Emergência e sem socorro em curso (a tela de
+  emergência antes do pedido), segurar escolhe o destacado. Com um diálogo
+  modal aberto, só os botões do de cima entram. Esc pausa e retoma a
+  varredura, para o cuidador usar o mouse — por no máximo 2 min: 10 s antes, um
+  aviso grande oferece "Continuar pausada" —; na pausa, com uma calibração
+  valendo, o olhar volta a clicar. Esc num campo de texto ou num diálogo é
+  deles e não pausa, e Espaço e Enter num campo de texto são do campo. Com o
+  acionador ligado, o olhar não clica (`acionadorDesligaOlhar`, ligado por
+  padrão); a suspensão do dwell é por motivo (acionador, Modo Computador), e
+  sair do Modo Computador não devolve o olhar que o acionador suspendeu. Quando
+  o olhar volta (a pausa, o fim do Modo Computador), o botão sob o olhar parado
+  só vale depois de o olhar sair dele, como numa tela nova (rearme por saída).
+- **Sim · Não por piscada longa** (`simNaoPorPiscada`, desligado por padrão;
+  `src/interaction/simNaoPorPiscada.ts`): na tela Sim · Não, uma piscada longa
+  = SIM, duas = NÃO. Longa é a partir de 0,7 s (ajustável de 0,4 a 2 s); acima
+  de 2,5 s é olho fechado, não resposta; a segunda é esperada por 2,5 s, e sem
+  ela a resposta é SIM; depois de cada resposta, 1,5 s sem contar; sem rosto, o
+  episódio em curso é descartado.
+
+A tela **Sim · Não · Chamar atenção** (`/sim-nao`) tem três alvos enormes: NÃO
+na metade esquerda, SIM na direita e uma faixa larga, embaixo, para CHAMAR
+ATENÇÃO. Funcionam com a calibração já imprecisa ("olhe para o lado do sim") e
+entram na varredura. A resposta sai pela fala do paciente (em letra grande na
+tela, se não sair em voz alta), vai ao histórico e ao celular do cuidador.
+"Chamar atenção" toca um chamado de três notas, fala "Por favor, venha aqui" e
+manda um pedido de ajuda ao celular — não é a emergência: sem contagem e sem
+alarme contínuo — e não repete antes de 20 s.
+
+**Onde dói, Minha voz e a prancha impressa** (19/10/2026).
+
+- **Onde dói** (`/dor`) diz onde e quanto dói em passos de poucos alvos
+  grandes — onde, o lado, a faixa da escala 0–10, o número, conferir —, com o
+  esquerdo e o direito do PACIENTE. A frase sai pela fala do paciente, vai à
+  conversa no celular do cuidador (sem aviso: ele vê quando abrir o app) e ao
+  histórico clínico (Configurações → Histórico clínico, com a exportação); a
+  tela diz o que o envio respondeu. De 7 em diante, a frase vai também como
+  pedido de ajuda, que toca no celular, e a tela diz se ele foi avisado. De 8
+  a 10, a tela oferece a Emergência, com a contagem de 5 s e o CANCELAR
+  (`pages/core/MapaDaDorScreen.tsx`, `dor/regioesDoCorpo.ts`).
+- **Minha voz** (`/minha-voz`, com a gravação guiada em `/minha-voz/gravar`):
+  mensagens gravadas na voz da própria pessoa, para tocar depois pelo olhar.
+  No app instalado ficam no computador (`userData/voz/guardadas/`); no
+  navegador, só na memória, e a tela diz isso. Nunca vão para a rede. Gravar
+  pede antes o termo de consentimento, um POR PACIENTE: o "Concordo" de um
+  perfil não vale para outro do mesmo computador, e o aceite de um não apaga o
+  registro do outro (revisão de segurança de 20/10/2026; o registro antigo, de
+  um perfil só, continua valendo para aquele perfil). Gravar e
+  ouvir vale em todos os planos; com o plano Voz, uma gravação de 2 s ou mais
+  pode virar a base da voz clonada.
+- **Prancha de letras impressa** (Configurações) é o plano C, para quando o
+  computador não está por perto: A4, para imprimir ou salvar em PDF. Quem usa
+  é o cuidador, com o mouse; os botões não são alvos do olhar. No app
+  instalado, imprimir passa pelo processo principal (`electron/prancha.ts`):
+  ele pergunta a impressora numa caixa própria e imprime em silêncio, A4
+  deitado, sem o diálogo do sistema, que segurava a página e parava o app
+  inteiro, a Emergência incluída. No navegador, vale o `window.print()`.
 
 ### Lazer e bem-estar
 
@@ -1243,7 +1520,11 @@ colunas.
   isso, logo depois de importar a voz, o app pré-sintetiza em segundo plano
   os pictogramas, as frases rápidas **e as 30 frases mais usadas pelo próprio
   paciente** (botão **Preparar frases rápidas** refaz quando quiser). Uma fala
-  nova cancela a anterior.
+  nova cancela a anterior. Se nada sai por falha (nem a clonada nem a do
+  sistema), a frase aparece em letra grande na tela, com "Tentar falar de
+  novo" e "Fechar" (`services/voz/falaDoPaciente.ts` e
+  `components/AvisoDeFalaQueNaoSaiu.tsx`, desde 19/10/2026): antes as telas
+  davam a fala por feita mesmo sem som.
 
   As frases do paciente entraram nessa lista para resolver um sintoma
   concreto e confuso de diagnosticar: *"a voz clonada funcionou uma vez no
@@ -1321,8 +1602,9 @@ pergunta "quer água?" pela décima vez, a resposta que o paciente deu nas nove
 anteriores fica a uma fixação de distância.
 
 Onde aparece: **sugestão de palavra no teclado**, **sugestão de frase inteira
-no teclado** e **sugestão de frase inteira na tela de Conversa**. Em
-Configurações há liga/desliga e um botão **apagar aprendizado** — o modelo é
+no teclado**, o **chip de abreviação** no teclado e a faixa **Respostas
+sugeridas** na tela de Conversa (as duas últimas estão descritas mais abaixo).
+Em Configurações há liga/desliga e um botão **apagar aprendizado** — o modelo é
 JSON puro no `localStorage` justamente para que exportar, auditar e apagar seja
 trivial. O modelo é **por paciente** (`irisflow.assistente.v1.<perfil>`): o que
 um paciente falou não vira sugestão para outro que divide o computador. O
@@ -1338,6 +1620,55 @@ apagado em seguida, para não ir para outro paciente) — ninguém perde o que j
 tinha ensinado ao app. Para código novo, use
 `services/assistente` diretamente: é ele que sugere frases, onde está a
 economia real de fixações.
+
+**Abreviações** (`frontend/src/services/abreviacoes/`). Quem escreve com o olhar
+paga duas fixações por letra: "obg" custa três, "obrigado" oito. Quando a
+última palavra do teclado é uma abreviação do dicionário do paciente, o
+significado entra como um **chip** na tecla de palavras, em primeiro lugar e com
+a etiqueta "abreviação" — escolhido com o olhar, nunca como troca automática (e
+nunca fala). O dicionário parte de catorze **sementes** em português do Brasil
+(obg, pfv, vc, td, tb, hj, qd, pq, msg, n, s, agr, dps, blz); em Configurações →
+Abreviações o cuidador edita, apaga, acrescenta (até 8 letras, significado de
+até 42 — o que cabe numa tecla) e restaura as de fábrica. O aparelho também
+**aprende**: uma frase de 2 a 5 palavras escrita por extenso e falada três vezes
+ganha a sigla das iniciais ("estou com dor" → "ecd"). A maiúscula acompanha a
+sigla ("OBG" → "OBRIGADO", "Obg" → "Obrigado") e a pontuação das pontas é
+preservada. Tudo por paciente (`irisflow.abreviacoes.v1.<perfil>` e
+`irisflow.abreviacoes.falas.v1.<perfil>`); "apagar aprendizado" some com as
+aprendidas, as que a pessoa fez ficam.
+
+**Respostas sugeridas** (`frontend/src/components/RespostasSugeridas.tsx`, motor
+em `src/assistente/respostas.ts`). Quando o cuidador faz uma pergunta, a Conversa
+mostra até quatro respostas curtas conforme a intenção da pergunta (sim ou
+não, como está, comida e bebida, posição, chamar alguém, bem-estar, oferta,
+saudação, despedida, escolha entre duas coisas), as que o paciente já deu àquela
+pergunta na frente, mais um botão **Nenhuma** que leva ao teclado. Pergunta
+aberta sem histórico não ganha faixa: respostas que não servem seriam ruído.
+**Pergunta que fala de dor nunca ganha faixa** (decisão de 21/10/2026): qualquer
+pergunta com palavra de dor — dor, dói, doendo, dolorido, machuca, incomoda,
+desconforto —, inclusive "A dor passou?", "O remédio aliviou a dor?", "Onde
+dói?" e "Quer remédio para a dor?", fica sem resposta pronta e sem a aprendida,
+porque uma frase pronta com o sentido trocado ("Sim, estou com dor" para "A dor
+passou?") seria dita na voz do paciente e enviada ao celular do cuidador. Ele
+responde pelo teclado ou pelo mapa da dor.
+Cada botão tem no mínimo o alvo de 5°, então quantas cabem depende da largura da
+coluna e do tamanho do alvo (que vem da diagonal da tela e da distância
+configuradas): medido num Chromium com o alvo em ~198 px, são 2 sugestões em
+1366 px de tela, 3 em 1920 px e 4 só em telas bem largas — ficam as mais
+prováveis, e o Nenhuma fica sempre. A faixa espera quando faltaria altura para
+ler a pergunta (tela baixa, ou a dica de primeira vez aberta): a pergunta vale
+mais que a sugestão. E o registro de mensagens continua no fim quando a faixa
+entra ou sai, para a pergunta não ir parar abaixo da dobra. Regras que a faixa
+cumpre sozinha:
+**nunca fala sozinha** (só entrega o texto quando o paciente escolhe um botão; é a
+Conversa que fala, envia ao celular e aprende o par pergunta→resposta), cada
+botão leva o rótulo **sugestão**, **some em emergência, na tela da dor e para
+pergunta de dor**, não
+aparece para o Sim/Não do cuidador (`kind: 'simnao'`, que tem tela própria) nem
+para mensagens do sistema, e **recolhe** quando menos de 30% foram escolhidas em
+20 mostradas (com um botão de mouse para trazer de volta). A medida
+(mostradas/escolhidas, só contadores — nada do conteúdo) fica em
+`irisflow.sugestoes.aceitacao.v1.<perfil>` e aparece em Configurações.
 
 **A porta para a nuvem fica aberta e explícita.** O tipo `ModoDoAssistente` já
 prevê `'nuvem'` ao lado de `'local'`, para que as telas tratem o caso desde
@@ -1405,8 +1736,10 @@ do computador, e é ela que força `sender = 'paciente'`.
 | câmera ok, rastreador ok, calibrado, versão | a cada 30 s | `heartbeat` |
 | sessão: fixação e suavização em uso, frases e caracteres | ao abrir / ao fechar ou sair | `session.upsert`, `session.end` |
 | resumo do teste de precisão (erro, precisão, acerto em 100/150 px, menor alvo, distância, condições) | ao concluir o teste | `calibration.result` |
-| o texto que o paciente falou (teclado, frase, pictograma, sim/não, "Estou bem") | a cada fala | `message.send` |
-| pedido de socorro | botão de emergência | `help.create` (+ push) |
+| o texto que o paciente falou (teclado, frase, pictograma, sim/não, "Estou bem") e as notas do sistema ("O olhar voltou a funcionar no computador.", "O alarme de socorro foi parado no computador do paciente.") | a cada fala ou nota | `message.send` |
+| pedido de socorro (`emergencia`) e o "Chamar atenção" da tela Sim · Não (`ajuda`) | na hora | `help.create` (+ push; a resposta diz quantos celulares foram avisados) |
+| aviso de problema que dura (`dispositivo`) | o mesmo problema de rastreamento por mais de 45 s | `help.create` (+ push) |
+| pedido de um código QR para o celular do cuidador (o banco guarda só o hash) e a consulta do estado dele | "Mostrar o código", e a cada 2 s enquanto o QR está na tela | `pairing.create`, `pairing.status`, `pairing.cancel` (fora da fila offline) |
 | confirmação de que a mensagem do cuidador foi falada | depois de vocalizar | `message.spoken` |
 | rótulo da voz em uso (`Voz clonada (local)` / `pt-BR padrão`) | ao ligar e quando muda | `voice.status` |
 | relatório de suporte (números e erros, nunca frases) | botão em Ajustes, ou envio automático se ligado | `report.send` |
@@ -1431,7 +1764,8 @@ da licença é essa chave, enviada em `x-device-key`. No Essencial, parear revog
 os outros computadores (o desktop oferece a transferência antes); Completo, Voz
 e Beta não têm limite. A cada abertura, `device.info` confirma vínculo e
 licença: `403 device_revoked` leva ao login, licença negada bloqueia, e rede,
-5xx ou 401 do gateway dão **7 dias** de carência (`VITE_LICENSE_OFFLINE_DAYS`) — perder a comunicação porque o
+5xx, 401 do gateway ou uma exceção na própria verificação (desde 19/10/2026;
+antes ela deixava as telas em "Carregando…" para sempre) dão **7 dias** de carência (`VITE_LICENSE_OFFLINE_DAYS`) — perder a comunicação porque o
 Wi-Fi caiu é pior que uma semana sem verificar. A regra mora no banco; o desktop
 só decide a carência. "Sair desta máquina" fecha a sessão, revoga o computador e
 faz `signOut`. A chave do computador (o token da licença), o vínculo, a
@@ -1447,8 +1781,16 @@ com a voz **do sistema** — a clonada é a do paciente e não deve dizer o que
 outra pessoa escreveu), `patient_settings` (fixação, suavização e prazo de
 emergência, quando preenchidos), `quick_phrases` (respostas rápidas da Conversa)
 e a confirmação do socorro ("Seu cuidador viu o pedido às HH:MM"). Sem realtime,
-consulta a cada 20 s. Sem rede, os envios esperam na fila `irisflow.fila` (até
-200; socorro e mensagem nunca são descartados), cada um com o instante em que
+consulta a cada 20 s; e a resposta do `heartbeat` traz as confirmações do
+cuidador (socorro e ajuda) das últimas 6 h, a reserva para uma rede que
+bloqueia o websocket — sem ela, o "Estou indo" não chegava e o alarme seguia
+tocando. Sem rede, os envios esperam na fila `irisflow.fila` (até
+200; socorro e mensagem nunca são descartados). Ela sai em ordem de
+prioridade — socorro, depois mensagem do paciente, depois o resto, na ordem de
+chegada dentro de cada grupo. Falha de rede para a passada; um item que o
+servidor recusa (5xx ou 429) da terceira tentativa em diante vai para o fim do
+grupo dele, sem segurar os outros, e o que não é socorro nem mensagem sai da
+fila depois de 10 tentativas. Cada envio leva o instante em que
 aconteceu (`occurred_at`) e, a cada tentativa, o relógio do computador
 (`sent_at`): a `desktop-sync` grava a hora do servidor menos esse atraso, o
 que cancela um relógio de PC errado, e um socorro que esperou na fila aparece
@@ -1460,7 +1802,8 @@ fila. O **socorro não depende da licença nem da conta**: a rota `/emergency`
 fica fora dos portões, e o alarme local toca mesmo com a licença bloqueada. A
 tela de emergência diz o que aconteceu com o pedido — enviando, enviado ao
 celular, sem internet (sai quando ela voltar), alarme só local (computador sem
-vínculo, ou falha no envio) e modo apresentação (nada enviado) — em vez de
+vínculo, falha no envio, ou o pedido chegou ao servidor e nenhum celular foi
+avisado), sem resposta do servidor e modo apresentação (nada enviado) — em vez de
 "alerta enviado" sem saber; a resposta do cuidador
 aparece e é falada nela. "Sair desta máquina" com itens na fila avisa quantos
 são e tenta enviá-los antes de sair. As telas só emitem no barramento
@@ -1468,6 +1811,113 @@ são e tenta enviá-los antes de sair. As telas só emitem no barramento
 apresentação](#modo-apresentação-e-relatório-de-suporte) corta fala, socorro,
 calibração e contadores; heartbeat, sessão, `voice.status` e relatório de
 suporte continuam, e as mensagens do cuidador seguem sendo faladas.
+
+**Pedido de socorro e alarme** (desde 19/10/2026). O pedido mora fora da tela,
+em
+[`services/emergencia/pedidoDeSocorro.ts`](frontend/src/services/emergencia/pedidoDeSocorro.ts):
+quem dispara (o botão, a contagem regressiva, o Modo Computador ou a grade da
+própria tela) envia na hora, e a tela `/emergency` só mostra o estado — antes
+o envio e o alarme moravam nela, e um erro ao desenhá-la, ou um olhar no
+"Voltar", calava os dois. Com um pedido ainda ativo, disparar de novo devolve o
+mesmo pedido, sem um segundo push. O alarme local começa pelo estado da
+entrega:
+
+| entrega | o alarme local começa |
+|---|---|
+| `enviado` (algum celular avisado) ou `ensaio` (modo apresentação) | no prazo do cuidador (`patient_settings.emergency_timeout_s`; sem ajuste, 45 s, o mesmo padrão do servidor) |
+| `na_fila`, `falhou`, `sem_nuvem` ou `sem_push` (gravado, e nenhum celular avisado) | em 5 s: ninguém mais vai ser avisado |
+| `enviando`, sem resposta | em 12 s (o envio desiste em 10 s e vai para a fila) |
+
+O alarme é um ciclo de 6 s — sirene de 3 s e a frase "ALERTA CRÍTICO: o
+paciente precisa de socorro imediato!", que não cobre a mensagem do cuidador —
+e, no Electron, também do sistema ([`electron/alarme.ts`](electron/alarme.ts)):
+a janela vem para a frente (restaurada se minimizada, por cima de tudo, com o
+ícone piscando) e, com "Volume máximo no alarme" ligado (Configurações →
+"Alarme de emergência"; ligado por padrão), o volume do Windows vai ao máximo,
+sem mudo, e volta ao que era quando o alarme para. O volume é mexido por um
+PowerShell chamado pelo caminho completo (`%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`),
+com texto fixo; as operações de volume passam por uma fila, uma de cada vez (antes,
+religar o alarme logo depois de parar podia tocar o segundo com o Windows mudo); o
+volume devolvido é o do começo do episódio; e fechar o app com o alarme ligado espera
+o volume voltar, até 8 s — ou até 18 s se a subida do volume ainda estiver rodando
+(o prazo do PowerShell mais a devolução; até a revisão de segurança de 20/10/2026, uma
+subida lenta terminava depois de o app sair e deixava o Windows em 100%). Fora do Windows, ou se o PowerShell falhar, ficam a
+janela e a sirene. O alarme para quando o cuidador confirma ESTE pedido —
+reconhecido pelo id daqui ou pelo que o servidor devolveu; até a revisão de
+19/10/2026 valia também a confirmação de outro pedido de até 60 s antes, e o
+"Estou indo" de um "Chamar atenção" calava o socorro disparado logo depois — ou
+quando o paciente confirma, em dois passos, que quer pará-lo;
+parado aqui antes de o cuidador ver, o celular recebe "O alarme de socorro foi
+parado no computador do paciente." — o pedido continua aberto lá, e só o
+cuidador o encerra. O pedido ativo sobrevive à recarga da página (o vigia de
+página travada recarrega): fica no `sessionStorage` e `restaurarPedidoDeSocorro`,
+no `main.tsx`, o traz de volta antes de desenhar, com o alarme se ele estava
+tocando e o prazo contado do disparo (pedido de mais de 6 h não volta); sem
+pedido a restaurar, a abertura desliga o alarme do sistema que a página
+anterior tenha deixado ligado. Durante o socorro a correção por dwell não
+aprende.
+
+**Aviso de problema que dura** (desde 19/10/2026). Quando o mesmo problema de
+rastreamento dura mais de 45 s fora da calibração e do teste de precisão
+([`services/problemaDoRastreamento.ts`](frontend/src/services/problemaDoRastreamento.ts);
+um sumiço de até 5 s não zera a contagem, e trocar de tipo recomeça do zero),
+o cuidador recebe no celular um pedido do tipo `dispositivo`, com push, em
+terceira pessoa e com o que fazer ("Há luz forte atrás do paciente…",
+[`cloud/avisoDoProblemaAoCuidador.ts`](frontend/src/cloud/avisoDoProblemaAoCuidador.ts)).
+O problema que conta não é o que o banner mostra (ele põe na frente avisos de
+configuração, que não têm tipo), e sim o de rastreamento mais grave, na mesma
+ordem do banner (`problemaPersistenteDoOlhar`); sem nenhum, a calibração que
+deixou de valer com o rosto na câmera e os olhos abertos vira
+`calibracao_perdida` — o modelo que reiniciou em outro tamanho de madrugada,
+por exemplo, deixa o paciente acordado sem nada que acione, nem a Emergência.
+Não viram aviso: olhos fechados (descanso ou sono); rosto fora da câmera e
+pouca luz sem rastreamento bom nos 10 min anteriores (o computador ligado sem
+ninguém na frente não acorda a casa; a `calibracao_perdida` avisa sem essa
+exigência); o mesmo tipo de novo em menos de 15 min. O servidor limita também:
+no máximo um aviso de dispositivo do mesmo texto a cada 15 min e quatro por
+hora por computador (acima disso responde `{ ok, limitado }`, sem gravar nem
+mandar push) — o limite do computador vive na memória, e uma chave tirada do
+PC mandaria push sem fim. A conversa recebe a nota "O olhar voltou a funcionar
+no computador.", sem push, só quando há rastreamento bom depois do aviso
+(conferido a cada 5 s): uma troca de problema, ou a câmera que volta com o
+rosto fora do quadro, não conta como volta.
+
+**Celular do cuidador pelo código QR** (desde 19/10/2026), sem digitar e-mail
+nem senha. No computador já vinculado, Configurações (atrás do PIN) →
+"Conectar o celular do cuidador" → "Mostrar o código"
+([`ParearCelular.tsx`](frontend/src/components/ParearCelular.tsx),
+[`cloud/pareamento.ts`](frontend/src/cloud/pareamento.ts)): a `desktop-sync`
+(`pairing.create`) sorteia 32 bytes (43 caracteres em base64url) e o banco
+guarda só o SHA-256 deles (`pareamentos_de_celular`). O código vale 3 min e
+uma vez só; há um ativo por computador (gerar outro, fechar a seção ou sair da
+tela cancela o anterior, `pairing.cancel`); são no máximo 5 por computador a
+cada 10 min; e conta sem e-mail confirmado não gera código nem entra por ele.
+O QR leva a `https://irisflow.ia.br/parear#t=<código>` — no fragmento, que
+nunca sai do celular: não vai ao log da hospedagem nem ao `Referer`. A página
+[`/parear`](site/src/pages/Parear.tsx) tira o código da barra de endereço antes
+de o React montar, guarda-o só na memória da aba, não faz pedido nenhum com
+ele e abre o app (`irisflow://parear?t=…`; no Android, pelo link `intent` com
+o pacote do app); se o app não abrir em 2,5 s, explica e oferece o download.
+No app ([`app/parear.tsx`](app/app/parear.tsx),
+[`lib/pareamento.ts`](app/src/lib/pareamento.ts)), nada acontece sozinho: o
+código só é usado depois do toque em "Conectar este celular", e um celular já
+numa conta não troca de conta por aqui (trocar tiraria dele os avisos de
+socorro da família atual) — é preciso sair em Ajustes antes. A Edge Function
+`parear-celular` troca o código, uma vez, por um link mágico da conta, gerado
+dentro dela com a `service_role`, e devolve só o `token_hash`; o app abre a
+sessão com `verifyOtp({ type: 'magiclink', token_hash })`, segue o fluxo normal
+(registro do push incluído) e avisa que entrou (`confirmar_celular_conectado`).
+O computador, que pergunta a cada 2 s (`pairing.status`), só diz "Celular
+conectado às HH:MM" depois desse aviso — é também o aviso de que alguém entrou
+na conta. O código certo passa sempre (tem 256 bits: adivinhar é inviável);
+só as tentativas que falham contam, por endereço de rede guardado como HMAC
+(nunca o IP; IPv6 agrupado pelo /64, que é o que o provedor entrega a cada
+casa; `tentativas_de_pareamento`, por 1 h): 10 a cada 10 min por endereço e 300
+por minuto no total. Até a revisão de segurança de 20/10/2026 o limite vinha
+antes do código, e 300 chutes por minuto, de endereços quaisquer, desligavam o
+QR de todas as famílias. Código inexistente, vencido, usado ou cancelado recebe a
+mesma resposta, e nem o código, nem o hash, nem o e-mail, nem o token, nem o
+endereço vão para o log.
 
 **Variáveis** ([`frontend/.env.example`](frontend/.env.example) →
 `frontend/.env.local`), embutidas no build, nunca segredo:
@@ -1496,7 +1946,7 @@ supabase/
 ├── migrations/    o esquema inteiro, em ordem: 20260923022346_schema_base.sql
 │                  (planos, perfis, pacientes, assinaturas, pagamentos, RLS) e as
 │                  migrações seguintes; o nome começa pela versão do histórico
-├── functions/     desktop-sync (publicada), payment-webhook (esqueleto)
+├── functions/     desktop-sync (publicada), parear-celular (19/10/2026), payment-webhook (esqueleto)
 ├── templates/     os e-mails do Auth em português e com a marca (confirmação,
 │                  nova senha, troca de e-mail, link de acesso, convite, código)
 ├── seed.sql       conta de teste da beta
@@ -1521,6 +1971,7 @@ com a chave anon marcaria a própria assinatura como paga.
 | `quick_phrases`, `patient_settings` | o dono | o dono | `desktop-sync` (`voice.status`) |
 | `push_tokens` | o dono | o dono; o app registra e remove por `registrar_push_token()` / `remover_push_token()` (o aparelho passa para a conta logada nele) | — |
 | `gateway_events` | ninguém | nada | `payment-webhook` |
+| `pareamentos_de_celular`, `tentativas_de_pareamento` (19/10/2026) | ninguém (RLS sem política, privilégios revogados de `anon` e `authenticated`) | nada; o celular logado só chama `confirmar_celular_conectado()` no pareamento da própria conta | `desktop-sync` (`pairing.*`) e `parear-celular`, pelas funções `criar_codigo_de_pareamento()` e `usar_codigo_de_pareamento()` |
 
 **Colunas que o cliente escreve** (revisão de 27/09/2026): o Supabase dá a
 `authenticated` UPDATE e INSERT em todas as colunas, e as políticas limitam a
@@ -1541,11 +1992,20 @@ RPCs de cadastro estão na tabela do site; só a `service_role` roda
 `license_for_profile()` e `register_charge()`.
 
 **pg_cron**, a cada minuto: `escalar-pedidos-de-ajuda` marca `escalated_at` no
-socorro sem confirmação após `emergency_timeout_s` (padrão 45 s), grava uma
-mensagem de sistema e reenvia push a todos os celulares — não telefona para
-ninguém. Enquanto ninguém confirma nem resolve, o aviso é reenviado mais duas
-vezes, com 5 min de intervalo (migração `20260927105153_escalonamento_reenvio`);
-cada pedido roda numa subtransação, e um que falhe não trava os outros.
+pedido de socorro ou de ajuda (`emergencia` e `ajuda`; o "Chamar atenção" da
+tela Sim · Não é `ajuda`) sem confirmação após `emergency_timeout_s` (padrão
+45 s), grava uma mensagem de sistema e reenvia push a todos os celulares — não
+telefona para ninguém. Enquanto ninguém confirma nem resolve, o aviso é
+reenviado mais duas vezes, com 5 min de intervalo (migração
+`20260927105153_escalonamento_reenvio`); cada pedido roda numa subtransação, e
+um que falhe não trava os outros. A migração
+`20261019120000_escalonamento_push_com_id` (19/10/2026, mesma função, mesmo
+comportamento) acrescenta duas coisas: o push leva `data.help_request_id`, e o
+app abre aquele pedido sem confundir o reenvio com um pedido novo; e, se o
+Vault tiver o segredo `expo_access_token` (o mesmo `EXPO_ACCESS_TOKEN` da Edge
+Function), o reenvio vai com `Authorization: Bearer` — com a "segurança
+reforçada de push" ligada no projeto da Expo, sem ele o reenvio era recusado
+em silêncio. Sem o segredo, nada muda.
 `encerrar-sessoes-orfas` fecha sessões sem heartbeat há mais de 5 min.
 O prazo conta da chegada ao servidor (`received_at`, migração
 `20260924020011_help_requests_received_at`), não de quando o pedido aconteceu
@@ -1555,7 +2015,29 @@ cadastrado.
 **Edge Functions.** `desktop-sync` está publicada, com `verify_jwt = false`: as
 ações de [Conta IrisFlow e nuvem](#conta-irisflow-e-nuvem) mais
 `messages.pending`, `settings.get` e `device.info`, escopadas ao paciente da
-chave; push Expo só para `emergencia` e `ajuda` (`EXPO_ACCESS_TOKEN` opcional).
+chave; push Expo para `emergencia`, `ajuda` e, desde 19/10/2026, `dispositivo`
+(o aviso de problema que dura), com `data.help_request_id` (`EXPO_ACCESS_TOKEN`
+opcional). Desde 19/10/2026, também: a resposta do `help.create` traz
+`push: { avisados, recusados, motivos }` (com `avisados: 0` o computador mostra
+"nenhum celular foi avisado" e toca o alarme em 5 s), e a do `heartbeat`, as
+confirmações do cuidador das últimas 6 h (`reconhecimentos`). Um desktop de
+antes ignora os campos novos; um desktop novo com a função antiga trata todo
+pedido gravado como entregue e só sabe da confirmação pelo realtime — publique
+a função junto com a versão do desktop. Também de 19/10/2026: o limite dos
+avisos de dispositivo (um do mesmo texto a cada 15 min e quatro por hora por
+computador; ver [Conta IrisFlow e nuvem](#conta-irisflow-e-nuvem)) e as ações
+`pairing.create`, `pairing.status` e `pairing.cancel` do código QR do celular
+(`pareamento.ts`, `codigoDoCelular.ts`; 429 `limite` com `tente_em`, 409
+`email_nao_confirmado`). `parear-celular` é a outra ponta do QR, também com
+`verify_jwt = false` (no `config.toml`): quem chama é um celular ainda sem
+conta, e a credencial é o próprio código. Recebe `{ codigo }` e responde 200
+com `token_hash`, 400 `codigo_invalido` (a mesma resposta para inexistente,
+vencido, usado, cancelado, computador desvinculado e conta sem e-mail
+confirmado), 415 `tipo_nao_suportado` (corpo que não é `application/json`),
+429 `muitas_tentativas` ou 503; não tem CORS (nenhum site precisa chamá-la), e
+o 415 fecha o POST "simples" (text/plain, formulário) que qualquer página manda
+sem preflight — ele nem chega ao banco (revisão de segurança de 20/10/2026). O
+HMAC do endereço usa a `service_role` como chave — nenhum segredo novo.
 Pelo painel, "Verify JWT" tem de ficar desligado, senão o desktop recebe 401 do
 gateway, trata como falta de rede e só enfileira. A v2 grava o horário real
 dos eventos que esperaram na fila offline (`horario.ts`, testado com `deno test
@@ -1593,7 +2075,14 @@ depois das três primeiras. As duas últimas entraram em 27/09 pelo conector do
 Supabase, com os arquivos renomeados para a versão registrada:
 `20260927014237_codigo_de_confirmacao` (o código de 4 dígitos da confirmação, com o
 modelo e o assunto do e-mail trocados no painel no mesmo dia) e
-`20260927014332_lazer_no_plano` (`features.lazer` na licença).
+`20260927014332_lazer_no_plano` (`features.lazer` na licença). Fora deste
+retrato, escritas em 19/10/2026: as migrações
+`20261019120000_escalonamento_push_com_id` e
+`20261019200000_pareamento_do_celular`, a `desktop-sync` com o resumo do push,
+as confirmações no heartbeat, o push e o limite do tipo `dispositivo` e as
+ações `pairing.*`, e a função nova `parear-celular`. A migração do pareamento
+vai antes das duas funções: sem as tabelas e as funções dela, `pairing.create`
+e `parear-celular` respondem erro.
 
 **Migração nova:** `supabase migration new <nome>` e `supabase db push` — a
 versão do nome do arquivo vira a do histórico. Aplicada por fora do CLI (MCP,
@@ -1609,6 +2098,7 @@ o histórico e aplica só as ausentes:
 supabase link --project-ref xouznaqxhqzjdgeshlmh
 supabase db push                                   # migrações em ordem; não roda o seed
 supabase functions deploy desktop-sync --no-verify-jwt
+supabase functions deploy parear-celular --no-verify-jwt   # 19/10/2026: o código QR do celular
 ```
 
 Sem o CLI: cole cada arquivo de `supabase/migrations/`, na ordem do nome, no
@@ -1616,7 +2106,7 @@ SQL Editor (todos são idempotentes; os que já estão aplicados não mudam nada
 e publique a função pelo painel (*Edge Functions → desktop-sync*, com os três
 arquivos `index.ts`, `horario.ts` e `respostas.ts`, "Verify JWT" desligado). O `seed.sql`
 roda à parte, no SQL Editor. No Auth do painel: Site URL = a origem do site
-(`https://irisflow-communicator.pages.dev`) e Redirect URLs `<site>/entrar` e
+(`https://irisflow.ia.br`) e Redirect URLs `<site>/entrar` e
 `<site>/nova-senha` — o "Esqueci a senha" do site e o do app mandam
 `redirectTo` para `/nova-senha`, e o site leva o evento de recuperação para lá
 de qualquer página. Os modelos de e-mail (*Authentication → Emails → Templates*)
@@ -1661,7 +2151,9 @@ fechada: os planos aparecem como indisponíveis e o fluxo pago leva a `/beta`.
 |---|---|---|
 | `/`, `/solucao`, `/como-funciona`, `/acessibilidade`, `/planos`, `/sobre` | institucional; preço de `plans`, com reserva em `content.ts` | `plans` |
 | `/cuidador` | a página do **IrisFlow Cuidador**: o vídeo de demonstração num celular, as telas do app e onde baixar (selos das lojas; no computador, um código QR para `/app`) | — |
-| `/baixar` | os dois aplicativos: o instalador do computador, com o sistema do visitante na frente (travado com o dia até o lançamento), e o app do celular pelos selos; no celular, oferece copiar ou mandar por e-mail o link para abrir no computador | `beta_program` |
+| `/baixar` | os dois aplicativos: o instalador do computador, com o sistema do visitante na frente (travado com o dia até o lançamento), e o app do celular pelos selos e pelo botão do APK (também em `/app`, em `/cuidador` e nos outros painéis de download; abaixo); no celular, oferece copiar ou mandar por e-mail o link para abrir no computador | `beta_program` |
+| `/meu-computador` | "Meu computador funciona?" (19/10/2026): o teste no navegador, antes de baixar — a câmera com a resolução e os quadros por segundo reais (mínimo 1280×720 a 30 quadros), WebGPU, Windows 10 ou 11, memória (8 GB) e núcleos (4; 8 recomendados), com o veredito em palavras ([`CompatCheck.tsx`](site/src/components/sections/CompatCheck.tsx)), e embaixo a tabela de requisitos; a câmera só liga quando a pessoa pede, e a imagem não sai do navegador. O painel de download e o rodapé levam para cá | — |
+| `/parear` | destino do código QR do computador (19/10/2026; fora do índice e do sitemap): tira o código (`#t=`) da barra de endereço antes de montar e só o passa ao app do cuidador (`irisflow://parear?t=…`); se o app não abrir, explica e oferece o download. Cabeçalho sólido e sem a chamada fixa da beta (ver [Conta IrisFlow e nuvem](#conta-irisflow-e-nuvem)) | — (quem troca o código é o app) |
 | `/app` | o endereço do código QR: no Android abre o Google Play; no iPhone, a App Store (ou a seção de disponibilidade, enquanto não houver endereço); no computador, mostra os selos | — |
 | `/beta` | a inscrição em 4 etapas com a trilha à vista: criar conta → confirmar e-mail (código de 4 dígitos) → pesquisa rápida → download (travado até o lançamento) | Auth, `confirmar_codigo()`, `complete_beta_registration()`, `beta_program`, `mark_beta_download()` |
 | `/confirmar-email` | destino do botão do e-mail, a alternativa ao código: verifica o `token_hash`, abre a sessão **no aparelho do clique** e agradece, com o próximo passo | Auth (`verifyOtp`) |
@@ -1733,7 +2225,14 @@ aparece "em preparação". Um sistema só ganha botão se tiver arquivo no
 release **e** estiver em `VITE_RELEASES_AVAILABLE` (padrão `windows`): assim o
 site nunca oferece um instalador de macOS ou Linux ainda não testado, e a
 frase da página bate com os botões. Os releases precisam ser públicos;
-`app_releases` não é mais lida.
+`app_releases` não é mais lida. O **APK do app do cuidador** segue a mesma
+fonte (desde 19/10/2026; antes o painel ignorava o `.apk` do release): com
+`VITE_APP_CUIDADOR_URL` apontando para um release deste repositório (o de
+produção aponta para `releases/latest/download/IrisFlow-Cuidador.apk`), o
+link é o `.apk` do último release (o que tem "cuidador" no nome), e um release
+que saiu sem ele mostra um aviso no lugar de um link que daria 404; um link de
+outro lugar (o build do EAS, uma loja) vale como está; e sem a variável o site
+não oferece o APK.
 
 **Variáveis** (todas públicas). As de produção estão em
 [`site/.env.production`](site/.env.production), versionado, que o `npm run build`
@@ -1746,7 +2245,7 @@ que o `.env.local`. Para desenvolver (`npm run dev`), copie
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | contas, planos, beta | site abre; ação de conta diz "serviço indisponível" |
 | `VITE_SITE_URL` | canonical, og:*, sitemap, destino dos e-mails | `https://irisflow.ia.br` |
 | `VITE_RELEASES_REPO` / `VITE_RELEASES_AVAILABLE` | de onde vêm os instaladores / quais sistemas o site oferece | `ZambePy/Communicator-V3` / `windows` |
-| `VITE_APP_CUIDADOR_URL` | APK do app do cuidador (anexado a cada release), em `/beta` | "o link chega por e-mail" |
+| `VITE_APP_CUIDADOR_URL` | APK do app do cuidador (anexado a cada release): o botão em `/app`, `/cuidador` e nos painéis de download | o site não oferece o APK |
 | `VITE_GOOGLE_PLAY_URL` | troca o endereço do Google Play | `…/store/apps/details?id=br.com.irisflow.cuidador`, que passa a funcionar sozinho quando o app for publicado com esse pacote |
 | `VITE_APP_STORE_URL` | endereço do app na App Store (com o número que o App Store Connect dá) | o selo da Apple aparece "em breve" e leva a `/cuidador#disponibilidade` |
 | `VITE_CF_ANALYTICS_TOKEN` | Cloudflare Web Analytics | nenhuma estatística |
@@ -1763,13 +2262,41 @@ canonical e og:* a cada rota e o `vite.config.ts` gera `sitemap.xml` e
 (`seo.test.ts` confere). O site não grava cookie; o Cloudflare Web Analytics
 (sem cookie) carrega a menos que o visitante recuse no aviso.
 
-**Home.** Pouco texto: a abertura ([`HeroProduto.tsx`](site/src/components/home/HeroProduto.tsx))
-traz a frase "Seu olhar tem voz", uma linha de apoio, as duas chamadas e o produto
-funcionando num monitor, com a gravação real da tela do IrisFlow Communicator
-(`public/media/demo-communicator.mp4`, de 18/09/2026, com o cursor do olhar). Logo
-abaixo, o app do cuidador num celular com a gravação dele
+**Home** (rodada 3, 21/10/2026, revista no mesmo dia). O dono recusou o visual "de
+efeito" do primeiro desenho (grade, feixe de luz, o "IRISFLOW" gigante atrás do título,
+um olho de partículas, aurora na chamada final: "parece feito por IA"); ficou o produto de
+verdade e um fundo chapado. A abertura
+([`HeroProduto.tsx`](site/src/components/home/HeroProduto.tsx)) é editorial, sem
+decoração: no computador, o título "Seu olhar tem voz" à esquerda e, à direita, alinhados
+pela base dele, a frase de apoio, as duas chamadas e os três fatos (webcam comum, nenhuma
+imagem sai do computador, Windows 10 e 11); no celular, uma coluna. Ela não ocupa a tela
+inteira de propósito: o topo do monitor com a gravação real (a seção seguinte) já aparece
+na primeira tela a 1280×800 e a 1440×900, e é esse monitor — o único movimento da
+página, uma vez, ao carregar (`monitor-sobe`, só `transform` e `opacity`) — o visual da
+abertura. A gravação real da tela do IrisFlow Communicator
+(`public/media/demo-communicator.mp4`, de 18/09/2026, com o cursor do olhar) é contada em
+três capítulos ([`Capitulos.tsx`](site/src/components/home/Capitulos.tsx)), com "Testar com
+o meu olhar", que só no computador e só no clique baixa o teste ao vivo
+([`TesteAoVivo.tsx`](site/src/components/demo/TesteAoVivo.tsx)). Depois, seis cartões
+numerados ([`CartoesNumerados.tsx`](site/src/components/v3/CartoesNumerados.tsx)): o
+cartão ativo mostra ao lado a TELA REAL do app (as imagens de `public/media/`, trocadas só
+quando o cartão ativo muda, com tamanho reservado e carregamento preguiçoso; o cartão de
+quem cuida usa a conversa do celular numa moldura de celular); "Mostrar onde dói" ainda
+não tem tela no instalador publicado e mostra só um painel com o aviso. O cartão tem a
+altura do texto mais alto (nenhum texto passa do pé em nenhuma largura), e com movimento
+reduzido a faixa vira uma grade parada com a tela pequena de cada cartão. Em seguida, os
+módulos com a tela real, o preço do aparelho que ele substitui, as condições num arco (um
+fio fino), o app do cuidador num celular com a gravação dele
 (`public/media/demo-cuidador.mp4`/`.webm`, dados simulados, sem os trechos com avisos
-técnicos de desenvolvimento). Os vídeos e as descrições para leitor de tela estão em
+técnicos de desenvolvimento), os planos, as perguntas e a chamada final
+([`ChamadaFinal.tsx`](site/src/components/v3/ChamadaFinal.tsx)), um campo sólido no azul
+`#1B54A8`; o rodapé mostra a hora de Brasília e desde quando a beta está no ar. A cor
+vem dos tokens `--v3-*` ([`tokens.css`](site/src/styles/tokens.css)): o marinho da marca
+`#0B1B3A` por baixo de tudo, o marinho fundo `#081530` em faixas alternadas, o azul só no
+cartão ativo e na chamada final, o verde-água só para confirmação (o anel que fecha).
+O teclado animado do olhar
+([`EscritaPeloOlhar.tsx`](site/src/components/home/olhar/EscritaPeloOlhar.tsx)) fica
+em "Como funciona". Os vídeos e as descrições para leitor de tela estão em
 [`data/home.ts`](site/src/data/home.ts). Cada vídeo toca sem som só enquanto está na
 tela, tem botão de pausa e, com movimento reduzido, começa parado no quadro de
 abertura ([`useDemo.ts`](site/src/hooks/useDemo.ts)).
@@ -1821,21 +2348,28 @@ python app/scripts/gerar-icones.py           # ícones, capa e imagem da loja (c
 |---|---|
 | Início | sessão ao vivo (computador visto há < 90 s), última mensagem, alertas, câmera e calibração; "Tudo tranquilo" e "Ainda sem mensagens" só com a última carga verificada |
 | Conversa | chat em tempo real; o que o cuidador envia é falado na tela do paciente e marcado "falado na tela"; marca como lidas só com o app na frente |
-| Alertas | alerta em tela cheia: "Estou indo!" (o desktop avisa o paciente), "Resolvido", ligar para os contatos, horário do escalonamento. O texto rola e a resposta fica num rodapé fixo (celular pequeno, fonte grande); Voltar ou "Minimizar" deixa uma faixa vermelha no topo, que volta à tela cheia sozinha se o servidor reenviar o pedido |
+| Alertas | alerta em tela cheia: "Estou indo!" (o desktop avisa o paciente), "Resolvido", ligar para os contatos, horário do escalonamento. Desde 19/10/2026 o motivo do socorro ou da ajuda é a manchete ("Falta de ar"), o fundo é um vermelho chapado (`#9E1B16`) e uma barra de prazo que diminui a cada segundo substitui os anéis pulsando; o pedido mais grave toma a tela (socorro antes de ajuda, ajuda antes de aviso), mesmo de um alerta minimizado; e o botão que nasce no lugar de outro ("Resolvido" no lugar de "Estou indo!", o pedido seguinte que assume a tela) espera 1,5 s, contra o toque duplo do susto — também na lista. O texto rola e a resposta fica num rodapé fixo (celular pequeno, fonte grande); Voltar ou "Minimizar" deixa uma faixa vermelha no topo, que não cobre o Voltar e o Fechar das telas e volta à tela cheia sozinha se o servidor reenviar o pedido |
 | Relatórios | 7 dias de uso e o Teste de precisão de cada sessão (planos Completo, Voz e Beta, pela licença do servidor — `desktop_license()`, a mesma do desktop); o relatório de uma sessão aberto pelo Início segue a mesma regra |
 | Ajustes | fixação, suavização (nulo = não definido), prazo de emergência e contatos, voz em uso, exclusão da conta; teclado e sensibilidade aparecem desativados, com "Em breve" |
 | Frases, Paciente, Assinatura | respostas rápidas da Conversa do desktop; computadores vinculados (tocar desvincula); "Programa beta", sem compra |
+| Conectar pelo código QR (`irisflow://parear?t=…`, rota `parear`, 19/10/2026) | entra na conta da família pelo QR do computador, sem senha, depois do toque em "Conectar este celular"; vale com e sem conta aberta, mas um celular já numa conta não troca de conta por aqui. O login lembra que dá para entrar assim ([Conta IrisFlow e nuvem](#conta-irisflow-e-nuvem)) |
 
 O desktop aplica hoje só fixação, suavização e prazo de emergência — por isso
 teclado e sensibilidade aparecem desativados no app, com "O computador ainda
-não aplica este ajuste", em vez de gravar um valor que não faz nada. O tipo
-`help_kind_t` do banco prevê avisos de postura, fadiga e recalibração, mas o
-desktop só envia pedidos de socorro (`emergencia`). O "Esqueci a senha" do app
+não aplica este ajuste", em vez de gravar um valor que não faz nada. A
+suavização tem uma ressalva: no V3, depois de uma calibração que mediu o
+ruído, quem suaviza o cursor é o estimador de fixação (M9), e o valor escolhido
+não governa o cursor (ver [Pipeline](#pipeline)). O tipo
+`help_kind_t` do banco prevê avisos de postura, fadiga e recalibração; o
+desktop envia o socorro (`emergencia`), o "Chamar atenção" da tela Sim · Não
+(`ajuda`) e, desde 19/10/2026, o aviso de problema que dura (`dispositivo`,
+"Problema no dispositivo"). O "Esqueci a senha" do app
 manda o cuidador para `<site>/nova-senha` (`EXPO_PUBLIC_SITE_URL`).
 
 **Push.** O token Expo é registrado por `registrar_push_token()` — o
 aparelho passa a ser da conta logada nele, mesmo que antes fosse de outra — e
-recebe o socorro e o escalonamento. Ao sair, `remover_push_token()` tira o
+recebe o socorro, a ajuda, o aviso de dispositivo e o escalonamento; desde
+19/10/2026 o push leva `help_request_id`, e tocar nele abre aquele pedido. Ao sair, `remover_push_token()` tira o
 token obtido na hora e o de aberturas anteriores; sem rede, a remoção fica
 guardada (com a credencial daquela sessão) e é concluída quando a rede voltar.
 O registro é refeito ao voltar dos ajustes do celular, depois de uma falha e
@@ -1845,7 +2379,20 @@ app pede, mas só o cuidador pode ligar). **Não funciona no Expo Go** nem em em
 `extra.eas.projectId` do `app.json` (projeto EAS criado em 24/09/2026); no Android,
 o FCM pede o `google-services.json` (`GOOGLE_SERVICES_JSON` no EAS, lido pelo
 `app.config.js`) e, no iOS, a chave APNs da conta Apple paga. Enquanto isso não
-estiver configurado, o alerta só chega com o app aberto, pelo realtime.
+estiver configurado, o alerta só chega com o app aberto, pelo realtime — e,
+desde 19/10/2026, com som: todo socorro ou ajuda aberto e sem confirmação
+toca um alarme local, uma notificação no canal de emergência, inclusive o que
+está atrás de outro pedido ou minimizado. Ele repete a cada 25 s até alguém
+confirmar ou resolver, por no máximo 10 min, e recomeça quando o servidor
+escala; com o app em segundo plano, os toques vão para o agendador do sistema,
+e sair da conta para a série. O primeiro toque não sai se o push daquele
+pedido já está na bandeja ou foi o que abriu o app. Sem módulo nativo novo,
+chega por atualização OTA.
+
+**Barras do sistema.** No Android a barra de navegação fica escondida desde
+18/10/2026 (ela ficava por cima da barra de abas): arrastar a borda de baixo
+para cima a mostra por alguns segundos
+([`BarrasDoSistema.tsx`](app/src/components/BarrasDoSistema.tsx)).
 
 **Variáveis** ([`app/.env.example`](app/.env.example) → `app/.env`, públicas):
 `EXPO_PUBLIC_SUPABASE_URL` e `EXPO_PUBLIC_SUPABASE_ANON_KEY` (obrigatórias),
@@ -2007,6 +2554,20 @@ repositório for público, o código está no próprio GitHub.
 `~/.config/irisflow/logs/`) e minidumps, só locais. Envio só com `IRISFLOW_CRASH_URL` no
 build — o minidump carrega memória com quadros da câmera: só com consentimento no termo.
 
+**Página travada.** Quem usa só o olhar não gera entrada física, então o `unresponsive`
+do Chromium pode nem disparar. A página manda uma batida a cada 2 s enquanto o laço do
+rastreador gira; sem batida por 30 s (janela visível, rastreamento ligado — minimizada,
+escondida pelo Modo Computador, tela bloqueada ou sistema suspenso não contam), o main
+derruba o processo da página, a recarga automática de quedas a reabre, e o log registra.
+O limiar e o porquê estão em `src/vigiaDoRenderer.ts`. No desenvolvimento o vigia só
+liga com `IRISFLOW_VIGIA=1` (um ponto de parada no DevTools pararia a página de
+propósito). O treino da calibração e o diagnóstico LOTO travam a thread da página por
+~13 s no PC de referência (e a recoleta da M22 treina de novo): desde 19/10/2026, quem
+treina avisa antes (`src/trabalhoLongo.ts`) e a batida desarma o vigia até a próxima
+volta do laço — num PC 2,5× mais lento, ele derrubaria a página no meio do resultado.
+Um socorro em andamento sobrevive a essa recarga (ver
+[Conta IrisFlow e nuvem](#conta-irisflow-e-nuvem)).
+
 ### Publicar uma versão
 
 ```bash
@@ -2061,16 +2622,80 @@ confira antes de pagar.
 
 | peça | agora (R$ 0) | limite que importa | quando pagar |
 |---|---|---|---|
-| site | Cloudflare Pages, `irisflow-communicator.pages.dev` | 500 builds/mês, 20 min cada, 20 000 arquivos de até 25 MiB | domínio próprio |
+| site | Cloudflare Pages, `irisflow.ia.br` (endereço do Pages: `irisflow-communicator.pages.dev`) | 500 builds/mês, 20 min cada, 20 000 arquivos de até 25 MiB | domínio próprio |
 | banco e login | Supabase Free | pausa após 7 dias parado, sem backup, 500 MB | Pro, US$ 25/mês |
 | instaladores | GitHub Releases, repositório público | arquivo < 2 GiB; Actions ilimitado só se público | privado: 2 000 min/mês |
 | app do cuidador | EAS Free | 15 builds Android + 15 iOS/mês, fila lenta; Update até 1 000 usuários | Starter, US$ 19/mês |
 | lojas | APK por link | — | Play US$ 25 (uma vez); Apple US$ 99/ano |
 | e-mail do Auth | Gmail com senha de app (desde 24/09/2026) | 500/dia; o Auth manda até 20/h | domínio + Resend (grátis até 3 000/mês) |
 
+### Publicar com um comando
+
+Na pasta **IrisFlow V2** (ramo `pipeline-v2`, onde o código novo chega, sem commit):
+
+```powershell
+npm run publicar
+npm run publicar -- --mensagem "Corrige o botão de socorro"
+```
+
+O `--` é do npm: sem ele, as opções se perdem. O [`scripts/publicar.mjs`](scripts/publicar.mjs)
+faz a sequência inteira, na ordem certa, escreve uma linha `▶ <etapa>` a cada passo e **para no
+primeiro problema** com `PAROU: <motivo>`; até o `git push`, nada vai para a internet. Se algo
+já tinha sido feito no seu computador (arquivos apagados, commit, a Beta andada), o `PAROU` conta
+o que ficou e traz os comandos para desfazer, em ordem.
+
+1. **Pastas:** o V2 em `pipeline-v2`; a Beta (a pasta da `main`) sem mudança por salvar; o
+   `origin` respondendo; o V2 contendo tudo que o GitHub e a Beta já têm (senão ele não
+   mistura nada: chame quem cuida do código).
+2. **Arquivos que saíram** nesta versão (`REMOVIDOS`), só se o V2 ainda estiver na `BASE`: o
+   `git rm` tira os que o git conhece e, em seguida, o comando apaga do disco os da lista que
+   foram só copiados para a pasta e nunca commitados (o `git rm` não os vê). Só arquivo: pasta
+   da lista é deixada como está, e nada fora do repositório é tocado. Estes últimos não voltam
+   pelo git; o `PAROU` avisa quantos foram.
+3. **Dependências:** `npm ci` onde falta `node_modules` ou o `package-lock.json` mudou (o
+   `app/` só se já estiver instalado; o CI do GitHub o confere).
+4. **Testes:** o [`verificar-tudo.mjs`](scripts/verificar-tudo.mjs) (`desktop,site`, mais `app`
+   se instalado), o mesmo portão do CI. Não existe opção para pular, e o grupo `site` entra
+   sempre, mesmo com `--so`.
+5. **O que vai junto:** `git add -A`; barra pesos de modelo (os do GazeGene e do EyeNet nunca
+   vão), `.env` (só `.env.production` e `.env.example` passam; também o que termina em `.env`),
+   chaves e certificados (`.pem`, `.key`, `.p12`, `.pfx`, `id_rsa*`), nomes com `credenciais`,
+   `credentials` ou `service-account` e segredos no diff (`service_role` em qualquer formato de
+   JWT, `sb_secret_…`, chave privada). Vale para o que vai no commit de agora **e** para os commits
+   que o V2 já tinha à frente do GitHub (o `push` leva todos). Achou algo na fila: lista, faz
+   `git reset` (seus arquivos ficam como estão; se o `reset` falhar, ele mostra o comando) e para;
+   achou num commit antigo: lista e pede para você chamar quem cuida do código.
+6. **Commit, resumo e pergunta** `Publicar agora no site?`: só `S` publica; qualquer outra
+   resposta cancela, e o commit fica salvo no V2.
+7. **Envio:** `git merge --ff-only` na Beta; `git push origin main` (é o que publica o site);
+   `git push v2 pipeline-v2` (só avisa se falhar).
+8. **Site no ar:** consulta `https://irisflow.ia.br/versao.json` a cada 15 s, por até 8 minutos (pelo relógio),
+   até o commit dele ser o que acabou de sair. Passou o tempo, é só um aviso (o envio deu certo);
+   veja então *Cloudflare → Workers e Pages → irisflow-communicator → Deployments*. Envio que não
+   mexe em `site/` não gera build no Pages (*build watch paths*): ele avisa e nem espera.
+
+| opção (depois do `--`) | o que faz |
+|---|---|
+| `--mensagem "<texto>"` | troca a mensagem inteira do commit |
+| `--sem-conferir-site` | não espera o site novo aparecer no ar |
+| `--so <grupos>` | grupos de teste do `verificar-tudo.mjs`, no lugar de `desktop,site` (o `site` entra sempre) |
+| `--sim` | não pergunta; só para uso sem terminal |
+
+O que muda a cada versão fica em [`scripts/publicar/estaVersao.mjs`](scripts/publicar/estaVersao.mjs),
+que quem entrega o código novo preenche: `BASE` (começo do SHA do commit em que o V2 está antes
+da versão; sem ela, `REMOVIDOS` não remove nada, e assim uma lista velha nunca apaga um arquivo
+que voltou), `REMOVIDOS` e `MENSAGEM` (título e corpo do commit). O `/versao.json`
+(`{ "commit": "<sha>", "construidoEm": "<data>" }`) sai no build do site, de
+[`site/plugins/versaoDoBuild.ts`](site/plugins/versaoDoBuild.ts), com o `CF_PAGES_COMMIT_SHA` do
+Pages (sem ele, o do git); o `_headers` o deixa sem cache. O comando nunca mexe na configuração
+do git (o `core.hooksPath` daqui aponta para outra pasta): commit e `push` passam pelos hooks,
+sem `--no-verify`. Depois do `Pronto.` ele só lembra o que não faz sozinho: o app do cuidador,
+se mudou ([App do cuidador (EAS)](#app-do-cuidador-eas)), e o instalador, com a tag
+`v1.0.0-beta.<n>` ([Publicar uma versão](#publicar-uma-versão)).
+
 ### Site no Cloudflare Pages
 
-Projeto **irisflow-communicator** (`https://irisflow-communicator.pages.dev`), ligado ao `ZambePy/Communicator-V3` pelo
+Projeto **irisflow-communicator** (domínio oficial `https://irisflow.ia.br`; endereço do Pages `https://irisflow-communicator.pages.dev`), ligado ao `ZambePy/Communicator-V3` pelo
 app do GitHub da Cloudflare; cada push na `main` publica. Build: branch `main`, root directory `site`,
 comando `npm run build` (`tsc -b && vite build`), saída `dist` (dentro de `site/`) e *build
 watch paths* `site/*`, para commit só de desktop ou app não gastar build. **Nada fica no
@@ -2103,9 +2728,16 @@ diferentes.
   `index.html` em toda rota profunda; o `_redirects` fica sem regras — a antiga
   `/* /index.html 200` era descartada pelo Pages com aviso e faria falhar um deploy no
   Workers (lá entra `not_found_handling`). O `_headers` traz CSP restrita (`connect-src`
-  só Supabase, `api.github.com` e Web Analytics), HSTS, `nosniff`, `X-Frame-Options`,
-  `Permissions-Policy`, COOP e cache longo em `/assets/*` e `/fonts/*`; o HTML fica no
-  padrão do Pages, `public, max-age=0, must-revalidate`.
+  só Supabase, `api.github.com` e Web Analytics; `script-src` com `'wasm-unsafe-eval'`, que
+  libera só a compilação de WebAssembly, para o reconhecimento do rosto do "Teste com o seu
+  olhar" — sem ele o MediaPipe falha calado), HSTS, `nosniff`, `X-Frame-Options`,
+  `Permissions-Policy`, COOP e cache longo em `/assets/*`, `/fonts/*` e `/demo/mediapipe-*` (o wasm e
+  o modelo do teste, com a versão no caminho; só essa pasta, não o resto de `/demo/`); o HTML fica no
+  padrão do Pages, `public, max-age=0, must-revalidate`. A `Permissions-Policy` dá a
+  câmera só ao próprio site, `camera=(self)`, em todas as rotas — o site é uma SPA, e
+  vale a política do documento carregado primeiro —, para o teste de `/meu-computador`;
+  até 19/10/2026 era `camera=()`, e o teste daria sempre "sem permissão" no site no ar.
+  O microfone continua bloqueado.
 - **Prévias e estatísticas:** cada push fora da `main` e cada PR ganham
   `<hash>.`/`<branch>.irisflow-communicator.pages.dev`, **públicas**, `noindex`, com o Supabase de
   produção (para fechar: *Preview branches* = None). O Web Analytics é o manual
@@ -2159,7 +2791,14 @@ domínio e o `www`. Depois:
 | `app/app.json` → `extra.privacyPolicyUrl`, `termsUrl`, `accountDeletionUrl` | e as fichas da Play e da App Store |
 
 Mantenha os dois endereços `pages.dev` no ar: versões antigas abrem o
-`irisflow.pages.dev` (que redireciona), e os dois estão na lista fixa de hosts do desktop.
+`irisflow.pages.dev` (que redireciona), e os dois estão na lista fixa de hosts do desktop,
+junto com o `irisflow.ia.br`. Quem abre o `irisflow-communicator.pages.dev` (instalador ou
+APK antigo, favorito, busca, e-mail antigo) é levado pelo próprio site ao mesmo caminho no
+domínio, com a busca e o fragmento (`site/src/seo/hostCanonico.ts`, antes de montar o app,
+para o login nascer no domínio certo); as prévias de deploy (`<hash>.`/`<branch>.`) ficam
+onde estão. O segredo `VITE_SITE_URL` do GitHub Actions, se existir, **vence** o
+`frontend/.env.production` no build do instalador: precisa ser `https://irisflow.ia.br` (ou
+ser apagado), senão o "Esqueci a senha" e o "Criar conta" do desktop abrem o `pages.dev`.
 Releases, keepalive e Edge Function não mudam, e não há deep link a trocar: o scheme
 `irisflow://` do app não participa do Auth.
 
@@ -2444,7 +3083,8 @@ Estado em 27/09/2026.
    por dia, remetente `@gmail.com`; com domínio próprio, troque por um SMTP do domínio.
 6. **App do cuidador sem push:** o projeto EAS existe e o APK de teste vai em todo
    release, mas o push depende do Firebase (`GOOGLE_SERVICES_JSON`) no Android e da conta
-   Apple paga no iOS; sem ele, os alertas chegam só com o app aberto (realtime).
+   Apple paga no iOS; sem ele, os alertas chegam só com o app aberto (realtime; desde
+   19/10/2026, com o alarme local do app).
 7. **macOS e Linux sem teste real:** o release gera `.dmg`/`.zip` e AppImage/`.deb`/`.rpm`
    (o CI só a pasta Linux, `--dir`), mas nenhum dos dois foi instalado numa máquina real.
    O site só oferece esses botões quando `VITE_RELEASES_AVAILABLE` os listar.
@@ -2484,6 +3124,18 @@ Estado em 27/09/2026.
     foram conferidos no export web e em testes — falta conferir num celular
     real. No desktop, a tradução para o inglês fica para quando todas as telas
     passarem pelo i18n (hoje o app é só em português).
+13. **Mudanças de 18–19/10/2026 que pedem conferência fora daqui.** Os limiares de
+    pouca luz (0,12 e 0,18, em `src/poucaLuz.ts`) e o destravar da exposição, com
+    webcam real num quarto escurecendo; a recoleta dos alvos ruins (M22) e o
+    estímulo novo (alvo ABC e fundo marinho) com pessoas — as medições anteriores a
+    19/10/2026 usaram outro alvo e outro fundo; a contraluz em fases e o reinício do
+    modelo depois de suspender e acordar o PC (WebGPU perdida); o alarme do sistema
+    no Windows (janela na frente e volume pelo PowerShell) e o socorro que volta
+    depois de a página recarregar; o alarme local do app num celular real; e o
+    pareamento por código QR de ponta a ponta (a câmera do celular abrindo `/parear`,
+    o app e o "Celular conectado às HH:MM"), que pede a migração
+    `20261019200000_pareamento_do_celular` e as duas funções publicadas. As sessões
+    de medição estão em `docs/ROTEIRO_DE_MEDICAO.md`.
 
 ---
 

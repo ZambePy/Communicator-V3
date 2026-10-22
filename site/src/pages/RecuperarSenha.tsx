@@ -1,6 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Field } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
@@ -12,6 +11,7 @@ import { useFormValidation, type Rules } from '@/hooks/useFormValidation'
 
 const RULES: Rules<{ email: string }> = { email: validar.email }
 import './checkout.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 /**
  * Para onde o link do e-mail leva: /nova-senha na origem pública do site
@@ -30,12 +30,21 @@ export default function RecuperarSenha() {
   const [enviado, setEnviado] = useState(false)
   const values = useMemo(() => ({ email }), [email])
   const v = useFormValidation(values, RULES)
+  // O botão não fica apagado: apertar com o e-mail em branco ou errado diz o
+  // que falta e leva o foco ao campo (um botão desabilitado não recebe foco,
+  // não deixa o Enter enviar e não explica o motivo; P2-10, como no /entrar).
+  const [tentou, setTentou] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setTentou(true)
     v.touch('email')
-    if (!v.isValid()) return
+    if (!v.isValid()) {
+      formRef.current?.querySelector<HTMLElement>('input')?.focus()
+      return
+    }
 
     setLoading(true)
     try {
@@ -50,8 +59,7 @@ export default function RecuperarSenha() {
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container flow__inner" style={{ maxWidth: 520 }}>
         <Reveal anim="fade">
           <span className="eyebrow">Acesso</span>
@@ -78,7 +86,7 @@ export default function RecuperarSenha() {
                 </p>
               </div>
             ) : (
-              <form onSubmit={submit} noValidate>
+              <form ref={formRef} onSubmit={submit} noValidate>
                 <p style={{ marginTop: 0 }}>
                   Digite o e-mail da conta. Você vai receber um link para escolher uma senha nova.
                 </p>
@@ -97,21 +105,20 @@ export default function RecuperarSenha() {
                   required
                 />
 
-                <Button
-                  type="submit"
-                  full
-                  size="lg"
-                  loading={loading}
-                  disabled={!v.isValid() || loading}
-                >
+                <Button type="submit" full size="lg" loading={loading} disabled={loading}>
                   {loading ? 'Enviando…' : 'Enviar link'}
                 </Button>
+                {tentou && !v.isValid() && (
+                  <p className="form-hint" role="status" aria-live="polite">
+                    Para enviar o link, falta preencher ou corrigir: e-mail.
+                  </p>
+                )}
               </form>
             )}
 
-            <p className="flow__foot" style={{ marginBottom: 0 }}>
+            <p className="flow__foot flow__foot--junto">
               Lembrou a senha?{' '}
-              <Link to="/entrar" className="underline-grow" style={{ color: 'var(--ok)' }}>
+              <Link to="/entrar" className="underline-grow">
                 Voltar para o acesso
               </Link>
             </p>

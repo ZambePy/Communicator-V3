@@ -50,6 +50,7 @@ export function DwellTarget({ label, dwellMs = 1500, onSelect, hint }: Props) {
     }
   }
 
+  const nomeVisivel = hint ? `${label} ${hint}` : label
   const R = 42
   const C = 2 * Math.PI * R
 
@@ -67,7 +68,10 @@ export function DwellTarget({ label, dwellMs = 1500, onSelect, hint }: Props) {
         onSelect?.()
         cooldown.current = window.setTimeout(() => setStage('idle'), 800)
       }}
-      aria-label={`${label}. Mantenha o cursor ou o foco sobre o alvo por ${dwellMs} milissegundos para selecionar.`}
+      // O nome começa pelo que aparece no botão (rótulo e dica): quem comanda por voz diz
+      // o que vê, e o comando só acha o botão se o texto visível estiver no nome
+      // (WCAG 2.5.3, auditoria P2-8, 21/10/2026). A instrução vem depois.
+      aria-label={`${nomeVisivel}. Mantenha o cursor ou o foco sobre o alvo por ${dwellMs} milissegundos para selecionar.`}
     >
       <svg className="dwell__ring" viewBox="0 0 100 100" aria-hidden="true">
         <circle className="dwell__track" cx="50" cy="50" r={R} />
@@ -107,7 +111,14 @@ export function DwellTarget({ label, dwellMs = 1500, onSelect, hint }: Props) {
         )}
       </span>
 
-      {hint && <span className="dwell__hint">{hint}</span>}
+      {/* O espaço antes da dica fica no DOM (no layout não aparece: os dois são itens do flex): quem
+          lê o texto do botão, como o axe, tem de ler "Rápido 0,8 s", e não "Rápido0,8 s". */}
+      {hint && (
+        <>
+          {' '}
+          <span className="dwell__hint">{hint}</span>
+        </>
+      )}
     </button>
   )
 }

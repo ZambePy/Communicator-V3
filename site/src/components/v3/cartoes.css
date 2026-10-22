@@ -1,0 +1,559 @@
+/* "O que um olhar faz" (CartoesNumerados.tsx), rodada 3 (21/10/2026), sem o
+   efeito de partículas (o dono o recusou no mesmo dia).
+
+   A faixa (trilho) é alta — uma janela mais ~62 % de janela por cartão — e o
+   palco fica preso no topo enquanto ela passa. À esquerda, a tela real do
+   app do cartão ativo, num retângulo de tamanho fixo (as telas esmaecem uma
+   na outra, sem mexer no layout); à direita, a faixa de cartões, que anda um
+   cartão por passo (transform, 700 ms): o que já passou sai pela esquerda,
+   esmaecendo, e o ativo vem no azul da marca, chapado. */
+
+.v3-recursos {
+  --vao: 20px;
+  --cartao: clamp(260px, 22vw, 320px);
+  /* Altura mínima do cartão. A altura de verdade é a do cartão mais alto
+     (todos têm o texto no fluxo, só invisível nos que não estão ativos), então
+     nenhum texto estoura o cartão em nenhuma largura e a faixa não muda de
+     altura ao trocar de cartão. */
+  --cartao-h: clamp(320px, 46vh, 400px);
+  /* A altura reservada da tela ao lado dos cartões (e do celular, que a usa toda). */
+  --tela-h: clamp(300px, 52vh, 440px);
+  position: relative;
+  background: var(--v3-noite);
+}
+
+.v3-recursos__trilho {
+  position: relative;
+  height: calc(100vh + var(--passos, 6) * 62vh);
+}
+
+.v3-recursos__palco {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+}
+
+.v3-recursos__dentro {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 6fr) minmax(0, 6fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'cabeca cabeca'
+    'tela   janela'
+    'passo  passo';
+  column-gap: clamp(24px, 4vw, 64px);
+  padding-block: calc(var(--header-h) + clamp(16px, 4vh, 40px)) clamp(20px, 5vh, 48px);
+}
+
+/* ---------- cabeça ---------- */
+.v3-recursos__cabeca {
+  grid-area: cabeca;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-3) var(--sp-6);
+}
+
+.v3-recursos__titulo {
+  margin: 0;
+  font-size: var(--fs-h2);
+  line-height: 1.04;
+  letter-spacing: -0.032em;
+}
+
+.v3-recursos__texto {
+  margin: 0;
+  max-width: 38ch;
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--v3-texto-2);
+}
+
+/* ---------- a tela real do cartão ativo ----------
+   O retângulo é reservado: a altura vem de --tela-h e a largura acompanha
+   (16 : 10, que cabe o monitor de 16 : 9 e o celular em pé). Cada tela
+   (.v3-tela) ocupa o retângulo inteiro, empilhada, e só a ativa aparece. */
+.v3-recursos__tela {
+  grid-area: tela;
+  align-self: center;
+  justify-self: start;
+  position: relative;
+  width: min(100%, calc(var(--tela-h) * 1.6));
+  height: var(--tela-h);
+}
+
+/* A troca da tela responde à troca de cartão (rodada 3, 21/10/2026, pedido do
+   dono): um cross-fade com escala leve. A tela que não está à vista fica um
+   pouco menor (0,985); a que entra esmaece para dentro e assenta no tamanho
+   inteiro, a que sai esmaece e encolhe de volta. Só opacity e transform. */
+.v3-tela {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.985);
+  pointer-events: none;
+  transition:
+    opacity 400ms var(--ease-out),
+    transform 520ms var(--ease-out);
+}
+
+/* A anterior fica por baixo até a nova carregar: o palco nunca fica vazio. */
+.v3-tela.is-anterior.is-pronta {
+  z-index: 1;
+  opacity: 1;
+  transform: none;
+}
+
+.v3-tela.is-ativa.is-pronta {
+  z-index: 2;
+  opacity: 1;
+  transform: none;
+}
+
+/* O monitor: o contorno fino da marca e uma sombra funda embaixo, sem brilho. */
+.v3-tela__moldura {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #05080f;
+  box-shadow:
+    0 0 0 1px rgba(169, 198, 247, 0.2),
+    0 30px 60px -36px rgba(0, 0, 0, 0.8);
+}
+
+.v3-tela__imagem {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 0;
+}
+
+/* O celular em pé: toda a altura reservada; a largura segue a proporção da tela (392 × 772) mais a moldura. */
+.v3-tela--celular .celular {
+  width: calc((var(--tela-h) - 20px) * 392 / 772 + 20px);
+  height: var(--tela-h);
+  margin: 0;
+}
+
+.v3-tela--celular .celular__moldura {
+  height: 100%;
+  box-sizing: border-box;
+  border-radius: 34px;
+}
+
+.v3-tela--celular .celular__tela {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 25px;
+}
+
+.v3-tela--celular .celular__camera {
+  top: 15px;
+  height: 14px;
+}
+
+/* Sem tela publicada ("Mostrar onde dói"): um painel quieto, com o nome do recurso; o aviso
+   fica no cartão. */
+.v3-tela__painel {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: clamp(20px, 3vw, 40px);
+  border-radius: 14px;
+  background: var(--v3-superficie);
+  box-shadow: 0 0 0 1px var(--v3-fio-forte);
+}
+
+.v3-tela__painel-rotulo {
+  margin: 0;
+  font-size: var(--fs-min);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--v3-iris);
+}
+
+.v3-tela__painel-texto {
+  margin: 0;
+  max-width: 28ch;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  color: var(--v3-papel);
+}
+
+/* ---------- a faixa de cartões ---------- */
+.v3-recursos__janela {
+  grid-area: janela;
+  align-self: center;
+  min-width: 0;
+}
+
+.v3-cartoes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: var(--vao);
+  transform: translateX(calc(var(--ativo, 0) * -1 * (var(--cartao) + var(--vao))));
+  transition: transform 700ms var(--ease-out);
+}
+
+.v3-cartao {
+  --pad: 22px;
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: var(--cartao);
+  min-height: var(--cartao-h);
+  margin: 0;
+  padding: var(--pad);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--v3-fio);
+  background: var(--v3-superficie);
+  color: var(--v3-papel);
+  cursor: default;
+  transition:
+    opacity 500ms var(--ease-out),
+    transform 500ms var(--ease-out);
+}
+
+.v3-cartao:not(.is-ativo):not(.is-parado):not(.is-passado) {
+  cursor: pointer;
+}
+
+/* Já saiu de cena: invisível E sem clique. Sem o pointer-events, o cartão
+   transparente ficava por cima da coluna da tela (a faixa anda para a
+   esquerda, passando por ela) e clicar na tela levava a página de volta
+   a um passo anterior (revisão de 21/10/2026, I3). O link continua na ordem
+   do Tab de propósito (nada de visibility/display): o foco do teclado nele
+   leva a página até o passo dele, e o cartão volta à vista. */
+.v3-cartao.is-passado {
+  opacity: 0;
+  transform: translateX(-24px);
+  pointer-events: none;
+}
+
+.v3-cartao__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* A seta (18 px) só existe no cartão ativo; a altura é a mesma com ou sem ela. */
+  min-height: 18px;
+}
+
+.v3-cartao__numero {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--v3-texto-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.v3-cartao__seta {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--v3-texto-2);
+}
+
+/* De lado: o título embaixo; o texto fica no fluxo, só invisível (fora da
+   vista, não do leitor de tela), segurando o espaço que o cartão ativo vai
+   precisar. A ordem põe o título depois do texto; no ativo, antes. */
+.v3-cartao__titulo {
+  order: 2;
+  margin: var(--sp-3) 0 0;
+  font-size: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: inherit;
+}
+
+.v3-cartao__titulo a {
+  color: inherit;
+  text-decoration: none;
+  border-radius: 6px;
+  /* Alvo de toque de 44 px (auditoria P3-3, 21/10/2026): o link media 25 px de
+     altura. O respiro é padding, e a margem negativa o devolve ao fluxo: o
+     cartão não cresce. inline-block, para a margem não colapsar com a do h3.
+     11 px, não 10: a 390 px a linha tem 23 px e 10 + 23 + 10 dava 43 px (medido
+     no navegador em 22/10/2026). */
+  display: inline-block;
+  padding-block: 11px;
+  margin-block: -11px;
+}
+
+.v3-cartao__titulo a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1.5px;
+}
+
+.v3-cartao__topo {
+  order: 0;
+}
+
+.v3-cartao__corpo {
+  order: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  /* As mesmas margens nos dois estados: o cartão tem a mesma altura ativo ou não. */
+  margin-top: var(--sp-3);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition:
+    opacity 380ms var(--ease-out),
+    transform 380ms var(--ease-out);
+}
+
+.v3-cartao__texto {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  color: var(--v3-cartao-ativo-texto);
+}
+
+.v3-cartao__pontos {
+  list-style: none;
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--v3-papel);
+}
+
+.v3-cartao__pontos li {
+  position: relative;
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* O marcador é o ponto de fixação: o aro com o ponto dentro. */
+.v3-cartao__pontos li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.42em;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  opacity: 0.8;
+}
+
+.v3-cartao__nota {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-min);
+  line-height: 1.45;
+  color: var(--v3-cartao-ativo-texto);
+}
+
+/* ---------- o ativo: o azul da marca, chapado ---------- */
+.v3-cartao.is-ativo {
+  background: var(--v3-cartao-ativo);
+  border-color: transparent;
+}
+
+.v3-cartao.is-ativo .v3-cartao__numero,
+.v3-cartao.is-ativo .v3-cartao__seta {
+  color: var(--v3-papel);
+}
+
+.v3-cartao.is-ativo .v3-cartao__titulo {
+  order: 1;
+}
+
+/* Ativo: o texto logo abaixo do título e os pontos no pé do cartão. */
+.v3-cartao.is-ativo .v3-cartao__corpo {
+  order: 2;
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.v3-cartao.is-ativo .v3-cartao__pontos {
+  margin-top: auto;
+  padding-top: var(--sp-4);
+}
+
+/* O foco no cartão azul: o aro teal continua acima de 3:1 sobre o azul. */
+.v3-cartao__titulo a:focus-visible {
+  outline-offset: 4px;
+}
+
+/* ---------- quanto já passou ---------- */
+.v3-recursos__passo {
+  grid-area: passo;
+  position: relative;
+  height: 2px;
+  margin: var(--sp-5) 0 0;
+  border-radius: 2px;
+  background: var(--v3-fio);
+  overflow: hidden;
+}
+
+.v3-recursos__barra {
+  position: absolute;
+  inset: 0;
+  background: var(--v3-iris);
+  transform-origin: 0 50%;
+  transform: scaleX(var(--feito, 0));
+  transition: transform 700ms var(--ease-out);
+}
+
+/* ---------- movimento reduzido: grade parada ---------- */
+.v3-recursos.is-parado {
+  padding-block: var(--faixa);
+}
+
+.v3-recursos.is-parado .v3-recursos__cabeca {
+  margin-bottom: clamp(32px, 6vh, 56px);
+}
+
+.v3-cartoes--grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: var(--vao);
+  transform: none;
+}
+
+.v3-cartao.is-parado {
+  width: auto;
+  height: auto;
+  min-height: 0;
+}
+
+.v3-cartao.is-parado .v3-cartao__titulo {
+  order: 0;
+  margin-top: var(--sp-3);
+}
+
+.v3-cartao.is-parado .v3-cartao__corpo {
+  order: 0;
+  flex: none;
+  display: block;
+  margin-top: var(--sp-3);
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.v3-cartao.is-parado .v3-cartao__texto,
+.v3-cartao.is-parado .v3-cartao__nota {
+  color: var(--v3-texto-2);
+}
+
+/* A tela pequena do cartão parado: um retângulo 16 : 9 reservado; a captura do
+   celular (em pé) aparece inteira, no meio. */
+.v3-cartao__tela {
+  margin-top: var(--sp-4);
+  aspect-ratio: 16 / 9;
+  display: flex;
+  justify-content: center;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #05080f;
+  box-shadow: 0 0 0 1px rgba(169, 198, 247, 0.18);
+}
+
+.v3-cartao__tela img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 0;
+}
+
+.v3-cartao__tela--celular img {
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+/* ---------- celular e tablet: a tela em cima, o cartão embaixo ---------- */
+@media (max-width: 960px) {
+  .v3-recursos {
+    --cartao: min(78vw, 320px);
+    --cartao-h: 240px;
+    /* O que sobra da janela depois do título, do cartão (que cresce com o
+       texto, até uns 400 px) e das margens. Abaixo de uns 140 px a tela não
+       vale o espaço e sai (ver o fim do arquivo). */
+    --tela-h: clamp(120px, calc(100svh - 660px), 260px);
+    --vao: 14px;
+  }
+  .v3-recursos__dentro {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'cabeca'
+      'tela'
+      'janela'
+      'passo';
+    padding-block: calc(var(--header-h) + 12px) 18px;
+  }
+  .v3-recursos__tela {
+    justify-self: center;
+    margin-block: var(--sp-3);
+  }
+  .v3-recursos__titulo {
+    font-size: clamp(1.75rem, 1.4rem + 1.6vw, 2.25rem);
+  }
+  .v3-recursos__passo {
+    margin-top: var(--sp-4);
+  }
+  .v3-cartao {
+    --pad: 18px;
+  }
+  .v3-cartao__texto {
+    font-size: 0.9375rem;
+  }
+  /* O painel sem tela é baixo no celular: o aviso cabe sem passar das bordas. */
+  .v3-tela__painel {
+    padding: 16px;
+    gap: var(--sp-2);
+  }
+  .v3-tela__painel-texto {
+    max-width: none;
+    font-size: 1rem;
+  }
+}
+
+/* Celular baixo (iPhone SE, janela com a barra aberta): sem espaço para a tela
+   E para o cartão inteiro. O texto do cartão não se corta nunca; a tela, que
+   só ilustra, é quem sai. */
+@media (max-width: 960px) and (max-height: 799px) {
+  .v3-recursos__tela {
+    display: none;
+  }
+  .v3-recursos__dentro {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'cabeca'
+      'janela'
+      'passo';
+  }
+}

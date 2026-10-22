@@ -149,3 +149,18 @@ export function alvoMinimoPx(): number {
   const n = parseFloat(lido);
   return Number.isFinite(n) && n > 0 ? n : Math.round(degToPx(GAZE_TOKENS.targetMinDeg));
 }
+
+/**
+ * Graus em px na geometria corrente, pelo token de afastamento (1,5°,
+ * `--gaze-spacing-min`), que o `SettingsProvider` refaz quando o posto ou a
+ * janela mudam — a mesma fonte única do `alvoMinimoPx`. Serve para medidas
+ * pequenas (de 0 a ~5°), onde a tangente é linear dentro de 0,1 %.
+ */
+export function grausEmPxDaTela(graus: number): number {
+  const fallback = degToPx(GAZE_TOKENS.spacingMinDeg);
+  const lido = typeof document === 'undefined'
+    ? NaN
+    : parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gaze-spacing-min'));
+  const pxPorUmEMeio = Number.isFinite(lido) && lido > 0 ? lido : fallback;
+  return (pxPorUmEMeio * graus) / GAZE_TOKENS.spacingMinDeg;
+}

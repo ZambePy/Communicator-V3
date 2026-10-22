@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { Text } from './Text';
-import { motion, radius, sizes, spacing, useTheme } from '@/theme';
+import { motion, sizes, spacing, useTheme } from '@/theme';
 
 export type PillTone = 'accent' | 'primary' | 'danger' | 'warning' | 'muted';
 
@@ -15,7 +15,10 @@ interface Props {
   onDark?: boolean;
 }
 
-/** Selo de estado (não é tocável). O texto sempre acompanha a cor — nunca só a cor. */
+/**
+ * Estado em uma linha (não é tocável): ponto + texto, sem cápsula preenchida
+ * (19/10/2026). O texto sempre acompanha a cor — nunca só a cor.
+ */
 export function StatusPill({ label, tone = 'accent', live, onDark }: Props) {
   const { colors } = useTheme();
   const cor: Record<PillTone, { fg: string; dot: string; bg: string }> = {
@@ -29,7 +32,7 @@ export function StatusPill({ label, tone = 'accent', live, onDark }: Props) {
   const fg = onDark ? colors.onDark : c.fg;
   const dot = onDark ? (tone === 'accent' ? colors.accent : colors.onDark) : c.dot;
   return (
-    <View style={[styles.pill, { backgroundColor: onDark ? colors.onDarkFill : c.bg }]}>
+    <View style={styles.pill}>
       {live ? <LiveDot color={dot} /> : <View style={[styles.dot, { backgroundColor: dot }]} />}
       <Text variant="caption" weight="semibold" style={[styles.label, { color: fg }]}>
         {label}
@@ -61,7 +64,7 @@ export function LiveDot({ color, size = sizes.dot }: { color: string; size?: num
 }
 
 const styles = StyleSheet.create({
-  pill: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + spacing.xxs, borderRadius: radius.pill, alignSelf: 'flex-start', maxWidth: '100%' },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxs, alignSelf: 'flex-start', maxWidth: '100%' },
   dot: { width: sizes.dot, height: sizes.dot, borderRadius: sizes.dot / 2 },
   label: { flexShrink: 1 },
 });

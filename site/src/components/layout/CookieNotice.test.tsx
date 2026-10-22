@@ -32,7 +32,7 @@ describe('<CookieNotice />', () => {
     expect(screen.getByRole('link', { name: /Privacidade/ })).toHaveAttribute('href', '/privacidade')
   })
 
-  it('"Recusar estatísticas" some com o aviso, tira o beacon e recarrega a página', () => {
+  it('"Só o essencial" some com o aviso, tira o beacon e recarrega a página', () => {
     const original = window.location
     const reload = vi.fn()
     Object.defineProperty(window, 'location', { configurable: true, value: { ...original, reload } })
@@ -40,7 +40,7 @@ describe('<CookieNotice />', () => {
       montar()
       // antes da escolha, com token, as estatísticas sem cookie rodam
       expect(beacon()).not.toBeNull()
-      fireEvent.click(screen.getByRole('button', { name: 'Recusar estatísticas' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Só o essencial' }))
       expect(screen.queryByRole('region')).not.toBeInTheDocument()
       expect(window.localStorage.getItem(CONSENT_KEY)).toBe('refused')
       expect(beacon()).toBeNull()
@@ -58,9 +58,9 @@ describe('<CookieNotice />', () => {
     expect(beacon()).toBeNull()
   })
 
-  it('"Entendi" guarda a escolha e mantém o beacon', () => {
+  it('"Aceitar estatísticas" guarda a escolha e mantém o beacon', () => {
     montar()
-    fireEvent.click(screen.getByRole('button', { name: 'Entendi' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Aceitar estatísticas' }))
     expect(window.localStorage.getItem(CONSENT_KEY)).toBe('accepted')
     expect(beacon()).not.toBeNull()
   })
@@ -68,7 +68,20 @@ describe('<CookieNotice />', () => {
   it('sem token no build, nunca carrega o beacon', () => {
     vi.stubEnv('VITE_CF_ANALYTICS_TOKEN', '')
     montar()
-    fireEvent.click(screen.getByRole('button', { name: 'Entendi' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Aceitar estatísticas' }))
     expect(beacon()).toBeNull()
+  })
+
+  // Auditoria P2-11 (21/10/2026): o botão em destaque dizia "Entendi" e o efeito
+  // real era aceitar as estatísticas. Agora cada botão diz o que faz e os dois
+  // têm o mesmo peso visual: nenhum empurra a pessoa para o "sim".
+  it('os dois rótulos dizem o que fazem e os botões têm o mesmo peso visual', () => {
+    montar()
+    const essencial = screen.getByRole('button', { name: 'Só o essencial' })
+    const aceitar = screen.getByRole('button', { name: 'Aceitar estatísticas' })
+    expect(screen.queryByRole('button', { name: 'Entendi' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Recusar estatísticas' })).not.toBeInTheDocument()
+    const variante = (el: HTMLElement) => [...el.classList].filter((c) => /^btn--(primary|secondary|ghost|chamada)$/.test(c))
+    expect(variante(essencial)).toEqual(variante(aceitar))
   })
 })

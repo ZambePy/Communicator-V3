@@ -1,0 +1,2131 @@
+{
+ "amostras": [
+  {
+   "x": 640.0000000000016,
+   "y": 239.99999951999985,
+   "timestamp": 1033,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 617.3285443743163,
+   "y": 240.4080847801575,
+   "timestamp": 1066,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 594.9681511227252,
+   "y": 241.89444698036476,
+   "timestamp": 1099,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 573.5562433821663,
+   "y": 244.36654877652916,
+   "timestamp": 1132,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 553.5064598210013,
+   "y": 247.78737938277465,
+   "timestamp": 1165,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 535.2224542957954,
+   "y": 252.13121493027768,
+   "timestamp": 1198,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 519.0750448109137,
+   "y": 257.36367841104334,
+   "timestamp": 1231,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 505.39238145787795,
+   "y": 263.4422929217513,
+   "timestamp": 1264,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 494.4526621999569,
+   "y": 270.3172636769393,
+   "timestamp": 1297,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 486.47819505176307,
+   "y": 277.9320573015957,
+   "timestamp": 1330,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 481.6305831147091,
+   "y": 286.2239426946829,
+   "timestamp": 1363,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 480.0067325198395,
+   "y": 295.12454568326484,
+   "timestamp": 1396,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 481.6338987726089,
+   "y": 304.5604333635678,
+   "timestamp": 1429,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 486.4414892884227,
+   "y": 314.45373182830934,
+   "timestamp": 1462,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 494.2357979941404,
+   "y": 324.7227761074786,
+   "timestamp": 1495,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 505.3837533694206,
+   "y": 335.2827889102437,
+   "timestamp": 1528,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 519.112414293008,
+   "y": 346.04658359807604,
+   "timestamp": 1561,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 535.2867415663057,
+   "y": 356.92528616182994,
+   "timestamp": 1594,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 553.5888288004684,
+   "y": 367.8290705792776,
+   "timestamp": 1627,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 573.6484913865588,
+   "y": 378.66790168897955,
+   "timestamp": 1660,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 595.05806097146,
+   "y": 389.3522795819685,
+   "timestamp": 1693,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 617.3818378858571,
+   "y": 399.7939794609482,
+   "timestamp": 1726,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 640.1652843621347,
+   "y": 409.9067809355655,
+   "timestamp": 1759,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 662.9443992529808,
+   "y": 419.6071808068239,
+   "timestamp": 1792,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 685.2552207511998,
+   "y": 428.8150835429474,
+   "timestamp": 1825,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 706.6433039453518,
+   "y": 437.45446386734494,
+   "timestamp": 1858,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 726.6729947487177,
+   "y": 445.45399617800757,
+   "timestamp": 1891,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 744.9363178763215,
+   "y": 452.74764592443944,
+   "timestamp": 1924,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 761.0613021957352,
+   "y": 459.27521864475216,
+   "timestamp": 1957,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 774.7195791067281,
+   "y": 464.9828632584788,
+   "timestamp": 1990,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 785.6331093583198,
+   "y": 469.8235277872033,
+   "timestamp": 2023,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 793.5799270726609,
+   "y": 473.75736893496645,
+   "timestamp": 2056,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 798.3988632229343,
+   "y": 476.7521249326794,
+   "timestamp": 2089,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 799.9934586918546,
+   "y": 478.78348428243925,
+   "timestamp": 2122,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 798.3366757853362,
+   "y": 479.8355658470832,
+   "timestamp": 2155,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 793.4956785236294,
+   "y": 479.90201256370574,
+   "timestamp": 2188,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 785.7240918276428,
+   "y": 478.99100912864856,
+   "timestamp": 2221,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 774.5087701638613,
+   "y": 477.1983481903048,
+   "timestamp": 2254,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 760.7553624343002,
+   "y": 474.3207125051446,
+   "timestamp": 2287,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 744.5603411779163,
+   "y": 470.4235688973116,
+   "timestamp": 2320,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 726.2408774281307,
+   "y": 465.6688124174635,
+   "timestamp": 2353,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 706.1673706587164,
+   "y": 460.05203346548166,
+   "timestamp": 2386,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 684.7477334523167,
+   "y": 453.61268725581624,
+   "timestamp": 2419,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 662.4178568982244,
+   "y": 446.40212549306494,
+   "timestamp": 2452,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 639.6323972102933,
+   "y": 438.47918149809203,
+   "timestamp": 2485,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 616.8553937895003,
+   "y": 429.9089435026005,
+   "timestamp": 2518,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 594.5507639975585,
+   "y": 420.7620012399631,
+   "timestamp": 2551,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 573.1728257939191,
+   "y": 411.11378245767173,
+   "timestamp": 2584,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 553.157026062121,
+   "y": 401.043894912146,
+   "timestamp": 2617,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 534.91105667551,
+   "y": 390.6354518359248,
+   "timestamp": 2650,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 518.8065347932347,
+   "y": 379.97437646951573,
+   "timestamp": 2683,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 505.1714115485745,
+   "y": 369.1486872880509,
+   "timestamp": 2716,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 494.2832534811333,
+   "y": 358.24776795751796,
+   "timestamp": 2749,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 486.3635075287475,
+   "y": 347.36162713104244,
+   "timestamp": 2782,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 481.5727862760791,
+   "y": 336.58015371357016,
+   "timestamp": 2815,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 480.00695904814927,
+   "y": 325.9923734704579,
+   "timestamp": 2848,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 481.6924101331175,
+   "y": 315.68571294864665,
+   "timestamp": 2881,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 486.56064042116606,
+   "y": 305.7452766680019,
+   "timestamp": 2914,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 494.36987792608625,
+   "y": 296.25314344692435,
+   "timestamp": 2947,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 505.60151517322583,
+   "y": 287.28768755807533,
+   "timestamp": 2980,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 519.3776746408133,
+   "y": 278.92293016406734,
+   "timestamp": 3013,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 535.5930004257472,
+   "y": 271.2279261446868,
+   "timestamp": 3046,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 553.929681223666,
+   "y": 264.266190958169,
+   "timestamp": 3079,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 574.016942070766,
+   "y": 258.0951714901314,
+   "timestamp": 3112,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 595.4465835215635,
+   "y": 252.76576371680684,
+   "timestamp": 3145,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 617.7825082164526,
+   "y": 248.3218778792894,
+   "timestamp": 3178,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 640.5699356433274,
+   "y": 244.80004712385877,
+   "timestamp": 3211,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 663.3447857874582,
+   "y": 242.22906305120662,
+   "timestamp": 3244,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 685.6431848952093,
+   "y": 240.6295819583937,
+   "timestamp": 3277,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 707.0109418344322,
+   "y": 240.0134881710375,
+   "timestamp": 3310,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 727.0128171416982,
+   "y": 240.3819353333398,
+   "timestamp": 3343,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 745.2414027277094,
+   "y": 241.71228340789955,
+   "timestamp": 3376,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 761.3254358334768,
+   "y": 243.1168777584353,
+   "timestamp": 3409,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 774.9373832152485,
+   "y": 247.3033587648763,
+   "timestamp": 3442,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 785.8001514274582,
+   "y": 251.57734094869264,
+   "timestamp": 3475,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 793.692812795022,
+   "y": 256.7142260690653,
+   "timestamp": 3508,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 798.4553114376852,
+   "y": 262.699658491253,
+   "timestamp": 3541,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 799.9923680942294,
+   "y": 269.4865970861809,
+   "timestamp": 3574,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 798.2782528417297,
+   "y": 277.0197872601208,
+   "timestamp": 3607,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 793.3828211282297,
+   "y": 285.2373913121386,
+   "timestamp": 3640,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 785.5365377550215,
+   "y": 294.0717481012808,
+   "timestamp": 3673,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 774.2879916675315,
+   "y": 303.45002109531623,
+   "timestamp": 3706,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 760.4890953814822,
+   "y": 313.29483819661885,
+   "timestamp": 3739,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 744.2534909865353,
+   "y": 323.52494923227385,
+   "timestamp": 3772,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 725.899622507086,
+   "y": 334.0559067536097,
+   "timestamp": 3805,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 705.7986397273435,
+   "y": 344.8007690219007,
+   "timestamp": 3838,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 684.3590283099617,
+   "y": 355.67082139830586,
+   "timestamp": 3871,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 662.0170911936378,
+   "y": 366.5763111687839,
+   "timestamp": 3904,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 639.2277324649027,
+   "y": 377.42719025395604,
+   "timestamp": 3937,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 616.4550720119345,
+   "y": 388.1338599616484,
+   "timestamp": 3970,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 616.4550720119345,
+   "y": 388.1338599616484,
+   "timestamp": 4003,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "closed"
+  },
+  {
+   "x": 616.4550720119345,
+   "y": 388.1338599616484,
+   "timestamp": 4036,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "closed"
+  },
+  {
+   "x": 616.4550720119345,
+   "y": 388.1338599616484,
+   "timestamp": 4069,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "closed"
+  },
+  {
+   "x": 616.4550720119345,
+   "y": 388.1338599616484,
+   "timestamp": 4102,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "closed"
+  },
+  {
+   "x": 616.4550720119345,
+   "y": 388.1338599616484,
+   "timestamp": 4135,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "closed"
+  },
+  {
+   "x": 616.4550720119345,
+   "y": 388.1338599616484,
+   "timestamp": 4168,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "closed"
+  },
+  {
+   "x": 254.13348996268124,
+   "y": 531.9358646497961,
+   "timestamp": 4201,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 246.23904453144277,
+   "y": 538.5780436687363,
+   "timestamp": 4234,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 241.50833461806747,
+   "y": 544.3803707353975,
+   "timestamp": 4267,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 240.00501254319624,
+   "y": 549.3209301522955,
+   "timestamp": 4300,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 241.7579129262311,
+   "y": 553.3591011612779,
+   "timestamp": 4333,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 246.7257375147757,
+   "y": 556.4617113670869,
+   "timestamp": 4366,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 254.7735838996093,
+   "y": 558.6034423451069,
+   "timestamp": 4399,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 265.5465949655057,
+   "y": 559.7672354406309,
+   "timestamp": 4432,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 279.61548219715655,
+   "y": 559.9450250851221,
+   "timestamp": 4465,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 295.89070543347606,
+   "y": 559.1403112060482,
+   "timestamp": 4498,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 314.2668724771879,
+   "y": 557.3887945712503,
+   "timestamp": 4531,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 334.38360798713796,
+   "y": 554.8964025516034,
+   "timestamp": 4564,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 355.8341394063929,
+   "y": 550.9264366999826,
+   "timestamp": 4597,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 378.18257235871465,
+   "y": 546.2627340929237,
+   "timestamp": 4630,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 400.97411840406437,
+   "y": 540.7419664519789,
+   "timestamp": 4663,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 423.7447254431337,
+   "y": 534.3942741653555,
+   "timestamp": 4696,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 446.0306619150393,
+   "y": 527.2693297857971,
+   "timestamp": 4729,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 467.3780203945679,
+   "y": 519.4250162580211,
+   "timestamp": 4762,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 487.35199385181573,
+   "y": 510.92568230268245,
+   "timestamp": 4795,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 505.5457527001636,
+   "y": 501.84129258981625,
+   "timestamp": 4828,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 521.5887501401916,
+   "y": 492.24673896332797,
+   "timestamp": 4861,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 535.1542936025019,
+   "y": 482.2211757752412,
+   "timestamp": 4894,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 545.9662392970547,
+   "y": 471.84734448132787,
+   "timestamp": 4927,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 553.8047006286621,
+   "y": 461.210879124541,
+   "timestamp": 4960,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 558.5107372255862,
+   "y": 450.3995929030298,
+   "timestamp": 4993,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 559.9902526038147,
+   "y": 439.50274927385817,
+   "timestamp": 5026,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 558.2188346820684,
+   "y": 428.6103224426767,
+   "timestamp": 5059,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 553.2691888920699,
+   "y": 417.8122527442959,
+   "timestamp": 5092,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 545.3496272602686,
+   "y": 407.19770273062267,
+   "timestamp": 5125,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 534.06634646493,
+   "y": 396.8543199092273,
+   "timestamp": 5158,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 520.222049272302,
+   "y": 386.867512084771,
+   "timestamp": 5191,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 503.94597038811577,
+   "y": 377.3197411759674,
+   "timestamp": 5224,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 485.5578164968778,
+   "y": 368.2898412235238,
+   "timestamp": 5257,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 465.4294871536647,
+   "y": 359.8523660695464,
+   "timestamp": 5290,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 443.97003909252413,
+   "y": 352.07697186324236,
+   "timestamp": 5323,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 421.61618454297746,
+   "y": 345.0278390975283,
+   "timestamp": 5356,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 398.8230726563256,
+   "y": 338.76313822523633,
+   "timestamp": 5389,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 376.05490088808943,
+   "y": 333.3345418461299,
+   "timestamp": 5422,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 353.7754077438885,
+   "y": 328.78678449255654,
+   "timestamp": 5455,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 332.4383995305895,
+   "y": 325.15726675384934,
+   "timestamp": 5488,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 312.4784892828156,
+   "y": 322.47568938815124,
+   "timestamp": 5521,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 294.302229831397,
+   "y": 320.76366869568574,
+   "timestamp": 5554,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 278.2798171701334,
+   "y": 320.0341519697414,
+   "timestamp": 5587,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 264.7375277203663,
+   "y": 320.28975626962267,
+   "timestamp": 5620,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 253.95103295624185,
+   "y": 321.5128144147591,
+   "timestamp": 5653,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 246.13970056159445,
+   "y": 323.10577157037574,
+   "timestamp": 5686,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 241.46191450950357,
+   "y": 326.86864300242945,
+   "timestamp": 5719,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 240.01118192046434,
+   "y": 331.04039743353036,
+   "timestamp": 5752,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 241.81126265981788,
+   "y": 336.0783910626568,
+   "timestamp": 5785,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 246.78808452121277,
+   "y": 341.96888760869956,
+   "timestamp": 5818,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 254.7425623239794,
+   "y": 348.66650920438894,
+   "timestamp": 5851,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 266.04474064354577,
+   "y": 356.11698543536687,
+   "timestamp": 5884,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 279.91175025633856,
+   "y": 364.25925035519384,
+   "timestamp": 5917,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 5950,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 5983,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6016,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6049,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6082,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6115,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6148,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6181,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6214,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6247,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6280,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6313,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6346,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6379,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6412,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6445,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6478,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6511,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6544,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6577,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 296.2080343951797,
+   "y": 373.0263030757715,
+   "timestamp": 6610,
+   "hasFace": false,
+   "uncalibrated": false
+  },
+  {
+   "x": 519.850102490555,
+   "y": 556.1266271891822,
+   "timestamp": 6643,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 503.6168251681017,
+   "y": 558.4147464203012,
+   "timestamp": 6676,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 485.2684988732327,
+   "y": 559.689335216971,
+   "timestamp": 6709,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 465.35887611160587,
+   "y": 559.9766174266081,
+   "timestamp": 6742,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 443.62943395407484,
+   "y": 559.2754638545514,
+   "timestamp": 6775,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 421.23554410216013,
+   "y": 557.594853237531,
+   "timestamp": 6808,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 398.42923374429387,
+   "y": 554.9620579874749,
+   "timestamp": 6841,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 375.6612292080988,
+   "y": 551.6482826102229,
+   "timestamp": 6874,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 353.39212533586937,
+   "y": 546.9023306035934,
+   "timestamp": 6907,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 332.07439698338226,
+   "y": 541.4358954720981,
+   "timestamp": 6940,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 312.1417715020804,
+   "y": 535.1717935400718,
+   "timestamp": 6973,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 293.9999992456293,
+   "y": 528.1301325117927,
+   "timestamp": 7006,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 278.0184389277137,
+   "y": 520.3638972271335,
+   "timestamp": 7039,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 264.5224558790846,
+   "y": 511.93567533358055,
+   "timestamp": 7072,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 253.78672849698071,
+   "y": 502.91443410737645,
+   "timestamp": 7105,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 246.0295544081328,
+   "y": 493.37436467699024,
+   "timestamp": 7138,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 241.40817875703706,
+   "y": 483.3940840677266,
+   "timestamp": 7171,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 240.0148942340903,
+   "y": 473.05591384069845,
+   "timestamp": 7204,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 241.87203390749468,
+   "y": 462.44516803654216,
+   "timestamp": 7237,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 246.90128179043228,
+   "y": 451.6494327074144,
+   "timestamp": 7270,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 254.93661426044827,
+   "y": 440.7578340926045,
+   "timestamp": 7303,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 266.26815765352984,
+   "y": 429.8602977175457,
+   "timestamp": 7336,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 280.1800835520612,
+   "y": 419.0468027911047,
+   "timestamp": 7369,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 296.5166080772411,
+   "y": 408.4066371864327,
+   "timestamp": 7402,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 314.9559433512931,
+   "y": 398.02765868838605,
+   "timestamp": 7435,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 335.1250393116264,
+   "y": 387.99556833172716,
+   "timestamp": 7468,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 356.6139790044099,
+   "y": 378.39320164440426,
+   "timestamp": 7501,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 378.98543838311195,
+   "y": 369.29984349318744,
+   "timestamp": 7534,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 401.78390482322607,
+   "y": 360.790572020329,
+   "timestamp": 7567,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 424.5450694514555,
+   "y": 352.9356368553182,
+   "timestamp": 7600,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 446.8053353483522,
+   "y": 345.7998763583033,
+   "timestamp": 7633,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 468.1112873830344,
+   "y": 339.44217802940176,
+   "timestamp": 7666,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 488.0289451049812,
+   "y": 333.91498522563694,
+   "timestamp": 7699,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 506.1526167388583,
+   "y": 329.26385151459203,
+   "timestamp": 7732,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 522.1131783593918,
+   "y": 325.5270401084798,
+   "timestamp": 7765,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 535.5856150648787,
+   "y": 322.73515596750815,
+   "timestamp": 7798,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 546.2956813587701,
+   "y": 320.9107682823096,
+   "timestamp": 7831,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 554.0255728295026,
+   "y": 320.0678691225285,
+   "timestamp": 7864,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 558.6185800860264,
+   "y": 320.2104512352603,
+   "timestamp": 7897,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 559.9829710936751,
+   "y": 321.3247888974581,
+   "timestamp": 7930,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 558.096966913039,
+   "y": 323.1657934118306,
+   "timestamp": 7963,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 553.0390999936624,
+   "y": 326.44311663920047,
+   "timestamp": 7996,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 544.9799743072111,
+   "y": 330.51421608884635,
+   "timestamp": 8029,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 533.6206492434651,
+   "y": 335.45357386774486,
+   "timestamp": 8062,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 519.6856767983508,
+   "y": 341.2486948072338,
+   "timestamp": 8095,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 503.3289467037586,
+   "y": 347.8563387452804,
+   "timestamp": 8128,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 484.8725702792699,
+   "y": 355.2233172947441,
+   "timestamp": 8161,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 464.6899321419632,
+   "y": 363.28936788134376,
+   "timestamp": 8194,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 443.1912216348654,
+   "y": 371.988165909469,
+   "timestamp": 8227,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 420.8139606250029,
+   "y": 381.2480347232745,
+   "timestamp": 8260,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 398.01377943001137,
+   "y": 390.9926010082785,
+   "timestamp": 8293,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 375.2550216268957,
+   "y": 401.1414541144856,
+   "timestamp": 8326,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 353.00123497122183,
+   "y": 411.61082442097245,
+   "timestamp": 8359,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 331.7057024886667,
+   "y": 422.3142828996761,
+   "timestamp": 8392,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 311.8021922310121,
+   "y": 433.16345939150864,
+   "timestamp": 8425,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 293.6961075688788,
+   "y": 444.068775191969,
+   "timestamp": 8458,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 277.75621383508866,
+   "y": 454.9401846629261,
+   "timestamp": 8491,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 264.3071043465668,
+   "y": 465.6879201582876,
+   "timestamp": 8524,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 253.62254836298902,
+   "y": 476.2232343503618,
+   "timestamp": 8557,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 245.91982846273808,
+   "y": 486.4591339792409,
+   "timestamp": 8590,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 241.35509523639715,
+   "y": 496.31109907883683,
+   "timestamp": 8623,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 240.0194883414707,
+   "y": 505.69778184392305,
+   "timestamp": 8656,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 241.93412381553807,
+   "y": 514.5416794871111,
+   "timestamp": 8689,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 247.0189219973193,
+   "y": 522.7697756988368,
+   "timestamp": 8722,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 255.1123043533692,
+   "y": 530.3141456853249,
+   "timestamp": 8755,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 266.4913047961029,
+   "y": 537.1125202651142,
+   "timestamp": 8788,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 280.448896830444,
+   "y": 543.1088052617736,
+   "timestamp": 8821,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 296.82572358698803,
+   "y": 548.2535537037625,
+   "timestamp": 8854,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 315.29908151816676,
+   "y": 552.5043908319637,
+   "timestamp": 8887,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  },
+  {
+   "x": 335.4952160286291,
+   "y": 555.8263976589302,
+   "timestamp": 8920,
+   "hasFace": true,
+   "degraded": false,
+   "uncalibrated": false,
+   "eyeState": "open"
+  }
+ ],
+ "estados": [
+  "idle",
+  "loading",
+  "tracking",
+  "no_face",
+  "tracking"
+ ]
+}

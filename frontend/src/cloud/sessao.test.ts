@@ -65,4 +65,21 @@ describe('camposDeCalibracao', () => {
     });
     expect(c.capture_conditions).toMatchObject({ iluminacao: 'boa', luxAmbiente: 320, blocoDeMedicao: 1 });
   });
+
+  // Auditoria A2 (19/10/2026): o `capture_conditions` daqui substitui o da
+  // abertura da sessão; sem o filtro junto, o relatório perdia o que governava
+  // o cursor (com o M9 em vigor, o preset do One Euro não governa nada).
+  it('leva o filtro em vigor nas condições de captura, com ou sem as condições da medição', () => {
+    expect(camposDeCalibracao(resultado, meta, 27.4, 'fixacao').capture_conditions).toMatchObject({
+      iluminacao: 'boa',
+      filtro: 'fixacao',
+    });
+    expect(camposDeCalibracao(resultado, null, null, 'kalman').capture_conditions).toEqual({ filtro: 'kalman' });
+  });
+
+  it('sem filtro informado, as condições são as de antes (nada inventado)', () => {
+    expect(camposDeCalibracao(resultado, meta, 27.4).capture_conditions).not.toHaveProperty('filtro');
+    expect(camposDeCalibracao(resultado, null, null).capture_conditions).toEqual({});
+    expect(camposDeCalibracao(resultado, null, null, null).capture_conditions).toEqual({});
+  });
 });

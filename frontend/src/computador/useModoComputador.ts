@@ -11,6 +11,8 @@ import { modoApresentacaoAtivo } from '../services/apresentacao';
 import { useSettings } from '../context/SettingsContext';
 import { limitarDwellMs } from '../dwellMs';
 import { mensagemDeSaida, ponteDoModoComputador, type PonteDoModoComputador } from './ponte';
+import { useTranslation } from 'react-i18next';
+import { dispararPedidoDeSocorro } from '../services/emergencia/pedidoDeSocorro';
 
 /**
  * Liga e desliga o Modo Computador a partir do app.
@@ -34,6 +36,9 @@ export interface ModoComputador {
 
 export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoModoComputador()): ModoComputador {
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const tRef = useRef(t);
+  tRef.current = t;
   const { subscribe } = useGaze();
   const { settings } = useSettings();
   const [capacidades, setCapacidades] = useState<CapacidadesDoSistema | null>(null);
@@ -76,7 +81,7 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
   const pararFluxo = useCallback(() => {
     cancelarFluxoRef.current?.();
     cancelarFluxoRef.current = null;
-    suspenderDwell(false);
+    suspenderDwell(false, 'modo_computador');
     ativoRef.current = false;
   }, []);
 
@@ -87,7 +92,10 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
       setAtivo(false);
       setIniciando(false);
       if (motivo === 'emergencia') {
-        navigate('/emergency?autoTrigger=other');
+        // O pedido sai AQUI, antes de a tela de emergência existir (ver
+        // services/emergencia/pedidoDeSocorro.ts).
+        dispararPedidoDeSocorro('other', tRef.current('emergency.items.other'));
+        navigate('/emergency');
         return;
       }
       setAviso(mensagemDeSaida(motivo));
@@ -108,11 +116,21 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
     setAviso(null);
     setIniciando(true);
     const dwellMs = limitarDwellMs(settings.dwellMs);
-    const r = await ponte.iniciar({
-      dwellMs,
-      tamanhoCursorPx: tamanhoDoCursorNoSistema(EXPERIMENT.cursorSizePx),
-      lupa: true,
-    });
+    let r: Awaited<ReturnType<PonteDoModoComputador['iniciar']>>;
+    try {
+      r = await ponte.iniciar({
+        dwellMs,
+        tamanhoCursorPx: tamanhoDoCursorNoSistema(EXPERIMENT.cursorSizePx),
+        lupa: true,
+      });
+    } catch (e) {
+      // Relato de 22/10/2026: o `invoke` do Electron REJEITA quando o processo
+      // principal lança. Sem isto `iniciando` ficava verdadeiro para sempre (o
+      // botão voltava logo no início e a tela dizia "Iniciando…") e a rejeição
+      // saía sem tratamento. Agora vira o erro calmo da tela.
+      console.warn('[computador] a chamada para iniciar o Modo Computador falhou:', e);
+      r = { ok: false, motivo: 'Não consegui iniciar o Modo Computador agora. Tente de novo; se repetir, reinicie o IrisFlow.' };
+    }
     if (!montado.current) {
       // A tela saiu enquanto a sobreposição subia. Se ela SUBIU, precisa
       // descer: a limpeza do efeito já passou e viu `ativoRef.current === false`,
@@ -128,7 +146,7 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
     pararFluxo();
     // Dwell do app suspenso ANTES de ligar o fluxo: a janela fica oculta e o
     // olhar passa a ser da sobreposição.
-    suspenderDwell(true);
+    suspenderDwell(true, 'modo_computador');
     ativoRef.current = true;
     // Rótulos da sobreposição → correção por dwell. É o único caminho pelo
     // qual ela aprende no Modo Computador: a janela do app está oculta e
@@ -204,7 +222,13 @@ export function useModoComputador(ponte: PonteDoModoComputador | null = ponteDoM
   const parar = useCallback(async () => {
     if (!ponte) return;
     pararFluxo();
-    await ponte.parar();
+    try {
+      await ponte.parar();
+    } catch (e) {
+      // O fluxo do olhar e o dwell do app já foram devolvidos acima: a tela não
+      // pode seguir dizendo "ligado" por causa de um IPC que rejeitou (22/10/2026).
+      console.warn('[computador] a chamada para parar o Modo Computador falhou:', e);
+    }
     setAtivo(false);
   }, [ponte, pararFluxo]);
 

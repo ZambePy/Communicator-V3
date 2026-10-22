@@ -1,6 +1,7 @@
 import React from 'react';
 import type { MotivoDeRecalibracao } from '@tracker/vigiaDeRecalibracao';
 import { detalheDoMotivo } from '@tracker/vigiaDeRecalibracao.aviso';
+import { alvoMinimoPx } from '../design/gazeMetrics';
 
 /**
  * Falhas que bloqueiam o controle por olhar precisam ser VISÍVEIS.
@@ -48,6 +49,12 @@ interface Props {
    */
   avisoDeTela?: string | null;
   /**
+   * A suspensão do `avisoDeTela` é pelo recorte do modelo do rosto (o modelo
+   * reiniciou de outro jeito), e não pela janela: não volta sozinha. Só conta
+   * para o problema persistente (aviso ao cuidador); o banner não muda.
+   */
+  suspensaoPeloRecorte?: boolean;
+  /**
    * gaze perdido além do hold de 2 s. `null` no caminho feliz.
    *
    * Vem pronto do `GazeFallback` (que já aplicou a histerese) em vez de ser
@@ -87,6 +94,31 @@ interface Props {
    * aviso de borda, causa diferente.
    */
   avisoDeOlhosFechados?: string | null;
+  /**
+   * Contraluz forte (relato de 19/10/2026): o texto da luz, vindo das amostras
+   * com `motivo: 'contraluz'`. Vence o aviso de olhos fechados e o de rosto
+   * perdido — sob contraluz o rosto some e o EAR mente, e a causa das duas
+   * coisas é a janela.
+   */
+  avisoDeContraluz?: string | null;
+  /**
+   * Pouca luz no quadro inteiro, por mais de 10 s (pedido de 18/10/2026: a
+   * emergência precisa funcionar à noite). Abaixo da contraluz e acima do
+   * rosto perdido: no escuro o detector perde o rosto, e a causa é a luz.
+   */
+  avisoDePoucaLuz?: string | null;
+  /**
+   * A tela está escurecida (brilho reduzido ou filtro âmbar) enquanto falta
+   * luz: o aviso de pouca luz oferece "Clarear a tela". `null` some com o botão.
+   */
+  onClarearTela?: (() => void) | null;
+  /**
+   * O despachante do olhar falhou seguidamente: o olhar não aciona nada, nem
+   * a Emergência. Erro, logo abaixo do rastreamento parado.
+   */
+  avisoDeAcionamento?: string | null;
+  /** O modelo do olhar (L2CS ou EyeNet) parou ou não carregou. */
+  avisoDoModelo?: { titulo: string; detalhe: string } | null;
   /**
    * Aviso de distância fora da faixa de calibração. `null` quando a
    * distância está na faixa ou não há medição.
@@ -154,7 +186,67 @@ const CARD: React.CSSProperties = {
   boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
 };
 
-export const GazeStatusBanner: React.FC<Props> = ({
+/**
+ * O problema de RASTREAMENTO que um aviso descreve — o que pode deixar o
+ * paciente sem comunicação se durar. Os avisos de configuração (calibração
+ * suspensa, borda, distância, postura, recalibração, câmera trocada) não têm
+ * tipo. É a chave de `services/problemaDoRastreamento.ts`.
+ *
+ * `calibracao_perdida` (revisão de UX de 19/10/2026): a calibração deixou de
+ * valer (o modelo do olhar reiniciou em outro tamanho, por exemplo) com o rosto
+ * na câmera — nada aciona pelo olhar, nem a Emergência. Só aparece pela escolha
+ * do problema persistente (`problemaPersistenteDoOlhar`), não pelo banner.
+ *
+ * `olhar_reduzido` (revisão do pipeline de 19/10/2026): a calibração ficou
+ * SUSPENSA porque o modelo do rosto voltou de outro jeito — o olhar só aciona a
+ * Emergência e a recuperação, e isso não volta sozinho. Também só pela escolha
+ * do problema persistente.
+ */
+export type TipoDeProblemaDoRastreamento =
+  | 'camera'
+  | 'rastreamento_parado'
+  | 'acionamento_falhou'
+  | 'contraluz'
+  | 'rosto_perdido'
+  | 'olhos_fechados'
+  | 'modelo_do_olhar'
+  | 'pouca_luz'
+  | 'calibracao_perdida'
+  | 'olhar_reduzido';
+
+/** O aviso em vigor: o que o banner mostra. */
+export interface AvisoDoOlhar {
+  tom: 'erro' | 'aviso';
+  titulo: string;
+  detalhe: string;
+  /** O reajuste rápido resolve ESTE aviso? */
+  reajustavel: boolean;
+  /** ESTE aviso pede a calibração inteira (vigia de recalibração)? */
+  recalibravel: boolean;
+  /** Clarear a tela ajuda neste aviso (pouca luz com a tela escurecida)? */
+  clareavel?: boolean;
+  problema: TipoDeProblemaDoRastreamento | null;
+}
+
+/** O que decide o aviso: as props do banner menos as ações. */
+export type EntradasDoAviso = Omit<
+  Props,
+  'onReancorar' | 'reancorando' | 'onRecalibrar' | 'onDispensarRecalibracao' | 'onClarearTela'
+>;
+
+/**
+ * Qual aviso vale agora — um só. Pura, para o banner e para o serviço de
+ * problema persistente decidirem pela MESMA regra (relato de 19/10/2026).
+ *
+ * `state` só vale para `sem_camera` e `error`. `state="uncalibrated"` não
+ * produz aviso nenhum (o "Ainda não há calibração" saiu de vez). Ordem de
+ * precedência = ordem de gravidade. Sem câmera, nada mais importa.
+ *
+ * Os textos de rastreamento são calmos e em primeira pessoa, sem culpar
+ * ninguém (pedido do dono, 19/10/2026): dizem o que está acontecendo, que o
+ * IrisFlow está tentando, e o que ajuda.
+ */
+export function escolherAvisoDoOlhar({
   state,
   cameraError,
   calibrationInvalidated,
@@ -163,120 +255,209 @@ export const GazeStatusBanner: React.FC<Props> = ({
   gazeLostMessage = null,
   avisoDeBorda = null,
   avisoDeOlhosFechados = null,
+  avisoDeContraluz = null,
+  avisoDePoucaLuz = null,
+  avisoDeAcionamento = null,
+  avisoDoModelo = null,
   avisoDeCamera = null,
-  onReancorar = null,
-  reancorando = false,
   reajuste = REAJUSTE_NO_CENTRO,
   avisoDePostura = false,
   avisoDeRecalibracao = null,
-  onRecalibrar = null,
-  onDispensarRecalibracao = null,
-}) => {
-  // `state` só vale para `sem_camera` e `error`. `state="uncalibrated"` não
-  // produz banner nenhum (o aviso "Ainda não há calibração" saiu de vez).
-  // Ordem de precedência = ordem de gravidade. Sem câmera, nada mais importa.
-  let tom: 'erro' | 'aviso' | null = null;
-  let titulo = '';
-  let detalhe = '';
-  /** O reajuste rápido resolve ESTE aviso? */
-  let reajustavel = false;
-  /** ESTE aviso pede a calibração inteira (vigia de recalibração)? */
-  let recalibravel = false;
+}: EntradasDoAviso): AvisoDoOlhar | null {
+  const aviso = (
+    tom: AvisoDoOlhar['tom'],
+    titulo: string,
+    detalhe: string,
+    problema: TipoDeProblemaDoRastreamento | null,
+    extra: Partial<Pick<AvisoDoOlhar, 'reajustavel' | 'recalibravel' | 'clareavel'>> = {},
+  ): AvisoDoOlhar => ({ tom, titulo, detalhe, problema, reajustavel: false, recalibravel: false, ...extra });
 
   if (cameraError) {
-    tom = 'erro';
-    titulo = 'A câmera não está disponível';
-    detalhe = `${cameraError} O controle por olhar está desligado até a câmera voltar.`;
-  } else if (state === 'sem_camera') {
+    return aviso(
+      'erro',
+      'Não estou conseguindo usar a câmera',
+      `${cameraError} Enquanto ela não volta, o olhar não aciona os botões.`,
+      'camera',
+    );
+  }
+  if (state === 'sem_camera') {
     // A câmera abriu, mas parou de entregar quadros (cabo solto, hub USB que
     // reiniciou, driver travado, notebook que dormiu). Antes o engine seguia
     // em `tracking` sem emitir nada, e a tela não dizia coisa alguma.
-    tom = 'erro';
-    titulo = 'A câmera parou de enviar imagem';
-    detalhe =
-      'O controle por olhar está parado. O IrisFlow está tentando reconectar a câmera sozinho; ' +
-      'confira se o cabo USB está firme e se nenhum outro programa está usando a câmera.';
-  } else if (state === 'error') {
-    tom = 'erro';
-    titulo = 'O rastreamento do olhar parou';
-    detalhe =
-      'O detector de rosto falhou — em geral por causa da placa de vídeo. O IrisFlow está ' +
-      'tentando recuperar sozinho; se não voltar em alguns minutos, feche e abra o IrisFlow.';
-  } else if (calibrationInvalidated) {
-    tom = 'erro';
-    titulo = 'A calibração deixou de valer';
-    detalhe = `${calibrationInvalidated} É preciso calibrar de novo antes de usar o olhar.`;
-  } else if (avisoDeTela) {
+    return aviso(
+      'erro',
+      'A câmera parou de enviar imagem',
+      'Estou tentando reconectar a câmera sozinho, e o olhar volta junto com ela. Se demorar, ' +
+        'vale conferir se o cabo USB está firme e se nenhum outro programa está usando a câmera.',
+      'camera',
+    );
+  }
+  if (state === 'error') {
+    return aviso(
+      'erro',
+      'O rastreamento do olhar parou por um momento',
+      'Estou tentando recuperar sozinho — em geral é a placa de vídeo. Se não voltar em ' +
+        'alguns minutos, feche e abra o IrisFlow.',
+      'rastreamento_parado',
+    );
+  }
+  if (avisoDeAcionamento) {
+    // Erro: o olhar está sendo lido, mas não aciona nada — nem a Emergência.
+    return aviso('erro', 'O acionamento pelo olhar falhou', avisoDeAcionamento, 'acionamento_falhou');
+  }
+  if (calibrationInvalidated) {
+    return aviso(
+      'erro',
+      'A calibração deixou de valer',
+      `${calibrationInvalidated} É preciso calibrar de novo antes de usar o olhar.`,
+      null,
+    );
+  }
+  if (avisoDeTela) {
     // 'aviso', não 'erro': nada foi perdido — a calibração volta sozinha quando
     // a janela voltar ao tamanho dela, e a Emergência continua funcionando.
-    tom = 'aviso';
-    titulo = 'O olhar está em modo reduzido';
-    detalhe = avisoDeTela;
-  } else if (gazeLostMessage) {
+    return aviso('aviso', 'O olhar está em modo reduzido', avisoDeTela, null);
+  }
+  if (avisoDeContraluz) {
+    // Antes do rosto perdido e dos olhos fechados: sob contraluz o detector
+    // perde o rosto e o EAR mente, e a causa das duas coisas é a luz. Dizer
+    // "olhos fechados" aqui mandava a pessoa fazer a coisa errada.
+    return aviso('aviso', 'Luz forte atrás de você', avisoDeContraluz, 'contraluz');
+  }
+  if (avisoDePoucaLuz) {
+    // Antes do rosto perdido: no escuro o detector perde o rosto, e dizer
+    // "não estou vendo seu rosto" não diz o que fazer — a causa é a luz.
+    return aviso('aviso', 'Está escuro para a câmera', avisoDePoucaLuz, 'pouca_luz', { clareavel: true });
+  }
+  if (gazeLostMessage) {
     // acima do aviso de distância e abaixo dos erros de configuração.
     //
     // A ordem não é arbitrária: sem rosto na câmera, dizer que a distância
     // está diferente da calibração é responder a uma pergunta que ninguém
-    // fez. E é 'aviso' e não 'erro' porque a situação é reversível pela
-    // própria pessoa em um segundo — que é exatamente o que a mensagem pede.
-    tom = 'aviso';
-    titulo = gazeLostMessage;
-    detalhe =
-      'O rastreamento perdeu o rosto. O cursor volta assim que a câmera ' +
-      'enxergar você de novo.';
-  } else if (avisoDeOlhosFechados) {
+    // fez. E é 'aviso' e não 'erro' porque a situação se resolve sozinha
+    // assim que a câmera volta a ver o rosto.
+    return aviso(
+      'aviso',
+      gazeLostMessage,
+      'O cursor volta sozinho assim que a câmera enxergar você. Se puder, fique de frente para a câmera.',
+      'rosto_perdido',
+    );
+  }
+  if (avisoDeOlhosFechados) {
     // Antes do aviso de borda: com o olho fechado a predição nem existe, então
     // falar da borda seria falar de um número que não foi medido neste quadro.
-    tom = 'aviso';
-    titulo = 'O cursor está parado';
-    detalhe = avisoDeOlhosFechados;
-  } else if (avisoDeBorda) {
+    return aviso('aviso', 'Não estou vendo bem os seus olhos', avisoDeOlhosFechados, 'olhos_fechados');
+  }
+  if (avisoDoModelo) {
+    // O cursor continua (com a íris), só com a mira pior: 'aviso', depois do
+    // que impede o uso e antes do que é só configuração.
+    return aviso('aviso', avisoDoModelo.titulo, avisoDoModelo.detalhe, 'modelo_do_olhar');
+  }
+  if (avisoDeBorda) {
     // Depois da perda de rosto e antes do aviso de distância. Com o rosto
     // perdido, falar da borda seria errado — a posição na tela nem está sendo
     // medida. E é 'aviso', não 'erro': nada quebrou, e a saída está a um
     // movimento de olho de distância, que é o que a mensagem diz como fazer.
-    tom = 'aviso';
-    titulo = 'O cursor parou na borda';
-    detalhe = avisoDeBorda;
-  } else if (distanceAdvice) {
+    return aviso('aviso', 'O cursor parou na borda', avisoDeBorda, null);
+  }
+  if (distanceAdvice) {
     // o tom é 'aviso', não 'erro': o sistema continua funcionando, só
     // com precisão pior que a medida na calibração. Tratar isso como erro
     // ensinaria o cuidador a ignorar banners vermelhos.
-    tom = 'aviso';
-    titulo = 'Distância diferente da calibração';
-    detalhe = distanceAdvice;
     // A compensação de distância continua corrigindo; o que sobra de erro é
     // deriva, e o reajuste rápido a corrige sem retreinar o modelo (ver
     // `distanceAdvisory.ts`). O aviso continua enquanto a distância for outra:
     // ele informa a posição, não o erro.
-    reajustavel = true;
-  } else if (avisoDePostura) {
+    return aviso('aviso', 'Distância diferente da calibração', distanceAdvice, null, { reajustavel: true });
+  }
+  if (avisoDePostura) {
     // Abaixo da distância: os dois pedem o mesmo reajuste, e quando os dois
     // valem ao mesmo tempo a distância é a causa mais provável e a mais fácil
     // de entender ("você está mais perto do que quando calibrou").
-    tom = 'aviso';
-    titulo = 'Postura diferente da calibração';
-    detalhe =
+    return aviso(
+      'aviso',
+      'Postura diferente da calibração',
       'Você está há um tempo numa posição diferente da que calibrou. O cursor ' +
-      `continua funcionando; um reajuste de ${reajuste.segundos} segundos deixa a mira no lugar.`;
-    reajustavel = true;
-  } else if (avisoDeRecalibracao) {
+        `continua funcionando; um reajuste de ${reajuste.segundos} segundos deixa a mira no lugar.`,
+      null,
+      { reajustavel: true },
+    );
+  }
+  if (avisoDeRecalibracao) {
     // Depois de distância e postura (que o reajuste rápido resolve) e antes
     // do aviso de câmera: é o vigia dizendo que o modelo deixou de descrever
     // a pessoa. 'aviso', não 'erro' — o cursor continua funcionando, só pior.
-    tom = 'aviso';
-    titulo = 'A mira piorou desde a última medição';
-    detalhe = detalheDoMotivo(avisoDeRecalibracao);
-    recalibravel = true;
-  } else if (avisoDeCamera) {
+    return aviso(
+      'aviso',
+      'A mira piorou desde a última medição',
+      detalheDoMotivo(avisoDeRecalibracao),
+      null,
+      { recalibravel: true },
+    );
+  }
+  if (avisoDeCamera) {
     // Por último: é a situação mais benigna e a única que se resolve em
     // Configurações, não na cadeira. Só aparece quando a câmera mudou.
-    tom = 'aviso';
-    titulo = 'Câmera diferente da última sessão';
-    detalhe = avisoDeCamera;
+    return aviso('aviso', 'Câmera diferente da última sessão', avisoDeCamera, null);
   }
+  return null;
+}
 
-  if (!tom) return null;
+/**
+ * O problema que conta para o aviso ao cuidador — separado do que o banner
+ * mostra (revisão de UX de 19/10/2026).
+ *
+ * O banner põe na frente avisos de CONFIGURAÇÃO (a calibração que deixou de
+ * valer, a janela fora do tamanho), que não têm tipo. Usar a escolha do banner
+ * aqui calava o aviso ao cuidador justamente quando o paciente fica sem nada —
+ * a WebGPU caiu de madrugada, o modelo voltou em outro tamanho e a calibração
+ * deixou de valer — e ainda dava o problema anterior por resolvido ("O olhar
+ * voltou a funcionar"). Aqui vale o problema de RASTREAMENTO mais grave, pela
+ * mesma ordem do banner; sem nenhum, a calibração que deixou de valer vira
+ * `calibracao_perdida` (o rosto está na câmera, de olhos abertos, e nada
+ * aciona).
+ */
+export function problemaPersistenteDoOlhar(
+  e: EntradasDoAviso,
+): { tipo: TipoDeProblemaDoRastreamento; mensagem: string } | null {
+  const doRastreamento = escolherAvisoDoOlhar({ ...e, calibrationInvalidated: null, avisoDeTela: null });
+  if (doRastreamento?.problema) {
+    return { tipo: doRastreamento.problema, mensagem: juntarFrasesDoAviso(doRastreamento.titulo, doRastreamento.detalhe) };
+  }
+  if (e.avisoDeTela && e.suspensaoPeloRecorte && !e.calibrationInvalidated) {
+    // A janela fora do tamanho volta sozinha (e quase sempre é alguém mexendo
+    // no computador); a suspensão pelo recorte, não.
+    return { tipo: 'olhar_reduzido', mensagem: juntarFrasesDoAviso('O olhar está em modo reduzido', e.avisoDeTela) };
+  }
+  if (e.calibrationInvalidated) {
+    return {
+      tipo: 'calibracao_perdida',
+      mensagem: juntarFrasesDoAviso(
+        'A calibração deixou de valer',
+        `${e.calibrationInvalidated} É preciso calibrar de novo antes de usar o olhar.`,
+      ),
+    };
+  }
+  return null;
+}
+
+/** "Título. Detalhe" — sem dobrar a pontuação quando o título já termina com ela. */
+function juntarFrasesDoAviso(titulo: string, detalhe: string): string {
+  return /[.!?…]$/.test(titulo.trim()) ? `${titulo} ${detalhe}` : `${titulo}. ${detalhe}`;
+}
+
+export const GazeStatusBanner: React.FC<Props> = ({
+  onReancorar = null,
+  reancorando = false,
+  onRecalibrar = null,
+  onDispensarRecalibracao = null,
+  onClarearTela = null,
+  ...entradas
+}) => {
+  const reajuste = entradas.reajuste ?? REAJUSTE_NO_CENTRO;
+  const escolhido = escolherAvisoDoOlhar(entradas);
+  if (!escolhido) return null;
+  const { tom, titulo, detalhe, reajustavel, recalibravel, clareavel } = escolhido;
 
   const cores =
     tom === 'erro'
@@ -343,6 +524,25 @@ export const GazeStatusBanner: React.FC<Props> = ({
               </button>
             )}
           </>
+        )}
+        {clareavel && onClarearTela && (
+          <button
+            type="button"
+            onClick={onClarearTela}
+            data-testid="clarear-tela"
+            // Dwellável, como o "Reajustar": quem precisa está usando o olhar.
+            // Com o tamanho mínimo de alvo (5°) nos dois sentidos — revisão de
+            // UX de 19/10/2026: com pouca luz a mira piora, e o botão fica na
+            // borda de cima, onde ela já é pior.
+            style={{
+              flexShrink: 0, minWidth: Math.max(200, alvoMinimoPx()), minHeight: Math.max(72, alvoMinimoPx()),
+              padding: '0.6rem 1.1rem', borderRadius: '0.7rem',
+              border: `2px solid ${cores.fg}`, background: cores.fg, color: cores.bg,
+              fontSize: '1.05rem', fontWeight: 800, cursor: 'pointer',
+            }}
+          >
+            Clarear a tela
+          </button>
         )}
         {reajustavel && onReancorar && (
           <button

@@ -392,6 +392,16 @@ begin
   ) then
     raise exception 'push do escalonamento com destino ou texto errado: %', (select body from net.chamadas order by id desc limit 1);
   end if;
+  -- 19/10/2026: o push leva o id do pedido (o app abre ESTE pedido) e, sem
+  -- token da Expo no Vault, só o content-type no cabeçalho.
+  if not exists (
+    select 1 from net.chamadas c, jsonb_array_elements(c.body) m
+     where m->>'to' = 'ExponentPushToken[teste-1]'
+       and m->'data'->>'help_request_id' = hr::text
+       and c.headers = '{"content-type": "application/json"}'::jsonb
+  ) then
+    raise exception 'push do escalonamento sem o id do pedido ou com cabeçalho inesperado: %', (select row_to_json(c) from net.chamadas c order by id desc limit 1);
+  end if;
 
   -- segunda rodada: nada novo a escalar
   if public.escalar_pedidos_de_ajuda() <> 0 then raise exception 'escalou de novo o que já estava escalado'; end if;
@@ -616,6 +626,10 @@ declare
 begin
   -- o que o app faz continua funcionando
   insert into public.messages (beneficiary_id, sender, kind, text) values (b, 'cuidador', 'texto', 'Já vou');
+  -- Pergunta sim/não do cuidador (21/10/2026): o app grava a pergunta como
+  -- kind = 'simnao' com sender = 'cuidador', e o computador a mostra com o NÃO
+  -- e o SIM dos lados. Uma política que recusasse isto desligaria a pergunta.
+  insert into public.messages (beneficiary_id, sender, kind, text) values (b, 'cuidador', 'simnao', 'Você está com dor?');
   update public.messages set read_at = now() where id = m_pac;
   if not found then raise exception 'DB-2: marcar como lida deveria continuar valendo'; end if;
   update public.help_requests set acknowledged_at = now(), acknowledged_by = auth.uid() where id = hr;
@@ -877,3 +891,679 @@ delete from public.push_tokens where token = 'ExponentPushToken[falha]';
 select 'revisão de 27/09 (DB-2, DB-3, DB-5, SITE-1, SITE-12, SITE-17): tudo certo' as resultado;
 
 select 'cenário da beta, 22/09 e 23/09: tudo certo' as resultado;
+
+-- =====================================================================
+-- Pareamento do celular por código QR (19/10/2026,
+-- 20261019200000_pareamento_do_celular). Cada bloco falha sem a migração.
+-- O código do QR nunca chega ao banco: aqui, como na Edge Function, só o
+-- SHA-256 dele (h('…') abaixo faz o papel do código).
+-- =====================================================================
+reset role;
+reset request.jwt.claim.sub;
+create function pg_temp.h(t text) returns text language sql immutable as $$
+  select encode(extensions.digest(t, 'sha256'), 'hex')
+$$;
+
+insert into auth.users (id, email, email_confirmed_at) values
+  ('c0de0000-0000-4000-8000-000000000001', 'familia-qr@exemplo.com', now()),
+  ('c0de0000-0000-4000-8000-000000000002', 'sem-confirmar-qr@exemplo.com', null),
+  ('c0de0000-0000-4000-8000-000000000003', 'outra-familia-qr@exemplo.com', now());
+insert into public.beneficiaries (profile_id, user_name, relation, condition, os) values
+  ('c0de0000-0000-4000-8000-000000000001', 'Maria Teste', 'filho', 'ela', 'windows'),
+  ('c0de0000-0000-4000-8000-000000000002', 'João Teste', 'filho', 'ela', 'windows'),
+  ('c0de0000-0000-4000-8000-000000000003', 'Rosa Teste', 'filho', 'ela', 'windows');
+-- d1: computador da família; d2: conta sem e-mail confirmado; d3: outra
+-- família; d4: computador da família já desvinculado.
+insert into public.devices (id, beneficiary_id, name, device_key_hash)
+select v.id, b.id, 'PC da sala', v.chave
+  from (values
+    ('c0de0000-0000-4000-8000-0000000000d1'::uuid, 'c0de0000-0000-4000-8000-000000000001'::uuid, repeat('d1', 32)),
+    ('c0de0000-0000-4000-8000-0000000000d2'::uuid, 'c0de0000-0000-4000-8000-000000000002'::uuid, repeat('d2', 32)),
+    ('c0de0000-0000-4000-8000-0000000000d3'::uuid, 'c0de0000-0000-4000-8000-000000000003'::uuid, repeat('d3', 32)),
+    ('c0de0000-0000-4000-8000-0000000000d4'::uuid, 'c0de0000-0000-4000-8000-000000000001'::uuid, repeat('d4', 32))
+  ) as v(id, perfil, chave)
+  join public.beneficiaries b on b.profile_id = v.perfil;
+update public.devices set revoked_at = now() where id = 'c0de0000-0000-4000-8000-0000000000d4';
+
+-- QR-1. Ninguém de fora mexe nas tabelas: RLS ligada, nenhuma política, sem
+--       privilégio para anon/authenticated; criar e usar só pela service_role.
+do $$
+begin
+  if not (select relrowsecurity from pg_class where oid = 'public.pareamentos_de_celular'::regclass)
+     or not (select relrowsecurity from pg_class where oid = 'public.tentativas_de_pareamento'::regclass) then
+    raise exception 'QR-1: RLS deveria estar ligada nas duas tabelas do pareamento';
+  end if;
+  if exists (select 1 from pg_policies where tablename in ('pareamentos_de_celular', 'tentativas_de_pareamento')) then
+    raise exception 'QR-1: as tabelas do pareamento não deveriam ter política nenhuma';
+  end if;
+  if has_table_privilege('anon', 'public.pareamentos_de_celular', 'select')
+     or has_table_privilege('authenticated', 'public.pareamentos_de_celular', 'select')
+     or has_table_privilege('authenticated', 'public.pareamentos_de_celular', 'insert')
+     or has_table_privilege('authenticated', 'public.pareamentos_de_celular', 'update')
+     or has_table_privilege('anon', 'public.tentativas_de_pareamento', 'select')
+     or has_table_privilege('authenticated', 'public.tentativas_de_pareamento', 'insert') then
+    raise exception 'QR-1: as tabelas do pareamento não podem ser acessíveis pelo site nem pelo app';
+  end if;
+  if has_function_privilege('anon', 'public.criar_codigo_de_pareamento(uuid, text)', 'execute')
+     or has_function_privilege('authenticated', 'public.criar_codigo_de_pareamento(uuid, text)', 'execute')
+     or has_function_privilege('anon', 'public.usar_codigo_de_pareamento(text, text)', 'execute')
+     or has_function_privilege('authenticated', 'public.usar_codigo_de_pareamento(text, text)', 'execute') then
+    raise exception 'QR-1: criar e usar o código são só da service_role (Edge Functions)';
+  end if;
+  if not has_function_privilege('service_role', 'public.criar_codigo_de_pareamento(uuid, text)', 'execute')
+     or not has_function_privilege('service_role', 'public.usar_codigo_de_pareamento(text, text)', 'execute') then
+    raise exception 'QR-1: a service_role precisa poder criar e usar o código';
+  end if;
+  if has_function_privilege('anon', 'public.confirmar_celular_conectado(uuid)', 'execute')
+     or not has_function_privilege('authenticated', 'public.confirmar_celular_conectado(uuid)', 'execute') then
+    raise exception 'QR-1: confirmar_celular_conectado é do celular logado, não da chave anônima';
+  end if;
+end $$;
+
+-- QR-2. O computador pede o código: conta sem e-mail confirmado e computador
+--       desvinculado não geram; o código vale 3 minutos; um ativo por vez;
+--       no máximo 5 a cada 10 minutos; faxina do que tem mais de um dia.
+do $$
+declare
+  d1 uuid := 'c0de0000-0000-4000-8000-0000000000d1';
+  b1 uuid := (select beneficiary_id from public.devices where id = 'c0de0000-0000-4000-8000-0000000000d1');
+  r jsonb; r2 jsonb; linha record; i int;
+begin
+  r := public.criar_codigo_de_pareamento('c0de0000-0000-4000-8000-0000000000d2', pg_temp.h('qr-um'));
+  if r is distinct from '{"ok": false, "motivo": "email_nao_confirmado"}'::jsonb then
+    raise exception 'QR-2: conta sem e-mail confirmado não pode gerar código (o link mágico confirmaria o e-mail): %', r;
+  end if;
+  r := public.criar_codigo_de_pareamento('c0de0000-0000-4000-8000-0000000000d4', pg_temp.h('qr-um'));
+  if r is distinct from '{"ok": false, "motivo": "computador_desvinculado"}'::jsonb then
+    raise exception 'QR-2: computador desvinculado não pode gerar código: %', r;
+  end if;
+  r := public.criar_codigo_de_pareamento(gen_random_uuid(), pg_temp.h('qr-um'));
+  if r->>'motivo' is distinct from 'computador_desvinculado' then
+    raise exception 'QR-2: computador inexistente deveria ter a mesma resposta: %', r;
+  end if;
+  begin
+    perform public.criar_codigo_de_pareamento(d1, 'isto-nao-e-um-hash');
+    raise exception 'QR-2: hash fora do formato deveria ser recusado';
+  exception when sqlstate '22023' then null;
+  end;
+  if exists (select 1 from public.pareamentos_de_celular) then
+    raise exception 'QR-2: nenhum código deveria ter sido gravado até aqui';
+  end if;
+
+  r := public.criar_codigo_de_pareamento(d1, pg_temp.h('qr-um'));
+  if not coalesce((r->>'ok')::boolean, false) or (r->>'validade_s')::int <> 180 then
+    raise exception 'QR-2: o computador da família deveria receber o código: %', r;
+  end if;
+  select * into linha from public.pareamentos_de_celular where id = (r->>'id')::uuid;
+  if linha.token_hash <> pg_temp.h('qr-um') or linha.beneficiary_id <> b1
+     or linha.expira_em <> linha.criado_em + interval '3 minutes'
+     or linha.usado_em is not null or linha.cancelado_em is not null then
+    raise exception 'QR-2: linha do código errada: %', row_to_json(linha);
+  end if;
+  if (r->>'expira_em')::timestamptz <> linha.expira_em then
+    raise exception 'QR-2: a validade devolvida ao computador não confere com a gravada';
+  end if;
+
+  -- Outro código no mesmo computador: o QR anterior para de valer.
+  r2 := public.criar_codigo_de_pareamento(d1, pg_temp.h('qr-dois'));
+  if (select cancelado_em from public.pareamentos_de_celular where id = (r->>'id')::uuid) is null then
+    raise exception 'QR-2: gerar outro código deveria cancelar o anterior';
+  end if;
+  if (select cancelado_em from public.pareamentos_de_celular where id = (r2->>'id')::uuid) is not null then
+    raise exception 'QR-2: o código novo não pode nascer cancelado';
+  end if;
+
+  -- Cinco a cada 10 minutos: o sexto espera, e a resposta diz até quando.
+  for i in 3..5 loop
+    r := public.criar_codigo_de_pareamento(d1, pg_temp.h('qr-' || i));
+    if not coalesce((r->>'ok')::boolean, false) then raise exception 'QR-2: o código % deveria passar: %', i, r; end if;
+  end loop;
+  r := public.criar_codigo_de_pareamento(d1, pg_temp.h('qr-6'));
+  if r->>'motivo' is distinct from 'limite' or (r->>'tente_em') is null then
+    raise exception 'QR-2: o sexto código em 10 minutos deveria esperar: %', r;
+  end if;
+  if (select count(*) from public.pareamentos_de_celular where device_id = d1) <> 5 then
+    raise exception 'QR-2: o código recusado pelo limite não pode ser gravado';
+  end if;
+  -- Outro computador não divide o limite.
+  r := public.criar_codigo_de_pareamento('c0de0000-0000-4000-8000-0000000000d3', pg_temp.h('qr-outra-familia'));
+  if not coalesce((r->>'ok')::boolean, false) then raise exception 'QR-2: o limite é por computador: %', r; end if;
+
+  -- Passados 10 minutos, volta a gerar; o que tem mais de um dia sai.
+  update public.pareamentos_de_celular
+     set criado_em = criado_em - interval '11 minutes', expira_em = expira_em - interval '11 minutes'
+   where device_id = d1;
+  insert into public.pareamentos_de_celular (device_id, beneficiary_id, token_hash, criado_em, expira_em)
+  values (d1, b1, pg_temp.h('qr-velho'), now() - interval '2 days', now() - interval '2 days' + interval '3 minutes');
+  r := public.criar_codigo_de_pareamento(d1, pg_temp.h('qr-7'));
+  if not coalesce((r->>'ok')::boolean, false) then raise exception 'QR-2: passados 10 minutos, o computador volta a gerar: %', r; end if;
+  if exists (select 1 from public.pareamentos_de_celular where token_hash = pg_temp.h('qr-velho')) then
+    raise exception 'QR-2: código de mais de um dia deveria ter saído na faxina';
+  end if;
+  -- Para os blocos seguintes, o limite do computador recomeça.
+  delete from public.pareamentos_de_celular;
+end $$;
+
+-- QR-3. O celular usa o código: uso único, a mesma resposta para inexistente,
+--       usado, vencido, cancelado e computador desvinculado.
+do $$
+declare
+  d1 uuid := 'c0de0000-0000-4000-8000-0000000000d1';
+  d3 uuid := 'c0de0000-0000-4000-8000-0000000000d3';
+  b1 uuid := (select beneficiary_id from public.devices where id = 'c0de0000-0000-4000-8000-0000000000d1');
+  b3 uuid := (select beneficiary_id from public.devices where id = 'c0de0000-0000-4000-8000-0000000000d3');
+  invalido jsonb := '{"ok": false, "motivo": "invalido"}'::jsonb;
+  ip text := pg_temp.h('203.0.113.7');
+  r jsonb; criado jsonb;
+begin
+  delete from public.tentativas_de_pareamento;
+  criado := public.criar_codigo_de_pareamento(d1, pg_temp.h('qr-valido'));
+
+  r := public.usar_codigo_de_pareamento(pg_temp.h('qr-que-nao-existe'), ip);
+  if r is distinct from invalido then raise exception 'QR-3: código inexistente: %', r; end if;
+
+  r := public.usar_codigo_de_pareamento(pg_temp.h('qr-valido'), ip);
+  if not coalesce((r->>'ok')::boolean, false)
+     or r->>'email' is distinct from 'familia-qr@exemplo.com'
+     or r->>'user_id' is distinct from 'c0de0000-0000-4000-8000-000000000001'
+     or r->>'paciente' is distinct from 'Maria Teste'
+     or (r->>'email_confirmado')::boolean is distinct from true
+     or r->>'pareamento_id' is distinct from criado->>'id' then
+    raise exception 'QR-3: o código certo deveria devolver a conta da família: %', r;
+  end if;
+  if (select usado_em from public.pareamentos_de_celular where id = (criado->>'id')::uuid) is null then
+    raise exception 'QR-3: o código usado deveria ficar marcado';
+  end if;
+  -- Só a tentativa que FALHOU conta (revisão de segurança de 20/10/2026): o
+  -- uso certo não ocupa lugar no limite.
+  if (select count(*) from public.tentativas_de_pareamento where ip_hash = ip) <> 1 then
+    raise exception 'QR-3: só o código inexistente deveria contar como tentativa (contou %)',
+      (select count(*) from public.tentativas_de_pareamento where ip_hash = ip);
+  end if;
+
+  -- Uso único: a segunda vez é igual a um código que não existe.
+  r := public.usar_codigo_de_pareamento(pg_temp.h('qr-valido'), ip);
+  if r is distinct from invalido then raise exception 'QR-3: o código não pode servir duas vezes: %', r; end if;
+
+  -- Vencido, cancelado e de computador desvinculado: a mesma resposta.
+  insert into public.pareamentos_de_celular (device_id, beneficiary_id, token_hash, criado_em, expira_em) values
+    (d1, b1, pg_temp.h('qr-vencido'), now() - interval '5 minutes', now() - interval '2 minutes');
+  insert into public.pareamentos_de_celular (device_id, beneficiary_id, token_hash, expira_em, cancelado_em) values
+    (d1, b1, pg_temp.h('qr-cancelado'), now() + interval '3 minutes', now());
+  insert into public.pareamentos_de_celular (device_id, beneficiary_id, token_hash, expira_em) values
+    (d3, b3, pg_temp.h('qr-desvinculado'), now() + interval '3 minutes');
+  update public.devices set revoked_at = now() where id = d3;
+  if public.usar_codigo_de_pareamento(pg_temp.h('qr-vencido'), ip) is distinct from invalido
+     or public.usar_codigo_de_pareamento(pg_temp.h('qr-cancelado'), ip) is distinct from invalido
+     or public.usar_codigo_de_pareamento(pg_temp.h('qr-desvinculado'), ip) is distinct from invalido then
+    raise exception 'QR-3: vencido, cancelado e computador desvinculado deveriam ter a resposta de inexistente';
+  end if;
+  update public.devices set revoked_at = null where id = d3;
+  if exists (select 1 from public.pareamentos_de_celular
+              where token_hash in (pg_temp.h('qr-vencido'), pg_temp.h('qr-cancelado'), pg_temp.h('qr-desvinculado'))
+                and usado_em is not null) then
+    raise exception 'QR-3: código recusado não pode ficar marcado como usado';
+  end if;
+
+  begin
+    perform public.usar_codigo_de_pareamento('nao-e-hash', ip);
+    raise exception 'QR-3: hash fora do formato deveria ser recusado';
+  exception when sqlstate '22023' then null;
+  end;
+
+  -- O endereço de rede fica só como HMAC (a função recusa outro formato).
+  begin
+    perform public.usar_codigo_de_pareamento(pg_temp.h('qr-x'), '203.0.113.7');
+    raise exception 'QR-3: endereço em claro deveria ser recusado';
+  exception when sqlstate '22023' then null;
+  end;
+
+  perform set_config('irisflow.teste_pareamento', criado->>'id', false);
+end $$;
+
+-- QR-4. Limites de tentativa: só a tentativa que FALHA conta e é barrada
+--       (revisão de segurança de 20/10/2026) — 10 a cada 10 minutos por
+--       endereço (a recusada não conta), outro endereço segue, faxina de uma
+--       hora e 300 por minuto no total. O código CERTO passa com qualquer
+--       limite cheio: antes o limite vinha primeiro, e 300 chutes por minuto,
+--       de endereços quaisquer, desligavam o QR de todas as famílias.
+do $$
+declare
+  d1 uuid := 'c0de0000-0000-4000-8000-0000000000d1';
+  d3 uuid := 'c0de0000-0000-4000-8000-0000000000d3';
+  limite jsonb := '{"ok": false, "motivo": "limite"}'::jsonb;
+  ip text := pg_temp.h('198.51.100.20');
+  r jsonb; criado jsonb; i int;
+begin
+  delete from public.tentativas_de_pareamento;
+  for i in 1..10 loop
+    r := public.usar_codigo_de_pareamento(pg_temp.h('chute-' || i), ip);
+    if r->>'motivo' is distinct from 'invalido' then raise exception 'QR-4: a tentativa % deveria só falhar: %', i, r; end if;
+  end loop;
+  r := public.usar_codigo_de_pareamento(pg_temp.h('chute-11'), ip);
+  if r is distinct from limite then
+    raise exception 'QR-4: a 11ª tentativa em 10 minutos deveria ser recusada pelo limite: %', r;
+  end if;
+  if (select count(*) from public.tentativas_de_pareamento where ip_hash = ip) <> 10 then
+    raise exception 'QR-4: a tentativa recusada pelo limite não pode contar';
+  end if;
+
+  -- Com o limite do endereço cheio, o código certo passa: quem divide o
+  -- endereço com quem chuta (a mesma rede de celular, o mesmo /64) conecta. E
+  -- o uso certo não conta como tentativa.
+  criado := public.criar_codigo_de_pareamento(d1, pg_temp.h('qr-limite-do-endereco'));
+  if not coalesce((criado->>'ok')::boolean, false) then raise exception 'QR-4: o código deveria ter sido criado: %', criado; end if;
+  r := public.usar_codigo_de_pareamento(pg_temp.h('qr-limite-do-endereco'), ip);
+  if not coalesce((r->>'ok')::boolean, false) or r->>'pareamento_id' is distinct from criado->>'id' then
+    raise exception 'QR-4: com o limite do endereço cheio, o código certo deveria passar: %', r;
+  end if;
+  if (select usado_em from public.pareamentos_de_celular where id = (criado->>'id')::uuid) is null then
+    raise exception 'QR-4: o código certo usado com o limite cheio deveria ficar marcado';
+  end if;
+  if (select count(*) from public.tentativas_de_pareamento where ip_hash = ip) <> 10 then
+    raise exception 'QR-4: o uso certo não pode contar como tentativa';
+  end if;
+  -- Gasto, ele é um código que falha como outro qualquer: o limite vale.
+  r := public.usar_codigo_de_pareamento(pg_temp.h('qr-limite-do-endereco'), ip);
+  if r is distinct from limite then
+    raise exception 'QR-4: o código já usado, com o limite cheio, deveria receber o limite: %', r;
+  end if;
+
+  r := public.usar_codigo_de_pareamento(pg_temp.h('chute-outro'), pg_temp.h('198.51.100.21'));
+  if r->>'motivo' is distinct from 'invalido' then raise exception 'QR-4: outro endereço não divide o limite: %', r; end if;
+
+  update public.tentativas_de_pareamento set em = now() - interval '11 minutes' where ip_hash = ip;
+  r := public.usar_codigo_de_pareamento(pg_temp.h('chute-12'), ip);
+  if r->>'motivo' is distinct from 'invalido' then raise exception 'QR-4: passados 10 minutos, o endereço volta: %', r; end if;
+
+  update public.tentativas_de_pareamento set em = now() - interval '2 hours' where ip_hash = ip;
+  perform public.usar_codigo_de_pareamento(pg_temp.h('chute-13'), pg_temp.h('198.51.100.22'));
+  if exists (select 1 from public.tentativas_de_pareamento where em < now() - interval '1 hour') then
+    raise exception 'QR-4: tentativas de mais de uma hora deveriam sair na faxina';
+  end if;
+
+  -- 300 por minuto no total, no caso do revisor: 300 chutes PELA FUNÇÃO, cada
+  -- um de um endereço diferente (um por IPv6 de um mesmo /64, por exemplo).
+  delete from public.tentativas_de_pareamento;
+  for i in 1..300 loop
+    r := public.usar_codigo_de_pareamento(pg_temp.h('chute-global-' || i), pg_temp.h('2001:db8:1:1::' || to_hex(i)));
+    if r->>'motivo' is distinct from 'invalido' then raise exception 'QR-4: o chute % deveria só falhar: %', i, r; end if;
+  end loop;
+  r := public.usar_codigo_de_pareamento(pg_temp.h('chute-global'), pg_temp.h('192.0.2.250'));
+  if r is distinct from limite then
+    raise exception 'QR-4: com 300 tentativas no último minuto, o limite global deveria segurar o chute: %', r;
+  end if;
+  if (select count(*) from public.tentativas_de_pareamento) <> 300 then
+    raise exception 'QR-4: o chute recusado pelo limite global não pode contar';
+  end if;
+  -- ...mas o cuidador de OUTRA família, com o código certo, de um endereço
+  -- nunca visto, conecta.
+  criado := public.criar_codigo_de_pareamento(d3, pg_temp.h('qr-limite-global'));
+  if not coalesce((criado->>'ok')::boolean, false) then raise exception 'QR-4: o código deveria ter sido criado: %', criado; end if;
+  r := public.usar_codigo_de_pareamento(pg_temp.h('qr-limite-global'), pg_temp.h('203.0.113.99'));
+  if not coalesce((r->>'ok')::boolean, false) or r->>'email' is distinct from 'outra-familia-qr@exemplo.com' then
+    raise exception 'QR-4: com o limite global cheio, o código certo deveria passar (o QR de todas as famílias parava): %', r;
+  end if;
+  if (select usado_em from public.pareamentos_de_celular where id = (criado->>'id')::uuid) is null then
+    raise exception 'QR-4: o código certo usado com o limite global cheio deveria ficar marcado';
+  end if;
+  if (select count(*) from public.tentativas_de_pareamento) <> 300 then
+    raise exception 'QR-4: o uso certo não pode contar no limite global';
+  end if;
+  delete from public.tentativas_de_pareamento;
+end $$;
+
+-- QR-5. O celular, já logado, confirma a entrada: só na própria conta, uma
+--       vez, até 10 minutos depois do uso; a chave anônima nem chama; e nem o
+--       dono lê a tabela.
+do $$
+declare
+  b1 uuid := (select beneficiary_id from public.devices where id = 'c0de0000-0000-4000-8000-0000000000d1');
+  v_nao_usado uuid; v_antigo uuid;
+begin
+  insert into public.pareamentos_de_celular (device_id, beneficiary_id, token_hash, expira_em)
+  values ('c0de0000-0000-4000-8000-0000000000d1', b1, pg_temp.h('qr-sem-uso'), now() + interval '3 minutes')
+  returning id into v_nao_usado;
+  insert into public.pareamentos_de_celular (device_id, beneficiary_id, token_hash, criado_em, expira_em, usado_em)
+  values ('c0de0000-0000-4000-8000-0000000000d1', b1, pg_temp.h('qr-usado-ha-tempo'),
+          now() - interval '20 minutes', now() - interval '17 minutes', now() - interval '18 minutes')
+  returning id into v_antigo;
+  perform set_config('irisflow.teste_pareamento_sem_uso', v_nao_usado::text, false);
+  perform set_config('irisflow.teste_pareamento_antigo', v_antigo::text, false);
+end $$;
+set role authenticated;
+set request.jwt.claim.sub = 'c0de0000-0000-4000-8000-000000000003';
+do $$
+begin
+  if public.confirmar_celular_conectado(current_setting('irisflow.teste_pareamento')::uuid) then
+    raise exception 'QR-5: outra família não pode confirmar o pareamento desta';
+  end if;
+end $$;
+set request.jwt.claim.sub = 'c0de0000-0000-4000-8000-000000000001';
+do $$
+begin
+  begin
+    perform 1 from public.pareamentos_de_celular;
+    raise exception 'QR-5: nem o dono da conta lê a tabela dos códigos';
+  exception when insufficient_privilege then null;
+  end;
+  if public.confirmar_celular_conectado(current_setting('irisflow.teste_pareamento_sem_uso')::uuid) then
+    raise exception 'QR-5: código ainda não usado não pode virar "celular conectado"';
+  end if;
+  if public.confirmar_celular_conectado(current_setting('irisflow.teste_pareamento_antigo')::uuid) then
+    raise exception 'QR-5: uso de mais de 10 minutos atrás não confirma mais';
+  end if;
+  if not public.confirmar_celular_conectado(current_setting('irisflow.teste_pareamento')::uuid) then
+    raise exception 'QR-5: o celular da família deveria confirmar a entrada';
+  end if;
+  if public.confirmar_celular_conectado(current_setting('irisflow.teste_pareamento')::uuid) then
+    raise exception 'QR-5: a confirmação vale uma vez só';
+  end if;
+end $$;
+reset role;
+set role anon;
+do $$
+begin
+  begin
+    perform public.confirmar_celular_conectado(current_setting('irisflow.teste_pareamento')::uuid);
+    raise exception 'QR-5: a chave anônima não pode chamar confirmar_celular_conectado';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+reset request.jwt.claim.sub;
+do $$
+begin
+  if (select conectado_em from public.pareamentos_de_celular
+       where id = current_setting('irisflow.teste_pareamento')::uuid) is null then
+    raise exception 'QR-5: a confirmação deveria ficar gravada para o computador mostrar a hora';
+  end if;
+end $$;
+
+select 'pareamento do celular por QR, 19/10: tudo certo' as resultado;
+
+-- =====================================================================
+-- Rodada 3 (21/10/2026, 20261021120000_endurecimento_rodada3). Cada bloco
+-- falha sem a migração. A corrida — duas chamadas ao mesmo tempo no limite —
+-- precisa de duas sessões e fica em scripts/db-local-test.sh.
+-- =====================================================================
+reset role;
+reset request.jwt.claim.sub;
+
+-- R3-1. Funções security definer do public: search_path fixo com pg_temp no
+--       FIM (fora da lista, o esquema temporário da sessão é lido ANTES do
+--       public, e uma tabela temporária com o nome de uma do public tomaria o
+--       lugar dela); a chave anônima só executa confirmar_codigo (o site
+--       confere o código do e-mail antes de existir sessão); a chave
+--       estrangeira subscriptions.plan_id com índice (Performance Advisor).
+do $$
+declare v text;
+begin
+  select string_agg(format('%s [%s]', p.oid::regprocedure, coalesce(array_to_string(p.proconfig, '; '), 'sem search_path')), ', ')
+    into v
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace
+     and p.prosecdef
+     and not exists (select 1 from pg_depend d
+                      where d.classid = 'pg_proc'::regclass and d.objid = p.oid and d.deptype = 'e')
+     and not coalesce((select c ~ '^search_path=(.*,\s*)?pg_temp$'
+                         from unnest(p.proconfig) c where c like 'search_path=%'), false);
+  if v is not null then
+    raise exception 'R3-1: security definer sem pg_temp no fim do search_path: %', v;
+  end if;
+
+  select string_agg(p.oid::regprocedure::text, ', ') into v
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace
+     and p.prosecdef
+     and has_function_privilege('anon', p.oid, 'execute')
+     and p.oid <> 'public.confirmar_codigo(text, text)'::regprocedure;
+  if v is not null then
+    raise exception 'R3-1: a chave anônima só deveria executar confirmar_codigo; executa também: %', v;
+  end if;
+
+  if not exists (
+    select 1 from pg_index i
+     where i.indrelid = 'public.subscriptions'::regclass
+       and i.indkey[0] = (select a.attnum from pg_attribute a
+                           where a.attrelid = 'public.subscriptions'::regclass and a.attname = 'plan_id')
+  ) then
+    raise exception 'R3-1: subscriptions.plan_id (chave estrangeira para plans) sem índice';
+  end if;
+end $$;
+
+-- R3-2. Limite atômico dos avisos (decisão 2 da rodada 3):
+--       registrar_aviso_com_limite. Ajuda: 6 a cada 10 minutos por
+--       computador; aviso de dispositivo: o mesmo texto a cada 15 minutos e 4
+--       por hora por computador; socorro: NUNCA.
+insert into auth.users (id, email, email_confirmed_at) values
+  ('a5a5a5a5-0000-4000-8000-000000000001', 'familia-avisos@exemplo.com', now()),
+  ('a5a5a5a5-0000-4000-8000-000000000002', 'outra-familia-avisos@exemplo.com', now());
+insert into public.beneficiaries (id, profile_id, user_name, relation, condition, os) values
+  ('a5a5a5a5-0000-4000-8000-0000000000b1', 'a5a5a5a5-0000-4000-8000-000000000001', 'Lia Teste', 'filho', 'ela', 'windows'),
+  ('a5a5a5a5-0000-4000-8000-0000000000b2', 'a5a5a5a5-0000-4000-8000-000000000002', 'Rui Teste', 'filho', 'ela', 'windows');
+-- d1 e d2: dois computadores da mesma família; d3 a d5: um por bloco, para os
+-- limites não se misturarem; d6: desvinculado; d7: da outra família.
+insert into public.devices (id, beneficiary_id, name, device_key_hash)
+select ('a5a5a5a5-0000-4000-8000-0000000000d' || n)::uuid,
+       case when n = 7 then 'a5a5a5a5-0000-4000-8000-0000000000b2'::uuid
+            else 'a5a5a5a5-0000-4000-8000-0000000000b1'::uuid end,
+       'Computador ' || n, repeat('a' || n, 32)
+  from generate_series(1, 7) n;
+update public.devices set revoked_at = now() where id = 'a5a5a5a5-0000-4000-8000-0000000000d6';
+
+-- R3-2a. Só a service_role (a desktop-sync) chama; o site e o app, não.
+do $$
+declare f text := 'public.registrar_aviso_com_limite(uuid, text, text, uuid, timestamptz, uuid)';
+begin
+  if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute') then
+    raise exception 'R3-2a: registrar_aviso_com_limite é só da service_role (desktop-sync), não do site nem do app';
+  end if;
+  if not has_function_privilege('service_role', f, 'execute') then
+    raise exception 'R3-2a: a service_role (desktop-sync) precisa poder registrar avisos';
+  end if;
+end $$;
+
+-- R3-2b. Ajuda: 6 a cada 10 minutos por computador, contados da CHEGADA
+--        (received_at) — um pedido que esperou horas na fila offline conta
+--        quando chega. O outro computador do mesmo paciente tem o próprio.
+do $$
+declare
+  d1 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d1';
+  d2 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d2';
+  b1 uuid := 'a5a5a5a5-0000-4000-8000-0000000000b1';
+  r jsonb; i int;
+begin
+  for i in 1..6 loop
+    -- hora do evento de 3 h atrás: a fila offline entregando agora
+    r := public.registrar_aviso_com_limite(d1, 'ajuda', 'Chamando ' || i, null, now() - interval '3 hours');
+    if not coalesce((r->>'ok')::boolean, false) or (r->>'id') is null then
+      raise exception 'R3-2b: a ajuda % deveria passar: %', i, r;
+    end if;
+  end loop;
+  if (select count(*) from public.help_requests
+       where device_id = d1 and beneficiary_id = b1 and kind = 'ajuda'
+         and created_at < now() - interval '2 hours' and received_at > now() - interval '1 minute') <> 6 then
+    raise exception 'R3-2b: as 6 ajudas deveriam estar gravadas com o computador, a hora do evento e a da chegada';
+  end if;
+  r := public.registrar_aviso_com_limite(d1, 'ajuda', 'Chamando 7', null, now());
+  if r is distinct from '{"ok": false, "motivo": "limite"}'::jsonb then
+    raise exception 'R3-2b: a 7ª ajuda do computador em 10 minutos deveria esperar: %', r;
+  end if;
+  if (select count(*) from public.help_requests where device_id = d1 and kind = 'ajuda') <> 6 then
+    raise exception 'R3-2b: a ajuda recusada pelo limite não pode ser gravada';
+  end if;
+  r := public.registrar_aviso_com_limite(d2, 'ajuda', 'Do notebook', null, now());
+  if not coalesce((r->>'ok')::boolean, false) then
+    raise exception 'R3-2b: o limite é por computador — o outro computador do paciente passa: %', r;
+  end if;
+  update public.help_requests set received_at = received_at - interval '11 minutes'
+   where device_id = d1 and kind = 'ajuda';
+  r := public.registrar_aviso_com_limite(d1, 'ajuda', 'Depois de 10 minutos', null, now());
+  if not coalesce((r->>'ok')::boolean, false) then
+    raise exception 'R3-2b: passados 10 minutos, a ajuda volta a passar: %', r;
+  end if;
+end $$;
+
+-- R3-2c. Aviso de dispositivo: o mesmo texto no máximo a cada 15 minutos e 4
+--        por hora, de qualquer texto, por computador.
+do $$
+declare
+  d3 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d3';
+  d4 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d4';
+  limite jsonb := '{"ok": false, "motivo": "limite"}'::jsonb;
+  r jsonb;
+begin
+  r := public.registrar_aviso_com_limite(d3, 'dispositivo', 'A câmera parou', null, now());
+  if not coalesce((r->>'ok')::boolean, false) then raise exception 'R3-2c: o primeiro aviso deveria passar: %', r; end if;
+  r := public.registrar_aviso_com_limite(d3, 'dispositivo', 'A câmera parou', null, now());
+  if r is distinct from limite then raise exception 'R3-2c: o mesmo texto em menos de 15 minutos deveria esperar: %', r; end if;
+  r := public.registrar_aviso_com_limite(d3, 'dispositivo', 'Rosto fora da câmera', null, now());
+  if not coalesce((r->>'ok')::boolean, false) then raise exception 'R3-2c: outro texto deveria passar: %', r; end if;
+  r := public.registrar_aviso_com_limite(d3, 'dispositivo', 'Luz forte atrás', null, now());
+  r := public.registrar_aviso_com_limite(d3, 'dispositivo', 'Pouca luz', null, now());
+  if not coalesce((r->>'ok')::boolean, false) then raise exception 'R3-2c: o 4º aviso da hora deveria passar: %', r; end if;
+  r := public.registrar_aviso_com_limite(d3, 'dispositivo', 'Modelo lento', null, now());
+  if r is distinct from limite then raise exception 'R3-2c: o 5º aviso na mesma hora deveria esperar: %', r; end if;
+  if (select count(*) from public.help_requests where device_id = d3 and kind = 'dispositivo') <> 4 then
+    raise exception 'R3-2c: os avisos recusados não podem ser gravados';
+  end if;
+  -- 16 minutos depois: o mesmo texto já poderia, mas a hora ainda tem 4
+  update public.help_requests set received_at = received_at - interval '16 minutes' where device_id = d3;
+  r := public.registrar_aviso_com_limite(d3, 'dispositivo', 'A câmera parou', null, now());
+  if r is distinct from limite then raise exception 'R3-2c: com 4 avisos na última hora, nem o texto liberado passa: %', r; end if;
+  -- passada a hora, volta
+  update public.help_requests set received_at = received_at - interval '45 minutes' where device_id = d3;
+  r := public.registrar_aviso_com_limite(d3, 'dispositivo', 'A câmera parou', null, now());
+  if not coalesce((r->>'ok')::boolean, false) then raise exception 'R3-2c: passada uma hora, o aviso volta: %', r; end if;
+  -- e o mesmo texto depois de 15 minutos, com a hora folgada, passa
+  perform public.registrar_aviso_com_limite(d4, 'dispositivo', 'A câmera parou', null, now());
+  update public.help_requests set received_at = received_at - interval '16 minutes' where device_id = d4;
+  r := public.registrar_aviso_com_limite(d4, 'dispositivo', 'A câmera parou', null, now());
+  if not coalesce((r->>'ok')::boolean, false) then raise exception 'R3-2c: o mesmo texto depois de 15 minutos deveria passar: %', r; end if;
+end $$;
+
+-- R3-2d. O socorro NUNCA é limitado: com a ajuda e o aviso de dispositivo no
+--        limite do computador, dez socorros seguidos passam todos.
+do $$
+declare
+  d1 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d1';
+  limite jsonb := '{"ok": false, "motivo": "limite"}'::jsonb;
+  r jsonb; i int; antes int;
+begin
+  for i in 1..6 loop perform public.registrar_aviso_com_limite(d1, 'ajuda', 'enchendo ' || i, null, now()); end loop;
+  for i in 1..4 loop perform public.registrar_aviso_com_limite(d1, 'dispositivo', 'enchendo ' || i, null, now()); end loop;
+  if public.registrar_aviso_com_limite(d1, 'ajuda', 'cheio', null, now()) is distinct from limite
+     or public.registrar_aviso_com_limite(d1, 'dispositivo', 'cheio', null, now()) is distinct from limite then
+    raise exception 'R3-2d: a ajuda e o aviso de dispositivo deveriam estar no limite para o teste valer';
+  end if;
+  select count(*) into antes from public.help_requests where device_id = d1 and kind = 'emergencia';
+  for i in 1..10 loop
+    r := public.registrar_aviso_com_limite(d1, 'emergencia', 'Socorro ' || i, null, now());
+    if not coalesce((r->>'ok')::boolean, false) then
+      raise exception 'R3-2d: o socorro nunca pode ser limitado (o %º veio %)', i, r;
+    end if;
+  end loop;
+  if (select count(*) from public.help_requests where device_id = d1 and kind = 'emergencia') <> antes + 10 then
+    raise exception 'R3-2d: os 10 socorros deveriam estar gravados';
+  end if;
+end $$;
+
+-- R3-2e. Reenvio do mesmo pedido (o id é escolhido no computador): nem
+--        segunda linha nem "limite" — o pedido já está gravado —, e vale o
+--        tipo gravado. Id de OUTRO paciente (cliente adulterado) vira pedido
+--        novo, com id do servidor, sem tocar no do outro.
+do $$
+declare
+  d4 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d4';
+  d5 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d5';
+  d7 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d7';
+  x  uuid := 'a5a5a5a5-0000-4000-8000-0000000000a1';
+  y  uuid := 'a5a5a5a5-0000-4000-8000-0000000000a2';
+  r jsonb; i int;
+begin
+  r := public.registrar_aviso_com_limite(d5, 'ajuda', 'Água', null, now(), x);
+  if r is distinct from jsonb_build_object('ok', true, 'id', x) then
+    raise exception 'R3-2e: o pedido deveria ser gravado com o id do computador: %', r;
+  end if;
+  r := public.registrar_aviso_com_limite(d5, 'ajuda', 'Água', null, now(), x);
+  if r is distinct from jsonb_build_object('ok', true, 'id', x, 'repetido', true, 'kind', 'ajuda') then
+    raise exception 'R3-2e: o reenvio deveria encontrar o pedido gravado: %', r;
+  end if;
+  for i in 1..5 loop perform public.registrar_aviso_com_limite(d5, 'ajuda', 'mais ' || i, null, now()); end loop;
+  r := public.registrar_aviso_com_limite(d5, 'dispositivo', 'outro tipo, mesmo id', null, now(), x);
+  if r is distinct from jsonb_build_object('ok', true, 'id', x, 'repetido', true, 'kind', 'ajuda') then
+    raise exception 'R3-2e: com o limite cheio (e o tipo trocado), o reenvio continua "repetido", com o tipo gravado: %', r;
+  end if;
+  if (select count(*) from public.help_requests where id = x) <> 1
+     or (select message from public.help_requests where id = x) <> 'Água' then
+    raise exception 'R3-2e: o reenvio não pode criar nem alterar linha';
+  end if;
+
+  perform public.registrar_aviso_com_limite(d7, 'ajuda', 'Da outra família', null, now(), y);
+  r := public.registrar_aviso_com_limite(d4, 'ajuda', 'Id alheio', null, now(), y);
+  if not coalesce((r->>'ok')::boolean, false) or (r->>'id')::uuid = y or r ? 'repetido' then
+    raise exception 'R3-2e: id de outro paciente deveria virar pedido novo, com id do servidor: %', r;
+  end if;
+  if (select message from public.help_requests where id = y) <> 'Da outra família'
+     or (select beneficiary_id from public.help_requests where id = (r->>'id')::uuid) <> 'a5a5a5a5-0000-4000-8000-0000000000b1' then
+    raise exception 'R3-2e: o pedido do outro paciente não pode ser tocado, e o novo é deste paciente';
+  end if;
+end $$;
+
+-- R3-2f. Sessão só do próprio paciente; computador desvinculado ou que não
+--        existe não grava nada; tipo que não existe é recusado; texto até
+--        500 caracteres; sem hora do evento vale a da chegada.
+do $$
+declare
+  d2 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d2';
+  d6 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d6';
+  d7 uuid := 'a5a5a5a5-0000-4000-8000-0000000000d7';
+  b1 uuid := 'a5a5a5a5-0000-4000-8000-0000000000b1';
+  desvinculado jsonb := '{"ok": false, "motivo": "computador_desvinculado"}'::jsonb;
+  s_minha uuid; s_alheia uuid; r jsonb; antes int;
+begin
+  insert into public.sessions (beneficiary_id, device_id, status) values (b1, d2, 'active') returning id into s_minha;
+  insert into public.sessions (beneficiary_id, device_id, status)
+  values ('a5a5a5a5-0000-4000-8000-0000000000b2', d7, 'active') returning id into s_alheia;
+
+  r := public.registrar_aviso_com_limite(d2, 'ajuda', 'Com sessão', s_minha, now());
+  if (select session_id from public.help_requests where id = (r->>'id')::uuid) is distinct from s_minha
+     or (select help_requests from public.sessions where id = s_minha) <> 1 then
+    raise exception 'R3-2f: a sessão do próprio paciente fica no pedido, e a ajuda conta na sessão';
+  end if;
+  r := public.registrar_aviso_com_limite(d2, 'ajuda', 'Sessão alheia', s_alheia, now());
+  if (select session_id from public.help_requests where id = (r->>'id')::uuid) is not null
+     or (select help_requests from public.sessions where id = s_alheia) <> 0 then
+    raise exception 'R3-2f: sessão de outro paciente não pode ser usada (nem contada)';
+  end if;
+
+  select count(*) into antes from public.help_requests;
+  if public.registrar_aviso_com_limite(d6, 'ajuda', 'Desvinculado', null, now()) is distinct from desvinculado
+     or public.registrar_aviso_com_limite(d6, 'emergencia', 'Desvinculado', null, now()) is distinct from desvinculado
+     or public.registrar_aviso_com_limite(gen_random_uuid(), 'ajuda', 'Inexistente', null, now()) is distinct from desvinculado then
+    raise exception 'R3-2f: computador desvinculado ou inexistente deveria receber computador_desvinculado';
+  end if;
+  if (select count(*) from public.help_requests) <> antes then
+    raise exception 'R3-2f: nada deveria ter sido gravado para computador desvinculado ou inexistente';
+  end if;
+
+  begin
+    perform public.registrar_aviso_com_limite(d2, 'socorro', 'tipo que não existe', null, now());
+    raise exception 'R3-2f: tipo de aviso que não existe deveria ser recusado';
+  exception when invalid_text_representation then null;
+  end;
+  begin
+    perform public.registrar_aviso_com_limite(d2, null, 'sem tipo', null, now());
+    raise exception 'R3-2f: aviso sem tipo deveria ser recusado';
+  exception when sqlstate '22023' then null;
+  end;
+
+  r := public.registrar_aviso_com_limite(d2, 'ajuda', repeat('x', 600), null, null);
+  if (select length(message) from public.help_requests where id = (r->>'id')::uuid) <> 500
+     or (select created_at from public.help_requests where id = (r->>'id')::uuid) < now() - interval '1 minute' then
+    raise exception 'R3-2f: o texto vai até 500 caracteres, e sem a hora do evento vale a da chegada';
+  end if;
+end $$;
+
+select 'rodada 3 (21/10): endurecimento e limite atômico dos avisos — tudo certo' as resultado;

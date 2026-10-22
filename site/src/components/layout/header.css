@@ -1,3 +1,8 @@
+/* Cabeçalho (Header.tsx). No topo das páginas de conteúdo ele é transparente
+   (rodada 3, 21/10/2026): a abertura corre por baixo dele, sem uma barra
+   cortando o topo. Ao rolar (e nas páginas de fluxo, que já nascem com
+   `is-scrolled`), fica chapado no marinho do v3, com o fio de baixo. Sem vidro: o desfoque custava a camada mais cara
+   da página e deixava o texto atrás dele competindo com o menu. */
 .header {
   position: fixed;
   inset: 0 0 auto 0;
@@ -5,45 +10,17 @@
   height: var(--header-h);
   display: flex;
   align-items: center;
+  background: transparent;
+  color: var(--text);
   border-bottom: 1px solid transparent;
   transition:
-    background var(--dur) var(--ease-out),
-    border-color var(--dur) var(--ease-out),
-    color var(--dur) var(--ease-out);
-}
-
-/* Sobre a abertura o cabeçalho é transparente e usa a marca em
-   negativo; ao rolar, ganha o vidro escuro para se separar do conteúdo. */
-.header:not(.is-scrolled) {
-  color: #f2f6fd;
+    border-color var(--dur) ease,
+    background-color var(--dur) ease;
 }
 
 .header.is-scrolled {
-  background: rgba(6, 18, 35, 0.82);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  background: var(--v3-noite);
   border-bottom-color: var(--line);
-  color: var(--text);
-}
-
-/* Em máquinas modestas e telas estreitas o vidro (backdrop-filter) sai:
-   é a camada mais cara do cabeçalho, e sólido fica igual de legível. */
-@media (max-width: 720px), (prefers-reduced-motion: reduce) {
-  .header.is-scrolled {
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    background: rgba(6, 18, 35, 0.97);
-  }
-}
-
-.header__progress {
-  position: absolute;
-  left: 0;
-  bottom: -1px;
-  width: 100%;
-  height: 2px;
-  transform-origin: left;
-  background: linear-gradient(90deg, var(--blue), var(--teal));
 }
 
 .header__inner {
@@ -59,22 +36,6 @@
   margin-left: auto;
 }
 
-.drawer__link--beta {
-  color: var(--ok);
-}
-
-.nav-pilula__link--destaque {
-  color: #fff;
-  font-weight: 650;
-}
-
-/* "Entrar" na pílula: separado das abas e um pouco mais forte, por ser ação. */
-.nav-pilula__link--acao {
-  margin-left: 14px;
-  color: #dce6f6;
-  font-weight: 650;
-}
-
 .header__actions {
   display: flex;
   align-items: center;
@@ -82,50 +43,32 @@
 }
 
 .header__actions .btn {
-  padding: 0.62rem 1.1rem;
-  font-size: 0.94rem;
+  min-height: 44px;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.9375rem;
   white-space: nowrap;
 }
 
-/* A chamada acende ao passar o mouse ou com o foco do teclado: anel claro,
-   como a borda do vidro da pílula, e halo mais forte (além de subir 2 px). */
-.header__actions .btn--primary {
-  transition:
-    transform var(--dur) var(--ease-spring),
-    box-shadow var(--dur) var(--ease-out),
-    filter var(--dur) var(--ease-out);
-}
-
-.header__actions .btn--primary:hover:not(:disabled),
-.header__actions .btn--primary:focus-visible {
-  filter: brightness(1.1);
-  box-shadow:
-    0 0 0 3px rgba(255, 255, 255, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 14px 34px rgba(27, 84, 168, 0.6);
-}
-
-/* --- hamburguer com morphing para X --- */
+/* --- menu do celular: três traços que viram X --- */
 .burger {
   display: none;
   flex-direction: column;
   justify-content: center;
   gap: 5px;
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   margin-left: auto;
   background: transparent;
-  border: 1px solid currentColor;
-  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
   color: inherit;
-  opacity: 0.7;
   cursor: pointer;
-  transition: opacity var(--dur) var(--ease-out);
+  transition: border-color var(--dur-fast) ease;
 }
 
 .burger:hover {
-  opacity: 1;
+  border-color: var(--papel);
 }
 
 .burger span {
@@ -137,7 +80,7 @@
   border-radius: 2px;
   transition:
     transform var(--dur) var(--ease-out),
-    opacity var(--dur-fast) var(--ease-out);
+    opacity var(--dur-fast) ease;
 }
 
 .burger.is-open span:nth-child(1) {
@@ -150,26 +93,26 @@
   transform: translateY(-7px) rotate(-45deg);
 }
 
-/* --- gaveta mobile ---
-   Irmã do <header> (não filha): o vidro do cabeçalho viraria o bloco de
-   contenção dela. Fica acima da barra fixa de chamada (110) e do aviso de
-   cookies (120), que cobriam os botões do fim da gaveta. */
+/* --- gaveta do celular ---
+   Irmã do <header> (não filha). Fica acima da barra fixa de chamada (110) e
+   do aviso de cookies (120), que cobriam os botões do fim da gaveta. */
 .drawer {
   display: none;
   position: fixed;
   inset: var(--header-h) 0 0 0;
   z-index: 125;
-  background: var(--bg);
-  padding: var(--sp-6) var(--sp-5) var(--sp-8);
+  background: var(--v3-noite);
+  padding: var(--sp-5) var(--gutter) var(--sp-7);
   overflow-y: auto;
   flex-direction: column;
   gap: var(--sp-5);
   color: var(--text);
+  border-top: 1px solid var(--line);
 }
 
 .drawer.is-open {
   display: flex;
-  animation: fade-in 240ms var(--ease-out) both;
+  animation: fade-in 180ms ease-out both;
 }
 
 .drawer[hidden] {
@@ -182,12 +125,16 @@
 }
 
 .drawer__link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 56px;
   font-family: var(--font-display);
-  font-size: 1.4rem;
-  padding-block: var(--sp-4);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   border-bottom: 1px solid var(--line);
   color: var(--text);
-  animation: slide-right 460ms var(--ease-out) both;
 }
 
 .drawer__link[aria-current='page'] {
@@ -217,7 +164,7 @@
   }
 }
 
-/* Alvo de toque do logotipo: 44 px de altura mesmo com a marca de 38 px. */
+/* Alvo de toque do logotipo: 44 px de altura. */
 .header .logo {
   min-height: 44px;
 }

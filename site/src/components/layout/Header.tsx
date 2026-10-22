@@ -5,25 +5,25 @@ import { Logo } from './Logo'
 import { Button } from '@/components/ui/Button'
 import { useScrollProgress } from '@/hooks/useScrollProgress'
 import { useAccount } from '@/context/AccountContext'
-import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
-import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
 import { BETA, BETA_CTA, TRIAL_DAYS } from '@/data/content'
 import { naRota } from '@/routes'
 import './header.css'
 
-type NavItem = { to: string; label: string; beta?: boolean }
+type NavItem = { to: string; label: string }
 
-/** O menu principal: o produto, o app de quem cuida, preço e a beta. Empresa,
- *  contato e acessibilidade ficam no rodapé (e na gaveta do celular). */
+/** O menu principal: o produto, como funciona, o app de quem cuida e preço.
+ *  Empresa, contato e acessibilidade ficam no rodapé (e na gaveta do celular).
+ *
+ *  A aba "Beta", com o selo vermelho, saiu em 21/10/2026 (auditoria P2-6 e
+ *  P2-16): levava a /beta enquanto o botão "Baixar grátis" levava a /baixar, dois
+ *  caminhos para a mesma coisa, e o vermelho é da emergência. O caminho é o
+ *  botão ao lado; o programa beta segue no rodapé e na página de download. */
 const NAV: NavItem[] = [
   { to: '/solucao', label: 'Produto' },
   { to: '/como-funciona', label: 'Como funciona' },
   { to: '/cuidador', label: 'Cuidador' },
   { to: '/planos', label: 'Planos' },
-  // Só aparece com a beta ligada, sempre com a etiqueta vermelha: até o
-  // lançamento, o dia ("10/11"); depois dele, "Liberada".
-  ...(BETA.ativo ? [{ to: BETA_CTA.to, label: 'Beta', beta: true }] : []),
 ]
 
 /** Na gaveta do celular, depois do menu principal. */
@@ -45,10 +45,11 @@ const SOLID_ROUTES = [
   '/conta',
   '/perfil',
   '/confirmar-email',
+  '/parear',
 ]
 
 export function Header() {
-  const { scrolled, progress } = useScrollProgress()
+  const { scrolled } = useScrollProgress()
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
   const botaoRef = useRef<HTMLButtonElement>(null)
@@ -59,23 +60,13 @@ export function Header() {
   const { authenticated, loading } = useAccount()
   const program = useBetaProgram()
   const lancou = useJaLancou(program.launchAt)
-  const seloDaBeta = <EtiquetaLancamento lancamento={program.launchAt} variante="curta" />
   // "Entrar" vai na mesma pílula das abas: o vidro chega até ele como chega
   // em Produto ou Planos (fora dela, o link não respondia do mesmo jeito).
   // Enquanto a sessão carrega, ele não aparece — nem "Meu perfil".
   const itensDaNav: ItemDaNav[] = [
-    ...NAV.map((item) => ({
-      to: item.to,
-      label: item.label,
-      destaque: item.beta,
-      selo: item.beta ? seloDaBeta : undefined,
-    })),
+    ...NAV.map((item) => ({ to: item.to, label: item.label })),
     ...(loading || authenticated ? [] : [{ to: '/entrar', label: 'Entrar', acao: true }]),
   ]
-  // A barra de progresso de leitura é movimento contínuo ao rolar: some
-  // quando o sistema pede menos movimento.
-  const reduced = useReducedMotion()
-
   useEffect(() => setOpen(false), [pathname])
 
   /* Gaveta aberta: a página atrás não rola nem recebe foco (inert em main e
@@ -104,22 +95,19 @@ export function Header() {
      a página em que a pessoa já está (aí a rota não muda). */
   const fechar = () => setOpen(false)
 
-  // As páginas de conteúdo abrem com a faixa de destaque, sob a qual o
-  // cabeçalho fica transparente; nas de fluxo (beta, conta, acesso) e
-  // depois de rolar, ele ganha fundo sólido para separar do conteúdo.
+  // O cabeçalho é sempre do marinho fundo da abertura. Nas páginas de
+  // conteúdo ele se funde com ela no topo; nas de fluxo (beta, conta,
+  // acesso) e depois de rolar, ganha o fio de baixo que o separa do
+  // conteúdo.
   const opensSolid = naRota(pathname, SOLID_ROUTES)
   const solid = scrolled || open || opensSolid
 
   return (
     <>
+    {/* A barra de progresso de leitura saiu no redesenho de 19/10/2026: era
+        movimento contínuo ao rolar, sem informação que a barra de rolagem
+        do navegador já não desse. */}
     <header className={`header${solid ? ' is-scrolled' : ''}`}>
-      {!reduced && (
-        <span
-          className="header__progress"
-          style={{ transform: `scaleX(${progress})` }}
-          aria-hidden="true"
-        />
-      )}
 
       <div className="container header__inner">
         <Logo size="sm" tone="negativo" />
@@ -138,12 +126,18 @@ export function Header() {
             </Button>
           ) : BETA.ativo ? (
             lancou ? (
-              <Button to="/baixar">Baixar grátis</Button>
+              <Button to="/baixar" chamada>
+                Baixar grátis
+              </Button>
             ) : (
-              <Button to={BETA_CTA.to}>{BETA_CTA.label}</Button>
+              <Button to={BETA_CTA.to} chamada>
+                {BETA_CTA.label}
+              </Button>
             )
           ) : (
-            <Button to="/cadastro">Testar grátis</Button>
+            <Button to="/cadastro" chamada>
+              Testar grátis
+            </Button>
           )}
         </div>
 
@@ -173,16 +167,14 @@ export function Header() {
       hidden={!open}
     >
         <nav aria-label="Navegação mobile">
-          {[...NAV, ...NAV_SECUNDARIA].map((item, i) => (
+          {[...NAV, ...NAV_SECUNDARIA].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               onClick={fechar}
-              className={`drawer__link${item.beta ? ' drawer__link--beta' : ''}`}
-              style={{ animationDelay: `${i * 55}ms` }}
+              className="drawer__link"
             >
               {item.label}
-              {item.beta && seloDaBeta}
             </NavLink>
           ))}
         </nav>

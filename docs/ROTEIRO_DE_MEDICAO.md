@@ -1,8 +1,11 @@
 # Roteiro de medição do V3
 
-As mudanças do pipeline V3 (M1–M21, README → *Pipeline V3*) foram decididas com
+As mudanças do pipeline V3 (M1–M22, README → *Pipeline V3*) foram decididas com
 literatura, simulação e o replay de uma gravação. Nenhuma foi medida com uma
-pessoa. Este roteiro diz, sessão por sessão, o que medir para decidir cada flag.
+pessoa. Este roteiro diz, sessão por sessão, o que medir para decidir cada flag
+— e, desde 19/10/2026, também o que conferir nas mudanças de robustez de
+18–19/10 (roll do recorte, estímulo novo, contraluz, perda do modelo, pouca luz,
+desempenho), que não têm flag mas têm limiares e comportamentos a confirmar.
 O protocolo do teste de precisão, a bancada e a leitura do relatório continuam
 os de [`MEDICOES.md`](MEDICOES.md); aqui entra só o que o V3 acrescenta.
 
@@ -14,7 +17,14 @@ os de [`MEDICOES.md`](MEDICOES.md); aqui entra só o que o V3 acrescenta.
 | 4. Condições de ELA | M2, M3, M7, M10, M13; luz e óculos | 30 min por condição |
 | 5. 30 min de uso | M15, M16 | 40 min |
 | 6. Sessão longa | M17–M21, deriva e fadiga | 2 h |
-| 7. Ramo ocular | se a EyeNet substitui a L2CS-Net do rosto (`eyeNet` com `ep=off`) | 70 min |
+| 7. Ramo ocular | se a EyeNet substitui a L2CS-Net do rosto (`eyeNet` com `ep=off`); **refazer** as rodadas de antes de 19/10/2026 | 70 min |
+| 8. Roll do recorte (A1) | o padrão de `normalizarRollNoCrop` e a M13 | 60 min |
+| 9. Recoleta dos alvos ruins | M22 | 45 min |
+| 10. Estímulo novo | quanto a troca de alvo e de fundo de 19/10/2026 muda os números | 45 min |
+| 11. Contraluz real | as três fases da contraluz forte | 20 min |
+| 12. Perda da WebGPU | o reinício do modelo e o aviso de calibração perdida | 20 min |
+| 13. Pouca luz | os limiares 0,12 e 0,18 e o destravar da exposição | 30 min |
+| 14. Desempenho no PC real | se o reaproveitamento de buffers tira as coletas de lixo e os engasgos | 20 min |
 
 ---
 
@@ -40,7 +50,23 @@ os de [`MEDICOES.md`](MEDICOES.md); aqui entra só o que o V3 acrescenta.
 - **Recalibre a cada troca.** Com o L2CS ligado, trocar entre `v3` e `base`
   muda o `FEATURE_VECTOR_ID`, e o perfil salvo não carrega na outra condição.
   Sem o L2CS o identificador não muda, mas a calibração tem de ser nova do
-  mesmo jeito: é ela que a réplica repete.
+  mesmo jeito: é ela que a réplica repete. O mesmo vale para todo parâmetro que
+  entra na chave do perfil — `ep=off`, `dimsIris=`, `expansao=`, `rosto=`,
+  `rollCrop=` (no V3), os `exp.` da M2, da M3, da M4 e da M13,
+  `geometricPoseCompensation` (pelo console) e o lado efetivo do L2CS (lista
+  completa no README, *Flags de experimento*): na recarga, o perfil da condição
+  anterior é descartado.
+- **Mudança de protocolo em 19/10/2026: o estímulo mudou.** Desde então a
+  calibração e o teste usam o alvo ABC sobre o fundo azul-marinho `#091B33`
+  (MEDICOES §2); antes, outro alvo e fundo preto. Não junte na mesma condição
+  rodadas dos dois lados dessa data: confira o carimbo de build na tela de
+  calibração e anote-o. A sessão 10 mede a diferença; até ela, uma sessão de
+  antes não é linha de base para uma de depois.
+- **A recoleta (M22) muda o modelo medido.** No V3, uma calibração com alvo
+  ruim refaz até 4 alvos e pode trocar o modelo. Em toda sessão, registre
+  `calibrationFit.recoleta` (rodou? foi aceita?) junto com o relatório; para
+  medir outra coisa sem ela, acrescente `&exp.recoletaDeAlvosRuins=0` às duas
+  condições.
 - **Com e sem o L2CS.** O instalador da beta roda com o L2CS desde a
   1.0.0-beta.10 (até a beta.9 rodava sem, `&ep=off`), e é esse o número que a
   família recebe; sem o L2CS fica o caminho de quem escolhe "calibrar só com a
@@ -102,6 +128,11 @@ o pipeline anterior?
 **Decisão.** O V3 continua padrão se ganhar ≥ 15 % em `meanErrorDeg` ou em
 `lado95Filtrado1sPx` sem piorar 15 % nenhuma outra. Se não ganhar, ou se piorar
 alguma, a sessão 2 acha a flag responsável antes de qualquer outra decisão.
+
+Desde 19/10/2026 a condição B inclui a M22 (a recoleta), que a A não tem:
+anote em cada rodada de B se a recoleta rodou e se foi aceita
+(`calibrationFit.recoleta`). Se ela rodar em alguma rodada, a comparação mede o
+V3 com a M22; o efeito da M22 sozinha é a sessão 9.
 
 ## 3. Sessão 2 — ablação
 
@@ -171,7 +202,12 @@ piorou a linha de baixo da grade (README, nota da tabela; RELATORIO, Fase 7).
 A sessão com gente é o que falta para decidir.
 
 M13 muda a imagem que o L2CS recebe: a flag existe para essa decisão ser tomada
-com número, e a decisão é do responsável.
+com número, e a decisão é do responsável. A comparação do roll com as três
+condições do recorte (sem normalização, a de hoje — que dobra a inclinação — e
+a M13) ficou numa sessão própria, a 8; aqui a cabeça inclinada mede M2 e M3.
+
+O "quarto à noite" daqui mede a acurácia com só a tela acesa; o aviso de pouca
+luz e os limiares dele são a sessão 13.
 
 ## 6. Sessão 5 — 30 minutos de uso com a correção por dwell (M15, M16)
 
@@ -259,6 +295,14 @@ tirar a rede do rosto, e quanto a EyeNet devolve.
 `irisCore+l2cs+olho`). A condição da EyeNet no lugar da L2CS-Net leva também
 `&ep=off`.
 
+**Refazer as rodadas de antes de 19/10/2026.** Até então a condição E media um
+ramo ocular com defeito (A4 da auditoria de 18/10): o peso da amostra olhava só
+o bloco do L2CS e, com `?ep=off&olho=onnx`, toda amostra saía como "bloco
+zerado" (×0,35), e o bloco ocular zerava sem rampa. Desde 19/10/2026 o peso
+olha o motivo do bloco ocular e o bloco desvanece como o do L2CS. Rodada de E
+anterior a isso não vale, e rodada de qualquer condição anterior a 19/10/2026
+também usou o estímulo antigo (§0).
+
 | | P — produção | I — só íris | E — íris + EyeNet |
 |---|---|---|---|
 | parâmetros | `&rosto=gaze360&ep=auto&olho=off&dimsIris=absolutas` | `&ep=off&olho=off&dimsIris=ambas` | `&ep=off&olho=onnx` |
@@ -305,3 +349,198 @@ cada 100 ms) e às bordas de baixo (B3, B4), onde a pálpebra cobre a íris.
 A EyeNet junto com a L2CS-Net (`&ep=auto&olho=onnx`, conjunto
 `irisCore+l2cs+olho`) fica como ablação, se sobrar tempo: ela responde se o olho
 acrescenta algo à rede do rosto, não se pode substituí-la.
+
+## 10. Sessão 8 — roll do recorte do L2CS (A1)
+
+A pergunta: o recorte do L2CS deve girar com a cabeça? Hoje
+(`normalizarRollNoCrop` ligada) ele gira com o sinal trocado, e a rede vê o
+DOBRO da inclinação (README, *Compensação de cabeça*); a M13 passa o sinal
+certo e a rede vê o rosto nivelado. O impacto na acurácia nunca foi medido.
+
+| | A — sem normalização | B — a de hoje | C — M13 |
+|---|---|---|---|
+| URL | `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3&rollCrop=0&exp.nivelarRecorteCorrigido=0` | `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3&rollCrop=1&exp.nivelarRecorteCorrigido=0` | `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3&rollCrop=1&exp.nivelarRecorteCorrigido=1` |
+| o que a rede vê, com a cabeça a 15° | o rosto a 15° | o rosto a ~30° | o rosto nivelado |
+| ordem | A B C C B A A B C, cinco minutos de pausa entre as rodadas | | |
+| cada rodada | calibração completa com a cabeça nivelada; teste de precisão nivelado; teste de precisão com a cabeça inclinada ~15° para um lado e mantida (o mesmo lado em todas as rodadas; conferir `pose.roll` no HUD), sem recalibrar | | |
+
+Com o L2CS (é ele que vê o recorte). As três condições mudam a chave do perfil
+(`+rl`, `+rc`): **cada rodada tem a sua calibração**, e o "sem recalibrar" vale
+só entre o teste nivelado e o inclinado.
+
+**Registrar:** `meanErrorDeg` e `biasY` nos dois testes; o cisalhamento do
+`affine`; `pose.roll` do HUD durante o teste inclinado; `l2csValidFraction`.
+
+**Decisão.** A métrica é o `meanErrorDeg` do teste inclinado, contra B. C
+ganhando ≥ 15 % sem piorar 15 % o teste nivelado: a M13 vira candidata a padrão,
+e a decisão é do responsável (muda a imagem que a rede vê). A ganhando ≥ 15 %:
+`normalizarRollNoCrop` sai do padrão. No meio, fica como está, "não decidido".
+
+## 11. Sessão 9 — recoleta dos alvos ruins (M22)
+
+A pergunta: refazer na hora os alvos ruins melhora o modelo que a pessoa usa, e
+quanto tempo custa? A trava garante que o LOTO médio não piora; o teste de
+precisão é o que diz se o cursor melhorou.
+
+| | A — sem recoleta | B — com recoleta (padrão) |
+|---|---|---|
+| URL | `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3&exp.recoletaDeAlvosRuins=0` | `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3&exp.recoletaDeAlvosRuins=1` |
+| ordem | blocos alternados, A B B A A B, cinco minutos de pausa entre as rodadas | |
+| cada rodada | calibração completa (13 alvos) e teste de precisão | |
+
+A flag não muda a chave do perfil, mas cada rodada calibra de novo do mesmo
+jeito. Para haver alvo ruim sem forçar, não peça nada à pessoa: a recoleta
+existe para as distrações de verdade, e uma sessão em que ela nunca roda também
+é resultado.
+
+**Registrar**, em cada rodada de B: `calibrationFit.recoleta` — `looAntesPx`,
+`looDepoisPx`, `aceito`, `motivo`, `tempoUtilMs` e os `alvos` refeitos; em todas
+as rodadas: o erro do teste no miolo (`meanErrorDeg`, P1–P9) e nos cantos
+(`meanErrorEdge`, B1–B4), e o tempo total da calibração no cronômetro.
+
+**Decisão.** Comparam-se as rodadas de B em que a recoleta rodou e foi aceita
+com as de A. A M22 fica ligada se o erro do miolo ou o dos cantos melhorar
+≥ 15 % sem o outro piorar 15 %; sai se piorar 15 % qualquer um dos dois. Se em
+nenhuma rodada houver alvo ruim, a sessão registra "não decidido: a M22 não
+agiu", com a contagem das rodadas, e a flag fica como está.
+
+## 12. Sessão 10 — o estímulo novo (19/10/2026)
+
+A pergunta: quanto a troca do alvo (a bola pulsante e o alvo antigo do teste
+pelo ABC) e do fundo (preto pelo azul-marinho `#091B33`) muda os números? Não há
+flag: a sessão diz se as medições de antes e de depois podem ser comparadas.
+
+| | A — antes | B — depois |
+|---|---|---|
+| build | o de antes de 19/10/2026 no `preview`: a tag `pc-atual` (a pasta do PC em 18/10, 23h10; commit `22a0047` na reconstrução), que ainda não tem `src/alvoDeFixacao.ts` | o atual (`pipeline-v2`) no `preview` |
+| URL | `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3` | `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3&exp.recoletaDeAlvosRuins=0` |
+| ordem | A B B A A B, a mesma pessoa, a mesma bancada e a mesma luz | |
+| cada rodada | calibração completa (13 alvos) e teste de precisão | |
+
+O `&exp.recoletaDeAlvosRuins=0` em B tira a M22, que A não tem: assim a
+diferença é a do estímulo. As outras mudanças entre os dois builds agem em
+falha (contraluz forte, pouca luz, modelo que cai, predição inválida) ou fora
+do rastreamento, com uma exceção: desde 19/10/2026 o rastreador abre a câmera
+escolhida no preparo, e antes podia abrir outra — deixe só uma câmera ligada. Cada build serve a sua pasta `dist`; confira o carimbo de build na tela
+de calibração antes de cada rodada.
+
+**Registrar:** `meanErrorDeg`, `medianErrorDeg`, `p95ErrorDeg`, `jitterRMS`,
+`precisionS2S`, `bceaDeg2`, `calibrationFit.looErrorPx` e o tempo da
+calibração.
+
+**Decisão.** Sem diferença maior que a variação entre as réplicas: as sessões
+de antes continuam valendo como linha de base, com a nota da data. Com
+diferença: as de antes viram histórico, e a linha de base passa a ser B. Se B
+piorar ≥ 15 % o `meanErrorDeg` ou o `jitterRMS`, a troca volta ao responsável
+antes de qualquer outra sessão.
+
+**Atualização de 20/10/2026.** Agora dá para medir o estímulo no MESMO build: blocos alternados com `?exp.estimuloAntigo=1` (a bola azul lisa sobre preto na calibração e o círculo com cruz no teste, como antes de 19/10) e `?exp.estimuloAntigo=0` (o alvo ABC e o fundo marinho, o padrão), recalibrando a cada bloco. Isso separa o efeito do estímulo das outras mudanças (M22, A4, A5, supervisor).
+
+## 13. Sessão 11 — contraluz real
+
+A pergunta: com uma janela de verdade atrás da pessoa, a contraluz forte
+(fundo ≥ 3× mais claro que o rosto) segue as três fases de 19/10/2026? Até
+~500 ms, pausa; até 10 s, posição não medida — o dwell não conta tempo e nada
+é selecionado; depois de 10 s, a predição volta degradada e só a Emergência
+(dwell 2×) e os botões de recuperação (2,5×) aceitam.
+
+| | A — controle | B — contraluz |
+|---|---|---|
+| posto | luz de frente, janela fechada ou de lado | janela clara atrás da pessoa, cortina aberta |
+| URL | `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3` | a mesma |
+
+Calibrar no posto A. Em B, sem recalibrar, abrir a cortina com a pessoa olhando
+o teclado; repetir três vezes, com a pessoa parada sobre uma letra, sobre o
+"Voltar" e sobre a Emergência.
+
+**Registrar:** o tempo do abrir da cortina até o aviso "Luz forte atrás de
+você" (cronômetro ou a hora do console); se alguma letra ou botão foi
+selecionado antes dos 10 s (não pode); se, depois dos 10 s, a Emergência
+completou e as letras não; a contraluz que a verificação de prontidão do
+preparo mostra em A e em B (a razão fundo/rosto).
+
+**Decisão.** Passa se nada for selecionado nos primeiros 10 s e se, depois
+deles, só a Emergência e os botões de recuperação completarem. Qualquer seleção
+indevida volta ao código como defeito, com o horário do console. Os 10 s e os
+multiplicadores do dwell ficam se a pessoa conseguir chamar a Emergência sob
+contraluz em pelo menos duas das três tentativas.
+
+## 14. Sessão 12 — perda da WebGPU (suspender e acordar)
+
+A pergunta: quando o dispositivo WebGPU se perde no sono do notebook, o modelo
+volta sozinho, e a pessoa fica sabendo que a calibração precisa ser refeita?
+
+1. No `preview`, num navegador com WebGPU (Chrome ou Edge), com
+   `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3&ep=auto`:
+   conferir no HUD que o provider é `webgpu` e o recorte 448². Calibrar.
+2. Suspender o computador por pelo menos 1 minuto e acordar, com a pessoa na
+   frente da câmera. Depois, repetir no aplicativo instalado, que é onde o
+   paciente usa — lá sem o HUD: vale o que a tela diz.
+3. Cronometrar até o modelo voltar: as tentativas são em 2, 5, 15, 30 e 60 s, e
+   da segunda em diante o WASM é forçado (recorte 224²).
+
+**Registrar:** as linhas do console do reinício (tentativas, provider de
+volta); o provider e o lado do recorte depois; se a tela disse que a
+calibração deixou de valer e pediu outra (com o recorte em 224², a calibração
+de 448² deixa de valer, a não ser que exista um perfil salvo em 224²); com a
+conta ligada, se o celular recebeu o aviso `calibracao_perdida` depois de 45 s.
+
+**Decisão.** Passa se o modelo voltar sem reabrir o IrisFlow e se a tela pedir
+a calibração nova em vez de mostrar um cursor deslocado. Esgotadas as cinco
+tentativas sem volta, ou cursor deslocado sem aviso, é defeito: o console vai
+junto com o relato.
+
+**Atualização de 20/10/2026.** O reinício agora MANTÉM o lado da calibração (WASM a 448², ~3,2× mais lento que a 224² no contêiner) e mede as primeiras respostas: se duas das três passarem de 1,25 s, volta a 224² e a calibração fica suspensa (só Emergência e recuperação, faixa "O olhar está em modo reduzido", aviso `olhar_reduzido` ao cuidador). Registrar: a latência real a 448² e a 224² no PC (HUD com `?ep=wasm&l2cs=448&debug=1` e `l2cs=224`), se a linha "[L2CS] o recorte de 448² em WASM está levando X s…" aparece no console, quanto tempo leva a troca, e se o cursor fica no lugar quando NÃO troca.
+
+## 15. Sessão 13 — pouca luz
+
+A pergunta: os limiares do aviso de pouca luz (entra abaixo de 0,12 por 10 s,
+sai acima de 0,18 por 3 s, na luminância média do quadro) batem com uma webcam
+real? E destravar a exposição traz o rosto de volta?
+
+1. Calibrar com o quarto bem iluminado: o ajuste da câmera trava a exposição.
+2. Sem recalibrar, escurecer o quarto aos poucos (uma luz por vez, até ficar só
+   a tela), com a pessoa olhando o menu.
+3. Depois de 2 minutos no escuro, acender de novo.
+4. Repetir com o brilho da tela reduzido ou o filtro âmbar ligado, para ver o
+   "Clarear a tela".
+
+URL: `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3`.
+
+**Registrar:** as linhas `[camera] pouca luz no quadro (brilho …) há mais de
+10 s.` e `[camera] pouca luz: a exposição voltou ao automático…` (ou a de
+recusa da câmera), com a hora; o brilho em que o rosto se perdeu (a hora do
+aviso de rosto perdido); se o rosto voltou depois de a exposição destravar; o
+brilho em que o aviso saiu; e, numa hora de uso normal com a luz acesa, se o
+aviso apareceu alguma vez (não pode).
+
+**Decisão.** Os limiares ficam se o aviso aparecer quando o rosto some pelo
+escuro e nunca com a luz normal. Se o rosto se perder com o brilho acima de
+0,12 nas três repetições, o limiar sobe para o brilho medido na perda (e o de
+saída acompanha, com a mesma folga); se o aviso aparecer com luz normal, ele
+desce. A mudança é no código (`src/poucaLuz.ts`), com os números desta sessão.
+
+## 16. Sessão 14 — desempenho no PC real
+
+A pergunta: o reaproveitamento dos buffers (19/10/2026) tira, no PC de
+verdade, as coletas de lixo e os engasgos do cursor? Na medição sintética de 1
+min de pipeline, a alocação caiu de 707 MB para ~0 e as coletas de 33 para 11
+(224²), e de 1,74 GB para ~0 e de 63 para 12 (448²). O `getImageData` ainda
+aloca por recorte.
+
+| | A — antes | B — depois |
+|---|---|---|
+| build | o último commit antes do reaproveitamento ("à noite: aviso de pouca luz…", `041d11c` na reconstrução), que ainda não tem `src/reusoDeBuffers.test.ts` | o atual |
+| como | `npm run electron:dev`, DevTools → Performance, com Memory marcado | o mesmo |
+
+Gravar 60 s com o rastreamento ligado e o cursor andando sobre o teclado, três
+vezes por condição, com o mesmo provider (anotar `webgpu` 448² ou `wasm` 224²).
+
+**Registrar:** o número de coletas (Minor GC e Major GC) e o tempo somado
+delas; a amplitude do dente de serra do JS heap; os quadros acima de 50 ms; e
+os engasgos do cursor que a pessoa percebeu.
+
+**Decisão.** Não há flag: a saída é idêntica por teste
+(`src/reusoDeBuffers.test.ts`). A sessão confirma o ganho se as coletas e os
+quadros longos caírem em B. Se não caírem, registra "sem efeito no PC real", e
+o próximo passo é o `getImageData`.

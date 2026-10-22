@@ -7,6 +7,8 @@ type Options = {
   rootMargin?: string
   /** Dispara uma única vez e para de observar. */
   once?: boolean
+  /** Com `false` nem observa (movimento reduzido, por exemplo): `inView` fica falso. Padrão: true. */
+  ativo?: boolean
 }
 
 /**
@@ -35,13 +37,14 @@ export function useInView<T extends HTMLElement = HTMLDivElement>({
   threshold = 0.18,
   rootMargin = '0px 0px -10% 0px',
   once = true,
+  ativo = true,
 }: Options = {}) {
   const ref = useRef<T | null>(null)
   const [inView, setInView] = useState(false)
 
   useEffect(() => {
     const el = ref.current
-    if (!el) return
+    if (!el || !ativo) return
 
     if (typeof IntersectionObserver === 'undefined') {
       setInView(true)
@@ -69,7 +72,7 @@ export function useInView<T extends HTMLElement = HTMLDivElement>({
 
     observer.observe(el)
     return () => observer.disconnect()
-  }, [threshold, rootMargin, once])
+  }, [threshold, rootMargin, once, ativo])
 
   return { ref, inView }
 }

@@ -8,13 +8,19 @@
 }
 
 /* ---------- abas ---------- */
+/* Sangra até a borda da tela: a margem negativa e o recuo seguem o --gutter
+   do .container (relato de 19/10/2026: com o recuo fixo de 24 px e o
+   contêiner de 16 px no celular, a lista passava 8 px da tela). */
 .explorador__abas {
   display: flex;
   gap: var(--sp-2);
-  margin-inline: calc(-1 * var(--sp-5));
-  padding: 2px var(--sp-5) var(--sp-2);
+  margin-inline: calc(-1 * var(--gutter));
+  padding: 2px var(--gutter) var(--sp-2);
   overflow-x: auto;
   scroll-snap-type: x proximity;
+  /* Sem isto, o encaixe (scroll-snap-align: start) puxava a primeira aba
+     para a borda da tela, por cima do recuo. */
+  scroll-padding-inline: var(--gutter);
   scrollbar-width: none;
 }
 

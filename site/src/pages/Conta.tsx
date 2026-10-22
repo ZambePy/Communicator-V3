@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Button } from '@/components/ui/Button'
 import { DownloadPanel } from '@/components/ui/DownloadPanel'
@@ -15,6 +14,7 @@ import { usePlans } from '@/hooks/usePlans'
 import { useDownloads } from '@/hooks/useDownloads'
 import './checkout.css'
 import './conta.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 const STATUS_LABEL = {
   avaliacao: { text: 'Em avaliação gratuita', tone: 'tag--wip' },
@@ -55,6 +55,7 @@ export default function Conta() {
   if (!account && sessionError) {
     return (
       <div className="flow">
+        <FundoDaPagina variante="calmo" />
         <div className="container container--narrow flow__inner">
           <div className="notice notice--warn" role="alert">
             <span className="notice__icon">
@@ -62,7 +63,7 @@ export default function Conta() {
             </span>
             <p>
               Não foi possível carregar os dados da sua conta ({sessionError}). Você continua
-              conectado — isto é uma falha de conexão com o servidor, não um problema no seu
+              conectado. Isto é uma falha de conexão com o servidor, não um problema no seu
               cadastro.
             </p>
           </div>
@@ -87,7 +88,7 @@ export default function Conta() {
   // a inscrição gravou como o fim do programa.
   const naBeta = account.planId === 'beta'
   const status = naBeta
-    ? { text: `Programa beta · acesso até ${formatDate(account.nextChargeAt)}`, tone: 'tag--ok' }
+    ? { text: `Programa beta, com acesso até ${formatDate(account.nextChargeAt)}`, tone: 'tag--ok' }
     : STATUS_LABEL[account.status]
   const remaining = daysUntil(account.trialEndsAt)
   const progress =
@@ -98,8 +99,7 @@ export default function Conta() {
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container flow__inner">
         <Reveal anim="fade">
           <span className="eyebrow">Painel</span>

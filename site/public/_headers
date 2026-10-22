@@ -3,6 +3,10 @@
 # CSP: só o que o site realmente carrega.
 # - script: o próprio bundle + o beacon do Cloudflare Web Analytics
 #   (carregado só com VITE_CF_ANALYTICS_TOKEN e sem recusa do visitante);
+#   'wasm-unsafe-eval' (21/10/2026) deixa o navegador COMPILAR WebAssembly — o
+#   reconhecimento do rosto do "Teste com o seu olhar" (MediaPipe, servido de
+#   /demo/). Libera só o wasm, não o eval de JavaScript; sem ele, o MediaPipe
+#   falha calado no teste de SIMD e o teste ao vivo nunca liga;
 # - connect: Supabase (API REST, Auth e Realtime do projeto em *.supabase.co),
 #   a API pública do GitHub (qual é o último release do desktop, para os
 #   botões de download) e o endpoint de estatísticas do Cloudflare;
@@ -10,18 +14,23 @@
 # - nenhum iframe, nenhum plugin, e o site não pode ser emoldurado
 #   (frame-ancestors 'none' + X-Frame-Options para navegadores antigos).
 # Os downloads apontam para github.com, mas são navegações comuns, fora da CSP.
-# Permissions-Policy: o site não usa câmera nem microfone (a verificação de
-# compatibilidade só pergunta se o navegador tem acesso à webcam, sem ligá-la).
+# Permissions-Policy: a câmera só para o próprio site, camera=(self). O teste
+# "Meu computador funciona?" (/meu-computador e a tela de sucesso) liga a
+# webcam quando a pessoa pede, e a imagem não sai do navegador. Vale em TODAS
+# as rotas de propósito: o site é uma SPA, e a política que conta é a do
+# documento carregado primeiro — quem entra pela home e vai ao teste pelo menu
+# continua no documento da home. Até 19/10/2026 era camera=(), e o teste daria
+# sempre "sem permissão" no site no ar. O microfone continua bloqueado.
 # Sem "interest-cohort" (o FLoC foi abandonado) e sem "bluetooth": o Chrome
 # registra "Error with Permissions-Policy header" no console de toda página
 # para recurso que não reconhece.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.github.com https://cloudflareinsights.com; manifest-src 'self'; worker-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.github.com https://cloudflareinsights.com; manifest-src 'self'; worker-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=()
+  Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=(), serial=()
   Cross-Origin-Opener-Policy: same-origin
 
 # Arquivos com hash no nome (gerados pelo Vite): cache de um ano, imutável.
@@ -32,11 +41,34 @@
 /fonts/*
   Cache-Control: public, max-age=31536000, immutable
 
+# Teste ao vivo: wasm e modelo do MediaPipe (uns 15 MB, baixados só no clique).
+# A versão está no caminho (/demo/mediapipe-<versão>/), então o conteúdo de um
+# caminho nunca muda: trocar a versão é trocar a pasta. A regra é só
+# /demo/mediapipe-* (revisão de 21/10/2026): o Pages devolve o index.html (200)
+# para caminho que não existe, e com /demo/* um /demo/qualquer-coisa, ou um
+# arquivo que faltasse num deploy, ficaria como HTML imutável por um ano.
+/demo/mediapipe-*
+  Cache-Control: public, max-age=31536000, immutable
+
+# O texto da licença Apache-2.0 do MediaPipe (sem extensão no nome): como texto
+# puro em UTF-8, abre na tela em vez de baixar como arquivo qualquer.
+/demo/mediapipe-0.10.35/LICENSE
+  Content-Type: text/plain; charset=utf-8
+
 # Fotos da equipe e marca: um dia, revalidando depois.
 /team/*
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 
 /brand/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+# Telas e gravações do app (/media, até 1,5 MB) e os selos das lojas (/badges):
+# o nome do arquivo não leva hash, então um dia, como /team e /brand. Sem esta
+# regra, cada visita revalidava as imagens e os vídeos (auditoria de 21/10/2026).
+/media/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/badges/*
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 
 # HTML e rotas da SPA: sem regra aqui, de propósito. O Pages serve o index.html
@@ -54,3 +86,9 @@
 
 /robots.txt
   Cache-Control: public, max-age=3600
+
+# A versão que está no ar (versao.json, gerado no build: plugins/versaoDoBuild.ts).
+# O `npm run publicar` o consulta depois do envio para saber se o Pages já
+# publicou o commit novo; em cache, ele olharia uma versão velha.
+/versao.json
+  Cache-Control: no-store

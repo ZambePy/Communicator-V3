@@ -3,7 +3,9 @@ import { render, screen, act, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { EmergencyEscalation } from './EmergencyEscalation';
-import { informarEntrega, _limparOuvintes } from '../../cloud/eventos';
+import { informarEntrega, entregaDaResposta, _limparOuvintes } from '../../cloud/eventos';
+import { _reiniciarSocorroParaTestes, pedidoAtual, dispararPedidoDeSocorro } from '../../services/emergencia/pedidoDeSocorro';
+import { alvoMinimoPx } from '../../design/gazeMetrics';
 
 // O único envio da tela é o pedido de ajuda no barramento da nuvem (que o modo
 // apresentação corta). Nada de backend de demonstração em localhost.
@@ -39,9 +41,12 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
     vi.stubGlobal('fetch', fetchEspiao);
     cloud.ajustesRemotos = null;
     cloud.reconhecimento = null;
+    _limparOuvintes();
+    _reiniciarSocorroParaTestes();
   });
 
   afterEach(() => {
+    _reiniciarSocorroParaTestes();
     vi.unstubAllGlobals();
   });
 
@@ -65,7 +70,7 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
     expect(screen.getByText(/Alerta disparado. Aguarde atendimento./i)).toBeInTheDocument();
   });
 
-  it('deve autodisparar se a URL vier com autoTrigger e escalar para crítico após 15 segundos', () => {
+  it('link antigo com autoTrigger: dispara uma vez; sem resposta do envio, o alarme local toca em 12 s', () => {
     vi.useFakeTimers();
 
     render(
@@ -74,43 +79,73 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
       </MemoryRouter>
     );
 
-    // Disparou automaticamente
     expect(emitirPedidoDeAjuda).toHaveBeenCalledWith('emergencia', 'emergency.items.pain', expect.any(String));
     expect(screen.getByText(/Aguarde atendimento/i)).toBeInTheDocument();
 
-    // Avança o relógio em 15 segundos para simular não-resposta do cuidador
     act(() => {
-      vi.advanceTimersByTime(15000);
+      vi.advanceTimersByTime(12_100);
     });
 
-    // Escala o alarme LOCAL. Não reenvia nada daqui: quem reenvia ao celular
-    // é o servidor (pg_cron), e a tela não diz que mandou o que não mandou.
-    expect(screen.getByText(/ALERTA ESCALADO/i)).toBeInTheDocument();
-    expect(screen.getByText('Ninguém confirmou ainda. O alarme continua tocando neste computador.')).toBeInTheDocument();
-    expect(screen.queryByText(/enviados repetidamente/i)).toBeNull();
+    // Escala o alarme LOCAL e diz por quê. Não reenvia nada daqui: quem reenvia
+    // ao celular é o servidor (pg_cron), e a tela não diz que mandou o que não mandou.
+    expect(screen.getByText('emergency.entrega.sem_resposta.titulo')).toBeInTheDocument();
+    expect(pedidoAtual()?.fase).toBe('escalado');
     expect(emitirPedidoDeAjuda).toHaveBeenCalledTimes(1);
     expect(fetchEspiao).not.toHaveBeenCalled();
 
     vi.useRealTimers();
   });
 
-  it('usa o prazo de patient_settings (emergency_timeout_s) em vez dos 15 s fixos', () => {
+  it('entregue ao celular: usa o prazo do cuidador (patient_settings.emergency_timeout_s)', () => {
     vi.useFakeTimers();
-    cloud.ajustesRemotos = { emergency_timeout_s: 45 };
+    cloud.ajustesRemotos = { emergency_timeout_s: 30 };
 
     render(
       <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
         <EmergencyEscalation />
       </MemoryRouter>
     );
+    const id = emitirPedidoDeAjuda.mock.calls[0][2] as string;
+    act(() => informarEntrega(id, 'enviado'));
 
-    act(() => { vi.advanceTimersByTime(15000); });
-    // Aos 15 s ainda não escalou: o prazo agora é o do cuidador.
-    expect(screen.queryByText(/ALERTA ESCALADO/i)).toBeNull();
+    act(() => { vi.advanceTimersByTime(29_000); });
+    expect(screen.queryByText('emergency.escalado.titulo')).toBeNull();
 
-    act(() => { vi.advanceTimersByTime(30000); });
-    expect(screen.getByText(/ALERTA ESCALADO/i)).toBeInTheDocument();
+    act(() => { vi.advanceTimersByTime(1_200); });
+    expect(screen.getByText('emergency.escalado.titulo')).toBeInTheDocument();
 
+    vi.useRealTimers();
+  });
+
+  it('sem o ajuste do cuidador, o prazo é 45 s — o mesmo do servidor (antes eram 15 s aqui e 45 lá)', () => {
+    vi.useFakeTimers();
+    render(
+      <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
+        <EmergencyEscalation />
+      </MemoryRouter>
+    );
+    const id = emitirPedidoDeAjuda.mock.calls[0][2] as string;
+    act(() => informarEntrega(id, 'enviado'));
+    act(() => { vi.advanceTimersByTime(44_000); });
+    expect(screen.queryByText('emergency.escalado.titulo')).toBeNull();
+    act(() => { vi.advanceTimersByTime(1_200); });
+    expect(screen.getByText('emergency.escalado.titulo')).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('sem internet (na fila): o alarme local começa em 5 s, mesmo com prazo do cuidador longo', () => {
+    vi.useFakeTimers();
+    cloud.ajustesRemotos = { emergency_timeout_s: 300 };
+    render(
+      <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
+        <EmergencyEscalation />
+      </MemoryRouter>
+    );
+    const id = emitirPedidoDeAjuda.mock.calls[0][2] as string;
+    act(() => informarEntrega(id, 'na_fila'));
+    act(() => { vi.advanceTimersByTime(5_100); });
+    expect(pedidoAtual()?.fase).toBe('escalado');
+    expect(screen.getByText('emergency.entrega.na_fila.titulo')).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -129,7 +164,9 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
 
     const vistoEm = new Date(Date.now() + 5_000).toISOString();
     const hora = new Date(vistoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    cloud.reconhecimento = { id: 'hr-1', kind: 'emergencia', created_at: new Date().toISOString(), acknowledged_at: vistoEm, resolved_at: null };
+    // A confirmação DESTE pedido (o servidor grava o id do computador). A de
+    // outro pedido não conta mais — revisão de segurança de 19/10/2026.
+    cloud.reconhecimento = { id: pedidoAtual()!.id, kind: 'emergencia', created_at: new Date().toISOString(), acknowledged_at: vistoEm, resolved_at: null };
     act(() => {
       rerender(
         <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
@@ -138,13 +175,14 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
       );
     });
 
-    expect(screen.getByText(new RegExp(`Seu cuidador viu o pedido às ${hora}`))).toBeInTheDocument();
+    expect(screen.getByText('emergency.visto.titulo')).toBeInTheDocument();
     expect(speak).toHaveBeenCalledTimes(1);
     expect((speak.mock.calls[0][0] as { text: string }).text).toMatch(new RegExp(`viu o pedido às ${hora}`));
 
     // Confirmado antes do prazo: o escalonamento local não dispara mais.
-    act(() => { vi.advanceTimersByTime(20000); });
-    expect(screen.queryByText(/ALERTA ESCALADO/i)).toBeNull();
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(screen.queryByText('emergency.escalado.titulo')).toBeNull();
+    expect(pedidoAtual()?.fase).toBe('visto');
 
     vi.unstubAllGlobals();
     vi.useRealTimers();
@@ -173,10 +211,10 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
         </MemoryRouter>
       );
     });
-    expect(screen.getByText(/Seu cuidador viu o pedido/i)).toBeInTheDocument();
+    expect(screen.getByText('emergency.visto.titulo')).toBeInTheDocument();
   });
 
-  it('voltar ao menu depois do autodisparo NÃO manda um segundo pedido de socorro (FE-2)', () => {
+  it('parar o alarme pede confirmação; só o "sim" para e volta ao menu, sem segundo pedido (FE-2)', () => {
     // O `setTriggered(null)` renderizava antes da navegação (que vai em
     // transição) com `autoTrigger` ainda na URL: o efeito disparava de novo —
     // segundo push no celular, segundo pedido no banco, alarme de novo.
@@ -193,9 +231,37 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
     act(() => {
       fireEvent.click(screen.getByRole('button', { name: /emergency.cancelAndReturn/i }));
     });
+    // Primeiro passo: pergunta. O alarme continua valendo.
+    expect(screen.getByText('emergency.pararAlarme.pergunta')).toBeInTheDocument();
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /emergency.pararAlarme.nao/i }));
+    });
+    expect(screen.queryByText('tela do menu')).toBeNull();
+    expect(pedidoAtual()?.fase).not.toBe('encerrado');
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /emergency.cancelAndReturn/i }));
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /emergency.pararAlarme.sim/i }));
+    });
 
     expect(screen.getByText('tela do menu')).toBeInTheDocument();
+    expect(pedidoAtual()?.fase).toBe('encerrado');
     expect(emitirPedidoDeAjuda).toHaveBeenCalledTimes(1);
+  });
+
+  it('com um pedido em andamento, a tela abre nele (não na grade) e não dispara outro', () => {
+    dispararPedidoDeSocorro('other', 'OUTRA');
+    emitirPedidoDeAjuda.mockClear();
+    render(
+      <MemoryRouter initialEntries={['/emergency']}>
+        <EmergencyEscalation />
+      </MemoryRouter>
+    );
+    expect(screen.queryByRole('button', { name: /emergency.items.pain/i })).toBeNull();
+    expect(screen.getByText(/Aguarde atendimento/i)).toBeInTheDocument();
+    expect(emitirPedidoDeAjuda).not.toHaveBeenCalled();
   });
 
   it('o parâmetro autoTrigger é consumido da URL logo depois do disparo', () => {
@@ -232,7 +298,7 @@ describe('EmergencyEscalation Page — Escalonamento de Emergência', () => {
         <EmergencyEscalation />
       </MemoryRouter>
     );
-    expect(screen.queryByText(/Seu cuidador viu/i)).toBeNull();
+    expect(screen.queryByText('emergency.visto.titulo')).toBeNull();
     expect(screen.getByText(/Aguarde atendimento/i)).toBeInTheDocument();
   });
 });
@@ -243,7 +309,9 @@ describe('EmergencyEscalation — a tela diz o que aconteceu com o pedido (FE-9)
     cloud.ajustesRemotos = null;
     cloud.reconhecimento = null;
     _limparOuvintes();
+    _reiniciarSocorroParaTestes();
   });
+  afterEach(() => _reiniciarSocorroParaTestes());
 
   function disparar(): string {
     render(
@@ -276,10 +344,93 @@ describe('EmergencyEscalation — a tela diz o que aconteceu com o pedido (FE-9)
     expect(screen.getByText('emergency.entrega.ensaio.titulo')).toBeInTheDocument();
   });
 
+  it('reenvio que achou o pedido gravado, sem dado do push: a tela NÃO diz que o celular foi avisado (revisão de UX de 19/10/2026)', () => {
+    const id = disparar();
+    act(() => informarEntrega(id, entregaDaResposta({ ok: true, id, repetido: true })));
+    expect(screen.queryByText('emergency.entrega.enviado.titulo')).toBeNull();
+    expect(screen.getByText('emergency.entrega.push_incerto.titulo')).toBeInTheDocument();
+    expect(screen.getByText('emergency.entrega.push_incerto.detalhe')).toBeInTheDocument();
+  });
+
   it('a entrega de OUTRO pedido não muda esta tela', () => {
     disparar();
     act(() => informarEntrega('00000000-0000-4000-8000-000000000000', 'enviado'));
     expect(screen.getByText('emergency.entrega.enviando.titulo')).toBeInTheDocument();
+  });
+});
+
+// Revisão de UX de 19/10/2026 (achado 10): com o rastreamento degradado só
+// passam alvos de Emergência e de recuperação — parar um alarme falso não
+// funcionava pelo olhar. E os botões tinham 96 px de altura (~2,4°) contra o
+// mínimo de 5°, com o Não e o Sim a 24 px um do outro.
+describe('EmergencyEscalation — parar o alarme pelo olhar, inclusive no modo degradado (achado 10)', () => {
+  beforeEach(() => {
+    emitirPedidoDeAjuda.mockClear();
+    cloud.ajustesRemotos = null;
+    cloud.reconhecimento = null;
+    cloud.mensagens = [];
+    _limparOuvintes();
+    _reiniciarSocorroParaTestes();
+  });
+  afterEach(() => _reiniciarSocorroParaTestes());
+
+  /** O valor do estilo em px; o token do alvo mínimo vale `alvoMinimoPx()` (o jsdom não resolve `var()`). */
+  const emPx = (valor: string) => (valor.includes('--gaze-target-min') ? alvoMinimoPx() : parseFloat(valor));
+
+  const alvoGrandeDeRecuperacao = (b: HTMLElement) => {
+    expect(b.getAttribute('data-recovery')).toBe('true');
+    expect(emPx(b.style.height)).toBeGreaterThanOrEqual(alvoMinimoPx());
+    // A largura é fluida (`min(400px, 32vw)`), com o alvo mínimo como piso.
+    expect(emPx(b.style.minWidth)).toBeGreaterThanOrEqual(alvoMinimoPx());
+  };
+
+  it('"Parar o alarme" e as duas respostas da pergunta: recuperação, com o alvo mínimo, e longe uma da outra', () => {
+    render(
+      <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
+        <EmergencyEscalation />
+      </MemoryRouter>
+    );
+    alvoGrandeDeRecuperacao(screen.getByRole('button', { name: /emergency.cancelAndReturn/i }));
+
+    act(() => { fireEvent.click(screen.getByRole('button', { name: /emergency.cancelAndReturn/i })); });
+    const nao = screen.getByRole('button', { name: /emergency.pararAlarme.nao/i });
+    const sim = screen.getByRole('button', { name: /emergency.pararAlarme.sim/i });
+    alvoGrandeDeRecuperacao(nao);
+    alvoGrandeDeRecuperacao(sim);
+    // Um erro de mira no "Não" não pode cair no "Sim, parar": pelo menos meio
+    // alvo mínimo (2,5°) entre os dois, já descontada a zona de acerto.
+    const fileira = nao.parentElement!;
+    expect(fileira).toBe(sim.parentElement);
+    expect(emPx(fileira.style.columnGap || fileira.style.gap)).toBeGreaterThanOrEqual(alvoMinimoPx() / 2 + 24);
+  });
+
+  it('"Sim, parar" só aceita aperto curto do acionador (revisão de UX de 20/10/2026, achado 1)', () => {
+    render(
+      <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
+        <EmergencyEscalation />
+      </MemoryRouter>
+    );
+    act(() => { fireEvent.click(screen.getByRole('button', { name: /emergency.cancelAndReturn/i })); });
+    expect(screen.getByRole('button', { name: /emergency.pararAlarme.sim/i })).toHaveAttribute('data-acionador-aperto-curto', 'true');
+    // O "Não" continua um item comum (com o pedido em curso, segurar também não o escolhe).
+    expect(screen.getByRole('button', { name: /emergency.pararAlarme.nao/i })).not.toHaveAttribute('data-acionador-aperto-curto');
+  });
+
+  it('"Voltar ao menu" depois de o cuidador ver: recuperação, com o alvo mínimo', () => {
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
+        <EmergencyEscalation />
+      </MemoryRouter>
+    );
+    cloud.reconhecimento = { id: pedidoAtual()!.id, kind: 'emergencia', created_at: new Date().toISOString(), acknowledged_at: new Date().toISOString(), resolved_at: null };
+    act(() => {
+      rerender(
+        <MemoryRouter initialEntries={['/emergency?autoTrigger=pain']}>
+          <EmergencyEscalation />
+        </MemoryRouter>
+      );
+    });
+    alvoGrandeDeRecuperacao(screen.getByRole('button', { name: /emergency.voltarAoMenu/i }));
   });
 });
 
@@ -289,7 +440,10 @@ describe('EmergencyEscalation — a resposta do cuidador aparece na tela de emer
     cloud.ajustesRemotos = null;
     cloud.reconhecimento = null;
     cloud.mensagens = [];
+    _limparOuvintes();
+    _reiniciarSocorroParaTestes();
   });
+  afterEach(() => _reiniciarSocorroParaTestes());
 
   it('mostra a mensagem do cuidador que chegou depois do pedido; não mostra as antigas nem as de sistema', () => {
     const agora = Date.now();

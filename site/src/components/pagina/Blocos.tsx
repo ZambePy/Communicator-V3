@@ -18,23 +18,24 @@ export function Recursos({
 }: {
   itens: Recurso[]
   colunas?: 2 | 3 | 4
-  /** Mostra 01, 02… no lugar do ícone (passos em ordem). */
+  /** Mostra 1, 2… no lugar do ícone (só quando os itens são uma sequência). */
   numerar?: boolean
   /**
    * Nível do título de cada item. O normal é 3, porque a lista vem sob o h2 de
    * um capítulo; direto sob o h1 da página, é 2 — pular um nível atrapalha
-   * quem navega pelos títulos no leitor de tela.
+   * quem navega pelos títulos no leitor de tela. 4 serve a uma lista que vem
+   * sob um h3 (as três perguntas de "Como funciona", 21/10/2026).
    */
-  nivel?: 2 | 3
+  nivel?: 2 | 3 | 4
 }) {
-  const Titulo = nivel === 2 ? 'h2' : 'h3'
+  const Titulo = nivel === 2 ? 'h2' : nivel === 4 ? 'h4' : 'h3'
   return (
     <ul className={`recursos recursos--${colunas}`}>
       {itens.map((r, i) => (
         <Reveal key={r.titulo} as="li" anim="up" delay={60 * i} className="recursos__item">
           {numerar ? (
             <span className="recursos__numero" aria-hidden="true">
-              {String(i + 1).padStart(2, '0')}
+              {i + 1}
             </span>
           ) : (
             r.icone && (

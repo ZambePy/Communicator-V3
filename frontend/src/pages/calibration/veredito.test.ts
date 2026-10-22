@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ehCanto,
   lerCalibracao,
-  nivelDeQualidade,
+  lugarDoPonto,
+  palavraDaCalibracao,
   LOO_BOM_PX,
   DERIVA_ALTA_GRAUS,
-  type LeituraDaCalibracao,
 } from './veredito';
+import { classificarErroPx } from '@tracker/resultadoSimples';
 import type { CalibrationFitDiagnostics } from '@tracker/calibration';
 
 // -----------------------------------------------------------------------------
@@ -163,31 +165,119 @@ describe('o que a tela precisa mostrar', () => {
   });
 });
 
-describe('nivelDeQualidade — cinco degraus, sem unidade', () => {
-  const leitura = (over: Partial<LeituraDaCalibracao>): LeituraDaCalibracao => ({
-    veredicto: 'bom',
-    motivo: null,
-    looErrorPx: 50,
-    semOsCantos: false,
-    derivaGraus: null,
-    ...over,
+describe('a palavra do resultado (pedido de 19/10/2026)', () => {
+  const ler = (over: Partial<CalibrationFitDiagnostics> = {}) => {
+    const d = diag(over);
+    return { d, l: lerCalibracao(d) };
+  };
+  const semPontos = { validacao: null, pontosRuins: [] };
+
+  it('os limiares são os do teste de precisão: Excelente/Bom → Ótima, Regular → Boa, Ruim → refazer', () => {
+    for (const [px, esperado] of [[20, 'otima'], [59, 'otima'], [60, 'boa'], [99, 'boa'], [100, 'refazerTudo']] as const) {
+      const { d, l } = ler({ looErrorPx: px });
+      expect(palavraDaCalibracao(l, d, semPontos).palavra).toBe(esperado);
+    }
+    // E a fronteira é exatamente a do `accuracy.ts`.
+    expect(classificarErroPx(59.9)).toBe('Bom');
+    expect(classificarErroPx(60)).toBe('Regular');
+    expect(classificarErroPx(100)).toBe('Ruim');
   });
 
-  it('erro pequeno enche a barra', () => {
-    expect(nivelDeQualidade(leitura({ looErrorPx: 30 }))).toBe(5);
+  it('com o teste de precisão medido contra o modelo, vale o erro do teste (o painel disse o mesmo)', () => {
+    const { d, l } = ler({ looErrorPx: 150 });
+    const r = palavraDaCalibracao(l, d, { validacao: { erroInternoPx: 45 }, pontosRuins: [] });
+    expect(r.palavra).toBe('otima');
+    expect(r.fonte).toBe('teste');
   });
 
-  it('a fronteira do "bom" é o nível 3', () => {
-    expect(nivelDeQualidade(leitura({ looErrorPx: LOO_BOM_PX }))).toBe(3);
-    expect(nivelDeQualidade(leitura({ veredicto: 'aceitavel', looErrorPx: LOO_BOM_PX + 1 }))).toBe(2);
+  it('cantos ruins: "Refazer os cantos"; um meio de borda: "Refazer as bordas"', () => {
+    const { d, l } = ler({ looErrorPx: 50 });
+    const cantos = palavraDaCalibracao(l, d, { validacao: null, pontosRuins: [{ x: 0.05, y: 0.05, borda: true }] });
+    expect(cantos.palavra).toBe('refazerCantos');
+    expect(cantos.titulo).toBe('refazerCantos');
+    const bordas = palavraDaCalibracao(l, d, { validacao: null, pontosRuins: [{ x: 0.5, y: 0.98, borda: true }] });
+    expect(bordas.titulo).toBe('refazerBordas');
   });
 
-  it('"refazer" é sempre o nível mais baixo, seja qual for o número', () => {
-    expect(nivelDeQualidade(leitura({ veredicto: 'refazer', looErrorPx: 10 }))).toBe(1);
+  it('um ponto ruim no miolo: "Refazer alguns pontos"', () => {
+    const { d, l } = ler({ looErrorPx: 50 });
+    const r = palavraDaCalibracao(l, d, {
+      validacao: null,
+      pontosRuins: [{ x: 0.5, y: 0.5, borda: false }, { x: 0.05, y: 0.05, borda: true }],
+    });
+    expect(r.palavra).toBe('refazerPontos');
+    // Com um ponto do miolo na lista, o botão não pode dizer "só os cantos".
+    expect(r.soCantos).toBe(false);
   });
 
-  it('sem número, não inventa extremo', () => {
-    expect(nivelDeQualidade(leitura({ looErrorPx: null }))).toBe(4);
-    expect(nivelDeQualidade(leitura({ veredicto: 'aceitavel', looErrorPx: null }))).toBe(3);
+  it('o miolo ruim vence os pontos: refazer a calibração, com a frase do motivo', () => {
+    const { d, l } = ler({
+      gridDiagnosis: grade('sessao_ruim'),
+      poseDrift: { targets: 8, yawDeg: 4.5, pitchDeg: 1, rollDeg: 1 },
+    });
+    const r = palavraDaCalibracao(l, d, { validacao: null, pontosRuins: [{ x: 0.05, y: 0.05, borda: true }] });
+    expect(r.palavra).toBe('refazerTudo');
+    expect(r.frase).toBe('refazerTudoDeriva');
+  });
+
+  it('alvo inaprendível reprova como o core; se ele está na lista, refaz só ele', () => {
+    const { d, l } = ler({ looErrorPx: 50, gridDiagnosis: grade('alvo_inaprendivel') });
+    const semLista = palavraDaCalibracao(l, d, semPontos);
+    expect(semLista.palavra).toBe('refazerTudo');
+    expect(semLista.frase).toBe('refazerTudoPonto');
+    const comLista = palavraDaCalibracao(l, d, { validacao: null, pontosRuins: [{ x: 0.5, y: 0.5, borda: false }] });
+    expect(comLista.palavra).toBe('refazerPontos');
+  });
+
+  it('com o teste medido, o veredito da grade não reprova sozinho (o painel do teste já falou)', () => {
+    const { d, l } = ler({ looErrorPx: 50, gridDiagnosis: grade('sessao_ruim') });
+    expect(palavraDaCalibracao(l, d, { validacao: { erroInternoPx: 40 }, pontosRuins: [] }).palavra).toBe('otima');
+  });
+
+  it('sem diagnóstico não reprova nem promete "Ótima"', () => {
+    const r = palavraDaCalibracao(lerCalibracao(null), null, semPontos);
+    expect(r.palavra).toBe('boa');
+    expect(r.fonte).toBe('nenhuma');
+  });
+
+  // Revisão do pipeline de 19/10/2026: sem como refazer (recoleta desligada,
+  // calibração do disco) a lista vem vazia, e a tela dizia "Ótima" logo depois
+  // de o painel do teste dizer "Refazer os cantos".
+  it('sem como refazer, os cantos que o TESTE mediu "Ruim" ainda dão a palavra — sem prometer o botão', () => {
+    const { d, l } = ler({ looErrorPx: 50 });
+    const cantos = palavraDaCalibracao(l, d, {
+      validacao: { erroInternoPx: 40, cantosRuins: [{ x: 0.05, y: 0.95 }] },
+      pontosRuins: [],
+    });
+    expect(cantos.palavra).toBe('refazerCantos');
+    expect(cantos.titulo).toBe('refazerCantos');
+    expect(cantos.frase).toBe('refazerCantosSemBotao');
+    const bordas = palavraDaCalibracao(l, d, {
+      validacao: { erroInternoPx: 40, cantosRuins: [{ x: 0.5, y: 0.98 }] },
+      pontosRuins: [],
+    });
+    expect(bordas.titulo).toBe('refazerBordas');
+    expect(bordas.frase).toBe('refazerBordasSemBotao');
+    // Com a lista do núcleo (o botão existe), a frase é a de sempre.
+    const comBotao = palavraDaCalibracao(l, d, {
+      validacao: { erroInternoPx: 40, cantosRuins: [{ x: 0.05, y: 0.95 }] },
+      pontosRuins: [{ x: 0.05, y: 0.95, borda: true }],
+    });
+    expect(comBotao.frase).toBe('refazerCantos');
+    // Sem canto ruim no teste, nada muda.
+    expect(palavraDaCalibracao(l, d, { validacao: { erroInternoPx: 40, cantosRuins: [] }, pontosRuins: [] }).palavra).toBe('otima');
+  });
+});
+
+describe('onde fica cada ponto, em palavras', () => {
+  it('nove regiões', () => {
+    expect(lugarDoPonto({ x: 0.05, y: 0.05 })).toBe('cima.esquerda');
+    expect(lugarDoPonto({ x: 0.5, y: 0.5 })).toBe('meio.centro');
+    expect(lugarDoPonto({ x: 0.95, y: 0.95 })).toBe('baixo.direita');
+  });
+
+  it('canto é longe do centro nos dois eixos', () => {
+    expect(ehCanto({ x: 0.05, y: 0.95 })).toBe(true);
+    expect(ehCanto({ x: 0.5, y: 0.98 })).toBe(false);
   });
 });

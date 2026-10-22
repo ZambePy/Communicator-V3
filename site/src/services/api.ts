@@ -9,6 +9,7 @@
    (a base é 20260923022346_schema_base.sql; a da beta, 20260923022616_beta.sql).
    ============================================================ */
 
+import { lerLinhasPublicas } from '@/lib/leituraPublica'
 import { client, mensagemDeErro } from '@/lib/supabase'
 import type { Account, Payment, Profile } from '@/context/AccountContext'
 import { BETA, getPlan, PLANS, SITE_URL, type Plan, type PlanId } from '@/data/content'
@@ -199,7 +200,7 @@ function paraAccount(row: MyAccountRow): Account {
  * (`signUp`); a beta cria a conta sozinha, antes da pesquisa (`criarContaBeta`).
  */
 async function criarUsuarioSeNecessario(profile: Profile, password: string): Promise<void> {
-  const sb = client()
+  const sb = await client()
   const { data: sessaoAtual } = await sb.auth.getSession()
   if (sessaoAtual.session) return
 
@@ -230,7 +231,7 @@ async function criarUsuarioSeNecessario(profile: Profile, password: string): Pro
  * costuma chegar é o de intervalo mínimo entre envios, já traduzido.
  */
 export async function reenviarConfirmacao(email: string): Promise<void> {
-  const { error } = await client().auth.resend({
+  const { error } = await (await client()).auth.resend({
     type: 'signup',
     email: email.trim().toLowerCase(),
     options: { emailRedirectTo: AUTH_REDIRECT.confirmacao },
@@ -247,7 +248,7 @@ export async function reenviarConfirmacao(email: string): Promise<void> {
  * entram depois, pela função complete_registration, que roda no banco.
  */
 export async function signUp(profile: Profile, password: string, planId: PlanId): Promise<Account> {
-  const sb = client()
+  const sb = await client()
   await criarUsuarioSeNecessario(profile, password)
 
   const { error: erroRpc } = await sb.rpc('complete_registration', {
@@ -312,7 +313,7 @@ export type ResultadoNovaConta = 'sessao' | 'confirmar'
  * cliente — e não manda link. A tela de "confirme o e-mail" avisa isso.
  */
 export async function criarContaBeta(nova: NovaContaBeta): Promise<ResultadoNovaConta> {
-  const { data, error } = await client().auth.signUp({
+  const { data, error } = await (await client()).auth.signUp({
     email: nova.email.trim().toLowerCase(),
     password: nova.senha,
     options: {
@@ -348,7 +349,7 @@ export function verificarLinkDoEmail(tokenHash: string, tipo: TipoDeLink): Promi
   const existente = verificacoes.get(chave)
   if (existente) return existente
   const pedido = (async () => {
-    const { error } = await client().auth.verifyOtp({ token_hash: tokenHash, type: tipo })
+    const { error } = await (await client()).auth.verifyOtp({ token_hash: tokenHash, type: tipo })
     if (error) erro(error)
   })()
   verificacoes.set(chave, pedido)
@@ -368,7 +369,7 @@ export function verificarLinkDoEmail(tokenHash: string, tipo: TipoDeLink): Promi
  * e-mail, então vale a senha desta tela. "Mesma senha" não é erro.
  */
 export async function definirSenhaAposConfirmar(senha: string): Promise<void> {
-  const { error } = await client().auth.updateUser({ password: senha })
+  const { error } = await (await client()).auth.updateUser({ password: senha })
   if (error && (error as { code?: string }).code !== 'same_password') erro(error)
 }
 
@@ -401,7 +402,7 @@ export const CODIGO_BLOQUEADO =
  * sessão: quem chama decide quando (ver verificarLinkDoEmail).
  */
 export async function conferirCodigo(email: string, codigo: string): Promise<string> {
-  const { data, error } = await client().rpc('confirmar_codigo', {
+  const { data, error } = await (await client()).rpc('confirmar_codigo', {
     p_email: email.trim().toLowerCase(),
     p_codigo: codigo,
   })
@@ -449,7 +450,7 @@ export type RespostasPesquisa = {
  * criar a conta nem apaga o profissional de uma inscrição antiga.
  */
 export async function responderPesquisa(r: RespostasPesquisa): Promise<Account> {
-  const sb = client()
+  const sb = await client()
   const perfil = await fetchPerfilBasico()
   const atual = await fetchAccount().catch(() => null)
 
@@ -494,7 +495,7 @@ export type InscricaoBeta = {
  */
 export async function fetchInscricaoBeta(): Promise<InscricaoBeta | null> {
   try {
-    const { data, error } = await client()
+    const { data, error } = await (await client())
       .from('beta_registrations')
       .select('wants_caregiver_app, feedback_consent, how_found, registered_at, downloaded_at')
       .maybeSingle()
@@ -533,7 +534,7 @@ export type DadosDaConta = {
  * muda por aqui: ele é o login do site, do desktop e do app do cuidador.
  */
 export async function atualizarDadosDaConta(d: DadosDaConta): Promise<void> {
-  const sb = client()
+  const sb = await client()
   const { data: sessao } = await sb.auth.getSession()
   const uid = sessao.session?.user.id
   if (!uid) erro('Sua sessão terminou. Entre de novo para salvar.')
@@ -589,10 +590,10 @@ type BetaProgramRow = {
  */
 export async function fetchBetaProgram(): Promise<BetaProgram> {
   try {
-    const { data, error } = await client().from('beta_program').select('*').eq('id', 1).maybeSingle()
+    // Leitura pública direto no REST: não carrega o supabase-js (ver lib/leituraPublica.ts).
+    const [row] = await lerLinhasPublicas<BetaProgramRow>('beta_program', { select: '*', id: 'eq.1' })
 
-    if (error || !data) return BETA_PROGRAM_RESERVA
-    const row = data as BetaProgramRow
+    if (!row) return BETA_PROGRAM_RESERVA
     return {
       open: Boolean(row.open),
       endsAt: row.ends_at || BETA.fimReserva,
@@ -611,14 +612,14 @@ export async function fetchBetaProgram(): Promise<BetaProgram> {
  */
 export async function markBetaDownload(os: 'windows' | 'macos' | 'linux'): Promise<void> {
   try {
-    await client().rpc('mark_beta_download', { p_os: os })
+    await (await client()).rpc('mark_beta_download', { p_os: os })
   } catch {
     // métrica, não fluxo
   }
 }
 
 export async function signIn(email: string, password: string): Promise<void> {
-  const { error } = await client().auth.signInWithPassword({
+  const { error } = await (await client()).auth.signInWithPassword({
     email: email.trim().toLowerCase(),
     password,
   })
@@ -629,8 +630,13 @@ export async function signOut(): Promise<void> {
   // `local`: sai só deste navegador. O padrão do supabase-js é `global`, que
   // revoga a sessão da conta em todo lugar — e a conta é da família: sair do
   // site derrubava o app dos cuidadores (e o alarme de socorro com ele).
-  const { error } = await client().auth.signOut({ scope: 'local' })
-  if (error) erro(error)
+  //
+  // O erro não sobe: no escopo local o supabase-js apaga a sessão do navegador
+  // ANTES de devolver uma falha de rede, então a pessoa já saiu daqui. Quem
+  // chama (Perfil, Beta, Conta) não tem catch, e a rejeição pulava o
+  // navigate('/') com a sessão já encerrada.
+  const { error } = await (await client()).auth.signOut({ scope: 'local' })
+  if (error) console.warn('[signOut]', error.message)
 }
 
 /* ---------------- recuperação de senha ----------------
@@ -656,7 +662,7 @@ export async function requestPasswordReset(
   email: string,
   redirectTo: string = AUTH_REDIRECT.novaSenha,
 ): Promise<void> {
-  const { error } = await client().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+  const { error } = await (await client()).auth.resetPasswordForEmail(email.trim().toLowerCase(), {
     redirectTo,
   })
   if (error) erro(error)
@@ -665,18 +671,18 @@ export async function requestPasswordReset(
 /** Troca a senha do usuário da sessão atual (a de recuperação, ou a normal). */
 /** E-mail da sessão aberta neste aparelho (para dizer de qual conta é a senha). */
 export async function emailDaSessao(): Promise<string | null> {
-  const { data } = await client().auth.getSession()
+  const { data } = await (await client()).auth.getSession()
   return data.session?.user.email ?? null
 }
 
 export async function updatePassword(password: string): Promise<void> {
-  const { error } = await client().auth.updateUser({ password })
+  const { error } = await (await client()).auth.updateUser({ password })
   if (error) erro(error)
 }
 
 /** Conta do usuário logado, ou null se não houver sessão. */
 export async function fetchAccount(): Promise<Account | null> {
-  const sb = client()
+  const sb = await client()
 
   const { data: sessao } = await sb.auth.getSession()
   if (!sessao.session) return null
@@ -712,7 +718,7 @@ export type PerfilBasico = {
  */
 export async function fetchPerfilBasico(): Promise<PerfilBasico | null> {
   try {
-    const sb = client()
+    const sb = await client()
     const { data: sessao } = await sb.auth.getSession()
     const uid = sessao.session?.user.id
     if (!uid) return null
@@ -748,7 +754,7 @@ export async function fetchPerfilBasico(): Promise<PerfilBasico | null> {
 /* ---------------- assinatura ---------------- */
 
 export async function attachPaymentMethod(payment: Payment): Promise<void> {
-  const { error } = await client().rpc('attach_payment_method', {
+  const { error } = await (await client()).rpc('attach_payment_method', {
     p_method: payment.method,
     p_billing_interval: payment.installments === 12 ? 'anual' : 'mensal',
     p_card_last4: payment.cardLast4 ?? null,
@@ -760,12 +766,12 @@ export async function attachPaymentMethod(payment: Payment): Promise<void> {
 }
 
 export async function cancelSubscription(): Promise<void> {
-  const { error } = await client().rpc('request_cancellation')
+  const { error } = await (await client()).rpc('request_cancellation')
   if (error) erro(error)
 }
 
 export async function reactivateSubscription(): Promise<void> {
-  const { error } = await client().rpc('reactivate_subscription')
+  const { error } = await (await client()).rpc('reactivate_subscription')
   if (error) erro(error)
 }
 
@@ -777,7 +783,7 @@ export async function sendContactMessage(input: {
   role: string
   message: string
 }): Promise<void> {
-  const { error } = await client()
+  const { error } = await (await client())
     .from('contact_messages')
     .insert({
       name: input.name.trim(),
@@ -861,16 +867,15 @@ function mesclarPlanos(linhas: PlanRow[]): Plan[] {
  */
 export async function fetchPlans(): Promise<Plan[]> {
   try {
-    const { data, error } = await client()
-      .from('plans')
-      .select('id, name, price_brl, purchasable')
-      .eq('active', true)
-
-    if (error || !data) return PLANS
-    return mesclarPlanos(data as PlanRow[])
+    // Leitura pública direto no REST: não carrega o supabase-js (ver lib/leituraPublica.ts).
+    const linhas = await lerLinhasPublicas<PlanRow>('plans', {
+      select: 'id,name,price_brl,purchasable',
+      active: 'eq.true',
+    })
+    return mesclarPlanos(linhas)
   } catch {
-    // client() lança quando o .env.local está vazio; a grade continua
-    // aparecendo com os valores da reserva.
+    // Sem .env.local, sem rede ou com o banco pendurado (4 s): a grade
+    // continua aparecendo com os valores da reserva.
     return PLANS
   }
 }
@@ -943,7 +948,7 @@ export type AppLicense = {
 }
 
 export async function fetchAppLicense(): Promise<AppLicense> {
-  const { data, error } = await client().rpc('desktop_license')
+  const { data, error } = await (await client()).rpc('desktop_license')
   if (error) erro(error)
   return data as AppLicense
 }
@@ -966,7 +971,7 @@ export type LinkedDevice = {
 }
 
 export async function fetchDevices(): Promise<LinkedDevice[]> {
-  const { data, error } = await client()
+  const { data, error } = await (await client())
     .from('devices')
     .select(
       'id, name, os, app_version, hostname, paired_at, last_seen_at, revoked_at, camera_ok, tracker_ok, calibrated',
@@ -991,6 +996,6 @@ export async function fetchDevices(): Promise<LinkedDevice[]> {
 
 /** Desvincula um computador. A partir daí o desktop volta a pedir e-mail e senha. */
 export async function revokeDevice(deviceId: string): Promise<void> {
-  const { error } = await client().rpc('revoke_device', { p_device_id: deviceId })
+  const { error } = await (await client()).rpc('revoke_device', { p_device_id: deviceId })
   if (error) erro(error)
 }

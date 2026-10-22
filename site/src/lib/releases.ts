@@ -281,6 +281,29 @@ export function mapReleaseFiles(files: ReleaseFile[]): Record<OS, Asset[]> {
   return { windows, macos, linux }
 }
 
+/* ---------- o app do cuidador (Android) ---------- */
+
+/**
+ * O APK do IrisFlow Cuidador anexado ao release (o release.yml publica
+ * IrisFlow-Cuidador.apk em todo release). Não é um sistema do Communicator:
+ * é o outro app, para o celular de quem cuida — por isso fica fora de
+ * `mapReleaseFiles`, e o painel de download o mostra à parte. Com mais de um
+ * .apk no release, vale o que tem "cuidador" no nome.
+ */
+export function apkDoCuidador(files: ReleaseFile[]): ReleaseFile | null {
+  const apks = files.filter((f) => ext(f.name, '.apk'))
+  return apks.find((f) => /cuidador/i.test(f.name)) ?? apks[0] ?? null
+}
+
+/**
+ * O link configurado do APK (VITE_APP_CUIDADOR_URL) é um arquivo do release
+ * deste repositório? Só aí o último release decide se o arquivo existe; um
+ * link de outro lugar (o build do EAS, uma loja) vale como está.
+ */
+export function apkVemDoRelease(urlConfigurada: string, repo: string): boolean {
+  return urlConfigurada.startsWith(`https://github.com/${normalizeRepo(repo)}/releases/`)
+}
+
 /**
  * Mesma forma de buildDownloads, montada a partir do último release. Um
  * sistema só fica disponível se tiver arquivo no release E estiver em
@@ -356,28 +379,44 @@ export const RELEASES_PAGE = releasesPageUrl(RELEASES_REPO)
 // da beta ("10/11"), a barra fazia a versão do Windows parecer uma data.
 const OS_NAMES: Record<OS, string> = { windows: 'Windows 10 e 11', macos: 'macOS', linux: 'Linux' }
 
-function joinPt(items: string[]): string {
+// Na frase de requisito o computador tem UM sistema: "Basta um computador com
+// Windows 10 ou 11", e não "com Windows 10 e 11" (revisão do texto no ar,
+// 19/10/2026). Nos rótulos curtos ("Sistema: Windows 10 e 11") o "e" fica.
+const OS_NO_REQUISITO: Record<OS, string> = { windows: 'Windows 10 ou 11', macos: 'macOS', linux: 'Linux' }
+
+function joinPt(items: string[], conjuncao = 'e'): string {
   if (items.length <= 1) return items.join('')
-  return `${items.slice(0, -1).join(', ')} e ${items[items.length - 1]}`
+  return `${items.slice(0, -1).join(', ')} ${conjuncao} ${items[items.length - 1]}`
 }
 
 /**
  * Frases de plataforma usadas no site inteiro, derivadas de quais sistemas
  * têm instalador — o texto não promete o que o botão não entrega.
+ * `requisito` é a forma para "Basta um computador com …".
  */
 export function platformsText(available: OS[]) {
-  const on = ALL_OS.filter((os) => available.includes(os)).map((os) => OS_NAMES[os])
+  const on = ALL_OS.filter((os) => available.includes(os))
   const off = ALL_OS.filter((os) => !available.includes(os)).map((os) => OS_NAMES[os])
   if (!on.length) {
     const all = joinPt(off)
-    return { short: all, long: `${all} (em preparação)`, list: `${all} · em preparação` }
+    return {
+      short: all,
+      long: `${all} (em preparação)`,
+      list: `${all} · em preparação`,
+      requisito: `${all} (em preparação)`,
+    }
   }
-  const short = joinPt(on)
+  const short = joinPt(on.map((os) => OS_NAMES[os]))
   const pending = off.length ? `${joinPt(off)} em preparação` : ''
+  const requisito = joinPt(
+    on.map((os) => OS_NO_REQUISITO[os]),
+    'ou',
+  )
   return {
     short,
     long: pending ? `${short} (${pending})` : short,
     list: pending ? `${short} · ${pending}` : short,
+    requisito: pending ? `${requisito} (${pending})` : requisito,
   }
 }
 

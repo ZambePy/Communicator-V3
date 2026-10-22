@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated from 'react-native-reanimated';
 import { Button } from './Button';
 import { Text } from './Text';
-import { layout, radius, sizes, spacing, useEntrada, useTheme } from '@/theme';
+import { layout, sizes, spacing, useEntrada, useTheme } from '@/theme';
 
 interface Props {
   icon: keyof typeof Ionicons.glyphMap;
@@ -20,12 +20,9 @@ export function EmptyState({ icon, title, body, tone = 'primary', action, compac
   const { colors } = useTheme();
   const entrada = useEntrada();
   const fg = tone === 'accent' ? colors.accentText : colors.primary;
-  const bg = tone === 'accent' ? colors.accentTint : colors.primaryTint;
   return (
     <Animated.View entering={entrada.suave()} style={[styles.wrap, compact && styles.compact]}>
-      <View style={[styles.icon, { backgroundColor: bg }]}>
-        <Ionicons name={icon} size={sizes.icon.lg} color={fg} />
-      </View>
+      <Ionicons name={icon} size={sizes.icon.xl} color={fg} />
       <Text variant="h3" center style={styles.title}>
         {title}
       </Text>
@@ -42,8 +39,7 @@ export function EmptyState({ icon, title, body, tone = 'primary', action, compac
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', paddingVertical: spacing.xxxl, paddingHorizontal: spacing.lg },
   compact: { paddingVertical: spacing.xl },
-  icon: { width: sizes.tile.xl, height: sizes.tile.xl, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  title: { marginTop: spacing.lg },
+  title: { marginTop: spacing.md },
   body: { marginTop: spacing.xs, maxWidth: layout.textMax },
   action: { marginTop: spacing.xl, alignSelf: 'stretch' },
 });

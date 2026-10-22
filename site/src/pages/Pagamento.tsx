@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Field, SelectField } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
@@ -21,6 +20,7 @@ import {
 } from '@/utils/format'
 import { usePlans } from '@/hooks/usePlans'
 import './checkout.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 type Method = Payment['method']
 
@@ -142,8 +142,7 @@ export default function Pagamento() {
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
         <Reveal anim="fade">
           <span className="eyebrow">Forma de pagamento</span>
@@ -190,7 +189,7 @@ export default function Pagamento() {
                 <p>
                   <strong>[dev] Sem gateway de pagamento.</strong> Nenhum número de cartão
                   completo é processado ou armazenado e nenhuma cobrança é feita; só ficam o nome
-                  do titular, a bandeira e os quatro últimos dígitos. Use dados de teste — cartão{' '}
+                  do titular, a bandeira e os quatro últimos dígitos. Use dados de teste: cartão{' '}
                   <code>4111 1111 1111 1111</code>.
                 </p>
               </div>

@@ -68,6 +68,30 @@ describe('useInView', () => {
   })
 })
 
+describe('useInView com ativo: false (movimento reduzido)', () => {
+  function AlvoInativo() {
+    const { ref, inView } = useInView<HTMLDivElement>({ ativo: false })
+    return <div ref={ref} data-testid="alvo" data-visivel={inView ? 'sim' : 'nao'} />
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('nem cria o observador, e nunca diz que está à vista', () => {
+    callback = null
+    vi.stubGlobal('IntersectionObserver', ObservadorFalso)
+    const { getByTestId } = render(<AlvoInativo />)
+    expect(callback).toBeNull()
+    expect(getByTestId('alvo').dataset.visivel).toBe('nao')
+  })
+
+  it('sem IntersectionObserver também não dá a entrada por feita', () => {
+    const { getByTestId } = render(<AlvoInativo />)
+    expect(getByTestId('alvo').dataset.visivel).toBe('nao')
+  })
+})
+
 describe('limiarInalcancavel', () => {
   it('compara a fração máxima possível com o limiar', () => {
     expect(limiarInalcancavel(2000, 230, 0.18)).toBe(true)

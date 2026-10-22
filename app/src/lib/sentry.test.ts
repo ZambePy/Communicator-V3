@@ -48,6 +48,16 @@ describe('limpeza dos eventos', () => {
     expect(s).toBe('falhou para [email] [telefone] [jwt] ExponentPushToken[…] [uuid]');
   });
 
+  it('tira o código QR do computador dos links (ele abre a conta por 3 minutos)', () => {
+    const codigo = 'Qx7_-k2LmN0pRsTuVwXyZ1a2b3c4d5e6f7g8h9i0jAB';
+    expect(scrubText(`não abriu irisflow://parear?t=${codigo} nem https://irisflow.ia.br/parear#t=${codigo}`)).toBe(
+      'não abriu irisflow://parear?t=[codigo] nem https://irisflow.ia.br/parear#t=[codigo]',
+    );
+    // Um número longo dentro do código não vira "[telefone]" deixando o resto à mostra.
+    const comDigitos = 'AB12345678901234567890CDEFGHIJKLMNOPQRSTUVW';
+    expect(scrubText(`x?t=${comDigitos}`)).toBe('x?t=[codigo]');
+  });
+
   it('descarta breadcrumbs de console (podem ter texto de mensagem) e corta a query das URLs', () => {
     expect(scrubBreadcrumb({ category: 'console', message: 'Mensagem: estou com dor' })).toBeNull();
     const b = scrubBreadcrumb({

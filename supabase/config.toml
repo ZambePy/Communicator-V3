@@ -18,6 +18,16 @@ project_id = "irisflow"
 [functions.desktop-sync]
 verify_jwt = false
 
+# `parear-celular` (19/10/2026) também NÃO exige o JWT: quem chama é o celular
+# do cuidador ainda SEM conta, que leu o código QR do computador. A credencial
+# é o próprio código (256 bits, 3 minutos, uso único, conferido no banco); a
+# função troca o código por um link mágico da conta, com a service_role. Com
+# verify_jwt ligado, um celular sem sessão só passaria com a chave anônima, e a
+# troca para as chaves novas do Supabase (sb_publishable_…, que não são JWT)
+# derrubaria a função.
+[functions.parear-celular]
+verify_jwt = false
+
 # Modelos de e-mail do Supabase Auth, em português e com a marca (os mesmos
 # aplicados no projeto em produção, em Authentication → Emails → Templates).
 # A confirmação do cadastro mostra um código de 4 dígitos — os 4 primeiros do

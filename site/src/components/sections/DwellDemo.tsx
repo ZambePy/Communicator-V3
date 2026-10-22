@@ -256,7 +256,7 @@ export function DwellDemo() {
                   key={p.word}
                   active={holding === p.word}
                   dwellMs={dwellMs}
-                  ariaLabel={p.phrase}
+                  ariaLabel={`${p.word}. ${p.phrase}`}
                   {...targetProps(p.word, p.phrase)}
                 >
                   <svg

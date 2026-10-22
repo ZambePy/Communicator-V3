@@ -1,6 +1,21 @@
 import { normalizarPorGrupo, pesoDaAmostra, resumoDePesos } from './calibration/pesoDaAmostra';
 import { EstabilidadeDoPonto, decidirFechamento } from './calibration/estabilidadeDoPonto';
 import { celulaDoAlvo, colher, type AmostraDePerseguicao, type ResultadoDaColheita } from './calibration/perseguicao';
+import {
+  avaliarAlvos,
+  decidirAceitacao,
+  escolherAlvosParaRecoletar,
+  substituirAmostras,
+  MAXIMO_DE_ALVOS_POR_RODADA,
+  MINIMO_DE_ALVOS_PARA_AVALIAR,
+  type DecisaoDeAceitacao,
+  type LotoDoAlvo,
+  type MedidaDoAlvo,
+  type MotivoDaDecisao,
+  type MotivoDaRecoleta,
+  type QualidadeDoAlvo,
+} from './calibration/recoletaDeAlvos';
+import { LIMIAR_REGULAR_PX } from './resultadoSimples';
 import { corrigirDerivaPeloCentro, corrigirPorDwell, corrigirPorPontos, reiniciarCorrecao } from './interaction/correcaoPorDwell';
 import type { GazeRegressor } from './gazeRegressor';
 import {
@@ -27,11 +42,49 @@ import {
   type ResiduoBinocular,
 } from './fusaoBinocular';
 import { estimarRuido, ruidoValido, type AmostraDoRuido, type RuidoDaCalibracao } from './ruidoDaCalibracao';
-import { l2csSlotsInSet } from './extractor';
+import { l2csSlotsInSet, setUsaRamoOcular } from './extractor';
 import { ultimoDiagnosticoDoBloco, L2CS_CONFIDENCE_MIN } from './l2cs/block';
+import { ultimoDiagnosticoDoBlocoOcular } from './olho/bloco';
 
 /** Posições do bloco angular dentro do vetor projetado (vazio sem L2CS). */
 const L2CS_SLOTS: readonly number[] = l2csSlotsInSet();
+/** O conjunto ativo leva o bloco do ramo ocular (EyeNet, `?olho=onnx`)? */
+const USA_BLOCO_OCULAR: boolean = setUsaRamoOcular();
+
+/**
+ * Como os blocos angulares entraram neste quadro, para o peso da amostra (S1).
+ *
+ * Relato de 19/10/2026 (auditoria A4). O peso olhava só o diagnóstico do bloco
+ * do ROSTO, e sempre — inclusive quando o conjunto ativo não tem bloco do rosto
+ * (`?ep=off&olho=onnx`): ali o diagnóstico diz "leitura obsoleta" em todo
+ * quadro, e TODA amostra saía rebaixada (×0,35), com o resumo de pesos
+ * relatando 100 % abaixo de 0,5. E o bloco OCULAR zerado nunca reduzia peso.
+ *
+ * Agora cada bloco só conta se o conjunto ativo o leva. Com `olho=off` o bloco
+ * ocular não existe e o resultado é o mesmo de antes, bit a bit.
+ */
+function blocosAngularesDoQuadro(featuresLeft: number[], featuresRight: number[]): {
+  /** Os slots do rosto chegaram exatamente zerados (para a contagem por motivo). */
+  rostoExatamenteZerado: boolean;
+  /** Algum bloco angular entrou zerado ou atenuado: a amostra pesa menos. */
+  zerado: boolean;
+  /** Confiança do decodificador do rosto, quando o bloco do rosto valeu. */
+  confiancaDoRosto: number | null;
+} {
+  const temRosto = L2CS_SLOTS.length > 0;
+  const rostoExatamenteZerado = temRosto
+    && L2CS_SLOTS.every((i) => featuresLeft[i] === 0 && featuresRight[i] === 0);
+  const rostoAtenuado = temRosto && (rostoExatamenteZerado || ultimoDiagnosticoDoBloco().pesoDoAngulo < 1);
+  const olho = USA_BLOCO_OCULAR ? ultimoDiagnosticoDoBlocoOcular() : null;
+  const olhoAtenuado = olho !== null && (olho.esquerdo.pesoDoAngulo < 1 || olho.direito.pesoDoAngulo < 1);
+  const zerado = rostoAtenuado || olhoAtenuado;
+  return {
+    rostoExatamenteZerado,
+    zerado,
+    confiancaDoRosto: temRosto && !zerado ? ultimoDiagnosticoDoBloco().confidence : null,
+  };
+}
+import { avisarTrabalhoLongo } from './trabalhoLongo';
 import { EXPERIMENT } from './config/experiment';
 import { descricaoDoModelo, ladoAceito, MODELO_DO_ROSTO_PADRAO } from './l2cs/modelos';
 import { compensarPredicao, deslocamentoPorPose, poseDeReferencia } from './poseCompensation';
@@ -174,8 +227,9 @@ export interface CalibrationPoint {
 // S2 é teto, não duração: o ponto fecha antes se o olhar estabilizar
 // (`estabilidadeDoPonto.ts`, piso `COLLECTION_MIN_MS`).
 //
-// CUIDADO: se o total ultrapassar ~40 s (9 pontos × ~2,6 s + acomodação), a
-// fadiga do usuário-alvo (ELA) piora as fixações finais e anula o ganho.
+// CUIDADO: se o total passar muito de ~40 s (13 pontos × ~2,6 s + acomodação;
+// com a M8, ~42 s), a fadiga do usuário-alvo (ELA) piora as fixações finais e
+// anula o ganho.
 const COLLECTION_MS_BASE = 1680;
 const COLLECTION_MS_RANGE = 1120;
 const COLLECTION_MS_FALLBACK = COLLECTION_MS_BASE + COLLECTION_MS_RANGE;
@@ -264,7 +318,8 @@ export function duracaoTotalDoPonto(collectionMs: number): number {
 /**
  * Mediana de uma série de distâncias, descartando valores não-finitos.
  * `null` quando não sobra nenhum valor — fabricar um número aqui contaminaria
- * `calibrationRefDistance`, que governa a compensação de distância.
+ * as distâncias de referência da calibração (`calibrationCameraDistanceCm`),
+ * que governam a compensação de distância.
  */
 export function medianaDeDistancias(valores: readonly number[]): number | null {
   const v = valores.filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
@@ -702,6 +757,32 @@ const estabilidadeDoAlvo = new EstabilidadeDoPonto();
 /** Tempo útil que cada alvo de fato consumiu, e quantos foram ao teto. */
 let tempoUtilPorAlvoMs: number[] = [];
 let pontosInstaveis = 0;
+
+/**
+ * O que cada coleta de PONTO acrescentou às séries e aos contadores da sessão
+ * (`tempoUtilPorAlvoMs`, `pontosInstaveis`, variância, reflexo, pose por alvo,
+ * distâncias aceitas), na ordem em que fechou, com a chave do alvo (revisão do
+ * pipeline de 19/10/2026).
+ *
+ * Existe para a recoleta (M22). Ela TROCA as amostras de alguns alvos, e as
+ * séries precisam acompanhar: antes, no aceite, `tempoUtilPorAlvoMs` ficava
+ * com 13+k entradas, os contadores somavam as tentativas, e a pose e as
+ * distâncias dos alvos substituídos continuavam lá — a distância de
+ * referência do modelo novo saía da mediana de amostras que ele nem usa. E no
+ * abort da recoleta o `encerrarColeta` zerava os contadores da calibração em
+ * uso. Fora da recoleta nada lê isto: os contadores andam como sempre.
+ */
+interface RegistroDaColeta {
+  chave: string;
+  tempoUtilMs: number;
+  instavel: boolean;
+  varianciaBaixa: boolean;
+  varianciaAlta: boolean;
+  reflexo: boolean;
+  pose: { yaw: number; pitch: number; roll: number } | null;
+  distanciasCm: number[];
+}
+let registrosDasColetas: RegistroDaColeta[] = [];
 /** Como o alvo corrente foi fechado — vai para o log do ponto. */
 let motivoDoFechamento: 'estavel' | 'teto' = 'teto';
 
@@ -726,6 +807,20 @@ let modeloAntesDoReforco: {
    */
   referencia: CalibrationReferenceState;
   meta: CalibrationProfileMeta | null;
+  /** Lado do recorte do modelo de antes do reforço (ver `ladoDoModeloEmUso`). */
+  lado: number | null;
+  /**
+   * A SESSÃO de antes do reforço (revisão do pipeline de 20/10/2026): o perfil
+   * (os mesmos objetos), os alvos planejados e as séries e contadores. O abort
+   * do reforço — desde a pausa de 19/10, caminho normal: a janela perde o foco,
+   * "Continuar" segue para o teste — devolve tudo, como o da recoleta. Antes as
+   * amostras do extra que já tinha fechado ficavam no perfil (o modelo em uso
+   * nunca as usou, mas a recoleta seguinte retreinava com elas) e as séries da
+   * calibração em uso eram zeradas.
+   */
+  perfilAntes: CalibrationPoint[];
+  alvosAntes: readonly { x: number; y: number }[] | null;
+  sessao: RetratoDoTreino['sessao'];
 } | null = null;
 
 /**
@@ -751,8 +846,38 @@ interface ModeloEmUso {
   meta: CalibrationProfileMeta | null;
   /** Paciente dono do modelo (ver `donoDoModeloEmUso`). */
   dono: string | null;
+  /** Lado do recorte do L2CS em que o modelo foi treinado (ver `ladoDoModeloEmUso`). */
+  lado: number | null;
 }
 let modeloAntesDaCalibracao: ModeloEmUso | null = null;
+
+/**
+ * A última sessão de coleta foi CANCELADA (`abortCalibration` com uma coleta
+ * em curso) e nenhuma outra começou desde então (revisão do pipeline de
+ * 20/10/2026). O `completeCalibration` que chegar nesse intervalo é recusado.
+ *
+ * Antes ele treinava: a tela disparava o treino depois da pintura e uma
+ * interrupção entre o último ponto e a pintura não o impedia. O perfil em
+ * memória ainda tinha as amostras da sessão cancelada, e o modelo delas
+ * entrava em uso por cima da calibração que o abort tinha devolvido — gravado
+ * com o id e o instante dela, como se fosse ela.
+ */
+let sessaoCancelada = false;
+
+/**
+ * Lado do recorte do L2CS com que o modelo EM USO foi treinado — ou o da chave
+ * do perfil carregado (revisão do pipeline de 19/10/2026). Só vale com modelo
+ * (`isCalibrated()`); quem instala um modelo o define.
+ *
+ * É o que diz se um reinício do modelo do rosto pode trocar o lado: 224² e
+ * 448² dão tan(yaw)/tan(pitch) diferentes para o mesmo olhar, e um modelo
+ * treinado num lado prevê deslocado no outro. Antes o engine trocava o lado no
+ * reinício (WASM → 224²) e a calibração de 448² era APAGADA — sem calibração o
+ * dwell bloqueia tudo, inclusive a Emergência. Agora o engine mantém este lado
+ * (`ladoDoRecorteAPreservar`) e, se ainda assim o lado mudar, a calibração fica
+ * suspensa em vez de sumir (`setL2csInputSizeEfetivo`).
+ */
+let ladoDoModeloEmUso: number | null = null;
 
 // ── Calibração por paciente ─────────────────────────────────────────────────
 //
@@ -849,10 +974,11 @@ let regressorRight: GazeRegressor | null = null;
 export const featureScalerLeft = new StandardScaler();
 export const featureScalerRight = new StandardScaler();
 
-// `cameraDistanceEstimate` médio durante a calibração. Serve de
-// distância de REFERÊNCIA para a correção geométrica em mapGaze. Null
-// enquanto não houver calibração treinada, e null se nenhum `quality`
-// dos pontos carregou o valor (compat com callers antigos).
+// `cameraDistanceEstimate` médio durante a calibração, se o `quality` dos
+// pontos o trouxer — hoje não traz, então fica `null` na prática. NÃO governa a
+// compensação de distância (essa usa `calibrationCameraDistanceCm` e
+// `calibrationScreenDistanceCm`, abaixo); segue no perfil por compatibilidade
+// (correção da documentação de 19/10/2026).
 let calibrationRefDistance: number | null = null;
 
 // Distâncias da calibração em CENTÍMETROS, para a compensação de saída.
@@ -1261,20 +1387,66 @@ export interface SuspensaoDaCalibracao {
   calibracao: ViewportMedido;
   atual: ViewportMedido;
   desde: number;
+  /**
+   * O lado do recorte do L2CS em vigor não é o do modelo em uso (revisão do
+   * pipeline de 19/10/2026): o modelo do rosto voltou de um reinício noutro
+   * lado (224² × 448²) e não havia, no disco, calibração para o lado novo. Os
+   * dois lados dão tan(yaw)/tan(pitch) diferentes para o mesmo olhar, então o
+   * modelo prevê deslocado — mas apagá-lo, como antes, deixava o paciente sem
+   * nada clicável, nem a Emergência. Suspenso, a Emergência e a recuperação
+   * continuam acionáveis. Ausente quando a suspensão é só pela janela; com ele,
+   * `calibracao`/`atual` continuam dizendo da janela (iguais quando ela está do
+   * tamanho).
+   */
+  recorte?: { calibracao: number; atual: number };
 }
 
 let suspensaoPorTela: SuspensaoDaCalibracao | null = null;
+/** Suspensão pelo lado do recorte (ver `SuspensaoDaCalibracao.recorte`). */
+let suspensaoPorRecorte: { calibracao: number; atual: number; desde: number } | null = null;
 const ouvintesDaSuspensao = new Set<(s: SuspensaoDaCalibracao | null) => void>();
+
+/** O viewport de agora, na forma da suspensão. */
+function viewportAgora(): ViewportMedido {
+  const doc = typeof document !== 'undefined' ? document.documentElement : null;
+  return { w: doc?.clientWidth ?? 0, h: doc?.clientHeight ?? 0, dpr: escalaDoSistema() };
+}
 
 /** Suspensão em vigor, ou `null` (sem modelo nunca há suspensão). */
 export function getSuspensaoDaCalibracao(): SuspensaoDaCalibracao | null {
-  return isCalibrated() ? suspensaoPorTela : null;
+  if (!isCalibrated()) return null;
+  const r = suspensaoPorRecorte;
+  if (!r) return suspensaoPorTela;
+  const tela = suspensaoPorTela;
+  const vp = viewportAgora();
+  return {
+    calibracao: tela?.calibracao ?? vp,
+    atual: tela?.atual ?? vp,
+    desde: tela ? Math.min(tela.desde, r.desde) : r.desde,
+    recorte: { calibracao: r.calibracao, atual: r.atual },
+  };
 }
 
 /** Avisa quando a calibração é suspensa ou volta a valer. Devolve o cancelamento. */
 export function onSuspensaoDaCalibracao(cb: (s: SuspensaoDaCalibracao | null) => void): () => void {
   ouvintesDaSuspensao.add(cb);
   return () => ouvintesDaSuspensao.delete(cb);
+}
+
+/**
+ * Entrega a suspensão COMBINADA (janela e recorte) a quem ouve. Antes cada
+ * ouvinte recebia só a da janela: com as duas causas, a janela voltando ao
+ * tamanho avisaria "valendo de novo" com o recorte ainda trocado.
+ */
+function avisarOuvintesDaSuspensao(): void {
+  const s = getSuspensaoDaCalibracao();
+  for (const cb of ouvintesDaSuspensao) {
+    try {
+      cb(s);
+    } catch (err) {
+      console.error('[calib] ouvinte da suspensão lançou:', err);
+    }
+  }
 }
 
 function definirSuspensao(nova: SuspensaoDaCalibracao | null): void {
@@ -1295,13 +1467,40 @@ function definirSuspensao(nova: SuspensaoDaCalibracao | null): void {
   } else {
     console.log('[calib] a janela voltou ao tamanho da calibração — calibração valendo de novo.');
   }
-  for (const cb of ouvintesDaSuspensao) {
-    try {
-      cb(nova);
-    } catch (err) {
-      console.error('[calib] ouvinte da suspensão lançou:', err);
-    }
+  avisarOuvintesDaSuspensao();
+}
+
+/** Liga ou desliga a suspensão pelo lado do recorte (revisão do pipeline de 19/10/2026). */
+function definirSuspensaoPorRecorte(nova: { calibracao: number; atual: number } | null): void {
+  const antes = suspensaoPorRecorte;
+  if (!nova && !antes) return;
+  if (nova && antes && nova.calibracao === antes.calibracao && nova.atual === antes.atual) return;
+  suspensaoPorRecorte = nova ? { ...nova, desde: antes?.desde ?? Date.now() } : null;
+  if (nova) {
+    console.warn(
+      `[calib] calibração SUSPENSA: o modelo do rosto está com o recorte de ${nova.atual}² e a calibração ` +
+      `foi feita em ${nova.calibracao}². O olhar fica em modo degradado (só Emergência e recuperação) até o ` +
+      `recorte voltar a ${nova.calibracao}² ou uma calibração nova.`,
+    );
+  } else {
+    // Também ao começar uma calibração nova ou ao limpar o modelo: a frase
+    // diz só o que mudou.
+    console.warn('[calib] a calibração não está mais suspensa pelo recorte do modelo do rosto.');
   }
+  avisarOuvintesDaSuspensao();
+}
+
+/** Compara o lado do modelo em uso com o lado em vigor e suspende (ou tira a suspensão). */
+function reavaliarSuspensaoPorRecorte(): void {
+  const lado = isCalibrated() ? ladoDoModeloEmUso : null;
+  definirSuspensaoPorRecorte(
+    lado !== null && lado !== l2csInputSizeEfetivo ? { calibracao: lado, atual: l2csInputSizeEfetivo } : null,
+  );
+}
+
+/** Há modelo em uso, e de OUTRO lado do recorte que o em vigor (calibração suspensa por isso)? */
+function recorteTrocado(): boolean {
+  return isCalibrated() && ladoDoModeloEmUso !== l2csInputSizeEfetivo;
 }
 
 /**
@@ -1465,6 +1664,9 @@ export function restoreReferenceStateFromProfile(
   // viewport DELE. Sem modelo, não há suspensão.
   if (ref) reavaliarSuspensao();
   else definirSuspensao(null);
+  // E contra o lado do recorte dele (revisão do pipeline de 19/10/2026): quem
+  // instala um modelo define `ladoDoModeloEmUso` ANTES de chamar aqui.
+  reavaliarSuspensaoPorRecorte();
 }
 
 /**
@@ -1524,21 +1726,59 @@ export function abortCalibration(): void {
     collectionTimeoutHandle = null;
   }
   const estavaAtiva = isCalibrating || isCollecting;
-  encerrarColeta(estavaAtiva);
+  const eraRecoleta = recoletaEmCurso !== null;
+  // Reforço aberto e ainda não treinado (revisão do pipeline de 20/10/2026):
+  // o retrato do início dele devolve o perfil, os alvos e as séries, e a
+  // sessão da calibração em uso fica — como na recoleta logo abaixo.
+  // `clearCalibration` zera o retrato antes de chamar esta função.
+  const eraReforco = modeloAntesDoReforco !== null;
+  // Recoleta interrompida (relato de 19/10/2026): as amostras pela metade
+  // saem do perfil; o modelo, que nunca deixou de ser o de antes, fica — e,
+  // desde a revisão do pipeline de 19/10/2026, as séries e os contadores da
+  // calibração em uso também ficam (o retrato os devolve; ver `encerrarColeta`).
+  descartarRecoletaEmCurso('recoleta interrompida');
+  desfazerReforcoEmCurso();
+  encerrarColeta(estavaAtiva, eraRecoleta || eraReforco);
   // A calibração nova não terminou: volta a que funcionava (ver
   // `modeloAntesDaCalibracao`). `clearCalibration` zera o retrato antes de
   // chamar esta função, então lá nada volta.
   if (estavaAtiva) restaurarModeloAntesDaCalibracao('calibração cancelada', true);
   else modeloAntesDaCalibracao = null;
+  // Um treino pedido depois disto, sem sessão nova, seria o da sessão que
+  // acabou de ser cancelada (ver `sessaoCancelada`).
+  if (estavaAtiva) sessaoCancelada = true;
 }
 
-/** Derruba o estado de COLETA (o corpo do antigo `abortCalibration`). */
-function encerrarColeta(estavaAtiva: boolean): void {
+/**
+ * Desfaz um reforço aberto e não treinado (revisão do pipeline de 20/10/2026):
+ * o perfil, os alvos planejados e as séries voltam a ser os do retrato de
+ * `iniciarRodadaDeReforco`. O modelo nem precisa voltar — ele só muda no treino.
+ */
+function desfazerReforcoEmCurso(): void {
+  const b = modeloAntesDoReforco;
+  if (!b) return;
+  modeloAntesDoReforco = null;
+  profile = b.perfilAntes;
+  currentCalibrationTargets = b.alvosAntes;
+  devolverSeries(b.sessao);
+  console.warn('[calib] reforço interrompido: as amostras dele saíram; a calibração em uso segue a mesma, inteira.');
+}
+
+/**
+ * Derruba o estado de COLETA (o corpo do antigo `abortCalibration`).
+ *
+ * `preservarSessao`: o que se interrompe é uma RECOLETA, e a sessão — a grade
+ * planejada, o baseline de pose, as séries e os contadores do relatório — é a
+ * da calibração que continua em uso (revisão do pipeline de 19/10/2026). Antes
+ * tudo era zerado, e o reforço ou o relatório seguintes descreviam uma
+ * calibração sem os 13 pontos.
+ */
+function encerrarColeta(estavaAtiva: boolean, preservarSessao = false): void {
   isCalibrating = false;
   isCollecting = false;
   pointCompleteCallback = null;
   currentCalibrationMode = null;
-  currentCalibrationTargets = null;
+  if (!preservarSessao) currentCalibrationTargets = null;
 
   // Buffers do ponto em curso.
   collectedFeaturesLeft = [];
@@ -1559,8 +1799,10 @@ function encerrarColeta(estavaAtiva: boolean): void {
 
   // Diagnóstico por sessão (sprint S2): sem isto, o relatório depois de um
   // abort descreveria a sessão anterior.
-  tempoUtilPorAlvoMs = [];
-  pontosInstaveis = 0;
+  if (!preservarSessao) {
+    tempoUtilPorAlvoMs = [];
+    pontosInstaveis = 0;
+  }
   motivoDoFechamento = 'teto';
   estabilidadeDoAlvo.reiniciar();
 
@@ -1571,9 +1813,11 @@ function encerrarColeta(estavaAtiva: boolean): void {
   l2csRejects = 0;
   l2csRej = zerarRejeicoesL2cs();
   qualityRejects = 0;
-  sessionBaselinePose = null;
-  sessionPoseSamples = [];
-  sessionPoseByTarget = [];
+  if (!preservarSessao) {
+    sessionBaselinePose = null;
+    sessionPoseSamples = [];
+    sessionPoseByTarget = [];
+  }
 
   if (estavaAtiva) {
     console.log('[calib] calibração abortada — estado de coleta limpo');
@@ -1596,6 +1840,7 @@ function retratarModeloEmUso(): ModeloEmUso | null {
     perfil: perfilAtivo,
     meta: ultimaMetaPersistida,
     dono: donoDoModeloEmUso,
+    lado: ladoDoModeloEmUso,
   };
 }
 
@@ -1608,15 +1853,7 @@ function restaurarModeloAntesDaCalibracao(motivo: string, consumir: boolean): bo
   const b = modeloAntesDaCalibracao;
   if (consumir) modeloAntesDaCalibracao = null;
   if (!b || isCalibrated()) return false;
-  perfilAtivo = b.perfil;
-  regressorLeft = ridgeRegressorFromModel(b.left);
-  regressorRight = ridgeRegressorFromModel(b.right);
-  featureScalerLeft.setParams(b.scalerL.means, b.scalerL.stds);
-  featureScalerRight.setParams(b.scalerR.means, b.scalerR.stds);
-  restoreReferenceStateFromProfile(b.referencia);
-  definirTreinadoEm(b.treinadoEmMs);
-  ultimaMetaPersistida = b.meta;
-  donoDoModeloEmUso = b.dono;
+  reinstalarRetrato(b);
   // A meta pendente era da calibração que não terminou (rótulo, condição
   // óptica escolhidos para ELA): não pode ir parar no perfil do modelo antigo.
   pendingProfileMeta = null;
@@ -1624,11 +1861,33 @@ function restaurarModeloAntesDaCalibracao(motivo: string, consumir: boolean): bo
   return true;
 }
 
+/** Põe de volta em uso o modelo de um retrato (`retratarModeloEmUso`). */
+function reinstalarRetrato(b: ModeloEmUso): void {
+  perfilAtivo = b.perfil;
+  regressorLeft = ridgeRegressorFromModel(b.left);
+  regressorRight = ridgeRegressorFromModel(b.right);
+  // O lado de quando ele foi treinado: se o recorte mudou desde então, a
+  // referência abaixo o deixa suspenso (`reavaliarSuspensaoPorRecorte`).
+  ladoDoModeloEmUso = b.lado ?? l2csInputSizeEfetivo;
+  featureScalerLeft.setParams(b.scalerL.means, b.scalerL.stds);
+  featureScalerRight.setParams(b.scalerR.means, b.scalerR.stds);
+  restoreReferenceStateFromProfile(b.referencia);
+  definirTreinadoEm(b.treinadoEmMs);
+  ultimaMetaPersistida = b.meta;
+  donoDoModeloEmUso = b.dono;
+}
+
 export function clearCalibration() {
-  // Descartar é descartar: nada de restaurar o modelo anterior no abort abaixo.
+  // Descartar é descartar: nada de restaurar o modelo anterior no abort abaixo
+  // — nem o perfil de antes de um reforço aberto, para o abort zerar a sessão
+  // inteira como sempre zerou (revisão do pipeline de 20/10/2026).
   modeloAntesDaCalibracao = null;
+  modeloAntesDoReforco = null;
   donoDoModeloEmUso = null;
   abortCalibration();
+  // Sem modelo e sem amostras não há sessão cancelada a proteger: o próximo
+  // treino falha pela falta de amostras, como sempre.
+  sessaoCancelada = false;
   profile = [];
   tempoUtilPorAlvoMs = [];
   pontosInstaveis = 0;
@@ -1636,16 +1895,22 @@ export function clearCalibration() {
   alvoDaPerseguicao = null;
   quadrosDaPerseguicao = [];
   ultimaMetaPersistida = null;
-  modeloAntesDoReforco = null;
+  // A recoleta, o teste e o perfil descreviam o modelo que sai agora.
+  recoletaEmCurso = null;
+  ultimaRecoleta = null;
+  validacaoDoModelo = null;
+  regressorDoPerfil = null;
   // O deslocamento aprendido descrevia o modelo que acabou de ser descartado.
   reiniciarCorrecao();
   regressorLeft = null;
   regressorRight = null;
+  ladoDoModeloEmUso = null;
   varianceFloorBreaches = 0;
   varianceCeilBreaches = 0;
   currentPointSpecularHits = 0;
   currentPointFramesAccepted = 0;
   specularWarningsIssued = 0;
+  registrosDasColetas = [];
   pendingProfileMeta = null;
   currentCalibrationTargets = null;
   // O instante do treino descreve o modelo; sem modelo ele não descreve nada.
@@ -1829,25 +2094,107 @@ export function getL2csInputSizeEfetivo(): number {
 }
 
 /**
- * Informa o lado efetivo. Se ele mudou e há modelo carregado de um perfil
- * com a chave antiga, o modelo é descartado com invalidação explícita e o
- * disco é consultado por um perfil compatível — silêncio aqui seria um
- * modelo prevendo deslocado sem erro nenhum.
+ * O lado do recorte que um REINÍCIO do modelo do rosto precisa manter, ou
+ * `null` quando nada depende dele (revisão do pipeline de 19/10/2026): o da
+ * coleta em curso (calibração, reforço, recoleta — as amostras dela são de um
+ * lado só) ou o do modelo em uso. O engine passa este lado ao worker novo
+ * (`ladoFixo` do cliente): o ONNX aceita 224² e 448², e só a latência muda.
+ */
+export function ladoDoRecorteAPreservar(): 224 | 448 | null {
+  const lado = recoletaEmCurso || isCalibrating || isCollecting || perseguicaoAtiva
+    ? l2csInputSizeEfetivo
+    : isCalibrated() ? ladoDoModeloEmUso : null;
+  return lado === 224 || lado === 448 ? lado : null;
+}
+
+/**
+ * Uma coleta em curso foi interrompida pelo NÚCLEO, não pela tela (revisão do
+ * pipeline de 19/10/2026). Antes a tela só percebia pela falta do `onDone` do
+ * ponto, que nunca vinha: ficava presa no alvo.
+ *
+ * - `lado_do_recorte`: o lado do recorte do L2CS mudou no meio da coleta, e as
+ *   amostras de dois lados não treinam um modelo só.
+ * - `rodada`: `calibracao` (calibração nova, reforço ou segunda pose — o modelo
+ *   de antes, se havia, voltou) ou `recoleta` (as amostras novas saíram; a
+ *   calibração em uso continua a mesma).
+ */
+export interface ColetaInterrompida {
+  motivo: 'lado_do_recorte';
+  rodada: 'calibracao' | 'recoleta';
+  detalhe: string;
+  em: number;
+}
+
+const ouvintesDaInterrupcao = new Set<(e: ColetaInterrompida) => void>();
+
+/** Assina o evento de coleta interrompida pelo núcleo. Devolve o cancelamento. */
+export function onColetaInterrompida(cb: (e: ColetaInterrompida) => void): () => void {
+  ouvintesDaInterrupcao.add(cb);
+  return () => ouvintesDaInterrupcao.delete(cb);
+}
+
+function emitirInterrupcao(e: ColetaInterrompida): void {
+  console.warn(`[calib] ${e.rodada === 'recoleta' ? 'recoleta' : 'calibração'} interrompida: ${e.detalhe}`);
+  for (const cb of ouvintesDaInterrupcao) {
+    try {
+      cb(e);
+    } catch (err) {
+      console.error('[calib] ouvinte da interrupção da coleta lançou:', err);
+    }
+  }
+}
+
+/**
+ * Informa o lado efetivo do recorte (o engine chama quando o worker do rosto
+ * sobe). Revisão do pipeline de 19/10/2026 — antes, um lado novo com modelo
+ * carregado APAGAVA o modelo (`clearCalibration`) e o `loadProfile()` seguinte
+ * zerava os regressores ANTES de procurar perfil: com a janela fora do tamanho
+ * (a chave antiga já não batia com a do perfil) a calibração sumia sem evento
+ * nenhum, e a faixa seguia dizendo "não é preciso calibrar de novo". Agora:
+ *
+ *  1. uma coleta em curso no lado antigo é interrompida, com aviso à tela
+ *     (`onColetaInterrompida`) — amostras de dois lados não treinam um modelo;
+ *  2. com modelo em uso: voltou ao lado dele → a suspensão sai; senão, um
+ *     perfil do disco para o lado novo toma o lugar (procurado ANTES de mexer
+ *     no modelo); sem perfil, o modelo FICA, suspenso — só Emergência e
+ *     recuperação, o mesmo mecanismo da janela fora do tamanho;
+ *  3. sem modelo, o disco é consultado como sempre.
  */
 export function setL2csInputSizeEfetivo(size: number): void {
   if (size === l2csInputSizeEfetivo) return;
-  const chaveAntiga = buildContextKey();
+  const ladoAntigo = l2csInputSizeEfetivo;
   l2csInputSizeEfetivo = size;
-  const ativo = profileRegistry.getActive();
-  if (isCalibrated() && ativo && ativo.contextKey === chaveAntiga) {
-    clearCalibration();
-    emitirInvalidacao({
-      reason: 'feature_dim_mismatch',
-      detail: `lado do recorte L2CS mudou para ${size}² (perfil treinado em outro lado)`,
-      at: Date.now(),
+
+  // 1. A coleta em curso é do lado antigo.
+  const rodada: ColetaInterrompida['rodada'] | null = recoletaEmCurso
+    ? 'recoleta'
+    : isCalibrating || isCollecting || perseguicaoAtiva ? 'calibracao' : null;
+  if (rodada) {
+    // Recoleta: as amostras novas saem e o modelo fica. Calibração nova: o
+    // modelo de antes volta (`modeloAntesDaCalibracao`) — no lado DELE, e o
+    // passo 2 o suspende se for o caso.
+    abortCalibration();
+    emitirInterrupcao({
+      motivo: 'lado_do_recorte',
+      rodada,
+      detalhe: `o recorte do modelo do rosto mudou de ${ladoAntigo}² para ${size}² no meio da coleta`,
+      em: Date.now(),
     });
   }
-  // Reconsulta o disco SEMPRE, e não só quando havia modelo carregado.
+
+  // 2. Modelo em uso.
+  if (isCalibrated()) {
+    if (ladoDoModeloEmUso === size) {
+      reavaliarSuspensaoPorRecorte();
+      return;
+    }
+    const compativel = acharPerfilCompativel();
+    if (compativel && trocarPeloPerfil(compativel)) return;
+    reavaliarSuspensaoPorRecorte();
+    return;
+  }
+
+  // 3. Sem modelo: reconsulta o disco SEMPRE.
   //
   // O lado efetivo só é conhecido quando o worker do L2CS sobe, centenas de
   // milissegundos depois de `init()` — e o `loadProfile()` do init já rodou,
@@ -1855,6 +2202,23 @@ export function setL2csInputSizeEfetivo(size: number): void {
   // gravado sob `…_l2cs224`: a chave não bate, o perfil é ignorado, e sem esta
   // releitura o paciente recalibraria os nove pontos a cada abertura do app.
   loadProfile();
+}
+
+/**
+ * Troca o modelo em uso pelo do perfil `p` sem nunca deixar o app sem modelo:
+ * se a instalação falhar no meio, o de antes volta (revisão do pipeline de
+ * 19/10/2026). Devolve se trocou.
+ */
+function trocarPeloPerfil(p: StoredCalibrationProfile): boolean {
+  const antes = retratarModeloEmUso();
+  if (instalarPerfil(p)) {
+    console.warn(`[calib] o recorte do rosto mudou para ${l2csInputSizeEfetivo}²: em uso a calibração salva para ele (${p.meta.id}).`);
+    return true;
+  }
+  // `instalarPerfil` só mexe no estado depois de montar os regressores; uma
+  // falha no meio da troca, se acontecer, não pode deixar o app sem modelo.
+  if (!isCalibrated() && antes) reinstalarRetrato(antes);
+  return false;
 }
 
 function tryParseStoredProfiles(): StoredCalibrationProfile[] {
@@ -1912,7 +2276,8 @@ export function haCalibracaoNoDisco(): boolean {
  * pelo mesmo critério que depois carrega (ou não) o modelo.
  *
  * - `malformado`: sem `meta` ou sem modelos (perfil antigo, JSON editado à mão)
- *   — não pode derrubar o `init()` do engine;
+ *   — não pode derrubar o `init()` do engine —, ou com os números do modelo
+ *   inválidos (ver `numerosDoPerfilValidos`);
  * - `outroPaciente`: nunca (ver `definirPacienteDaCalibracao`);
  * - `contexto`: treinado noutra tela ou noutro pipeline (a chave inclui o
  *   tamanho da janela e a identidade do vetor de features);
@@ -1926,11 +2291,42 @@ function motivoParaIgnorarPerfil(
     || !p.modelLeft || !p.modelRight || !p.scalerParamsLeft || !p.scalerParamsRight) {
     return 'malformado';
   }
+  if (!numerosDoPerfilValidos(p)) return 'malformado';
   if (!perfilPodeSerDoPaciente(p)) return 'outroPaciente';
   const chave = p.contextKey ?? (p as unknown as Record<string, unknown>)._contextKey;
   if (typeof chave !== 'string' || !chavesAceitas.has(chave)) return 'contexto';
   if (!profileTemReferencia(p)) return 'schema';
   return null;
+}
+
+/** Lista de números, todos finitos, com o comprimento esperado. */
+function listaFinita(v: unknown, comprimento: number): v is number[] {
+  return Array.isArray(v) && v.length === comprimento
+    && v.every((x) => typeof x === 'number' && Number.isFinite(x));
+}
+
+/**
+ * Os números do perfil gravado servem para prever? (relato de 19/10/2026)
+ *
+ * Antes o perfil era aceito só pela PRESENÇA dos campos. Um NaN gravado em
+ * JSON volta como `null`; dividir por `null` dá ±Infinity no StandardScaler, e
+ * a predição não finita ia parar no centro da tela — com o estado em
+ * `tracking`, em TODA predição, e o dwell podendo acionar o botão do centro.
+ * Agora: médias e desvios finitos, com o comprimento do modelo; desvios
+ * positivos (o `fit` nunca grava zero); pesos finitos, com o intercepto.
+ */
+function numerosDoPerfilValidos(p: StoredCalibrationProfile): boolean {
+  const lado = (
+    modelo: StoredCalibrationProfile['modelLeft'],
+    scaler: StoredCalibrationProfile['scalerParamsLeft'],
+  ): boolean => {
+    const n = modelo?.numFeatures;
+    if (!(typeof n === 'number' && Number.isInteger(n) && n > 0)) return false;
+    if (!listaFinita(modelo.betaX, n + 1) || !listaFinita(modelo.betaY, n + 1)) return false;
+    if (!listaFinita(scaler?.means, n) || !listaFinita(scaler?.stds, n)) return false;
+    return scaler.stds.every((s) => s > 0);
+  };
+  return lado(p.modelLeft, p.scalerParamsLeft) && lado(p.modelRight, p.scalerParamsRight);
 }
 
 /**
@@ -2027,6 +2423,7 @@ export function removerCalibracoesDoPaciente(id: string): number {
 
 export function loadProfile(): boolean {
   // Tenta restaurar o perfil mais recente válido do localStorage.
+  const tinhaModelo = isCalibrated();
   regressorLeft = null;
   regressorRight = null;
 
@@ -2035,21 +2432,49 @@ export function loadProfile(): boolean {
   // gravado volta a valer assim que a flag for religada.
   if (!EXPERIMENT.persistirCalibracao) {
     console.warn('[calib] persistirCalibracao=false — nenhum perfil foi carregado. Calibre para usar o olhar.');
-    return false;
   }
+  const best = acharPerfilCompativel();
+  if (best && instalarPerfil(best)) return true;
+  // O modelo que estava em uso SAIU sem outro no lugar (revisão do pipeline de
+  // 19/10/2026): a referência, o instante do treino e a suspensão (janela ou
+  // recorte) eram dele. Antes ficavam de pé — a faixa seguia dizendo "o olhar só
+  // aciona a Emergência… Não é preciso calibrar de novo" sem modelo nenhum.
+  if (tinhaModelo) modeloSaiu();
+  return false;
+}
 
+/** O modelo em uso saiu e nenhum entrou: o estado que era dele sai junto, com aviso a quem ouve a suspensão. */
+function modeloSaiu(): void {
+  regressorLeft = null;
+  regressorRight = null;
+  restoreReferenceStateFromProfile(null);
+  definirTreinadoEm(null);
+  donoDoModeloEmUso = null;
+  ladoDoModeloEmUso = null;
+}
+
+/**
+ * O perfil gravado que serve ao contexto em vigor (o do paciente antes dos sem
+ * dono, o mais recente primeiro), ou `null`. SÓ LÊ: quem chama decide se e
+ * quando instalar (revisão do pipeline de 19/10/2026 — antes a busca só
+ * existia dentro do `loadProfile`, que zera o modelo em uso ANTES de procurar).
+ */
+function acharPerfilCompativel(): StoredCalibrationProfile | null {
+  if (!EXPERIMENT.persistirCalibracao) return null;
   const profiles = tryParseStoredProfiles();
-  if (profiles.length === 0) return false;
+  if (profiles.length === 0) return null;
 
   const chavesAceitas = new Set([buildContextKey()]);
-  const nowMs = Date.now();
 
   // Filtra e ordena por data (mais recente primeiro)
   const valid = profiles
     .filter(p => {
       const motivo = motivoParaIgnorarPerfil(p, chavesAceitas);
       if (motivo === 'malformado') {
-        console.warn('[calib] perfil salvo malformado — ignorado');
+        console.warn(
+          '[calib] perfil salvo malformado (campos do modelo ausentes, ou números inválidos ' +
+          'ou de tamanho errado) — ignorado. É preciso calibrar de novo.',
+        );
       } else if (motivo === 'contexto') {
         console.warn(`[calib] perfil ${p.meta.id} incompatível (contexto diferente) — ignorado`);
       } else if (motivo === 'schema') {
@@ -2073,9 +2498,26 @@ export function loadProfile(): boolean {
       return new Date(b.meta.createdAt).getTime() - new Date(a.meta.createdAt).getTime();
     });
 
-  if (valid.length === 0) return false;
+  return valid[0] ?? null;
+}
 
-  const best = valid[0];
+/**
+ * Instala um perfil gravado como o modelo em uso. Monta os regressores ANTES
+ * de mexer em qualquer estado: um perfil que não monta devolve `false` e deixa
+ * o modelo em uso como estava. Devolve se instalou.
+ */
+function instalarPerfil(best: StoredCalibrationProfile): boolean {
+  let reloadedLeft: GazeRegressor | null;
+  let reloadedRight: GazeRegressor | null;
+  try {
+    reloadedLeft = ridgeRegressorFromModel(best.modelLeft);
+    reloadedRight = ridgeRegressorFromModel(best.modelRight);
+  } catch (e) {
+    console.warn('[calib] falha ao restaurar perfil:', e);
+    return false;
+  }
+  if (!reloadedLeft || !reloadedRight) return false;
+
   // Perfil antigo, sem dono, carregado por um paciente: passa a ser dele — e
   // deixa de aparecer para os outros.
   let reivindicado = false;
@@ -2083,7 +2525,7 @@ export function loadProfile(): boolean {
     best.meta = { ...best.meta, paciente: pacienteDaCalibracao };
     reivindicado = true;
   }
-  const age = nowMs - new Date(best.meta.createdAt).getTime();
+  const age = Date.now() - new Date(best.meta.createdAt).getTime();
   if (age > PROFILES_MAX_AGE_MS) {
     console.warn(`[calib] perfil ${best.meta.id} tem ${Math.round(age / 3600000)} h — mais antigo que 24 h. Recomendado recalibrar.`);
     // Não bloqueia: oferecer revalidação, não bloqueio.
@@ -2092,11 +2534,10 @@ export function loadProfile(): boolean {
   try {
     // Restaura o perfil no registry e os regressors em memória
     profileRegistry.save(best);
-    const reloadedLeft = ridgeRegressorFromModel(best.modelLeft);
-    const reloadedRight = ridgeRegressorFromModel(best.modelRight);
-    if (!reloadedLeft || !reloadedRight) return false;
     regressorLeft = reloadedLeft;
     regressorRight = reloadedRight;
+    // A chave do perfil bateu com a do contexto em vigor: o lado é o de agora.
+    ladoDoModeloEmUso = l2csInputSizeEfetivo;
     featureScalerLeft.setParams(best.scalerParamsLeft.means, best.scalerParamsLeft.stds);
     featureScalerRight.setParams(best.scalerParamsRight.means, best.scalerParamsRight.stds);
     // O filtro acima garante que `best.reference` existe.
@@ -2125,18 +2566,38 @@ export function loadProfile(): boolean {
   }
 }
 
-function saveProfile(remover: readonly string[] = []) {
+/**
+ * Evento da janela a cada gravação dos perfis: `detail.salvo` diz se o disco
+ * aceitou. A interface o usa para mostrar "não foi possível salvar a
+ * calibração" (relato de 18/10/2026, item 15) — sem isto a falha ficava num
+ * `console.warn` e a próxima abertura não tinha calibração, sem ninguém saber.
+ */
+export const EVENTO_DE_GRAVACAO_DA_CALIBRACAO = 'irisflow:gravacao-da-calibracao';
+
+function avisarGravacao(salvo: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent(EVENTO_DE_GRAVACAO_DA_CALIBRACAO, { detail: { salvo } }));
+  } catch { /* sem `CustomEvent` (ambiente sem DOM): nada a avisar */ }
+}
+
+/**
+ * Grava os perfis. Devolve `false` só quando a gravação FALHOU (cota cheia,
+ * armazenamento bloqueado, sem armazenamento). A persistência desligada de
+ * propósito (`persistirCalibracao=false`) não é falha: devolve `true`.
+ */
+function saveProfile(remover: readonly string[] = []): boolean {
   // Persiste os perfis do registry no localStorage, JUNTO com os que já estão
   // no disco (de outros pacientes, de outras janelas): o registry só tem os
   // desta sessão, e regravar só ele apagava a calibração dos outros pacientes.
   // Chamado após `persistActiveProfileToRegistry` em `completeCalibration`.
-  if (typeof localStorage === 'undefined') return;
+  if (typeof localStorage === 'undefined') return false;
   // Simétrico ao `loadProfile`: desligada a persistência, a calibração recém
   // treinada vale para esta sessão e morre com ela. Não gravar é o ponto —
   // é o que faz a próxima abertura exigir uma calibração nova.
   if (!EXPERIMENT.persistirCalibracao) {
     console.warn('[calib] persistirCalibracao=false — perfil NÃO gravado; vale só nesta sessão.');
-    return;
+    return true;
   }
   try {
     const porId = new Map<string, StoredCalibrationProfile>();
@@ -2166,8 +2627,12 @@ function saveProfile(remover: readonly string[] = []) {
     }
     localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(latest));
     console.log(`[calib] ${latest.length} perfil(s) salvo(s) no localStorage`);
+    avisarGravacao(true);
+    return true;
   } catch (e) {
     console.warn('[calib] falha ao salvar perfis:', e);
+    avisarGravacao(false);
+    return false;
   }
 }
 
@@ -2700,6 +3165,15 @@ export function startCalibrationMode(
   // O limiar adaptativo de piscada não pode vir enviesado de sessões anteriores.
   resetEarHistory();
 
+  // Uma recoleta aberta não é uma calibração "em curso" no sentido de cima: o
+  // modelo dela ainda é o em uso, e é ele que o retrato abaixo precisa pegar.
+  if (recoletaEmCurso) {
+    descartarRecoletaEmCurso('calibração nova sobre uma recoleta aberta');
+    isCalibrating = false;
+  }
+  ultimaRecoleta = null;
+  validacaoDoModelo = null;
+
   // Retrato do modelo que funciona, ANTES de trocar o perfil e de descartar
   // tudo abaixo. Recomeçar uma calibração em curso mantém o retrato da
   // primeira tentativa (nessa hora já não há modelo para retratar).
@@ -2708,6 +3182,8 @@ export function startCalibrationMode(
   if (opts?.perfil) perfilAtivo = opts.perfil;
 
   isCalibrating = true;
+  // Sessão nova: o treino dela é dela (ver `sessaoCancelada`).
+  sessaoCancelada = false;
 
   // Zera a coleta de uma calibração abandonada: com `isCollecting` ligado,
   // `feedRawData` acumularia amostras contra o alvo ANTIGO e o timeout
@@ -2744,6 +3220,8 @@ export function startCalibrationMode(
   ultimaPredicaoSemCorrecao = null;
   // Sem modelo em uso não há o que suspender.
   definirSuspensao(null);
+  definirSuspensaoPorRecorte(null);
+  registrosDasColetas = [];
   // Os regressores acabaram de ser descartados: o instante do treino deles não
   // pode sobreviver a eles (`completeCalibration` grava o novo).
   definirTreinadoEm(null);
@@ -2894,21 +3372,33 @@ function calculateFeatureVariance(features: number[][]): number {
 // Retorna { deadCount, totalDims, deadIndices }. Chamador decide o corte
 // (DEAD_FEATURE_MAX_RATIO). Mede sobre um único array de features/targets;
 // para binocular, chame duas vezes (L e R).
+//
+// `grupos`: a chave do ALVO NOMINAL de cada amostra (`grupoDaAmostra`). O
+// treino tem de passá-la (relato de 19/10/2026, auditoria A5): os alvos que ele
+// tem em mãos já vêm compensados por pose, cada amostra com a sua coordenada,
+// e agrupar por eles dava um grupo por amostra. A "variância entre alvos" virava
+// a variância de amostra a amostra, e uma feature que só treme — sem sinal
+// nenhum de olhar — passava por viva. Ausente, agrupa por `targets`, como antes.
 export function countDeadFeatures(
   features: number[][],
   targets: { screenX: number; screenY: number }[],
   eps = DEAD_FEATURE_VARIANCE_EPS,
+  grupos?: readonly string[],
 ): { deadCount: number; totalDims: number; deadIndices: number[] } {
   if (features.length === 0 || targets.length !== features.length) {
     return { deadCount: 0, totalDims: 0, deadIndices: [] };
   }
   const numDims = features[0].length;
+  const porGrupo = grupos !== undefined && grupos.length === features.length;
 
-  // Agrupa índices por (screenX, screenY) arredondado — mesmo scheme do CV
-  // em ridge.ts (evita agrupamentos incorretos por drift de ponto flutuante).
+  // Agrupa índices pelo alvo nominal ou, sem ele, por (screenX, screenY)
+  // arredondado — mesmo scheme do CV em ridge.ts (evita agrupamentos
+  // incorretos por drift de ponto flutuante).
   const groups = new Map<string, number[]>();
   for (let i = 0; i < targets.length; i++) {
-    const key = `${targets[i].screenX.toFixed(4)},${targets[i].screenY.toFixed(4)}`;
+    const key = porGrupo
+      ? (grupos as readonly string[])[i]
+      : `${targets[i].screenX.toFixed(4)},${targets[i].screenY.toFixed(4)}`;
     let g = groups.get(key);
     if (!g) { g = []; groups.set(key, g); }
     g.push(i);
@@ -2992,16 +3482,14 @@ export function feedRawData(featuresLeft: number[], featuresRight: number[], qua
       // faixa em que os sete termos não são zero mas também não descrevem uma
       // leitura fresca. Tratá-los como bons daria peso cheio a uma amostra
       // construída sobre um ângulo que já está decaindo.
-      const blocoZeradoP = (L2CS_SLOTS.length > 0
-        && L2CS_SLOTS.every((i) => featuresLeft[i] === 0 && featuresRight[i] === 0))
-        || ultimoDiagnosticoDoBloco().pesoDoAngulo < 1;
+      const blocosP = blocosAngularesDoQuadro(featuresLeft, featuresRight);
       quadrosDaPerseguicao.push({
         featuresLeft, featuresRight,
         quality: quality ?? null,
         peso: pesoDaAmostra({
           qualidade: quality ?? null,
-          blocoZerado: blocoZeradoP,
-          l2csConfianca: blocoZeradoP ? null : ultimoDiagnosticoDoBloco().confidence,
+          blocoZerado: blocosP.zerado,
+          l2csConfianca: blocosP.confiancaDoRosto,
         }),
         amostra: {
           // Correlação de Pearson é invariante a ganho e deslocamento, então o
@@ -3088,9 +3576,10 @@ export function feedRawData(featuresLeft: number[], featuresRight: number[], qua
   // Idem ao ramo da perseguição acima: bloco atenuado pelo desvanecimento do
   // reuso conta como zerado para o peso. A CONTAGEM por motivo, logo abaixo,
   // continua sendo a de antes — quem estava em reuso não vira "stale".
-  const blocoExatamenteZerado = L2CS_SLOTS.length > 0
-    && L2CS_SLOTS.every((i) => featuresLeft[i] === 0 && featuresRight[i] === 0);
-  const blocoZerado = blocoExatamenteZerado || ultimoDiagnosticoDoBloco().pesoDoAngulo < 1;
+  // O bloco ocular (EyeNet) entra no peso junto com o do rosto — ver
+  // `blocosAngularesDoQuadro`.
+  const blocos = blocosAngularesDoQuadro(featuresLeft, featuresRight);
+  const blocoExatamenteZerado = blocos.rostoExatamenteZerado;
   if (blocoExatamenteZerado) {
     // CONTA, mas NÃO rejeita mais. A quebra por causa continua alimentando o
     // console e o relatório (`l2csValidFraction`), que é o que permite saber
@@ -3113,8 +3602,8 @@ export function feedRawData(featuresLeft: number[], featuresRight: number[], qua
   // frame depois, `ultimoDiagnosticoDoBloco()` já fala de outro.
   collectedPesos.push(pesoDaAmostra({
     qualidade: quality ?? null,
-    blocoZerado,
-    l2csConfianca: blocoZerado ? null : ultimoDiagnosticoDoBloco().confidence,
+    blocoZerado: blocos.zerado,
+    l2csConfianca: blocos.confiancaDoRosto,
   }));
   collectedEscalas.push(latestFaceScale ? { ...latestFaceScale } : null);
 
@@ -3185,6 +3674,20 @@ function processStaticPoint() {
     `${l2csRej.nConf > 0 ? `, conf. média=${(l2csRej.somaConf / l2csRej.nConf).toFixed(3)} < ${L2CS_CONFIDENCE_MIN}` : ''}` +
     `${l2csRej.nPitch > 0 ? `, |pitch| médio=${(l2csRej.somaPitchAbs / l2csRej.nPitch).toFixed(1)}°` : ''})`,
   );
+
+  // O que este ponto acrescenta às séries da sessão (ver `RegistroDaColeta`).
+  // O tempo útil e o "foi ao teto" acabaram de ser lançados por quem fechou.
+  const registro: RegistroDaColeta = {
+    chave: targetGroupKey({ screenX: currentTargetX, screenY: currentTargetY }),
+    tempoUtilMs: tempoUtilPorAlvoMs[tempoUtilPorAlvoMs.length - 1] ?? 0,
+    instavel: motivoDoFechamento === 'teto',
+    varianciaBaixa: false,
+    varianciaAlta: false,
+    reflexo: false,
+    pose: null,
+    distanciasCm: [],
+  };
+  registrosDasColetas.push(registro);
 
   if (collectedFeaturesLeft.length === 0) {
     // NÃO refaz mais. Sem amostra não há o que treinar neste alvo, mas repetir
@@ -3270,6 +3773,9 @@ function processStaticPoint() {
   if (esteAttemptTeveSpecular) specularWarningsIssued++;
   if (esteAttemptTeveVarianciaBaixa) varianceFloorBreaches++;
   if (esteAttemptTeveVarianciaAlta) varianceCeilBreaches++;
+  registro.reflexo = esteAttemptTeveSpecular;
+  registro.varianciaBaixa = esteAttemptTeveVarianciaBaixa;
+  registro.varianciaAlta = esteAttemptTeveVarianciaAlta;
 
   // Mediana das distâncias dos frames que este ponto de fato aceitou.
   {
@@ -3293,16 +3799,19 @@ function processStaticPoint() {
         const m = v.length >> 1;
         return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
       };
-      sessionPoseByTarget.push({
-        yaw: med((q) => q.yaw), pitch: med((q) => q.pitch), roll: med((q) => q.roll),
-      });
+      const pose = { yaw: med((q) => q.yaw), pitch: med((q) => q.pitch), roll: med((q) => q.roll) };
+      sessionPoseByTarget.push(pose);
+      registro.pose = pose;
     }
   }
 
   // Série real de distâncias, acumulada frame a frame em `feedRawData` junto
   // com a decisão de aceitar.
   for (const d of currentPointCameraDistances) {
-    if (d > 0) acceptedDistancesCm.push(d);
+    if (d > 0) {
+      acceptedDistancesCm.push(d);
+      registro.distanciasCm.push(d);
+    }
   }
 
   for (let i = 0; i < collectedFeaturesLeft.length; i++) {
@@ -3356,8 +3865,33 @@ export interface CalibrationFitDiagnostics {
    * sem alvos internos suficientes.
    */
   looGradeInternaPx?: number;
-  /** Erro LOO por alvo, na ordem dos alvos únicos. */
-  looByTarget: { x: number; y: number; errorPx: number; samples: number }[];
+  /**
+   * Erro LOO por alvo, na ordem dos alvos únicos. `x`/`y` são o alvo de
+   * treino da 1ª amostra (já compensado por pose); `chave` e `alvo` são o alvo
+   * NOMINAL — onde a bola foi desenhada e a chave das amostras no perfil —, que
+   * é o que a recoleta precisa para mandar a bola ao mesmo lugar.
+   * `dispersaoPx` é o RMS da predição em volta da média do próprio alvo, no
+   * modelo treinado (a precisão da fixação ali). Os três opcionais faltam em
+   * relatórios anteriores a 19/10/2026.
+   */
+  looByTarget: {
+    x: number;
+    y: number;
+    errorPx: number;
+    samples: number;
+    chave?: string;
+    alvo?: { x: number; y: number };
+    dispersaoPx?: number;
+    /**
+     * Amostras COLETADAS no alvo, antes do filtro robusto por quadro (M6).
+     * `samples` é o que sobrou dele e treinou; o mínimo de referência
+     * (`MIN_ACCEPTED_SAMPLES`) é o da coleta, e é contra este número que a
+     * recoleta julga "poucas amostras" (revisão do pipeline de 19/10/2026:
+     * a ~15 fps todo ponto fecha com exatamente 15, e um quadro descartado
+     * pelo M6 mandava refazer um alvo bom). Ausente em relatórios anteriores.
+     */
+    amostrasColetadas?: number;
+  }[];
   /** Média e desvio da pose durante TODA a calibração (rad). O desvio é o
    *  número interessante: pose que varia muito entre alvos vira variável
    *  confundida com o olhar. */
@@ -3430,6 +3964,12 @@ export interface CalibrationFitDiagnostics {
     y: CovarianciaDosOlhos;
     pesoEsquerdo: { x: number; y: number };
   } | null;
+  /**
+   * A recoleta dos alvos ruins desta calibração (`recoletaDeAlvosRuins`), com
+   * o antes e o depois de cada alvo refeito e a decisão da trava. Ausente
+   * quando não houve recoleta.
+   */
+  recoleta?: RelatorioDaRecoleta | null;
 }
 
 let lastFitDiagnostics: CalibrationFitDiagnostics | null = null;
@@ -3455,7 +3995,10 @@ function calcularTargetsSkipped(
 }
 
 export function getCalibrationFitDiagnostics(): CalibrationFitDiagnostics | null {
-  return lastFitDiagnostics;
+  if (!lastFitDiagnostics) return null;
+  // A recoleta vai junto, para o relatório do teste de precisão gravar o
+  // antes e o depois — inclusive quando o reforço (S4) retreinou depois dela.
+  return ultimaRecoleta ? { ...lastFitDiagnostics, recoleta: ultimaRecoleta } : lastFitDiagnostics;
 }
 
 /**
@@ -3477,6 +4020,7 @@ export function iniciarPerseguicao(): boolean {
   alvoDaPerseguicao = null;
   quadrosDaPerseguicao = [];
   isCalibrating = true;
+  sessaoCancelada = false;
   console.log('[calib] perseguição suave iniciada');
   return true;
 }
@@ -3608,12 +4152,15 @@ export function finalizarPerseguicao(): ResumoDaPerseguicao {
  * não ensina nada e ainda desequilibra o peso dos cantos.
  */
 export function iniciarRodadaDeSegundaPose(): { x: number; y: number }[] {
-  if (isCalibrating || profile.length === 0) return [];
+  // Idem ao reforço: com o recorte trocado, os cantos sairiam de outro lado; com
+  // a janela fora do tamanho, de outra geometria (revisão de 20/10/2026).
+  if (isCalibrating || profile.length === 0 || recorteTrocado() || getSuspensaoDaCalibracao() !== null) return [];
 
   const cantos = computeCalibrationTargets(currentCalibrationGeometry(), true);
   // Os cantos JÁ estão em `currentCalibrationTargets` — não são acrescentados
   // de novo, senão `targetsSkipped` passaria a contar cada um duas vezes.
   isCalibrating = true;
+  sessaoCancelada = false;
   console.log(
     `[calib] segunda pose: ${cantos.length} cantos, para o modelo aprender a ` +
     `ser plano na faixa de pose que esta pessoa ocupa.`,
@@ -3637,7 +4184,12 @@ export function iniciarRodadaDeReforco(
   opcoes?: { piores?: number; maximo?: number; razaoMinima?: number },
 ): { x: number; y: number }[] {
   const d = lastFitDiagnostics;
-  if (!d || isCalibrating) return [];
+  // Com o recorte trocado (calibração suspensa), os extras sairiam de outro
+  // lado que as amostras do perfil (revisão do pipeline de 19/10/2026). Com a
+  // janela fora do tamanho, de outra geometria — e o treino regravaria o
+  // perfil com a chave do tamanho de agora (revisão de 20/10/2026; ver
+  // `podeRecoletarAlvos`).
+  if (!d || isCalibrating || recorteTrocado() || getSuspensaoDaCalibracao() !== null) return [];
 
   const extras = alvosDeReforco(d.looByTarget, currentCalibrationGeometry(), opcoes);
   if (extras.length === 0) return [];
@@ -3657,17 +4209,616 @@ export function iniciarRodadaDeReforco(
     scalerR: featureScalerRight.getParams(),
     referencia: captureReferenceStateForProfile(),
     meta: pendingProfileMeta,
+    lado: ladoDoModeloEmUso,
+    perfilAntes: profile.slice(),
+    alvosAntes: currentCalibrationTargets,
+    sessao: retratarSeriesDaSessao(),
   };
 
   // Os extras entram na lista de planejados: sem isto eles não contariam em
   // `targetsSkipped` e um reforço que falhasse passaria despercebido.
   currentCalibrationTargets = [...(currentCalibrationTargets ?? []), ...extras];
   isCalibrating = true;
+  // Uma rodada nova: o treino dela não é o de uma sessão cancelada.
+  sessaoCancelada = false;
   console.log(
     `[calib] rodada de reforço: ${extras.length} alvo(s) extra(s) ao redor dos ` +
     `de pior erro leave-one-target-out.`,
   );
   return extras;
+}
+
+// ── Recoleta dos alvos ruins (item 7, pedido de 19/10/2026) ────────────────
+//
+// A matemática — quem é ruim, com quem se compara, por que substituir, a
+// trava — está em `calibration/recoletaDeAlvos.ts`. Aqui mora o estado: o
+// retrato do modelo que funciona, as amostras de antes e a troca. Diferente
+// do reforço (S4), que SOMA alvos novos onde o modelo é cego, a recoleta
+// TROCA as amostras dos alvos que já existiam.
+
+/** Um alvo proposto para refazer: o NOMINAL (onde a bola vai) e por quê. */
+export interface AlvoParaRecoletar {
+  x: number;
+  y: number;
+  borda: boolean;
+  /** `cantoNoTeste`: o teste de precisão mediu este canto como "Ruim". */
+  motivos: (MotivoDaRecoleta | 'cantoNoTeste')[];
+}
+
+/** O antes e o depois de um alvo refeito, como vão para o relatório. */
+export interface AlvoRecoletado {
+  x: number;
+  y: number;
+  borda: boolean;
+  motivos: AlvoParaRecoletar['motivos'];
+  antes: { erroLotoPx: number; dispersaoPx: number; amostras: number } | null;
+  /** Do modelo treinado com as amostras novas — também quando a trava o recusou. */
+  depois: { erroLotoPx: number; dispersaoPx: number; amostras: number } | null;
+  /** As amostras novas entraram no lugar das antigas. `false` = a recoleta não
+   *  rendeu amostras bastantes e o alvo ficou com as de antes. */
+  substituido: boolean;
+}
+
+export interface RelatorioDaRecoleta {
+  /** Rodada automática, logo depois da calibração, ou pedida na tela de resultado. */
+  automatica: boolean;
+  em: string;
+  alvos: AlvoRecoletado[];
+  /** O modelo novo ficou. `false` = a calibração de antes segue valendo, inteira. */
+  aceito: boolean;
+  motivo: MotivoDaDecisao | 'sem_amostras' | 'treino_falhou' | 'contraluz_forte' | 'sem_rodada';
+  /** LOTO médio nos mesmos alvos, antes e depois (px). `NaN` quando não houve treino. */
+  looAntesPx: number;
+  looDepoisPx: number;
+  looInternoAntesPx: number;
+  looInternoDepoisPx: number;
+  /** Tempo útil de coleta que a rodada custou ao paciente, em ms. */
+  tempoUtilMs: number;
+}
+
+/** Tudo que o treino reescreve, para a trava poder devolver o modelo antigo inteiro. */
+interface RetratoDoTreino {
+  regressorLeft: GazeRegressor;
+  regressorRight: GazeRegressor;
+  scalerL: { means: number[]; stds: number[] };
+  scalerR: { means: number[]; stds: number[] };
+  referencia: CalibrationReferenceState;
+  diagnostico: CalibrationFitDiagnostics | null;
+  resumoDePesos: ReturnType<typeof resumoDePesos>;
+  diagnosticoRobusto: DiagnosticoRobusto | null;
+  regressorDoPerfil: GazeRegressor | null;
+  /** Lado do recorte do modelo (ver `ladoDoModeloEmUso`). */
+  lado: number | null;
+  /**
+   * As séries e os contadores da sessão, inteiros (revisão do pipeline de
+   * 19/10/2026). Antes só os COMPRIMENTOS da pose por alvo e das distâncias,
+   * e o resto — tempo útil, pontos instáveis, variância, reflexo — somava as
+   * tentativas da rodada recusada ou cancelada.
+   */
+  sessao: {
+    registros: RegistroDaColeta[];
+    tempoUtilPorAlvoMs: number[];
+    pontosInstaveis: number;
+    varianceFloorBreaches: number;
+    varianceCeilBreaches: number;
+    specularWarningsIssued: number;
+    sessionPoseByTarget: { yaw: number; pitch: number; roll: number }[];
+    acceptedDistancesCm: number[];
+  };
+}
+
+interface RecoletaEmCurso {
+  automatica: boolean;
+  alvos: AlvoParaRecoletar[];
+  chaves: Set<string>;
+  /** O perfil de antes, os mesmos objetos: é ele que volta se a trava recusar. */
+  perfilAntes: CalibrationPoint[];
+  /** Daqui em diante, as amostras do `profile` são da rodada. */
+  inicio: number;
+  retrato: RetratoDoTreino;
+  tempoUtilAntes: number;
+}
+
+let recoletaEmCurso: RecoletaEmCurso | null = null;
+let ultimaRecoleta: RelatorioDaRecoleta | null = null;
+/**
+ * O regressor que o `profile` em memória produziu. O perfil só pode ser
+ * recoletado e retreinado quando é o do modelo EM USO: depois de carregar um
+ * perfil do disco ou trocar de perfil, as amostras em memória (se houver) são
+ * de outra calibração, e retreinar com elas trocaria o modelo por outro.
+ * Comparado por identidade: todo modelo novo é um objeto novo.
+ */
+let regressorDoPerfil: GazeRegressor | null = null;
+
+/** Um ponto do teste de precisão, em fração da tela. */
+export interface PontoDaValidacao {
+  x: number;
+  y: number;
+  /** Erro médio do ponto, em px. `NaN` quando não foi medido. */
+  erroPx: number;
+  borda: boolean;
+}
+
+/** O último teste de precisão medido contra o modelo em uso (ver `registrarValidacaoDoModelo`). */
+let validacaoDoModelo: {
+  regressor: GazeRegressor;
+  erroInternoPx: number | null;
+  pontos: PontoDaValidacao[];
+} | null = null;
+
+/** px de tela por grau na geometria da sessão (no centro: d·π/180). */
+function pxPorGrauDaSessao(): number {
+  return (screenDistancePx() * Math.PI) / 180;
+}
+
+/** A recoleta (ou a tela que a oferece) pode começar agora? */
+export function podeRecoletarAlvos(): boolean {
+  return EXPERIMENT.recoletaDeAlvosRuins
+    && !isCalibrating
+    && recoletaEmCurso === null
+    && isCalibrated()
+    && regressorLeft === regressorDoPerfil
+    && profile.length > 0
+    && lastFitDiagnostics !== null
+    // Suspensa pelo recorte, as amostras novas sairiam de outro lado que as do
+    // perfil (revisão do pipeline de 19/10/2026).
+    && !recorteTrocado()
+    // Suspensa pela JANELA também (revisão do pipeline de 20/10/2026): as
+    // amostras novas mediriam outra geometria que as do perfil, e o treino
+    // grava a janela de agora, tira a suspensão e regrava o ÚNICO perfil com a
+    // chave do tamanho de agora — na próxima abertura em tela cheia nenhum
+    // perfil carregava, sem aviso. A tela de resultado lê esta mesma regra
+    // (`alvosParaRecoletar`) e não oferece o botão.
+    && getSuspensaoDaCalibracao() === null;
+}
+
+/** Há uma rodada de recoleta aberta (entre `iniciar` e `concluir`)? */
+export function recoletaEmAndamento(): boolean {
+  return recoletaEmCurso !== null;
+}
+
+/** Qualidade dos alvos de um diagnóstico. Só os alvos de PONTO: a célula de
+ *  uma perseguição suave não é um lugar para onde a bola possa voltar. */
+function qualidadeDoDiagnostico(d: CalibrationFitDiagnostics | null): QualidadeDoAlvo[] | null {
+  if (!d) return null;
+  const geometria = currentCalibrationGeometry();
+  const medidas: MedidaDoAlvo[] = [];
+  for (const t of d.looByTarget) {
+    if (typeof t.chave !== 'string' || !t.alvo) continue;
+    if (t.chave !== targetGroupKey({ screenX: t.alvo.x, screenY: t.alvo.y })) continue;
+    medidas.push({
+      chave: t.chave,
+      x: t.alvo.x,
+      y: t.alvo.y,
+      erroLotoPx: t.errorPx,
+      dispersaoPx: t.dispersaoPx ?? Number.NaN,
+      // As COLETADAS, não as que sobraram do M6: o mínimo é o da coleta.
+      amostras: t.amostrasColetadas ?? t.samples,
+      borda: !naGradeInterna(t.alvo, geometria),
+    });
+  }
+  if (medidas.length < MINIMO_DE_ALVOS_PARA_AVALIAR) return null;
+  return avaliarAlvos(medidas, pxPorGrauDaSessao(), MIN_ACCEPTED_SAMPLES);
+}
+
+/**
+ * Qualidade de cada alvo da calibração em uso (erro fora da amostra,
+ * dispersão, amostras, e se passou de algum corte). `null` sem diagnóstico ou
+ * com menos de `MINIMO_DE_ALVOS_PARA_AVALIAR` alvos (modo rápido).
+ */
+export function getQualidadeDosAlvos(): QualidadeDoAlvo[] | null {
+  return qualidadeDoDiagnostico(lastFitDiagnostics);
+}
+
+/**
+ * Registra o teste de precisão que acabou de medir o modelo em uso. Chamado
+ * pelo `accuracy.ts` ao fim de uma rodada de MEDIÇÃO completa.
+ *
+ * Existe para a tela de resultado e o painel do teste dizerem a mesma coisa:
+ * medido o teste, é ele — e não a calibração — quem diz se um canto ficou
+ * ruim, porque é uma medida independente, tomada depois. Vale só para o modelo
+ * em que foi medido: qualquer treino novo troca o regressor e a medida cai.
+ */
+export function registrarValidacaoDoModelo(v: {
+  erroInternoPx: number | null;
+  pontos: readonly PontoDaValidacao[];
+}): void {
+  validacaoDoModelo = regressorLeft
+    ? { regressor: regressorLeft, erroInternoPx: v.erroInternoPx, pontos: v.pontos.map((p) => ({ ...p })) }
+    : null;
+}
+
+function validacaoEmVigor(): NonNullable<typeof validacaoDoModelo> | null {
+  return validacaoDoModelo && regressorLeft && validacaoDoModelo.regressor === regressorLeft
+    ? validacaoDoModelo
+    : null;
+}
+
+/**
+ * O teste de precisão medido contra o modelo EM USO, resumido: o erro dos
+ * pontos interiores e os cantos que saíram "Ruim" (a mesma fronteira do
+ * `accuracy.ts`). `null` sem teste para este modelo.
+ */
+export function getValidacaoDoModelo(): { erroInternoPx: number | null; cantosRuins: { x: number; y: number }[] } | null {
+  const v = validacaoEmVigor();
+  if (!v) return null;
+  return {
+    erroInternoPx: v.erroInternoPx,
+    cantosRuins: v.pontos
+      .filter((p) => p.borda && Number.isFinite(p.erroPx) && p.erroPx >= LIMIAR_REGULAR_PX)
+      .map((p) => ({ x: p.x, y: p.y })),
+  };
+}
+
+/** Tolerância para casar um ponto do teste com um alvo da calibração (a mesma
+ *  do aviso de sobreposição do `accuracy.ts`: 2 % de cada eixo). */
+const TOLERANCIA_DO_CANTO = 0.02;
+
+/** Alvos de PONTO da calibração em uso, um por chave, na ordem do perfil. */
+function alvosNominaisDoPerfil(): { chave: string; x: number; y: number }[] {
+  const vistos = new Map<string, { chave: string; x: number; y: number }>();
+  for (const p of profile) {
+    if (p.grupo) continue;
+    const chave = targetGroupKey({ screenX: p.screenX, screenY: p.screenY });
+    if (!vistos.has(chave)) vistos.set(chave, { chave, x: p.screenX, y: p.screenY });
+  }
+  return [...vistos.values()];
+}
+
+/**
+ * Os alvos que vale refazer agora, do pior para o menos ruim (no máximo
+ * `MAXIMO_DE_ALVOS_POR_RODADA`). Lista vazia = nada a refazer — e é o caso
+ * normal.
+ *
+ * Com um teste de precisão medido contra este modelo, quem decide é ele: os
+ * alvos de canto da calibração que coincidem com cantos que o teste mediu como
+ * "Ruim". Sem teste (a rodada automática, logo depois dos 13 pontos), decide a
+ * própria calibração (`recoletaDeAlvos.ts`). Com a sessão inteira ruim — o
+ * centro já errando mais de 150 px —, refazer pontos avulsos não resolve, e a
+ * resposta é vazia: o caso é de refazer a calibração.
+ */
+export function alvosParaRecoletar(opcoes?: { maximo?: number }): AlvoParaRecoletar[] {
+  if (!podeRecoletarAlvos()) return [];
+  const maximo = Math.min(opcoes?.maximo ?? MAXIMO_DE_ALVOS_POR_RODADA, MAXIMO_DE_ALVOS_POR_RODADA);
+
+  const v = validacaoEmVigor();
+  if (v) {
+    const doPerfil = alvosNominaisDoPerfil();
+    const out: AlvoParaRecoletar[] = [];
+    const ruins = v.pontos
+      .filter((p) => p.borda && Number.isFinite(p.erroPx) && p.erroPx >= LIMIAR_REGULAR_PX)
+      .sort((a, b) => b.erroPx - a.erroPx);
+    for (const p of ruins) {
+      const alvo = doPerfil.find((a) => Math.abs(a.x - p.x) < TOLERANCIA_DO_CANTO && Math.abs(a.y - p.y) < TOLERANCIA_DO_CANTO);
+      if (!alvo || out.some((o) => o.x === alvo.x && o.y === alvo.y)) continue;
+      out.push({ x: alvo.x, y: alvo.y, borda: true, motivos: ['cantoNoTeste'] });
+      if (out.length >= maximo) break;
+    }
+    return out;
+  }
+
+  if (lastFitDiagnostics?.gridDiagnosis?.veredicto === 'sessao_ruim') return [];
+  const q = getQualidadeDosAlvos();
+  if (!q) return [];
+  return escolherAlvosParaRecoletar(q, maximo).map((a) => ({
+    x: a.x,
+    y: a.y,
+    borda: a.borda,
+    motivos: [...a.motivos],
+  }));
+}
+
+function retratarTreino(): RetratoDoTreino | null {
+  if (!regressorLeft || !regressorRight) return null;
+  return {
+    // Os próprios objetos, não cópias: o treino cria regressores novos e o
+    // `StandardScaler.fit` troca os vetores em vez de mexer neles, então
+    // devolver estes é devolver o modelo de antes bit a bit.
+    regressorLeft,
+    regressorRight,
+    scalerL: featureScalerLeft.getParams(),
+    scalerR: featureScalerRight.getParams(),
+    referencia: captureReferenceStateForProfile(),
+    diagnostico: lastFitDiagnostics,
+    resumoDePesos: ultimoResumoDePesos,
+    diagnosticoRobusto: ultimoDiagnosticoRobusto,
+    regressorDoPerfil,
+    lado: ladoDoModeloEmUso,
+    sessao: retratarSeriesDaSessao(),
+  };
+}
+
+/** As séries e os contadores da sessão, copiados (a recoleta e o reforço os devolvem). */
+function retratarSeriesDaSessao(): RetratoDoTreino['sessao'] {
+  return {
+    registros: registrosDasColetas.slice(),
+    tempoUtilPorAlvoMs: tempoUtilPorAlvoMs.slice(),
+    pontosInstaveis,
+    varianceFloorBreaches,
+    varianceCeilBreaches,
+    specularWarningsIssued,
+    sessionPoseByTarget: sessionPoseByTarget.slice(),
+    acceptedDistancesCm: acceptedDistancesCm.slice(),
+  };
+}
+
+/** Desfaz o que a rodada escreveu nas séries e nos contadores da sessão. */
+function devolverSeriesDaSessao(r: RetratoDoTreino): void {
+  devolverSeries(r.sessao);
+}
+
+function devolverSeries(s: RetratoDoTreino['sessao']): void {
+  registrosDasColetas = s.registros.slice();
+  tempoUtilPorAlvoMs = s.tempoUtilPorAlvoMs.slice();
+  pontosInstaveis = s.pontosInstaveis;
+  varianceFloorBreaches = s.varianceFloorBreaches;
+  varianceCeilBreaches = s.varianceCeilBreaches;
+  specularWarningsIssued = s.specularWarningsIssued;
+  sessionPoseByTarget = s.sessionPoseByTarget.slice();
+  acceptedDistancesCm = s.acceptedDistancesCm.slice();
+}
+
+/**
+ * As séries da sessão depois da TROCA (revisão do pipeline de 19/10/2026): as
+ * coletas de antes, menos as dos alvos substituídos, mais as da rodada só
+ * desses alvos — a mesma conta de `substituirAmostras` sobre as amostras. Um
+ * alvo da rodada que não rendeu amostras bastantes fica com as de antes, e a
+ * coleta nova dele sai (o custo dela vai no relatório da recoleta,
+ * `tempoUtilMs`). Chamada ANTES do retreino: a distância de referência
+ * (`measuredCalibrationDistanceCm`) e a deriva de pose do diagnóstico saem
+ * destas séries.
+ */
+function aplicarTrocaNasSeries(r: RecoletaEmCurso, substituidas: readonly string[]): void {
+  const trocar = new Set(substituidas);
+  const daRodada = registrosDasColetas.slice(r.retrato.sessao.registros.length);
+  const ficam = [
+    ...r.retrato.sessao.registros.filter((c) => !trocar.has(c.chave)),
+    ...daRodada.filter((c) => trocar.has(c.chave)),
+  ];
+  const contar = (f: (c: RegistroDaColeta) => boolean) => ficam.reduce((n, c) => n + (f(c) ? 1 : 0), 0);
+  registrosDasColetas = ficam;
+  tempoUtilPorAlvoMs = ficam.map((c) => c.tempoUtilMs);
+  pontosInstaveis = contar((c) => c.instavel);
+  varianceFloorBreaches = contar((c) => c.varianciaBaixa);
+  varianceCeilBreaches = contar((c) => c.varianciaAlta);
+  specularWarningsIssued = contar((c) => c.reflexo);
+  sessionPoseByTarget = ficam.flatMap((c) => (c.pose ? [c.pose] : []));
+  acceptedDistancesCm = ficam.flatMap((c) => c.distanciasCm);
+}
+
+function restaurarTreino(r: RetratoDoTreino): void {
+  regressorLeft = r.regressorLeft;
+  regressorRight = r.regressorRight;
+  ladoDoModeloEmUso = r.lado;
+  featureScalerLeft.setParams(r.scalerL.means, r.scalerL.stds);
+  featureScalerRight.setParams(r.scalerR.means, r.scalerR.stds);
+  restoreReferenceStateFromProfile(r.referencia);
+  lastFitDiagnostics = r.diagnostico;
+  ultimoResumoDePesos = r.resumoDePesos;
+  ultimoDiagnosticoRobusto = r.diagnosticoRobusto;
+  regressorDoPerfil = r.regressorDoPerfil;
+  devolverSeriesDaSessao(r);
+}
+
+/**
+ * Abre a recoleta dos alvos dados (os de `alvosParaRecoletar`, ou os que a
+ * tela de resultado pediu). Devolve os alvos abertos — a tela coleta cada um
+ * com `startCollectingPoint`, como na calibração — ou lista vazia quando não
+ * dá para recoletar (flag desligada, calibração em curso, perfil que não é o
+ * do modelo em uso, alvo que não está no perfil).
+ *
+ * O modelo em uso NÃO sai: até `concluirRecoletaDeAlvos` decidir, ele continua
+ * valendo, e um cancelamento no meio só descarta as amostras novas.
+ */
+export function iniciarRecoletaDeAlvos(
+  alvos: readonly { x: number; y: number; borda?: boolean; motivos?: AlvoParaRecoletar['motivos'] }[],
+  opcoes?: { automatica?: boolean },
+): { x: number; y: number }[] {
+  if (!podeRecoletarAlvos()) return [];
+  const retrato = retratarTreino();
+  if (!retrato) return [];
+  const geometria = currentCalibrationGeometry();
+  const noPerfil = new Set(alvosNominaisDoPerfil().map((a) => a.chave));
+  const chaves = new Set<string>();
+  const escolhidos: AlvoParaRecoletar[] = [];
+  for (const a of alvos) {
+    if (!Number.isFinite(a.x) || !Number.isFinite(a.y)) continue;
+    const chave = targetGroupKey({ screenX: a.x, screenY: a.y });
+    // Só alvos que JÁ estão no perfil: a recoleta troca amostras; completar a
+    // grade com um alvo que nunca foi coletado é outra conversa (o aviso de
+    // alvos pulados).
+    if (!noPerfil.has(chave) || chaves.has(chave)) continue;
+    chaves.add(chave);
+    escolhidos.push({
+      x: a.x,
+      y: a.y,
+      borda: a.borda ?? !naGradeInterna(a, geometria),
+      motivos: a.motivos ? [...a.motivos] : [],
+    });
+    if (escolhidos.length >= MAXIMO_DE_ALVOS_POR_RODADA) break;
+  }
+  if (escolhidos.length === 0) return [];
+
+  recoletaEmCurso = {
+    automatica: opcoes?.automatica ?? false,
+    alvos: escolhidos,
+    chaves,
+    perfilAntes: profile.slice(),
+    inicio: profile.length,
+    retrato,
+    tempoUtilAntes: tempoUtilPorAlvoMs.length,
+  };
+  isCalibrating = true;
+  sessaoCancelada = false;
+  console.log(
+    `[calib] recoleta ${opcoes?.automatica ? 'automática' : 'pedida'} de ${escolhidos.length} alvo(s): ` +
+    escolhidos.map((a) => `(${(a.x * 100).toFixed(0)}%,${(a.y * 100).toFixed(0)}%) ${a.motivos.join('+') || 'pedido'}`).join('; '),
+  );
+  return escolhidos.map((a) => ({ x: a.x, y: a.y }));
+}
+
+/** Descarta uma rodada aberta sem treinar: as amostras novas saem, o modelo fica. */
+function descartarRecoletaEmCurso(motivo: string): void {
+  const r = recoletaEmCurso;
+  if (!r) return;
+  recoletaEmCurso = null;
+  profile = r.perfilAntes;
+  devolverSeriesDaSessao(r.retrato);
+  console.warn(`[calib] ${motivo}: as amostras da recoleta foram descartadas; a calibração segue a de antes.`);
+}
+
+function lotoDosAlvos(d: CalibrationFitDiagnostics | null): LotoDoAlvo[] {
+  if (!d) return [];
+  const geometria = currentCalibrationGeometry();
+  return d.looByTarget
+    .filter((t) => typeof t.chave === 'string')
+    .map((t) => ({
+      chave: t.chave as string,
+      erroPx: t.errorPx,
+      interno: naGradeInterna(t.alvo ?? t, geometria),
+    }));
+}
+
+/**
+ * Fecha a recoleta: troca as amostras, refaz o treino do zero e decide pela
+ * trava (`decidirAceitacao`). Síncrona como `completeCalibration`, e pelo
+ * mesmo motivo a tela pinta antes de chamar. O resultado — com o antes e o
+ * depois de cada alvo — fica em `getUltimaRecoleta()` e vai no relatório do
+ * teste de precisão (`calibrationFit.recoleta`).
+ *
+ * Nunca deixa o app sem modelo: sem amostras novas, com contraluz forte, com o
+ * treino lançando ou com o LOTO piorando, o modelo de antes volta, o mesmo
+ * objeto, e a saída do `mapGaze` é a de antes bit a bit.
+ */
+export function concluirRecoletaDeAlvos(
+  onComplete?: (r: RelatorioDaRecoleta) => void,
+): RelatorioDaRecoleta {
+  if (collectionTimeoutHandle !== null) {
+    clearTimeout(collectionTimeoutHandle);
+    collectionTimeoutHandle = null;
+  }
+  isCollecting = false;
+  pointCompleteCallback = null;
+
+  const r = recoletaEmCurso;
+  recoletaEmCurso = null;
+  const relatorioVazio = (motivo: RelatorioDaRecoleta['motivo']): RelatorioDaRecoleta => ({
+    automatica: r?.automatica ?? false,
+    em: new Date().toISOString(),
+    alvos: [],
+    aceito: false,
+    motivo,
+    looAntesPx: Number.NaN,
+    looDepoisPx: Number.NaN,
+    looInternoAntesPx: Number.NaN,
+    looInternoDepoisPx: Number.NaN,
+    tempoUtilMs: 0,
+  });
+  if (!r) {
+    isCalibrating = false;
+    const vazio = relatorioVazio('sem_rodada');
+    onComplete?.(vazio);
+    return vazio;
+  }
+
+  const tempoUtilMs = tempoUtilPorAlvoMs.slice(r.tempoUtilAntes).reduce((s, v) => s + v, 0);
+  const novas = profile.slice(r.inicio);
+  const troca = substituirAmostras(r.perfilAntes, novas, grupoDaAmostra, r.chaves, MIN_ACCEPTED_SAMPLES);
+  const qualidadeAntes = qualidadeDoDiagnostico(r.retrato.diagnostico);
+  let qualidadeDepois: QualidadeDoAlvo[] | null = null;
+  let decisao: DecisaoDeAceitacao | null = null;
+  let motivo: RelatorioDaRecoleta['motivo'];
+
+  if (troca.substituidas.length === 0) {
+    motivo = 'sem_amostras';
+  } else if (contraluzForte()) {
+    // A mesma regra do `completeCalibration`: um modelo treinado sob luz forte
+    // atrás da pessoa não valeria depois.
+    motivo = 'contraluz_forte';
+  } else {
+    profile = troca.perfil;
+    // As séries da sessão acompanham a troca das amostras (revisão do pipeline
+    // de 19/10/2026); recusado o modelo, `restaurarTreino` as devolve.
+    aplicarTrocaNasSeries(r, troca.substituidas);
+    let resumo: TrainingSummary | null = null;
+    try {
+      resumo = trainScalersAndRegressors(troca.perfil);
+      qualidadeDepois = qualidadeDoDiagnostico(lastFitDiagnostics);
+      decisao = decidirAceitacao(lotoDosAlvos(r.retrato.diagnostico), lotoDosAlvos(lastFitDiagnostics));
+    } catch (e) {
+      console.warn('[calib] o treino da recoleta falhou; a calibração de antes segue valendo:', e);
+    }
+    motivo = decisao ? decisao.motivo : 'treino_falhou';
+    if (decisao?.aceito && resumo) {
+      // Ficou: é gravado como a calibração era — o mesmo perfil (o mesmo id, o
+      // rótulo, a condição óptica). Gravar é do perfil; o modelo novo já está
+      // em uso de qualquer jeito, e um disco cheio não pode derrubá-lo aqui.
+      //
+      // Com um instante de treino NOVO (revisão do pipeline de 19/10/2026): é
+      // outro modelo. Com o instante de antes, o próximo teste de precisão
+      // contava como repetição do bloco medido no modelo anterior, e a linha
+      // de base do vigia e do alvo mínimo (M18) seguia a dele.
+      try {
+        persistActiveProfileToRegistry(resumo, { instanteNovo: true });
+        saveProfile();
+      } catch (e) {
+        console.warn('[calib] o modelo da recoleta ficou em uso, mas não foi gravado:', e);
+      }
+    }
+  }
+
+  const aceito = decisao?.aceito === true && motivo !== 'treino_falhou';
+  if (!aceito) {
+    profile = r.perfilAntes;
+    restaurarTreino(r.retrato);
+  }
+
+  const medida = (q: QualidadeDoAlvo[] | null, chave: string) => {
+    const a = q?.find((t) => t.chave === chave);
+    return a ? { erroLotoPx: a.erroLotoPx, dispersaoPx: a.dispersaoPx, amostras: a.amostras } : null;
+  };
+  const relatorio: RelatorioDaRecoleta = {
+    automatica: r.automatica,
+    em: new Date().toISOString(),
+    alvos: r.alvos.map((a) => {
+      const chave = targetGroupKey({ screenX: a.x, screenY: a.y });
+      const substituido = troca.substituidas.includes(chave);
+      return {
+        x: a.x,
+        y: a.y,
+        borda: a.borda,
+        motivos: [...a.motivos],
+        antes: medida(qualidadeAntes, chave),
+        depois: substituido ? medida(qualidadeDepois, chave) : null,
+        substituido,
+      };
+    }),
+    aceito,
+    motivo,
+    looAntesPx: decisao?.looAntesPx ?? Number.NaN,
+    looDepoisPx: decisao?.looDepoisPx ?? Number.NaN,
+    looInternoAntesPx: decisao?.looInternoAntesPx ?? Number.NaN,
+    looInternoDepoisPx: decisao?.looInternoDepoisPx ?? Number.NaN,
+    tempoUtilMs,
+  };
+  ultimaRecoleta = relatorio;
+  isCalibrating = false;
+
+  const px = (v: number) => (Number.isFinite(v) ? `${v.toFixed(0)}px` : '—');
+  const linha =
+    `[calib] recoleta de ${relatorio.alvos.length} alvo(s): LOTO ${px(relatorio.looAntesPx)} → ` +
+    `${px(relatorio.looDepoisPx)} (miolo ${px(relatorio.looInternoAntesPx)} → ${px(relatorio.looInternoDepoisPx)}) — ` +
+    (aceito ? 'modelo novo em uso' : `mantida a calibração de antes (${motivo})`);
+  if (aceito) console.log(linha);
+  else console.warn(linha);
+
+  onComplete?.(relatorio);
+  return relatorio;
+}
+
+/** A última recoleta desta calibração, ou `null`. */
+export function getUltimaRecoleta(): RelatorioDaRecoleta | null {
+  return ultimaRecoleta;
 }
 
 /**
@@ -4084,6 +5235,9 @@ function amostrasDoRuido(perfil: readonly CalibrationPoint[], vw: number, vh: nu
 }
 
 function trainScalersAndRegressors(perfilColetado: CalibrationPoint[]): TrainingSummary {
+  // O treino e o diagnóstico travam a thread por segundos: o vigia de página
+  // travada desarma até a próxima volta do laço (ver ./trabalhoLongo.ts).
+  avisarTrabalhoLongo();
   // Calibração robusta (M6), camada do QUADRO: dentro de cada alvo, quadro a
   // mais de 4·1,4826·MAD da mediana em alguma feature sai do treino, e entre 3
   // e 4 entra com peso menor, numa rampa. Sai de tudo o que vem depois —
@@ -4140,9 +5294,12 @@ function trainScalersAndRegressors(perfilColetado: CalibrationPoint[]): Training
     : null;
 
   // Falha cedo se mais de 30% das dimensões não variam entre alvos: o modelo
-  // linear não teria sinal e devolveria o viés.
-  const deadL = countDeadFeatures(trainFeaturesLeft, trainTargets);
-  const deadR = countDeadFeatures(trainFeaturesRight, trainTargets);
+  // linear não teria sinal e devolveria o viés. Agrupado pelo alvo NOMINAL de
+  // cada amostra: `trainTargets` já vem compensado por pose, uma coordenada por
+  // amostra, e agrupar por ele media tremor em vez de sinal (A5).
+  const gruposDoTreino = trainingProfile.map(grupoDaAmostra);
+  const deadL = countDeadFeatures(trainFeaturesLeft, trainTargets, DEAD_FEATURE_VARIANCE_EPS, gruposDoTreino);
+  const deadR = countDeadFeatures(trainFeaturesRight, trainTargets, DEAD_FEATURE_VARIANCE_EPS, gruposDoTreino);
   const ratioL = deadL.totalDims > 0 ? deadL.deadCount / deadL.totalDims : 0;
   const ratioR = deadR.totalDims > 0 ? deadR.deadCount / deadR.totalDims : 0;
   console.log(
@@ -4151,11 +5308,21 @@ function trainScalersAndRegressors(perfilColetado: CalibrationPoint[]): Training
     `R=${deadR.deadCount}/${deadR.totalDims} (${(ratioR * 100).toFixed(0)}%)`,
   );
   if (ratioL > DEAD_FEATURE_MAX_RATIO || ratioR > DEAD_FEATURE_MAX_RATIO) {
+    // Um bloco angular zerado em TODAS as amostras não é reflexo nem olhar
+    // fora do alvo: é o modelo do olhar (L2CS ou EyeNet) que não respondeu
+    // durante a coleta. A tela não pode mandar a pessoa tirar os óculos por
+    // isso (relato de 19/10/2026, auditoria A3) — a marca vai no detalhe e o
+    // `classifyTrainingError` a transforma em `causa`.
+    const slotsSemResposta = slotsAngularesNoConjunto().filter((s) =>
+      trainFeaturesLeft.every((f) => f[s] === 0) && trainFeaturesRight.every((f) => f[s] === 0));
     throw new Error(
       `[calib] degenerate_features: mais de ${(DEAD_FEATURE_MAX_RATIO * 100).toFixed(0)}% das dimensões ` +
       `não variam entre alvos (L=${(ratioL * 100).toFixed(0)}% R=${(ratioR * 100).toFixed(0)}%). ` +
-      `Causa provável: reflexo travando landmarks de íris, ou face fixa fora do alvo. ` +
-      `Recalibre com atenção especial ao enquadramento e à luz.`,
+      (slotsSemResposta.length > 0
+        ? `As dimensões angulares ${slotsSemResposta.join(', ')} ficaram zeradas em todas as amostras: ` +
+          `o modelo do olhar não respondeu durante a coleta [${CAUSA_BLOCO_ANGULAR_ZERADO}].`
+        : `Causa provável: reflexo travando landmarks de íris, ou face fixa fora do alvo. ` +
+          `Recalibre com atenção especial ao enquadramento e à luz.`),
     );
   }
 
@@ -4224,6 +5391,11 @@ function trainScalersAndRegressors(perfilColetado: CalibrationPoint[]): Training
     regressorRight = createRegressor();
     regressorRight.train(scaledFeaturesRight, targetsX, targetsY, gruposDeAlvo, undefined, pesosDeQualidade);
   }
+  // As amostras são todas do lado em vigor: uma mudança de lado no meio da
+  // coleta interrompe a sessão (`setL2csInputSizeEfetivo`). Modelo novo no
+  // lado de agora: a suspensão pelo recorte, se havia, acaba aqui.
+  ladoDoModeloEmUso = l2csInputSizeEfetivo;
+  reavaliarSuspensaoPorRecorte();
 
   // Peso por olho pelo inverso da variância do resíduo de treino. Com olhos
   // igualmente bons dá ~0,5/0,5; um olho ruim deixa de arrastar a média.
@@ -4299,11 +5471,20 @@ function trainScalersAndRegressors(perfilColetado: CalibrationPoint[]): Training
   // `mapGaze` a aplica (depois de pose e translação).
   ajustarCorrecaoDosCantos(trainingProfile, gruposDeAlvo, vw, vh);
 
+  // Amostras COLETADAS por alvo, antes do filtro robusto por quadro (M6) —
+  // revisão do pipeline de 19/10/2026: é contra o mínimo da COLETA que a
+  // recoleta julga "poucas amostras" (ver `qualidadeDoDiagnostico`).
+  const coletadasPorAlvo = new Map<string, number>();
+  for (const p of perfilColetado) {
+    const k = grupoDaAmostra(p);
+    coletadasPorAlvo.set(k, (coletadasPorAlvo.get(k) ?? 0) + 1);
+  }
   lastFitDiagnostics = computeFitDiagnostics(
     trainFeaturesLeft, trainFeaturesRight, trainTargets, trainingProfile,
     { w: vw, h: vh },
     pesosDoLoo,
     loo,
+    coletadasPorAlvo,
   );
 
   // Ruído de fixação (M9/M15): a variação da predição em torno da média de
@@ -4349,6 +5530,9 @@ function trainScalersAndRegressors(perfilColetado: CalibrationPoint[]): Training
     if (veredito) console.warn(`[calib] ⚠️ ${veredito.mensagem}`);
   }
 
+  // Estas amostras produziram o modelo em uso: só agora a recoleta pode
+  // trocar amostras delas e retreinar (ver `regressorDoPerfil`).
+  regressorDoPerfil = regressorLeft;
   return { deadFeaturesLeftPct: ratioL, deadFeaturesRightPct: ratioR };
 }
 
@@ -4480,6 +5664,13 @@ export function computeFitDiagnostics(
   pesosPorAmostra?: { left: readonly number[]; right: readonly number[] },
   /** LOO já calculado pelo treino (é o mesmo cálculo; evita refazê-lo). */
   looPronto?: LooPorOlho,
+  /**
+   * Amostras COLETADAS por alvo (chave do grupo), antes do filtro robusto por
+   * quadro (M6). Presente, vai em `looByTarget[].amostrasColetadas` — o número
+   * que a recoleta compara com o mínimo da coleta (revisão do pipeline de
+   * 19/10/2026).
+   */
+  amostrasColetadas?: ReadonlyMap<string, number>,
 ): CalibrationFitDiagnostics {
   const n = featuresLeft.length;
   const vw = viewport?.w ?? (typeof document !== 'undefined' ? document.documentElement.clientWidth : 1920);
@@ -4488,6 +5679,8 @@ export function computeFitDiagnostics(
   const fundir = (a: { x: number; y: number }, b: { x: number; y: number }) => fundirOlhos(a, b, undefined, false);
 
   let trainErrorPx = 0;
+  // Resíduo de treino de cada amostra, em px, para a dispersão por alvo.
+  const residuoPx: ({ x: number; y: number } | null)[] = new Array(n).fill(null);
   if (n > 0 && regressorLeft && regressorRight) {
     let sum = 0;
     for (let i = 0; i < n; i++) {
@@ -4496,6 +5689,7 @@ export function computeFitDiagnostics(
         regressorRight.predict(featureScalerRight.transformSingle(maybeExpandSingle(featuresRight[i]))),
       );
       sum += errPx(p.x - targets[i].screenX, p.y - targets[i].screenY);
+      residuoPx[i] = { x: (p.x - targets[i].screenX) * vw, y: (p.y - targets[i].screenY) * vh };
     }
     trainErrorPx = sum / n;
   }
@@ -4504,14 +5698,44 @@ export function computeFitDiagnostics(
   const keys = [...loo.porAlvo.keys()];
   const samplesPerTarget = keys.map((k) => loo.porAlvo.get(k)!.length);
 
+  /**
+   * Dispersão da fixação no alvo (relato de 19/10/2026, recoleta dos alvos
+   * ruins): RMS da predição em volta da média dela, no modelo treinado. Sobre o
+   * RESÍDUO, e não sobre a predição crua, porque o alvo de treino de cada
+   * amostra vem compensado pela pose dela: o que sobra de variação é a do
+   * olhar, não a da cabeça. Não é otimista como o resíduo: não mede acertar o
+   * alvo, mede se a predição ficou parada — o tremor que o cursor teria ali.
+   */
+  const dispersaoDoAlvo = (indices: readonly number[]): number | undefined => {
+    const r = indices.map((i) => residuoPx[i]).filter((v): v is { x: number; y: number } => v !== null);
+    if (r.length < 2) return undefined;
+    const mx = r.reduce((s, v) => s + v.x, 0) / r.length;
+    const my = r.reduce((s, v) => s + v.y, 0) / r.length;
+    const d = Math.sqrt(r.reduce((s, v) => s + (v.x - mx) ** 2 + (v.y - my) ** 2, 0) / r.length);
+    return Number.isFinite(d) ? d : undefined;
+  };
+
   const looByTarget: CalibrationFitDiagnostics['looByTarget'] = [];
   let looSum = 0, looCount = 0;
   if (keys.length >= 3) {
     for (const k of keys) {
       const test = loo.porAlvo.get(k)!;
       const alvo = { x: targets[test[0]].screenX, y: targets[test[0]].screenY };
+      const nominal = profile && profile[test[0]]
+        ? { x: profile[test[0]].screenX, y: profile[test[0]].screenY }
+        : undefined;
+      const coletadas = amostrasColetadas?.get(k);
+      const extras = {
+        chave: k,
+        ...(nominal ? { alvo: nominal } : {}),
+        ...(coletadas !== undefined ? { amostrasColetadas: coletadas } : {}),
+        ...(() => {
+          const d = dispersaoDoAlvo(test);
+          return d === undefined ? {} : { dispersaoPx: d };
+        })(),
+      };
       if (test.some((i) => !loo.esquerdo[i] || !loo.direito[i])) {
-        looByTarget.push({ ...alvo, errorPx: NaN, samples: test.length });
+        looByTarget.push({ ...alvo, errorPx: NaN, samples: test.length, ...extras });
         continue;
       }
       let s = 0;
@@ -4520,7 +5744,7 @@ export function computeFitDiagnostics(
         s += errPx(p.x - targets[i].screenX, p.y - targets[i].screenY);
       }
       const e = s / test.length;
-      looByTarget.push({ ...alvo, errorPx: e, samples: test.length });
+      looByTarget.push({ ...alvo, errorPx: e, samples: test.length, ...extras });
       looSum += e; looCount++;
     }
   }
@@ -4893,10 +6117,21 @@ function medianOf(values: readonly number[]): number {
   return s.length % 2 === 0 ? (s[m - 1] + s[m]) / 2 : s[m];
 }
 
+/** Marca, no detalhe de `degenerate_features`, de que a causa é o modelo do olhar. */
+const CAUSA_BLOCO_ANGULAR_ZERADO = 'bloco_angular_zerado';
+
 // Outcome tipado. O chamador sabe se a UI deve mostrar "Calibração Concluída"
 // (só se ok=true) ou uma tela de falha com a razão específica.
 export type CalibrationOutcome =
-  | { ok: true }
+  | {
+      ok: true;
+      /**
+       * `false`: treinou e vale nesta sessão, mas o disco recusou a gravação —
+       * a próxima abertura não terá esta calibração. Ausente = gravada (ou
+       * persistência desligada de propósito). Relato de 18/10/2026, item 15.
+       */
+      salvo?: false;
+    }
   | {
       ok: false;
       reason:
@@ -4905,8 +6140,15 @@ export type CalibrationOutcome =
         | 'degenerate_features'      // preflight (>30% features mortas)
         | 'engine_indisponivel'      // a tela pediu treino sem engine ativo
         | 'contraluz_forte'          // luz forte atrás da pessoa no fim da coleta: não grava perfil
+        | 'sessao_cancelada'         // a coleta foi cancelada antes do treino (ver `sessaoCancelada`)
         | 'unknown';
       detail: string;
+      /**
+       * Causa conhecida dentro da razão. `bloco_angular_zerado`: as features
+       * morreram porque o modelo do olhar (L2CS ou EyeNet) não respondeu na
+       * coleta — a tela fala do modelo, não do reflexo dos óculos (19/10/2026).
+       */
+      causa?: 'bloco_angular_zerado';
     };
 
 // Classificação de exceções do treino em um CalibrationOutcome.
@@ -4924,7 +6166,9 @@ function classifyTrainingError(e: unknown, sampleCount: number): CalibrationOutc
     return { ok: false, reason: 'insufficient_samples', detail };
   }
   if (/degenerate_features/i.test(detail)) {
-    return { ok: false, reason: 'degenerate_features', detail };
+    return detail.includes(CAUSA_BLOCO_ANGULAR_ZERADO)
+      ? { ok: false, reason: 'degenerate_features', detail, causa: CAUSA_BLOCO_ANGULAR_ZERADO }
+      : { ok: false, reason: 'degenerate_features', detail };
   }
   if (/matriz singular/i.test(detail)) {
     return { ok: false, reason: 'singular_matrix', detail };
@@ -4935,6 +6179,16 @@ function classifyTrainingError(e: unknown, sampleCount: number): CalibrationOutc
 export function completeCalibration(
   onComplete?: (outcome: CalibrationOutcome) => void,
 ) {
+  // A sessão foi cancelada e nenhuma outra começou (revisão do pipeline de
+  // 20/10/2026; ver `sessaoCancelada`): treinar agora poria em uso o modelo das
+  // amostras dela por cima da calibração que o abort devolveu. Nada muda — nem
+  // o modelo em uso, nem o perfil, nem o disco.
+  if (sessaoCancelada) {
+    const detalhe = 'a coleta foi cancelada antes do treino; nada foi treinado nem gravado.';
+    console.warn(`[calib] treino recusado: ${detalhe}`);
+    onComplete?.({ ok: false, reason: 'sessao_cancelada', detail: detalhe });
+    return;
+  }
   // Cancel any pending collection timeout before finalising
   if (collectionTimeoutHandle !== null) {
     clearTimeout(collectionTimeoutHandle);
@@ -4981,7 +6235,9 @@ export function completeCalibration(
     // gravado — na ordem inversa o perfil recém-treinado só chegaria ao disco
     // na calibração seguinte.
     persistActiveProfileToRegistry(summary);
-    saveProfile();
+    // A gravação que falha não passa mais por salva: o desfecho diz, e a tela
+    // avisa (relato de 18/10/2026, item 15).
+    const salvo = saveProfile();
     // O modelo novo tomou o lugar: o retrato do anterior não serve mais.
     modeloAntesDaCalibracao = null;
     // O instante do treino NÃO é `Date.now()` aqui: é o `createdAt` do perfil
@@ -4992,7 +6248,7 @@ export function completeCalibration(
     // e o caminho de RESTAURAÇÃO (app reaberto) só tem o `createdAt` para ler.
     // Com duas fontes, fechar e reabrir o app fazia o bloco 2 se apresentar
     // como bloco 1 contra o mesmo modelo.
-    outcome = { ok: true };
+    outcome = salvo ? { ok: true } : { ok: true, salvo: false };
   } catch (e) {
     const failure = classifyTrainingError(e, profile.length);
     outcome = failure;
@@ -5013,6 +6269,7 @@ export function completeCalibration(
       if (b.left && b.right) {
         regressorLeft = ridgeRegressorFromModel(b.left);
         regressorRight = ridgeRegressorFromModel(b.right);
+        ladoDoModeloEmUso = b.lado ?? l2csInputSizeEfetivo;
         featureScalerLeft.setParams(b.scalerL.means, b.scalerL.stds);
         featureScalerRight.setParams(b.scalerR.means, b.scalerR.stds);
         restoreReferenceStateFromProfile(b.referencia);
@@ -5041,15 +6298,26 @@ export function completeCalibration(
 // Extrai um snapshot serializável do estado atual e enfileira no registry sob
 // a meta pendente. Chamador (completeCalibration) só invoca quando o treino
 // terminou sem exceção.
-function persistActiveProfileToRegistry(summary: TrainingSummary): void {
+function persistActiveProfileToRegistry(
+  summary: TrainingSummary,
+  /**
+   * `instanteNovo`: o modelo trocou dentro do MESMO perfil (a recoleta aceita)
+   * — o `createdAt`, fonte única do instante do treino, passa a ser agora
+   * (revisão do pipeline de 19/10/2026; ver `concluirRecoletaDeAlvos`).
+   */
+  opcoes?: { instanteNovo?: boolean },
+): void {
   const modelL = regressorLeft ? ridgeModelFromRegressor(regressorLeft) : null;
   const modelR = regressorRight ? ridgeModelFromRegressor(regressorRight) : null;
   if (!modelL || !modelR) {
     console.warn('[calib] persistActiveProfileToRegistry: regressors ausentes; nada a salvar.');
     return;
   }
-  const meta = pendingProfileMeta ?? ultimaMetaPersistida
+  const metaDeAntes = pendingProfileMeta ?? ultimaMetaPersistida
     ?? profileRegistry.createMeta({ opticalCondition: 'desconhecido' });
+  const meta: CalibrationProfileMeta = opcoes?.instanteNovo
+    ? { ...metaDeAntes, createdAt: new Date().toISOString() }
+    : metaDeAntes;
   pendingProfileMeta = null;
   // Guardada para a rodada de reforço: ela chama `completeCalibration` uma
   // segunda vez, e `pendingProfileMeta` já foi consumida na primeira. Sem
@@ -5171,6 +6439,8 @@ export function switchActiveProfile(id: string): CalibrationProfileMeta | null {
   reiniciarCorrecao();
   regressorLeft = ridgeRegressorFromModel(stored.modelLeft);
   regressorRight = ridgeRegressorFromModel(stored.modelRight);
+  // A chave conferida acima é a do contexto em vigor: o lado é o de agora.
+  ladoDoModeloEmUso = l2csInputSizeEfetivo;
   featureScalerLeft.setParams(stored.scalerParamsLeft.means, stored.scalerParamsLeft.stds);
   featureScalerRight.setParams(stored.scalerParamsRight.means, stored.scalerParamsRight.stds);
   // A referência acompanha a troca de perfil: manter a `eyeReliability` do
@@ -5295,8 +6565,10 @@ export function init() {
     deadFeatures: () => {
       if (profile.length === 0) return null;
       const targets = profile.map(p => ({ screenX: p.screenX, screenY: p.screenY }));
-      const left = countDeadFeatures(profile.map(p => p.featuresLeft), targets);
-      const right = countDeadFeatures(profile.map(p => p.featuresRight), targets);
+      // O mesmo agrupamento do treino (alvo nominal; a perseguição tem `grupo`).
+      const grupos = profile.map(grupoDaAmostra);
+      const left = countDeadFeatures(profile.map(p => p.featuresLeft), targets, undefined, grupos);
+      const right = countDeadFeatures(profile.map(p => p.featuresRight), targets, undefined, grupos);
       return {
         left: { count: left.deadCount, total: left.totalDims, pct: left.totalDims ? left.deadCount / left.totalDims : 0 },
         right: { count: right.deadCount, total: right.totalDims, pct: right.totalDims ? right.deadCount / right.totalDims : 0 },
@@ -5359,6 +6631,25 @@ export function getTermosDaUltimaPredicao(): TermosDaPredicao | null {
 let _mapGazeConsecutiveErrors = 0;
 let _mapGazeLastLoggedMs = 0;
 const MAP_GAZE_LOG_INTERVAL_MS = 1000;
+
+/** Predições não finitas desde o último aviso, e quando ele saiu. */
+let predicoesNaoFinitas = 0;
+let ultimoAvisoDeNaoFinitaMs = -Infinity;
+/** Um aviso a cada 5 s, com a contagem: a falha costuma ser por quadro. */
+const INTERVALO_DO_AVISO_DE_NAO_FINITA_MS = 5000;
+
+function avisarPredicaoNaoFinita(p: { x: number; y: number }): void {
+  predicoesNaoFinitas++;
+  const agora = performance.now();
+  if (agora - ultimoAvisoDeNaoFinitaMs < INTERVALO_DO_AVISO_DE_NAO_FINITA_MS) return;
+  ultimoAvisoDeNaoFinitaMs = agora;
+  console.error(
+    `[calib] predição não finita (x=${p.x}, y=${p.y}) — ${predicoesNaoFinitas} desde o último aviso. ` +
+    'O quadro não vira posição: o engine marca o rastreamento como degradado. Causa provável: ' +
+    'feature não finita ou modelo com números inválidos; calibrar de novo resolve o segundo caso.',
+  );
+  predicoesNaoFinitas = 0;
+}
 
 /** Nunca zera um olho: mantém alguma contribuição. */
 const MIN_EYE_WEIGHT = 0.05;
@@ -5489,6 +6780,16 @@ export function mapGaze(
   // geométricas, porque foi medida depois delas; antes do dwell, porque o dwell
   // aprende o que SOBRA. Longe dos cantos ela vale ~0.
   const comCantos = EXPERIMENT.correcaoLocal ? aplicarCorrecaoLocal(correcaoLocal, comPose) : comPose;
+  // Predição não finita não é um ponto da tela (relato de 19/10/2026). Antes
+  // ela seguia até o clamp, que devolve 0,5 para NaN: o cursor ia para o
+  // CENTRO como se fosse leitura, com o estado em `tracking`, e o dwell podia
+  // acionar o botão do centro. `null` é a resposta honesta — liga o timer de
+  // degradação no engine. Conferido ANTES de gravar `ultimaPredicaoSemCorrecao`
+  // e de chamar a correção por dwell: nenhum estado guarda o NaN.
+  if (!Number.isFinite(comCantos.x) || !Number.isFinite(comCantos.y)) {
+    avisarPredicaoNaoFinita(comCantos);
+    return null;
+  }
   ultimaPredicaoSemCorrecao = comCantos;
 
   const comDwell = corrigirPorDwell({ x: comCantos.x, y: comCantos.y }, performance.now(), {
@@ -5497,6 +6798,10 @@ export function mapGaze(
     distanciaPx: screenDistancePx(),
     rho1: ruidoDaCalibracao?.rho1 ?? null,
   });
+  if (!Number.isFinite(comDwell.x) || !Number.isFinite(comDwell.y)) {
+    avisarPredicaoNaoFinita(comDwell);
+    return null;
+  }
 
   // Registrado ANTES do clamp: depois dele a informação some, e é exatamente
   // essa informação que explica o cursor parado na borda.

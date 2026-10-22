@@ -1,22 +1,20 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Check, X, Volume2, Keyboard, MessageSquare, Cloud, CloudOff, LogIn, Sparkles, ChevronRight } from 'lucide-react';
+import { Check, X, Volume2, Keyboard, MessageSquare, Cloud, CloudOff, LogIn, ChevronRight } from 'lucide-react';
 import { GazePageLayout } from '../../components/ui/GazePageLayout';
 import { GazeGrid } from '../../components/ui/GazeGrid';
 import { GazeButton } from '../../components/ui/GazeButton';
 import { EstadoVazio } from '../../components/ui/EstadoDaTela';
 import { useCloud } from '../../cloud/CloudContext';
 import { emitirFalaDoPaciente } from '../../cloud/eventos';
-import { falar } from '../../services/voz';
-import {
-  registrarFalaDoPaciente,
-  sugerirFrases,
-  ultimaPerguntaDoCuidador,
-} from '../../services/assistente';
+import { falarDoPaciente } from '../../services/voz/falaDoPaciente';
+import { registrarFalaDoPaciente, ultimaMensagemDoCuidador } from '../../services/assistente';
 import type { Message } from '../../cloud/types';
 import { DicaContextual } from '../../components/ui/DicaContextual';
 import { FaixaDeMissao } from '../../components/FaixaDeMissao';
+import { RespostasSugeridas } from '../../components/RespostasSugeridas';
+import { faixaCabeNaColuna } from '../../components/planoDaFaixaDeRespostas';
 import { cumprirMissao } from '../tutorial/missao';
 import { alvoMinimoPx } from '../../design/gazeMetrics';
 import { planejarRespostas, VAO, VAO_TOPO } from './planoDasRespostas';
@@ -32,6 +30,16 @@ import { planejarRespostas, VAO, VAO_TOPO } from './planoDasRespostas';
 
 const RESPOSTAS_PADRAO = ['Estou bem', 'Preciso de ajuda', 'Obrigado', 'Depois', 'Estou com sede', 'Quero descansar'];
 
+/** As respostas que a tela já tem como botão grande fixo: a faixa de sugestões não as repete. */
+const BOTOES_FIXOS = ['Sim', 'Não'];
+
+/**
+ * Até quantos px do fim ainda conta como "no fim" do registro de mensagens: a
+ * rolagem fica fracionária em escala 125% ou 150% do Windows, e um pixel de
+ * diferença não pode soltar o registro do fim.
+ */
+const MARGEM_DO_FIM_PX = 8;
+
 const hora = (iso: string) => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -41,17 +49,46 @@ export const ConversationScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const cloud = useCloud();
-  const listaRef = useRef<HTMLDivElement>(null);
+  // O registro de mensagens. Ref por callback: ele só existe com vínculo, e os efeitos
+  // abaixo precisam saber quando ele aparece.
+  const [lista, setLista] = useState<HTMLDivElement | null>(null);
+  /** O registro está no fim? Começa verdadeiro (ele abre no fim); só a rolagem da pessoa desliga. */
+  const noFim = useRef(true);
 
   useEffect(() => {
     if (cloud.vinculo) void cloud.carregarConversa();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cloud.vinculo?.device_id]);
 
+  // A pergunta nova está sempre no fim do registro, e mensagem nova leva até lá.
   useEffect(() => {
-    const el = listaRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [cloud.mensagens.length]);
+    if (!lista) return;
+    lista.scrollTop = lista.scrollHeight;
+    noFim.current = true;
+  }, [cloud.mensagens.length, lista]);
+
+  // O registro também muda de altura SEM mensagem nova: a faixa de sugestões entra e sai
+  // (a dica "Entendi" foi dispensada, a janela cresceu, "Mostrar de novo"). Quando ele
+  // encolhe, o navegador deixa a rolagem onde estava e não avisa: medido num Chromium
+  // (1280x720, notebook de 15,6", 21/10/2026), o registro que cabia inteiro (rolagem 0)
+  // encolheu com a faixa e a pergunta — a última mensagem — foi para baixo da dobra. Quem
+  // estava no fim continua no fim; quem rolou para reler uma mensagem antiga não é puxado.
+  useEffect(() => {
+    if (!lista) return;
+    const aoRolar = () => {
+      noFim.current = lista.scrollHeight - lista.scrollTop - lista.clientHeight <= MARGEM_DO_FIM_PX;
+    };
+    lista.addEventListener('scroll', aoRolar, { passive: true });
+    if (typeof ResizeObserver === 'undefined') return () => lista.removeEventListener('scroll', aoRolar);
+    const ro = new ResizeObserver(() => {
+      if (noFim.current) lista.scrollTop = lista.scrollHeight;
+    });
+    ro.observe(lista);
+    return () => {
+      lista.removeEventListener('scroll', aoRolar);
+      ro.disconnect();
+    };
+  }, [lista]);
 
   const respostasRapidas = useMemo(() => {
     const remotas = cloud.frasesRemotas.map((f) => f.text).filter(Boolean);
@@ -59,34 +96,28 @@ export const ConversationScreen: React.FC = () => {
   }, [cloud.frasesRemotas]);
 
   /**
-   * A pergunta que ainda está no ar. Some assim que o paciente responde — o
-   * assistente não deve continuar oferecendo "Sim, por favor" para uma pergunta
-   * que já foi respondida.
+   * A mensagem do cuidador que ainda espera resposta. Some assim que o paciente
+   * responde — o assistente não deve continuar oferecendo "Sim, por favor" para
+   * uma pergunta que já foi respondida. É a mensagem inteira (e não só o texto)
+   * porque a faixa de sugestões conta uma vez por mensagem e precisa do tipo.
    */
-  const perguntaNoAr = useMemo(() => ultimaPerguntaDoCuidador(cloud.mensagens), [cloud.mensagens]);
-
+  const mensagemNoAr = useMemo(() => ultimaMensagemDoCuidador(cloud.mensagens), [cloud.mensagens]);
+  const perguntaNoAr = mensagemNoAr?.text;
   /**
-   * Seis alvos, uma decisão de prioridade: enquanto há pergunta no ar, as
-   * sugestões do assistente ocupam a frente e as frases rápidas completam o
-   * resto. Sem pergunta, valem as frases que o cuidador cadastrou — elas são
-   * escolha humana e ganham de qualquer heurística.
+   * A mensagem que o paciente já respondeu aqui. A faixa de sugestões não volta
+   * para ela, mesmo que a resposta demore a aparecer na lista (sem internet ela
+   * não volta do celular): botões parados na tela depois de a pergunta ser
+   * respondida convidam a dizer a mesma coisa duas vezes.
    */
-  const respostas = useMemo(() => {
-    const sugeridas = perguntaNoAr
-      ? sugerirFrases({ mensagemDoCuidador: perguntaNoAr, maximo: 4 }).map((s) => s.texto)
-      : [];
-    const vistas = new Set(sugeridas.map((t) => t.toLowerCase()));
-    const complemento = respostasRapidas.filter((r) => !vistas.has(r.toLowerCase()));
-    return {
-      itens: [...sugeridas, ...complemento].slice(0, 6),
-      sugeridas: new Set(sugeridas),
-    };
-  }, [perguntaNoAr, respostasRapidas]);
+  const [respondidaId, setRespondidaId] = useState<string | null>(null);
 
   const responder = (texto: string, kind: Message['kind']) => {
+    if (mensagemNoAr) setRespondidaId(mensagemNoAr.id);
     emitirFalaDoPaciente(texto, kind);
-    // Resposta do paciente: sai na voz dele (clonada) quando houver.
-    void falar(texto, { rate: 1 }).catch((e) => console.warn('[voz] falha ao falar:', e));
+    // Resposta do paciente: sai na voz dele (clonada) quando houver. Se nada
+    // sair em voz alta, a resposta aparece em letra grande na tela (relato de
+    // 18/10/2026, item 5); ao celular do cuidador ela vai de qualquer jeito.
+    void falarDoPaciente(texto, { rate: 1 });
     // O assistente aprende PARA QUE pergunta esta resposta serviu — é o que faz
     // a décima vez custar uma fixação em vez de uma frase inteira.
     registrarFalaDoPaciente(texto, perguntaNoAr);
@@ -113,12 +144,33 @@ export const ConversationScreen: React.FC = () => {
     return () => ro.disconnect();
   }, [coluna]);
 
-  // Escrever, as frases e Repetir, nessa ordem: nas páginas, as sugestões da
-  // pergunta no ar vêm logo depois de Escrever.
-  const quantidadeDeAlvos = respostas.itens.length + 2;
+  // A coluna da esquerda (registro de mensagens + faixa de sugestões) é medida
+  // para a faixa não tirar do registro o espaço da pergunta — a conta está em
+  // `planoDaFaixaDeRespostas.ts`. A altura dela vem da grade da tela, e não do
+  // conteúdo, então não oscila quando a faixa entra ou sai.
+  const [esquerda, setEsquerda] = useState<HTMLDivElement | null>(null);
+  const [alturaDaEsquerda, setAlturaDaEsquerda] = useState(0);
+  useLayoutEffect(() => {
+    if (!esquerda || typeof ResizeObserver === 'undefined') return;
+    const medir = () => setAlturaDaEsquerda((a) => (a === esquerda.clientHeight ? a : esquerda.clientHeight));
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(esquerda);
+    return () => ro.disconnect();
+  }, [esquerda]);
+  // Antes da primeira medida cabe: a faixa reserva o espaço dela desde o primeiro
+  // quadro, para o registro não mudar de tamanho depois de a pergunta já estar
+  // no fim dele (rolada para a vista). Só é contada como "mostrada" quando os
+  // alvos são desenhados, e isso só acontece depois da medida da largura — que
+  // vem na mesma passada desta, antes da pintura.
+  const faixaCabe = faixaCabeNaColuna({ alturaDaColuna: alturaDaEsquerda, piso: alvoMinimoPx() });
+
+  // Escrever, as frases e Repetir, nessa ordem. As respostas sugeridas pelo
+  // assistente não entram aqui: têm a faixa própria, ao lado da pergunta.
+  const quantidadeDeAlvos = respostasRapidas.length + 2;
   const plano = planejarRespostas({ ...caixa, piso: alvoMinimoPx(), quantidade: quantidadeDeAlvos });
   const [pagina, setPagina] = useState(0);
-  const chaveDasFrases = respostas.itens.join('|');
+  const chaveDasFrases = respostasRapidas.join('|');
   // Frases novas (outra pergunta) ou outro tamanho de página: volta ao começo.
   useEffect(() => setPagina(0), [chaveDasFrases, plano.porPagina]);
 
@@ -173,32 +225,14 @@ export const ConversationScreen: React.FC = () => {
       </div>
     </GazeButton>
   );
-  const frases = respostas.itens.map((r) => {
-    const sugerida = respostas.sugeridas.has(r);
-    return (
-      <GazeButton
-        key={`frase:${r}`}
-        onClick={() => responder(r, 'frase')}
-        style={{
-          height: '100%',
-          borderRadius: '1.25rem',
-          // A sugestão do assistente se distingue por um contorno
-          // âmbar, não por cor de fundo: o paciente precisa saber
-          // de onde veio a frase sem que o alvo mude de peso visual.
-          ...(sugerida ? { border: '3px solid var(--color-accent)' } : {}),
-        }}
-      >
-        <span style={{ fontSize: '1.15rem', fontWeight: 700, padding: '0 0.5rem', textAlign: 'center' }}>
-          {sugerida ? (
-            <Sparkles size={18} color="var(--color-accent)" style={{ verticalAlign: '-3px', marginRight: 6 }} />
-          ) : (
-            <MessageSquare size={18} style={{ verticalAlign: '-3px', marginRight: 6 }} />
-          )}
-          {r}
-        </span>
-      </GazeButton>
-    );
-  });
+  const frases = respostasRapidas.map((r) => (
+    <GazeButton key={`frase:${r}`} onClick={() => responder(r, 'frase')} style={{ height: '100%', borderRadius: '1.25rem' }}>
+      <span style={{ fontSize: '1.15rem', fontWeight: 700, padding: '0 0.5rem', textAlign: 'center' }}>
+        <MessageSquare size={18} style={{ verticalAlign: '-3px', marginRight: 6 }} />
+        {r}
+      </span>
+    </GazeButton>
+  ));
   const repetir = (
     <GazeButton key="repetir" onClick={() => cloud.repetirUltimaMensagem()} style={{ height: '100%', borderRadius: '1.5rem' }} aria-label="Repetir a última mensagem em voz alta">
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
@@ -277,12 +311,16 @@ export const ConversationScreen: React.FC = () => {
         {/* `minmax(0, 1fr)` na linha: sem ele a linha crescia até caber as
             grades inteiras e o excedente saía cortado embaixo da tela. */}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 1fr)', gridTemplateRows: 'minmax(0, 1fr)', gap: '1.5rem', flex: 1, minHeight: 0 }}>
-          {/* mensagens */}
+          {/* mensagens, e logo abaixo as respostas sugeridas: a pergunta e as
+              respostas possíveis ficam juntas, e a coluna de Sim/Não e frases à
+              direita não perde altura quando a faixa aparece. */}
+          <div ref={setEsquerda} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: 0 }}>
           <div
-            ref={listaRef}
+            ref={setLista}
             role="log"
             aria-label="Mensagens"
             style={{
+              flex: 1, minHeight: 0,
               overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem',
               padding: '1rem', borderRadius: 'var(--radius-lg)',
               background: 'var(--color-card-bg)',
@@ -319,6 +357,14 @@ export const ConversationScreen: React.FC = () => {
                 </div>
               );
             })}
+          </div>
+            {/* Só oferece: quem fala é `responder`, depois da escolha do paciente. */}
+            <RespostasSugeridas
+              mensagem={!faixaCabe || mensagemNoAr?.id === respondidaId ? undefined : mensagemNoAr}
+              aoEscolher={(resposta) => responder(resposta, 'frase')}
+              aoNenhuma={() => navigate('/keyboard')}
+              jaNaTela={BOTOES_FIXOS}
+            />
           </div>
 
           {/* respostas */}

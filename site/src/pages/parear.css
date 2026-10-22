@@ -1,0 +1,21 @@
+/* /parear: a página é curta, mas segue o ritmo das outras. O título não nasce
+   colado no menu fixo, a lista numerada fica dentro da margem e o fim da página
+   tem um caminho (auditoria de 21/10/2026, P3-11). */
+.parear {
+  padding-block: calc(var(--header-h) + var(--sp-8)) var(--sp-9);
+}
+
+.parear__passos {
+  margin: 0;
+  padding-inline-start: 1.6em;
+}
+
+.parear__passos li + li {
+  margin-top: var(--sp-2);
+}
+
+.parear__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}

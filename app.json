@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "3124d71f-f6b3-4126-aa31-ff311a5dd57e"
+      }
+    },
+    "android": {
+      "package": "com.zambee.irisflow"
+    }
+  }
+}

@@ -36,6 +36,7 @@ import {
   type OpcoesDeSintese,
   type QualidadeDaReferencia,
   type ResultadoDaImportacao,
+  type ResultadoDaRemocaoDoPerfil,
   type ResultadoDaSintese,
 } from '../../src/voz/protocolo';
 import { localizarMotor, Sidecar } from './sidecar';
@@ -63,6 +64,13 @@ export interface ControleDaVoz {
   encerrarEAguardar: () => Promise<void>;
   /** Mata já o que ainda estiver vivo. */
   matarAgora: () => void;
+  /**
+   * A importação de sempre (preparo no motor, termo exigido e gravado, troca
+   * atômica), com um arquivo que o próprio app já tem — hoje, uma gravação da
+   * voz guardada (`voz/guardadas.ts`, 19/10/2026) — em vez do seletor do
+   * sistema. Só o processo principal chama: o caminho nunca vem da página.
+   */
+  importarDeArquivo: (origem: string, consentimento: unknown, nomeParaMostrar?: string) => Promise<ResultadoDaImportacao>;
 }
 
 export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: () => BrowserWindow | null }): ControleDaVoz {
@@ -96,6 +104,12 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
    * pertence a uma voz que já não existe e é jogado fora.
    */
   let geracao = 0;
+
+  /**
+   * Importações da voz em preparo agora (até 3 min no motor), cada uma com o perfil do termo que a
+   * acompanha. Remover um paciente marca as dele como `descartar` (ver `removerDoPerfil`).
+   */
+  const emPreparo = new Set<{ perfilId: string | null; descartar: boolean }>();
 
   const onde = localizarMotor({ empacotado: app.isPackaged, resourcesPath: process.resourcesPath, raizDoProjeto: opcoes.raizDoProjeto });
 
@@ -224,7 +238,31 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
 
   const hashDeTexto = (s: string) => createHash('sha256').update(s, 'utf-8').digest('hex');
 
+  /**
+   * O handler do IPC nunca rejeita (relato de 18/10/2026, auditoria de falhas
+   * silenciosas, item 5). Antes, um `readFileSync` do cache fora do `try` (o
+   * antivírus segurando o arquivo, EBUSY; ou `podarCache` apagando-o entre o
+   * `existsSync` e a leitura, ENOENT) e o `rmSync` do `finally` (EPERM/EBUSY
+   * no Windows, que SUBSTITUI o retorno) faziam o `invoke` rejeitar — e a
+   * frase do paciente sumia no renderer sem cair para a voz do sistema.
+   */
   async function sintetizar(texto: unknown, opcoesDeSintese: unknown): Promise<ResultadoDaSintese> {
+    try {
+      return await sintetizarSemProtecao(texto, opcoesDeSintese);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[voz] a síntese falhou fora do motor:', msg);
+      return { ok: false, motivo: 'motor', erro: msg };
+    }
+  }
+
+  /** Lê um WAV do disco como `ArrayBuffer` (lança em erro de disco). */
+  const lerWav = (arquivo: string): ArrayBuffer => {
+    const buf = fs.readFileSync(arquivo);
+    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  };
+
+  async function sintetizarSemProtecao(texto: unknown, opcoesDeSintese: unknown): Promise<ResultadoDaSintese> {
     if (typeof texto !== 'string') return { ok: false, motivo: 'texto' };
     const soCache = !!opcoesDeSintese && typeof opcoesDeSintese === 'object' && (opcoesDeSintese as OpcoesDeSintese).soCache === true;
     const t = normalizarTextoParaFala(texto);
@@ -242,8 +280,14 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     if (fs.existsSync(arquivo)) {
       const agora = new Date();
       try { fs.utimesSync(arquivo, agora, agora); } catch { /* só para o LRU */ }
-      const buf = fs.readFileSync(arquivo);
-      return { ok: true, wav: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), deCache: true, ms: 0 };
+      try {
+        return { ok: true, wav: lerWav(arquivo), deCache: true, ms: 0 };
+      } catch (e) {
+        // Cache ilegível agora (preso pelo antivírus, apagado no meio): é como
+        // não estar no cache — a frase é gerada de novo, ou o renderer fala
+        // com a voz do sistema.
+        console.warn('[voz] frase do cache ilegível; tratando como fora do cache:', e instanceof Error ? e.message : e);
+      }
     }
     // Só o cache: o renderer decide se vale esperar a geração ou falar com a
     // voz do sistema agora e deixar esta frase pronta para a próxima vez.
@@ -269,11 +313,19 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
         return { ok: false, motivo: 'sem_voz' };
       }
       if (!r.ok) return { ok: false, motivo: 'motor', erro: r.erro };
-      fs.renameSync(temp, arquivo);
+      let wav: ArrayBuffer;
+      try {
+        fs.renameSync(temp, arquivo);
+        wav = lerWav(arquivo);
+      } catch (eDoCache) {
+        // O cache recusou (arquivo preso, disco cheio): a frase ainda toca a
+        // partir do temporário, só não fica guardada para a próxima vez.
+        console.warn('[voz] a frase não pôde ir para o cache; tocando do temporário:', eDoCache instanceof Error ? eDoCache.message : eDoCache);
+        wav = lerWav(fs.existsSync(temp) ? temp : arquivo);
+      }
       podarCache();
       patch({ motor: 'pronto', erro: undefined, cache: medirCache(), dispositivo: r.dispositivo === 'cuda' ? 'cuda' : r.dispositivo === 'cpu' ? 'cpu' : estado.dispositivo });
-      const buf = fs.readFileSync(arquivo);
-      return { ok: true, wav: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), deCache: false, ms: Date.now() - inicio };
+      return { ok: true, wav, deCache: false, ms: Date.now() - inicio };
     } catch (e) {
       // Remover a voz encerra o motor, e a síntese em curso falha por isso:
       // não é erro do motor, é a voz que deixou de existir.
@@ -283,7 +335,14 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
       return { ok: false, motivo: 'motor', erro: msg };
     } finally {
       patch({ sintetizando: false });
-      fs.rmSync(temp, { force: true });
+      // Num `finally`, um erro aqui SUBSTITUI o retorno: a frase já pronta
+      // virava rejeição do IPC. Um temporário que sobra é apagado no próximo
+      // `limparTemporarios` (abertura do app ou remoção da voz).
+      try {
+        fs.rmSync(temp, { force: true });
+      } catch (eDoTemp) {
+        console.warn('[voz] não foi possível apagar o temporário da síntese:', eDoTemp instanceof Error ? eDoTemp.message : eDoTemp);
+      }
     }
   }
 
@@ -304,14 +363,31 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     });
     if (escolha.canceled || escolha.filePaths.length === 0) return { ok: false, erro: 'Nenhum arquivo escolhido.', cancelado: true };
     const origem = escolha.filePaths[0];
+    return prepararReferencia(origem, { texto: c.texto, aceitoEm: c.aceitoEm, perfilId: c.perfilId });
+  }
 
+  /** O que vem depois de ter o arquivo: preparo no motor e gravação da referência e do consentimento. */
+  async function prepararReferencia(
+    origem: string,
+    c: { texto: string; aceitoEm: string; perfilId?: unknown },
+    nomeParaMostrar?: string,
+  ): Promise<ResultadoDaImportacao> {
+    if (!sidecar) return { ok: false, erro: estado.indisponivelPorque ?? 'Motor de voz indisponível.' };
     const temp = path.join(caminhos.temp, 'referencia.part.wav');
     // "Remover voz" durante o preparo (até 3 min): sem esta conferência a
     // importação terminava depois e gravava a voz de volta.
     let minhaGeracao = geracao;
+    // Remover o PACIENTE durante o preparo (N1, 21/10/2026): a voz que está para ser gravada seria
+    // dele. Não dá para subir `geracao` (apagaria a voz de outro paciente que já está em uso), então
+    // esta importação em específico é marcada e descartada quando o motor responder.
+    const esta = { perfilId: typeof c.perfilId === 'string' ? c.perfilId : null, descartar: false };
+    emPreparo.add(esta);
     try {
       patch({ motor: estado.motor === 'pronto' ? 'pronto' : 'iniciando' });
       const r = await sidecar.pedir({ cmd: 'preparar_referencia', entrada: origem, saida: temp }, TIMEOUTS.preparar);
+      if (esta.descartar) {
+        return { ok: false, erro: 'O perfil foi removido enquanto o áudio era preparado; nada foi gravado.' };
+      }
       if (minhaGeracao !== geracao) {
         return { ok: false, erro: 'A voz foi removida enquanto o áudio era preparado; nada foi gravado.' };
       }
@@ -333,7 +409,7 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
         avisos,
         snrDb,
         importadaEm: new Date().toISOString(),
-        nomeDoArquivo: path.basename(origem),
+        nomeDoArquivo: nomeParaMostrar ?? path.basename(origem),
         consentimento: { texto: c.texto, hash: hashDeTexto(c.texto), aceitoEm: c.aceitoEm, perfilId: typeof c.perfilId === 'string' ? c.perfilId : null },
         vozId: createHash('sha256').update(fs.readFileSync(caminhos.referencia)).digest('hex').slice(0, 16),
       };
@@ -346,6 +422,9 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
       patch({ motor: 'pronto', erro: undefined });
       return { ok: true, duracaoS, qualidade, avisos };
     } catch (e) {
+      if (esta.descartar) {
+        return { ok: false, erro: 'O perfil foi removido enquanto o áudio era preparado; nada foi gravado.' };
+      }
       if (minhaGeracao !== geracao) {
         return { ok: false, erro: 'A voz foi removida enquanto o áudio era preparado; nada foi gravado.' };
       }
@@ -353,8 +432,19 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
       patch({ erro: msg });
       return { ok: false, erro: msg };
     } finally {
+      emPreparo.delete(esta);
       fs.rmSync(temp, { force: true });
     }
+  }
+
+  async function importarDeArquivo(origem: string, consentimento: unknown, nomeParaMostrar?: string): Promise<ResultadoDaImportacao> {
+    if (!sidecar) return { ok: false, erro: estado.indisponivelPorque ?? 'Motor de voz indisponível.' };
+    const c = consentimento as { texto?: unknown; aceitoEm?: unknown; perfilId?: unknown } | null;
+    if (!c || typeof c.texto !== 'string' || c.texto.length < 40 || typeof c.aceitoEm !== 'string') {
+      return { ok: false, erro: 'A importação exige o termo de consentimento aceito.' };
+    }
+    if (typeof origem !== 'string' || !fs.existsSync(origem)) return { ok: false, erro: 'O arquivo da gravação não está mais neste computador.' };
+    return prepararReferencia(origem, { texto: c.texto, aceitoEm: c.aceitoEm, perfilId: c.perfilId }, nomeParaMostrar);
   }
 
   async function baixarModelo(): Promise<{ ok: boolean; erro?: string }> {
@@ -402,6 +492,38 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     avisar();
   }
 
+  /**
+   * Remover o PACIENTE (revisão final, rodada 2, N1, 21/10/2026): a voz clonada importada é única
+   * por computador e guarda o termo de quem a autorizou; ela sai junto com o perfil SÓ se o termo for
+   * dele. Se for de outro paciente, ou de ninguém (`perfilId: null`, modo de desenvolvimento), fica:
+   * apagar a voz de quem continua usando o computador seria pior do que não apagar.
+   *
+   * O que sai é o de `remover()`: referência, termo, estado, cache de frases e o motor encerrado. O
+   * perfil vem do renderer, mas só como texto para comparar com o termo gravado aqui — nunca vira
+   * caminho. Falha de disco (arquivo preso) NÃO finge sucesso: devolve o erro e o termo continua, para
+   * o app avisar e a pessoa poder remover a voz em Configurações.
+   */
+  function removerDoPerfil(perfilId: unknown): ResultadoDaRemocaoDoPerfil {
+    if (typeof perfilId !== 'string' || perfilId === '') return { ok: false, erro: 'Perfil inválido.' };
+    try {
+      // Uma importação deste perfil ainda em preparo seria gravada depois da remoção.
+      for (const importacao of emPreparo) if (importacao.perfilId === perfilId) importacao.descartar = true;
+      const leitura = lerJsonProtegido(caminhos.meta, ehObjeto, (m) => console.warn(`[voz] ${m}`));
+      if (!leitura.ok) {
+        // Sem ler o termo não dá para saber de quem é a voz: não apaga às cegas nem diz que apagou.
+        throw new Error(`não consegui conferir de quem é a voz clonada (${leitura.erro})`);
+      }
+      const termo = (leitura.valor as Partial<MetaDaReferencia> | null)?.consentimento;
+      if (!termo || termo.perfilId !== perfilId) return { ok: true, removida: false };
+      remover();
+      return { ok: true, removida: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('[voz] a voz clonada do paciente removido não pôde ser apagada:', msg);
+      return { ok: false, erro: msg };
+    }
+  }
+
   // Só a janela do app fala com o motor. A sobreposição do Modo Computador
   // tem preload próprio sem esta ponte, mas a checagem de remetente vale para
   // qualquer janela que venha a existir.
@@ -426,6 +548,10 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
   }, Promise.resolve(estado)));
   ipcMain.handle(CANAIS_VOZ.importar, protegido(importar, Promise.resolve({ ok: false, erro: 'Origem não autorizada.' } as ResultadoDaImportacao)));
   ipcMain.handle(CANAIS_VOZ.remover, protegido(() => remover(), undefined));
+  ipcMain.handle(
+    CANAIS_VOZ.removerDoPerfil,
+    protegido((_e, perfilId: unknown) => removerDoPerfil(perfilId), { ok: false, erro: 'Origem não autorizada.' } as ResultadoDaRemocaoDoPerfil),
+  );
   ipcMain.handle(CANAIS_VOZ.baixarModelo, protegido(() => baixarModelo(), Promise.resolve({ ok: false, erro: 'Origem não autorizada.' })));
   ipcMain.handle(CANAIS_VOZ.sintetizar, protegido((_e, texto: unknown, o: unknown) => sintetizar(texto, o), Promise.resolve({ ok: false, motivo: 'indisponivel' } as ResultadoDaSintese)));
   ipcMain.handle(CANAIS_VOZ.ativar, protegido((_e, ligado: unknown) => {
@@ -439,5 +565,6 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     encerrar: () => sidecar?.encerrar(),
     encerrarEAguardar: () => sidecar?.encerrarEAguardar() ?? Promise.resolve(),
     matarAgora: () => sidecar?.matarAgora(),
+    importarDeArquivo,
   };
 }

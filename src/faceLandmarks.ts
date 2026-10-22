@@ -5,9 +5,13 @@
 // de gaze. Um índice trocado produz um EAR plausível e errado, por isso nada
 // aqui é literal solto no `extractor.ts`.
 //
-// "Esquerdo" e "direito" seguem o MediaPipe, que nomeia pelo lado da PESSOA:
-// numa imagem não espelhada, o olho esquerdo dela aparece à DIREITA do quadro.
-// Trocar isso inverte o sinal de yaw sem erro nenhum aparecendo.
+// ATENÇÃO ao nome: "esquerdo" aqui é o olho que aparece à ESQUERDA de uma
+// imagem não espelhada — o olho DIREITO da pessoa, que o MediaPipe chama de
+// RIGHT_EYE (33/133, íris 468–472); "direito" é o RIGHT da imagem (263/362,
+// íris 473–477), o olho esquerdo da pessoa. O comentário antigo dizia o
+// contrário; conferido em 19/10/2026 contra `FaceLandmarksConnections` do
+// MediaPipe e em fotos. Quem precisar do lado da PESSOA (o recorte da EyeNet,
+// por exemplo) não deve confiar no nome: decida pela geometria dos cantos.
 
 import {
   LM_CANTO_EXTERNO_ESQUERDO,

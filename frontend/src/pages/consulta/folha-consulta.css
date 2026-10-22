@@ -1,0 +1,184 @@
+/* Folha da consulta (21/10/2026) — ver `VistaDaFolha.tsx`.
+ *
+ * Medidas em milímetros: a mesma página serve à impressora, ao PDF e à prévia
+ * nas telas (reduzida por `transform`). É PAPEL: preto sobre branco, sem seguir
+ * o tema da tela; o que importa vai em negrito, não em cor, para ler igual numa
+ * impressora sem cor. A página tem altura fixa e `overflow: hidden`, e por isso
+ * `montarFolha` põe teto em cada seção — o que for cortado é dito na própria
+ * folha, nunca escondido. */
+
+.consulta-folha {
+  box-sizing: border-box;
+  width: 210mm;
+  /* 1 mm abaixo da altura do A4: um arredondamento de meio milímetro não pode
+     empurrar a folha para uma segunda página. */
+  height: 296mm;
+  padding: 8mm 10mm 6.5mm;
+  background: #ffffff;
+  color: #111111;
+  font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+  font-size: 2.9mm;
+  line-height: 1.25;
+  display: flex;
+  flex-direction: column;
+  gap: 2.2mm;
+  overflow: hidden;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  /* Altura de cada linha do dia a dia: 30 linhas cabem; 7 podem respirar. */
+  --linha: 3.9mm;
+}
+.consulta-folha--7 {
+  font-size: 3.6mm;
+  gap: 4mm;
+  --linha: 7.4mm;
+}
+
+.consulta-folha p,
+.consulta-folha h2,
+.consulta-folha h3,
+.consulta-folha h4 { margin: 0; }
+
+.consulta-folha__topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 6mm;
+  padding-bottom: 2mm;
+  border-bottom: 0.5mm solid #111111;
+}
+.consulta-folha__titulo { font-size: 6.2mm; font-weight: 900; line-height: 1.1; }
+.consulta-folha__paciente { font-size: 4mm; font-weight: 700; margin-top: 0.8mm; overflow-wrap: anywhere; }
+.consulta-folha__periodo { display: flex; flex-direction: column; align-items: flex-end; text-align: right; flex-shrink: 0; }
+.consulta-folha__periodo strong { font-size: 4mm; }
+
+.consulta-folha__resumo {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr 1fr;
+  gap: 4mm;
+}
+.consulta-folha__resumo h3,
+.consulta-folha__perguntas h4 { font-size: 3.1mm; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.consulta-folha--7 .consulta-folha__resumo h3,
+.consulta-folha--7 .consulta-folha__perguntas h4 { font-size: 3.5mm; }
+
+.consulta-folha__secao {
+  font-size: 3.3mm;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-bottom: 0.6mm;
+  margin-bottom: 0.8mm !important;
+  border-bottom: 0.25mm solid #777777;
+}
+.consulta-folha--7 .consulta-folha__secao { font-size: 3.8mm; }
+
+.consulta-folha table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.consulta-folha th,
+.consulta-folha td {
+  padding: 0 1mm;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 0.2mm solid #bdbdbd;
+}
+.consulta-folha thead th { font-size: 2.6mm; font-weight: 800; color: #333333; border-bottom: 0.3mm solid #555555; }
+.consulta-folha--7 thead th { font-size: 3mm; white-space: normal; }
+.consulta-folha tbody th { font-weight: 700; }
+
+.consulta-folha__dias tr { height: var(--linha); }
+.consulta-folha__dias th:nth-child(1) { width: 17mm; }
+.consulta-folha__dias th:nth-child(2) { width: 50mm; }
+.consulta-folha__dias th:nth-child(3) { width: 22mm; }
+.consulta-folha__dias th:nth-child(4) { width: 26mm; }
+.consulta-folha--7 .consulta-folha__dias th:nth-child(1) { width: 21mm; }
+.consulta-folha--7 .consulta-folha__dias th:nth-child(2) { width: 56mm; }
+.consulta-folha--7 .consulta-folha__dias th:nth-child(3) { width: 26mm; }
+.consulta-folha--7 .consulta-folha__dias th:nth-child(4) { width: 29mm; }
+/* Com 7 dias há altura de sobra: a linha pode ter duas linhas de texto, e a nota
+   (até 50 caracteres) não precisa ser cortada pela borda da coluna. */
+.consulta-folha--7 .consulta-folha__dias td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 3.3mm;
+}
+/* Dor alta em negrito: o destaque que sobrevive à impressora preto e branco. */
+.consulta-folha__forte { font-weight: 900; }
+
+.consulta-folha__semanas tr { height: 4mm; }
+.consulta-folha--7 .consulta-folha__semanas tr { height: 6.5mm; }
+.consulta-folha__semanas th:nth-child(1) { width: 44mm; }
+.consulta-folha--7 .consulta-folha__semanas th:nth-child(1) { width: 56mm; }
+.consulta-folha__situacao { font-weight: 600; color: #444444; }
+
+.consulta-folha__vazio { color: #444444; font-style: italic; }
+
+.consulta-folha__perguntas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4mm;
+}
+.consulta-folha__perguntas { font-size: 2.8mm; }
+.consulta-folha--7 .consulta-folha__perguntas { font-size: 3.1mm; }
+.consulta-folha__perguntas ol { margin: 0.6mm 0 0; padding-left: 4.2mm; }
+.consulta-folha__perguntas li { margin-bottom: 0.5mm; overflow-wrap: anywhere; }
+.consulta-folha__corte { margin-top: 0.8mm !important; font-weight: 700; }
+
+.consulta-folha__rodape {
+  margin-top: auto;
+  padding-top: 1.5mm;
+  border-top: 0.25mm solid #777777;
+  font-size: 2.5mm;
+  line-height: 1.3;
+  color: #222222;
+}
+.consulta-folha--7 .consulta-folha__rodape { font-size: 3mm; }
+
+/* Prévia nas telas: a página inteira, reduzida. */
+.consulta-previa {
+  --escala: 0.6;
+  width: calc(210mm * var(--escala));
+  height: calc(296mm * var(--escala));
+  overflow: hidden;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+.consulta-previa > .consulta-folha {
+  transform: scale(var(--escala));
+  transform-origin: top left;
+}
+
+/* Na tela a cópia de impressão não aparece; ao imprimir, só ela aparece. A
+   classe no <html> vale só durante "Imprimir" / "Salvar em PDF". */
+.consulta-impressao { display: none; }
+
+@media print {
+  html.imprimindo-consulta,
+  html.imprimindo-consulta body {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    /* O brilho reduzido e o filtro âmbar da tela não vão para o papel. */
+    filter: none !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  html.imprimindo-consulta::before,
+  html.imprimindo-consulta::after {
+    content: none !important;
+    display: none !important;
+  }
+  html.imprimindo-consulta body > *:not(.consulta-impressao) { display: none !important; }
+  html.imprimindo-consulta .consulta-impressao { display: block !important; }
+  html.imprimindo-consulta .consulta-folha {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

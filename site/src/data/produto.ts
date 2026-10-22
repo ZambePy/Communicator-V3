@@ -84,7 +84,7 @@ export const MODULOS_EM_TELA: ModuloEmTela[] = [
     },
     celular: {
       src: `${C}/conversa.webp`,
-      alt: 'Conversa no app IrisFlow Cuidador, com as mensagens do paciente e as respostas da família.',
+      alt: 'Conversa no app IrisFlow Cuidador, com as mensagens da pessoa e as respostas da família.',
     },
   },
   {
@@ -129,11 +129,11 @@ export const MODULOS_EM_TELA: ModuloEmTela[] = [
     id: 'calibracao',
     icone: 'alvo',
     nome: 'Primeiros passos',
-    resumo: 'Um tutorial nas telas de verdade e uma calibração de cerca de meio minuto.',
+    resumo: 'Um tutorial nas telas de verdade e uma calibração de cerca de um minuto.',
     pontos: [
       'Preparo do posto: distância, luz e reflexo nos óculos',
       'Calibração guiada de 13 pontos, com teste de precisão',
-      'Tutorial em 10 passos e um perfil para cada paciente',
+      'Tutorial em 10 passos e um perfil para cada pessoa',
     ],
     estado: 'Implementado',
     tela: {
@@ -160,7 +160,7 @@ export const MODULOS_EM_TELA: ModuloEmTela[] = [
     },
     celular: {
       src: `${C}/ajustes.webp`,
-      alt: 'Ajustes do computador do paciente feitos pelo app IrisFlow Cuidador.',
+      alt: 'Ajustes do computador da pessoa feitos pelo app IrisFlow Cuidador.',
     },
   },
   {
@@ -204,7 +204,7 @@ export const DECISOES: Recurso[] = [
   {
     icone: 'olho',
     titulo: 'Calibração que aprende o seu olhar',
-    texto: 'Meio minuto de pontos na tela. Um ponto ruim é descartado, e um teste mede a precisão no final.',
+    texto: 'Cerca de um minuto de pontos na tela. Um ponto ruim é descartado, e um teste mede a precisão no fim.',
   },
   {
     icone: 'inclinacao',
@@ -213,13 +213,13 @@ export const DECISOES: Recurso[] = [
   },
   {
     icone: 'webcam',
-    titulo: 'O posto se prepara sozinho',
-    texto: 'Distância, enquadramento, luz e reflexo nos óculos são conferidos antes. O que não dá para ajustar, a tela diz como resolver.',
+    titulo: 'O app prepara o posto de uso',
+    texto: 'Distância, enquadramento, luz e reflexo nos óculos são conferidos antes. Se algo precisa mudar, a tela diz como.',
   },
   {
     icone: 'teclado',
     titulo: 'Escrever custa cada vez menos',
-    texto: 'Letras grandes em dois passos e sugestões que aprendem o vocabulário de cada pessoa.',
+    texto: 'Letras grandes, em dois passos, e sugestões que aprendem as palavras de cada pessoa.',
   },
   {
     icone: 'offline',
@@ -228,24 +228,24 @@ export const DECISOES: Recurso[] = [
   },
   {
     icone: 'cadeado',
-    titulo: 'Privacidade por desenho',
-    texto: 'A imagem da câmera nunca sai do computador. O código é aberto para qualquer pessoa conferir.',
+    titulo: 'Sua imagem fica no computador',
+    texto: 'A imagem da câmera nunca sai do computador. O código é aberto, e qualquer pessoa pode conferir.',
   },
 ]
 
 /** O que acompanha o instalador: a adoção faz parte do produto. */
 export const ADOCAO: Recurso[] = [
   { icone: 'webcam', titulo: 'Primeiro uso guiado', texto: 'Câmera, luz e calibração, passo a passo, antes de qualquer uso de verdade.' },
-  { icone: 'monitor', titulo: 'Tutorial dentro do app', texto: 'A explicação aparece na tela em que a dúvida surge, não num manual.' },
+  { icone: 'monitor', titulo: 'Tutorial dentro do app', texto: 'A explicação aparece na tela em que a dúvida surge, e não num manual.' },
   { icone: 'documento', titulo: 'Guia para quem cuida', texto: 'Instalação e teste de precisão explicados em linguagem simples.' },
   { icone: 'email', titulo: 'Suporte com gente', texto: 'Em português, respondido pela própria equipe que faz o produto.' },
 ]
 
 /** O que o produto ainda não entrega: dito antes de alguém descobrir. */
 export const LIMITES = [
-  'Arraste fino e menus muito densos continuam trabalhosos com a precisão de uma webcam, mesmo com a lupa.',
+  'Arrastar com precisão e usar menus muito cheios continua trabalhoso com webcam, mesmo com a lupa.',
   'O uso por quem tem movimento involuntário acentuado, espasticidade ou tremor ainda não foi avaliado.',
-  'A taxa de acionamento acidental em uso contínuo ainda não foi medida: é tarefa do programa de validação.',
+  'Ainda não medimos quantos cliques sem querer acontecem em uso contínuo. Isso fica para o programa de validação.',
   'Ainda não há estudo clínico publicado, e nisso as soluções internacionais têm décadas de vantagem.',
 ]
 
@@ -273,7 +273,7 @@ export const PASSOS_DO_PRIMEIRO_USO: PassoComTela[] = [
   },
   {
     titulo: 'Calibre',
-    texto: 'A pessoa acompanha alguns pontos com o olhar. Leva cerca de meio minuto.',
+    texto: 'A pessoa acompanha alguns pontos com o olhar. Leva cerca de um minuto.',
     tela: {
       src: `${T}/calibracao.webp`,
       alt: 'Calibração: um ponto na tela para a pessoa acompanhar com o olhar.',
@@ -289,12 +289,19 @@ export const PASSOS_DO_PRIMEIRO_USO: PassoComTela[] = [
   },
 ]
 
+/** O teclado animado, que saiu da abertura da home na rodada 3 (21/10/2026). */
+export const ESCRITA_PELO_OLHAR = {
+  titulo: 'O olhar escrevendo.',
+  texto:
+    'O teclado do IrisFlow em miniatura: o ponto faz o papel do olhar. Ele para num grupo de letras, que se abre, e depois na letra. Com o mouse em cima, quem escreve é você.',
+}
+
 /** Do vídeo da webcam ao clique: os seis estágios, uma linha cada. */
 export const ESTAGIOS: { icone: IconName; titulo: string; texto: string }[] = [
   { icone: 'webcam', titulo: 'Captura', texto: 'A webcam comum filma o rosto.' },
   { icone: 'olho', titulo: 'Rosto e olhos', texto: 'O programa acha os olhos e a íris, quadro a quadro.' },
-  { icone: 'inclinacao', titulo: 'Direção do olhar', texto: 'Dos olhos e da cabeça sai para onde a pessoa olha.' },
-  { icone: 'alvo', titulo: 'Calibração', texto: 'Meio minuto ensina o jeito de olhar daquela pessoa.' },
+  { icone: 'inclinacao', titulo: 'Direção do olhar', texto: 'Dos olhos e da posição da cabeça, o programa calcula para onde a pessoa olha.' },
+  { icone: 'alvo', titulo: 'Calibração', texto: 'Cerca de um minuto ensina o jeito de olhar daquela pessoa.' },
   { icone: 'relogio', titulo: 'Cursor estável', texto: 'Firme sem ficar atrasado, no ritmo de quem usa.' },
   { icone: 'check', titulo: 'Seleção', texto: 'Olhar fixo por um instante confirma a escolha.' },
 ]
@@ -342,7 +349,7 @@ export const TRES_PERGUNTAS: Recurso[] = [
 /** Os números do produto que qualquer pessoa pode conferir no app. */
 export const NUMEROS_DO_PRODUTO: Numero[] = [
   { valor: '13', rotulo: 'pontos na calibração guiada, com teste de precisão no final' },
-  { valor: '0,4–4 s', rotulo: 'de tempo de fixação, ajustável conforme o dia' },
+  { valor: '0,4 a 4 s', rotulo: 'de tempo de fixação, ajustável conforme o dia' },
   { valor: '10', rotulo: 'passos de tutorial, nas telas de verdade' },
   { valor: '0', rotulo: 'imagens da câmera enviadas para a internet' },
 ]

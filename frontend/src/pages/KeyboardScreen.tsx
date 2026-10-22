@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { emitirFalaDoPaciente } from '../cloud/eventos';
-import { falar } from '../services/voz';
+import { falarDoPaciente, falaSaiu } from '../services/voz/falaDoPaciente';
 import { ArrowLeft, Delete, Home, Speech, Trash2 } from 'lucide-react';
 import { GazePageLayout } from '../components/ui/GazePageLayout';
 import { GazeButton } from '../components/ui/GazeButton';
@@ -13,11 +13,13 @@ import {
   sugerirPalavras,
   type SugestaoDeFrase,
 } from '../services/assistente';
+import { aplicarExpansao, aprenderAbreviacoesDaFala, expansaoParaOTexto } from '../services/abreviacoes';
 import { calcularCascata, palavraEmComposicao } from '@tracker/interaction/dwellEmCascata';
 import { EXPERIMENT } from '@tracker/config/experiment';
 import { useSettings } from '../context/SettingsContext';
 import { DWELL_MIN_MS, limitarDwellMs } from '../dwellMs';
 import { logSentence } from '../utils/clinicalLogger';
+import { useMedidorDeDigitacao } from '../services/evolucao/useMedidorDeDigitacao';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FaixaDeMissao } from '../components/FaixaDeMissao';
@@ -112,7 +114,20 @@ const ICON_SIZE = 68;
 const DEFAULT_WORDS = ['EU', 'SIM', 'NÃO', 'TALVEZ'];
 const MAX_SUGGESTIONS = 5;
 
-const GROUPS = [
+/** O que cada célula do grupo de palavras escreve — e a etiqueta que o diz. */
+type TipoDeItem = 'abreviacao' | 'frase' | 'palavra';
+const ETIQUETA_DO_ITEM: Record<TipoDeItem, string> = {
+  abreviacao: 'abreviação',
+  frase: 'frase inteira',
+  palavra: 'palavra',
+};
+
+/**
+ * Os grupos da camada de letras, na ordem da grade 3×2. Exportado para a
+ * prancha impressa (Configurações → plano C) desenhar o MESMO arranjo a
+ * partir desta fonte única — uma cópia divergiria no primeiro ajuste.
+ */
+export const GROUPS = [
   ['A', 'B', 'C', 'D', 'E', 'F'],
   ['G', 'H', 'I', 'J', 'K', 'L'],
   ['M', 'N', 'O', 'P', 'Q', 'R'],
@@ -206,6 +221,11 @@ export const KeyboardScreen: React.FC = () => {
   useEffect(() => {
     gravarRascunhoDoTeclado(text);
   }, [text]);
+  // Velocidade de escrita da evolução semanal: conta o que a pessoa ESCREVEU
+  // (letra, espaço, palavra sugerida). A frase pronta se avisa ao medidor antes
+  // de entrar (`handleSelectPhrase`), porque um toque que põe 17 caracteres não
+  // é escrever mais depressa.
+  const ignorarFrasePronta = useMedidorDeDigitacao(text);
   const [lastPressed, setLastPressed] = useState<string | null>(null);
   /** A linha de composição acabou de ser falada: brilho curto, uma vez. */
   const [falou, setFalou] = useState(false);
@@ -221,6 +241,13 @@ export const KeyboardScreen: React.FC = () => {
    * as que continuam o que ele começou.
    */
   const [frasesSugeridas, setFrasesSugeridas] = useState<SugestaoDeFrase[]>([]);
+  /**
+   * O que o paciente acabou de escrever é uma abreviação ("OBG")? Então o
+   * significado ("OBRIGADO") entra como um chip entre as palavras sugeridas
+   * (roadmap 2, rodada 3). É só uma oferta, calculada junto das sugestões: o
+   * texto nunca é trocado sem o paciente escolher o chip.
+   */
+  const [expansao, setExpansao] = useState<string | null>(null);
   // activeGroup: null (nível 1) | 0-4 (grupos da camada) | 5 (sugestões)
   const [activeGroup, setActiveGroup] = useState<number | null>(null);
   /** Letras (A–Z e ações) ou símbolos (acentos, ç, números, pontuação). */
@@ -249,6 +276,7 @@ export const KeyboardScreen: React.FC = () => {
     setSuggestions(sugerirPalavras(text, MAX_SUGGESTIONS));
     if (EXPERIMENT.dwellEmCascata) setPalavraEhConhecida(palavraConhecida(palavraEmComposicao(text)));
     setFrasesSugeridas(sugerirFrases({ textoAtual: text, maximo: 3 }));
+    setExpansao(expansaoParaOTexto(text));
   }, [text, isDwelling]);
 
   useEffect(() => {
@@ -258,12 +286,29 @@ export const KeyboardScreen: React.FC = () => {
 
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /** A tela ainda está montada? A voz avisa depois de um `await`. */
+  const montadaRef = useRef(true);
   useEffect(() => {
+    montadaRef.current = true;
     return () => {
+      montadaRef.current = false;
       if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
       if (falouTimeoutRef.current) clearTimeout(falouTimeoutRef.current);
     };
   }, []);
+
+  /** O brilho curto de "falou" na linha de composição. */
+  const acenderFalou = () => {
+    if (!montadaRef.current) return;
+    // Reinicia o brilho se "Falar" vier duas vezes seguidas.
+    setFalou(false);
+    if (falouTimeoutRef.current) clearTimeout(falouTimeoutRef.current);
+    requestAnimationFrame(() => {
+      if (!montadaRef.current) return;
+      setFalou(true);
+      falouTimeoutRef.current = setTimeout(() => setFalou(false), FALOU_MS);
+    });
+  };
 
   const triggerFeedback = (key: string) => {
     setLastPressed(key);
@@ -290,8 +335,22 @@ export const KeyboardScreen: React.FC = () => {
    * que não pode desmentir depressa.
    */
   const handleSelectPhrase = (frase: string) => {
-    setText(frase + ' ');
+    const texto = frase + ' ';
+    ignorarFrasePronta(texto);
+    setText(texto);
     triggerFeedback(frase);
+    setActiveGroup(null);
+  };
+
+  /**
+   * Abreviação: troca a palavra escrita ("OBG") pelo significado ("OBRIGADO") e
+   * põe o espaço, como a palavra sugerida. Só acontece quando o paciente escolhe
+   * o chip — nunca sozinha, e nunca fala: "n" pode ser a letra de uma sigla, e
+   * corrigir sem pedir, para quem não apaga depressa, custa mais que ajuda.
+   */
+  const handleSelectAbreviacao = (significado: string) => {
+    setText((t) => aplicarExpansao(t, significado));
+    triggerFeedback(significado);
     setActiveGroup(null);
   };
 
@@ -315,24 +374,26 @@ export const KeyboardScreen: React.FC = () => {
   const speak = () => {
     if (text.trim()) {
       // Voz clonada do paciente quando pronta; senão a do sistema.
-      void falar(text, { rate: 0.9 }).catch((e) => console.warn('[voz] falha ao falar:', e));
-      triggerFeedback('speak');
-      // Reinicia o brilho se "Falar" vier duas vezes seguidas.
-      setFalou(false);
-      if (falouTimeoutRef.current) clearTimeout(falouTimeoutRef.current);
-      requestAnimationFrame(() => {
-        setFalou(true);
-        falouTimeoutRef.current = setTimeout(() => setFalou(false), FALOU_MS);
+      //
+      // O brilho de "falou" acende quando o som COMEÇA, e não no toque em
+      // "Falar" (relato de 18/10/2026, item 5): antes ele acendia sempre, e o
+      // paciente via "falou" para uma frase que não tinha saído. Se nada sair,
+      // `falarDoPaciente` põe a frase em letra grande na tela.
+      void falarDoPaciente(text, { rate: 0.9, aoComecar: acenderFalou }).then((r) => {
+        // Missão do tutorial, quando houver uma. O que ela pede é uma frase
+        // ESCRITA e falada: um "Falar" com a linha vazia não é isso, e uma
+        // frase que não saiu em voz alta também não. Silenciosa e idempotente
+        // quando não há tutorial rodando.
+        if (falaSaiu(r)) cumprirMissao('digitacao');
       });
+      triggerFeedback('speak');
       registrarFalaDoPaciente(text);
+      // Frases curtas que o paciente escreve por extenso e repete viram
+      // abreviações. Como no assistente, aprende mesmo com as sugestões desligadas.
+      aprenderAbreviacoesDaFala(text);
       logSentence(text);
       // vai para o celular do cuidador (se a conta estiver ligada)
       emitirFalaDoPaciente(text, 'texto');
-      // Missão do tutorial, quando houver uma. Marcada AQUI, dentro do
-      // `if (text.trim())`: o que o tutorial pede é uma frase ESCRITA e
-      // falada, e um "Falar" com a linha vazia não é isso. Silenciosa e
-      // idempotente quando não há tutorial rodando.
-      cumprirMissao('digitacao');
     }
   };
 
@@ -364,22 +425,46 @@ export const KeyboardScreen: React.FC = () => {
     text.trim().length > 0 && suggestions.length > 0 ? suggestions : DEFAULT_WORDS;
 
   /**
-   * O que entra nas seis células do grupo de sugestões: frases primeiro, porque
-   * valem mais por fixação, depois palavras. Frases longas demais para caber
-   * numa célula ficam de fora — alvo com texto cortado é alvo que o paciente
-   * escolhe sem saber o que escolheu.
+   * O que entra nas seis células do grupo de sugestões: o chip da abreviação em
+   * primeiro lugar (foi o que o paciente acabou de pedir ao escrever "OBG"),
+   * depois as frases, porque valem mais por fixação, depois as palavras. Frases
+   * longas demais para caber numa célula ficam de fora — alvo com texto cortado
+   * é alvo que o paciente escolhe sem saber o que escolheu. O mesmo vale para o
+   * significado de uma abreviação (o dicionário já recusa os que passam disso).
    */
   const MAX_CARACTERES_NA_CELULA = 42;
+  const expansaoNaGrade = expansao && expansao.length <= MAX_CARACTERES_NA_CELULA ? expansao : null;
+  /** O chip já diz isto: uma palavra ou frase igual não precisa de uma segunda célula. */
+  const repeteAExpansao = (texto: string) =>
+    !!expansaoNaGrade && texto.toLowerCase() === expansaoNaGrade.toLowerCase();
   const frasesNaGrade = frasesSugeridas
     .map((f) => f.texto)
-    .filter((t) => t.length <= MAX_CARACTERES_NA_CELULA)
+    .filter((t) => t.length <= MAX_CARACTERES_NA_CELULA && !repeteAExpansao(t))
     .slice(0, 3);
-  const itensDeSugestao: { texto: string; frase: boolean }[] = [
-    ...frasesNaGrade.map((texto) => ({ texto, frase: true })),
+  const itensDeSugestao: { texto: string; tipo: TipoDeItem }[] = [
+    ...(expansaoNaGrade ? [{ texto: expansaoNaGrade, tipo: 'abreviacao' as const }] : []),
+    ...frasesNaGrade.map((texto) => ({ texto, tipo: 'frase' as const })),
     ...currentSuggestions
-      .filter((w) => !frasesNaGrade.some((f) => f.toLowerCase() === w.toLowerCase()))
-      .map((texto) => ({ texto, frase: false })),
+      .filter((w) => !frasesNaGrade.some((f) => f.toLowerCase() === w.toLowerCase()) && !repeteAExpansao(w))
+      .map((texto) => ({ texto, tipo: 'palavra' as const })),
   ].slice(0, 6);
+  /**
+   * Quantas palavras cabem na prévia do botão. O chip e a etiqueta dele ocupam
+   * o lugar de duas, para a prévia não crescer além do que a tecla comporta a
+   * 1366×768 (ver o comentário da fonte, mais abaixo).
+   */
+  const palavrasDaPrevia = currentSuggestions
+    .filter((w) => !repeteAExpansao(w))
+    .slice(0, (frasesNaGrade.length > 0 ? 3 : 5) - (expansaoNaGrade ? 2 : 0));
+  /** A etiqueta miúda em âmbar da prévia ("abreviação", "+ 3 frases"). */
+  const rotuloDaPrevia: React.CSSProperties = {
+    fontSize: 'min(1.5rem, 2.6vh)',
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    color: KB.emberBright,
+    opacity: 0.9,
+  };
 
   /**
    * Dwell em cascata (M17): as letras que continuam alguma palavra sugerida
@@ -531,7 +616,29 @@ export const KeyboardScreen: React.FC = () => {
           style={cell}
         >
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.15rem' }}>
-            {currentSuggestions.slice(0, frasesNaGrade.length > 0 ? 3 : 5).map((word) => (
+            {/* A abreviação escrita ("OBG") vem na frente, em âmbar e com o nome
+                dela: é o que a pessoa pediu ao escrever, e não pode parecer
+                mais uma palavra prevista. Um significado comprido quebra em
+                vez de sair cortado. */}
+            {expansaoNaGrade && (
+              <>
+                <span
+                  style={{
+                    fontSize: expansaoNaGrade.length > 12 ? 'min(1.9rem, 3.4vh)' : `min(${FS_SUGGESTION}, 4.2vh)`,
+                    fontWeight: 600,
+                    lineHeight: 1.2,
+                    color: KB.emberBright,
+                    textAlign: 'center',
+                    padding: '0 0.5rem',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {expansaoNaGrade}
+                </span>
+                <span style={{ ...rotuloDaPrevia, marginBottom: '0.35rem' }}>{ETIQUETA_DO_ITEM.abreviacao}</span>
+              </>
+            )}
+            {palavrasDaPrevia.map((word) => (
               <span
                 key={word}
                 style={{
@@ -550,17 +657,7 @@ export const KeyboardScreen: React.FC = () => {
             {/* A prévia não cabe a frase inteira; diz que ela existe lá dentro.
                 Sem isso, o paciente não teria motivo para entrar no grupo. */}
             {frasesNaGrade.length > 0 && (
-              <span
-                style={{
-                  marginTop: '0.35rem',
-                  fontSize: 'min(1.5rem, 2.6vh)',
-                  fontWeight: 600,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  color: KB.emberBright,
-                  opacity: 0.9,
-                }}
-              >
+              <span style={{ ...rotuloDaPrevia, marginTop: '0.35rem' }}>
                 + {frasesNaGrade.length} {frasesNaGrade.length === 1 ? 'frase' : 'frases'}
               </span>
             )}
@@ -575,7 +672,14 @@ export const KeyboardScreen: React.FC = () => {
     if (activeGroup === 5) items = itensDeSugestao.map((i) => i.texto);
     else if (activeGroup !== null && activeGroup < 5) items = gruposDaCamada[activeGroup];
 
-    const ehFrase = (texto: string) => itensDeSugestao.some((i) => i.frase && i.texto === texto);
+    /** Cada texto do grupo é único (o chip e as frases não se repetem), então o texto basta para achar o tipo. */
+    const tipoDe = (texto: string): TipoDeItem => itensDeSugestao.find((i) => i.texto === texto)?.tipo ?? 'palavra';
+    const escolherSugestao = (texto: string) => {
+      const tipo = tipoDe(texto);
+      if (tipo === 'abreviacao') handleSelectAbreviacao(texto);
+      else if (tipo === 'frase') handleSelectPhrase(texto);
+      else handleSelectSuggestion(texto);
+    };
 
     const pilha = (icone: React.ReactNode, rotulo: string) => (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.9rem' }}>
@@ -593,31 +697,38 @@ export const KeyboardScreen: React.FC = () => {
           if (item === 'Falar') content = pilha(<Speech size={ICON_SIZE} />, 'Falar');
           if (item === 'Apagar') content = pilha(<Delete size={ICON_SIZE} />, 'Apagar');
           if (item === 'Limpar') content = pilha(<Trash2 size={ICON_SIZE} />, 'Limpar');
-          const frase = activeGroup === 5 && ehFrase(item);
-          if (activeGroup === 5)
+          if (activeGroup === 5) {
+            const tipo = tipoDe(item);
+            // A frase é maior que a palavra e precisa caber; o corpo menor e a
+            // quebra em duas linhas evitam corte no meio da palavra. O mesmo
+            // vale para um significado de abreviação mais comprido que uma
+            // palavra ("POR FAVOR" ainda cabe no corpo grande).
+            const corpoMenor = tipo === 'frase' || (tipo === 'abreviacao' && item.length > 12);
             content = (
               <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <span
                   style={{
                     ...letterGlyph,
-                    // A frase é maior que a palavra e precisa caber; o corpo menor
-                    // e a quebra em duas linhas evitam corte no meio da palavra.
-                    fontSize: frase ? '1.9rem' : FS_SUGGESTION,
-                    lineHeight: frase ? 1.2 : 1,
-                    padding: frase ? '0 1rem' : 0,
+                    fontSize: corpoMenor ? '1.9rem' : FS_SUGGESTION,
+                    lineHeight: corpoMenor ? 1.2 : 1,
+                    padding: corpoMenor ? '0 1rem' : 0,
                     textAlign: 'center',
-                    color: frase ? KB.emberBright : undefined,
+                    // Âmbar nas que escrevem mais que uma palavra prevista:
+                    // a frase inteira e o significado da abreviação.
+                    color: tipo !== 'palavra' ? KB.emberBright : undefined,
                   }}
                 >
                   {item}
                 </span>
-                {/* A etiqueta diz o que a tecla escreve: uma palavra ou a frase
-                    inteira. É a diferença entre completar e substituir. */}
+                {/* A etiqueta diz o que a tecla escreve: uma palavra, a frase
+                    inteira ou a abreviação por extenso. É a diferença entre
+                    completar e substituir. */}
                 <span className="kb-key__etiqueta" aria-hidden="true">
-                  {frase ? 'frase inteira' : 'palavra'}
+                  {ETIQUETA_DO_ITEM[tipo]}
                 </span>
               </span>
             );
+          }
 
           return (
             <GazeButton
@@ -627,13 +738,7 @@ export const KeyboardScreen: React.FC = () => {
                 lastPressed === item,
                 activeGroup === 5 ? 'kb-key--sugestao' : classeDaAcao(item),
               )}
-              onClick={() =>
-                activeGroup === 5
-                  ? frase
-                    ? handleSelectPhrase(item)
-                    : handleSelectSuggestion(item)
-                  : handleItemClick(item)
-              }
+              onClick={() => (activeGroup === 5 ? escolherSugestao(item) : handleItemClick(item))}
               // Apagar repete com o olhar parado nele (apagar várias letras);
               // as outras teclas só voltam a valer depois que o olhar sai
               // (rearme por saída, ver GazeContext).

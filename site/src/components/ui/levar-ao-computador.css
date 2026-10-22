@@ -11,3 +11,19 @@
   flex-wrap: wrap;
   gap: var(--sp-3);
 }
+
+/* A marca de "copiado": o tique no teal da confirmação, que entra com o botão. */
+.levar-ao-computador__ok {
+  width: 1.1em;
+  height: 1.1em;
+  color: var(--ok);
+  animation: pop-check 300ms var(--ease-spring) both;
+}
+
+/* Não foi possível copiar: à vista, calmo, dizendo o que fazer. */
+.levar-ao-computador__aviso {
+  margin: var(--sp-3) 0 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+}

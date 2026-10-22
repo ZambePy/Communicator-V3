@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { FormularioPesquisa } from '@/components/beta/FormularioPesquisa'
 import { LinkedDevices } from '@/components/sections/LinkedDevices'
 import { Button } from '@/components/ui/Button'
-import { DownloadPanel } from '@/components/ui/DownloadPanel'
+import { AppDoCuidador, DownloadPanel } from '@/components/ui/DownloadPanel'
 import { LevarAoComputador } from '@/components/ui/LevarAoComputador'
 import { ehCelular } from '@/lib/aparelho'
 import { EtiquetaLancamento } from '@/components/ui/EtiquetaLancamento'
@@ -28,6 +27,7 @@ import { validar } from '@/utils/validation'
 import './checkout.css'
 import './sucesso.css'
 import './perfil.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 /* ============================================================
    /perfil — "Meu perfil": tudo o que a conta tem, num lugar só.
@@ -95,8 +95,7 @@ export default function Perfil() {
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container flow__inner perfil">
         <header className="perfil__cabeca">
           <div>
@@ -216,7 +215,7 @@ export default function Perfil() {
                   <dt>E-mail (login)</dt>
                   <dd>
                     {email || '—'}
-                    {perfil?.emailConfirmedAt && <span className="perfil__confirmado"> · confirmado</span>}
+                    {perfil?.emailConfirmedAt && <span className="perfil__confirmado"> (confirmado)</span>}
                   </dd>
                 </div>
                 <div>
@@ -342,7 +341,11 @@ export default function Perfil() {
                   : `O download abre em ${diaPorExtenso(program.launchAt)}, primeiro para ${BETA.sistemaDoLancamento}. macOS e Linux estão em preparação.`}
               </p>
               {ehCelular() ? (
-                <LevarAoComputador />
+                <>
+                  <LevarAoComputador />
+                  {/* No celular, o app de quem cuida é o que dá para instalar ali. */}
+                  <AppDoCuidador liberaEm={program.launchAt} />
+                </>
               ) : (
                 <DownloadPanel liberaEm={program.launchAt} onDownload={(os) => void markBetaDownload(os)} />
               )}

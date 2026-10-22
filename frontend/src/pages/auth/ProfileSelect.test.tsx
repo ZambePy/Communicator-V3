@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import React from 'react';
@@ -6,6 +6,7 @@ import i18n from '../../i18n';
 import { ProfileSelect } from './ProfileSelect';
 import { AuthProvider } from '../../context/AuthContext';
 import { criarPerfil, listarPerfis } from '../../services/local/profiles';
+import { armazemDaVozGuardada } from '../../services/voz/vozGuardada/armazem';
 
 // -----------------------------------------------------------------------------
 // Antes esta tela listava "Paciente A/B/C" cravados no código e a rota era
@@ -138,5 +139,61 @@ describe('remover um perfil', () => {
     criarPerfil({ name: 'Joana' });
     montar();
     expect(screen.getByRole('button', { name: /remover joana/i })).toHaveAttribute('data-no-dwell');
+  });
+
+  // Revisão final, rodada 1 (M4): a confirmação dizia só "o perfil e as frases do assistente".
+  it('a confirmação diz tudo o que sai: voz, diário, calibração e o que o cuidador anotou', async () => {
+    criarPerfil({ name: 'Joana' });
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: /remover joana/i }));
+    const dialogo = await screen.findByRole('alertdialog');
+    expect(dialogo).toHaveTextContent(/gravações da voz/i);
+    expect(dialogo).toHaveTextContent(/diário/i);
+    expect(dialogo).toHaveTextContent(/calibração/i);
+  });
+
+  // Revisão final, rodada 2 (N1): a confirmação diz EXATAMENTE o que sai da voz — as gravações e o
+  // termo dele, e a voz personalizada só se for dele.
+  it('a confirmação diz o que acontece com a voz personalizada: sai só se foi criada com o termo dele', async () => {
+    criarPerfil({ name: 'Joana' });
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: /remover joana/i }));
+    const dialogo = await screen.findByRole('alertdialog');
+    expect(dialogo).toHaveTextContent(/o termo que ele aceitou/i);
+    expect(dialogo).toHaveTextContent(/voz personalizada importada/i);
+    expect(dialogo).toHaveTextContent(/só se foi criada com o termo dele/i);
+    expect(dialogo).toHaveTextContent(/outro paciente.*continua/i);
+  });
+
+  it('se a voz personalizada não pôde ser apagada, a tela diz onde removê-la (e o perfil sai mesmo assim)', async () => {
+    criarPerfil({ name: 'Joana' });
+    (window as unknown as { irisflowVoz?: unknown }).irisflowVoz = {
+      removerDoPerfil: async () => ({ ok: false, erro: 'arquivo preso' }),
+    };
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: /remover joana/i }));
+    await screen.findByRole('alertdialog');
+    fireEvent.click(screen.getByRole('button', { name: 'Remover perfil' }));
+    await waitFor(() => expect(listarPerfis()).toHaveLength(0));
+    const aviso = await screen.findByRole('alert');
+    expect(aviso).toHaveTextContent(/não foi possível apagar a voz personalizada/i);
+    expect(aviso).toHaveTextContent(/Remover voz/);
+    delete (window as unknown as { irisflowVoz?: unknown }).irisflowVoz;
+    vi.restoreAllMocks();
+  });
+
+  it('se a voz guardada não pôde ser apagada, a tela diz (e o perfil sai mesmo assim)', async () => {
+    criarPerfil({ name: 'Joana' });
+    vi.spyOn(armazemDaVozGuardada(), 'apagarDoPerfil').mockResolvedValue({ ok: false, erro: 'arquivo preso' });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    montar();
+    fireEvent.click(screen.getByRole('button', { name: /remover joana/i }));
+    await screen.findByRole('alertdialog');
+    fireEvent.click(screen.getByRole('button', { name: 'Remover perfil' }));
+    await waitFor(() => expect(listarPerfis()).toHaveLength(0));
+    const aviso = await screen.findByRole('alert');
+    expect(aviso).toHaveTextContent(/não foi possível apagar as gravações da voz/i);
+    vi.restoreAllMocks();
   });
 });

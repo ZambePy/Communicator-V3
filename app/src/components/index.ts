@@ -14,6 +14,7 @@ export * from './MetricTile';
 export * from './SectionTitle';
 export * from './EmptyState';
 export * from './Notice';
+export * from './EspacoDoTopo';
 export * from './Screen';
 export * from './ScreenHeader';
 export * from './SegmentedControl';

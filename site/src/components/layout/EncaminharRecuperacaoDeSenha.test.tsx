@@ -35,8 +35,14 @@ vi.mock('@/lib/supabase', async (importOriginal) => {
   return {
     ...real,
     isSupabaseConfigured: true,
-    supabase: supabaseFake,
-    client: () => supabaseFake,
+    client: async () => supabaseFake,
+    clienteCarregado: () => supabaseFake,
+    clienteSeHouverSessao: async () => supabaseFake,
+    haSessaoGuardada: () => true,
+    aoCarregarCliente: (fn: (sb: typeof supabaseFake) => void) => {
+      fn(supabaseFake)
+      return () => {}
+    },
     get ENDERECO_INICIAL() {
       return aba.endereco
     },

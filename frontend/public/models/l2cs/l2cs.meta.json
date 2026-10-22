@@ -50,7 +50,7 @@
     }
   },
   "notes": "Outputs nomeados pelo export ('yaw', 'pitch') — SEMPRE indexar por nome, nunca por posição. REEXPORTADO em 2026-09-03 com eixos espaciais dinâmicos: input = ['batch', 3, 'height', 'width']. Os 110 tensores de peso são byte-idênticos ao export anterior (é reexport do mesmo checkpoint, não retreino), e a saída em 448² é bit-idêntica à de antes — a troca do binário não muda o comportamento no tamanho default. O tamanho efetivo do crop NÃO vem daqui: `l2cs.worker.ts` deduz o lado do próprio tensor (`tamanhoDoTensor`), porque com eixos dinâmicos duas fontes de verdade poderiam divergir em silêncio. `inputSize` aqui é o tamanho de REFERÊNCIA (o de treino da rede); quem escolhe o operacional é a flag `l2csInputSize` em src/config/experiment.ts. signConvention foi medido em 448² e NÃO foi revalidado em 224² — rodar frontend/scripts/l2cs_axis_validation.mjs antes de confiar nos sinais em 224. PROVENIÊNCIA: bloco `proveniencia` descreve com que dado os pesos foram treinados e sob que licença; `decoding` diz se os bins fecham a volta (circular) ou não (linear) — um modelo retreinado em ±45° precisa de 'linear', senão a média circular inventa ângulos.",
-  "sha256": null,
+  "sha256": "4128b10cd859d90c6879967ce80656df8134902abdf214a0b014b03cb8c68cb8",
   "proveniencia": {
     "treino": {
       "bases": [

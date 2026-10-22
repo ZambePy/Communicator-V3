@@ -72,3 +72,13 @@ export function horaDeBrasilia(horarioIso: string): string {
     minute: '2-digit',
   });
 }
+
+/**
+ * O texto do push de um pedido: um pedido que chegou atrasado (fila offline)
+ * diz a hora em que foi feito, para não passar por novo. Usado pelo socorro
+ * (index.ts) e pelos avisos com limite (./limites.ts).
+ */
+export function corpoDoPedido(mensagem: string, horarioIso: string, agora: Date = new Date()): string {
+  if (!chegouComAtraso(horarioIso, agora)) return mensagem;
+  return [mensagem, `pedido às ${horaDeBrasilia(horarioIso)}, chegou com atraso`].filter(Boolean).join(' — ');
+}

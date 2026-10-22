@@ -43,7 +43,7 @@ export const PAGES: PageMeta[] = [
     path: '/solucao',
     title: 'IrisFlow Communicator: o que o aplicativo faz',
     description:
-      'Comunicação por olhar, controle do computador, lazer, painel do cuidador e emergência — um aplicativo instalável que roda inteiro no computador da família.',
+      'Comunicação por olhar, controle do computador, lazer, painel do cuidador e emergência, num aplicativo que roda inteiro no computador da família.',
     index: true,
     changefreq: 'monthly',
     priority: 0.9,
@@ -61,7 +61,7 @@ export const PAGES: PageMeta[] = [
     path: '/acessibilidade',
     title: 'Acessibilidade: interface feita para o olhar',
     description:
-      'Os princípios de interface do IrisFlow para quem navega só com os olhos: retorno de fixação em três estágios, alvos grandes e emergência sempre no mesmo lugar.',
+      'As quatro regras de interface do IrisFlow para quem usa só os olhos: aviso em três momentos, botões grandes e emergência sempre no mesmo lugar.',
     index: true,
     changefreq: 'monthly',
     priority: 0.7,
@@ -79,7 +79,7 @@ export const PAGES: PageMeta[] = [
     path: '/cuidador',
     title: 'IrisFlow Cuidador: o app de celular de quem cuida',
     description:
-      'Veja o que o paciente escreve, responda de onde estiver e receba os pedidos de ajuda na hora. App para iPhone e Android, com a mesma conta do computador.',
+      'Veja o que a pessoa escreve, responda de onde estiver e receba os pedidos de ajuda na hora. App para iPhone e Android, com a mesma conta do computador.',
     index: true,
     changefreq: 'monthly',
     priority: 0.8,
@@ -88,10 +88,19 @@ export const PAGES: PageMeta[] = [
     path: '/baixar',
     title: 'Baixar o IrisFlow para o computador e o celular',
     description:
-      'O IrisFlow Communicator para o computador do paciente e o IrisFlow Cuidador para o celular de quem cuida. Os dois entram com a mesma conta.',
+      'O IrisFlow Communicator para o computador da pessoa e o IrisFlow Cuidador para o celular de quem cuida. Os dois usam a mesma conta.',
     index: true,
     changefreq: 'weekly',
     priority: 0.9,
+  },
+  {
+    path: '/meu-computador',
+    title: 'Meu computador funciona? Teste antes de baixar',
+    description:
+      'Teste no navegador, antes de baixar: câmera, placa de vídeo, versão do Windows, memória e processador. Nada é enviado, e a câmera desliga ao sair.',
+    index: true,
+    changefreq: 'monthly',
+    priority: 0.7,
   },
   {
     path: '/app',
@@ -200,6 +209,15 @@ export const PAGES: PageMeta[] = [
     path: '/sucesso',
     title: 'Conta criada',
     description: 'Sua conta IrisFlow está pronta: baixe o aplicativo e faça a primeira calibração.',
+    index: false,
+  },
+  {
+    // Destino do código QR do computador (19/10/2026). Fora do índice e do
+    // robots: o endereço só serve a quem acabou de ler o código.
+    path: '/parear',
+    title: 'Conectar o celular do cuidador',
+    description:
+      'Abre o app IrisFlow Cuidador a partir do código que o computador da pessoa mostra, sem digitar e-mail nem senha.',
     index: false,
   },
 ]

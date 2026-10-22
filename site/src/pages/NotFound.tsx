@@ -1,16 +1,13 @@
 import { Link, useLocation } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Button } from '@/components/ui/Button'
-import { BETA, BETA_CTA } from '@/data/content'
 import './not-found.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 /** Atalhos para onde a pessoa provavelmente queria ir. */
 const SUGESTOES = [
   { to: '/solucao', label: 'O produto' },
   { to: '/como-funciona', label: 'Como funciona' },
-  { to: '/cuidador', label: 'IrisFlow Cuidador' },
-  ...(BETA.ativo ? [{ to: BETA_CTA.to, label: 'Beta gratuita' }] : []),
   { to: '/baixar', label: 'Baixar' },
   { to: '/planos', label: 'Planos' },
 ]
@@ -39,8 +36,7 @@ export default function NotFound() {
 
   return (
     <section className="not-found on-dark">
-      <AmbientBackground />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container not-found__inner">
         <Reveal anim="up">
           <p className="not-found__code" aria-hidden="true">
@@ -54,8 +50,8 @@ export default function NotFound() {
 
         <Reveal anim="up" delay={120}>
           <p className="lead not-found__lead">
-            O endereço <code className="not-found__path">{caminho}</code> não leva a lugar nenhum
-            do site — talvez o link esteja incompleto ou a página tenha mudado de nome.
+            Não encontramos <code className="not-found__path">{caminho}</code>. O link pode estar
+            incompleto, ou a página mudou de lugar.
           </p>
         </Reveal>
 

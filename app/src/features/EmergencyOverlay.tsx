@@ -1,34 +1,57 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Linking, Modal, Platform, ScrollView, StyleSheet, useWindowDimensions, Vibration, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
+import { AccessibilityInfo, Linking, Modal, Platform, ScrollView, StyleSheet, Vibration, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FullWindowOverlay } from 'react-native-screens';
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
-import { Button, LiveDot, PressableScale, Text } from '@/components';
+import Animated from 'react-native-reanimated';
+import { Button, LiveDot, PressableScale, Text, useDefinirEspacoDoTopo } from '@/components';
 import { HelpRequest } from '@/data/types';
+import { useTravaDosBotoes } from '@/hooks/useTravaDosBotoes';
 import { haptics } from '@/lib/haptics';
 import { useApp } from '@/store/AppProvider';
-import { layout, lightColors, motion, radius, sizes, spacing, useEntrada, useTheme, zIndex } from '@/theme';
+import { brand, layout, lightColors, radius, sizes, spacing, useEntrada, useTheme, zIndex } from '@/theme';
 import { mensagemDeErro } from '@/utils/errors';
-import { firstName, helpKindLabel, hm } from '@/utils/format';
+import { firstName, helpKindLabel, hm, textoLegivel } from '@/utils/format';
 
 /** Vibração longa e insistente do Android enquanto ninguém confirma (padrão do canal "emergencia"). */
 const PADRAO_VIBRACAO = [0, 400, 200, 400, 200, 400];
 const REPETIR_A_CADA_MS = 2500;
-/**
- * Depois da confirmação, "Resolvido" aparece no MESMO lugar do rodapé em que
- * estava "Estou indo!". Por este tempo ele não aceita toque: um toque duplo
- * (comum no susto) confirmava e, no segundo toque, dava o socorro por resolvido.
- */
-export const TRAVA_DO_RESOLVIDO_MS = 1500;
+/** Altura mínima da faixa do alerta minimizado (cresce com a fonte do sistema). */
+const ALTURA_DA_FAIXA = sizes.touch + spacing.md;
 /**
  * A partir deste atraso entre o pedido (no computador) e a chegada ao
  * servidor, o overlay diz as duas horas. Mesmo limiar da notificação
  * (supabase/functions/desktop-sync/horario.ts).
  */
 const ATRASO_RELEVANTE_MS = 2 * 60_000;
+
+/**
+ * Redesenho de 19/10/2026 — legível para quem acorda com o alarme:
+ *  • o MOTIVO do pedido é a manchete ("Falta de ar"), não o rótulo genérico;
+ *  • vermelho chapado e mais fundo (#9E1B16: branco a 8:1, menos ofuscante no
+ *    escuro que o degradê de antes); aviso da sessão no marinho do app;
+ *  • no lugar dos anéis pulsando (enfeite), uma barra de prazo que diminui a
+ *    cada segundo — a única coisa que se mexe, e ela diz alguma coisa.
+ */
+const FUNDO_DO_SOCORRO = '#9E1B16';
+
+/** Até quantas letras o motivo vira manchete; acima, vai para o texto. */
+const MANCHETE_GRANDE = 24;
+const MANCHETE_MAX = 40;
+
+/**
+ * A manchete do alerta. Socorro e ajuda: o motivo enviado pelo computador
+ * ("FALTA DE AR" → "Falta de ar"), quando é curto o bastante para ser lido de
+ * longe; senão, o tipo do pedido. Avisos da sessão: sempre o tipo ("Aviso de
+ * postura"), com o detalhe no texto.
+ */
+export function mancheteDoAlerta(alerta: Pick<HelpRequest, 'kind' | 'message'>): { titulo: string; motivoNaManchete: boolean } {
+  const urgente = alerta.kind === 'emergencia' || alerta.kind === 'ajuda';
+  const motivo = alerta.message?.trim() ? textoLegivel(alerta.message) : null;
+  if (urgente && motivo && motivo.length <= MANCHETE_MAX) return { titulo: motivo, motivoNaManchete: true };
+  return { titulo: helpKindLabel[alerta.kind], motivoNaManchete: false };
+}
 
 /**
  * Alerta de tela cheia: aparece sobre qualquer tela quando o paciente aciona
@@ -46,6 +69,10 @@ const ATRASO_RELEVANTE_MS = 2 * 60_000;
  * alerta da tela cheia SEM confirmar nada: fica um aviso vermelho no topo, que
  * reabre o alerta; se o servidor reenviar o pedido (escalonamento), ele volta
  * sozinho para a tela cheia.
+ *
+ * O som (alarme local) não mora aqui: desde a revisão de UX de 19/10/2026 ele
+ * vale para todo pedido urgente sem confirmação — inclusive o que não está na
+ * tela, ou com o alerta minimizado — e quem cuida dele é o AppProvider.
  */
 export function EmergencyOverlay() {
   const { pendingAlert, dismissPendingAlert, pendingAlertMinimized, minimizePendingAlert } = useApp();
@@ -89,19 +116,35 @@ export function acaoDoVoltar(alerta: HelpRequest): 'ver-depois' | 'minimizar' {
 /**
  * O alerta minimizado: uma faixa no topo, acima das telas do app, que não some
  * enquanto o pedido estiver sem resposta. Tocar reabre a tela cheia.
+ *
+ * Revisão de UX de 19/10/2026 (achado 20): ela ficava exatamente sobre os
+ * botões Voltar/Fechar das telas (o mesmo topo de `Screen`). Agora informa a
+ * altura que ocupa e as telas descem o conteúdo por baixo dela (EspacoDoTopo).
  */
 function AlertaMinimizado({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) {
   const { restorePendingAlert, patient } = useApp();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const definirEspaco = useDefinirEspacoDoTopo();
+  // Reserva a altura mínima antes do primeiro quadro (a medida exata chega no
+  // onLayout) e devolve o espaço quando a faixa sai.
+  useLayoutEffect(() => {
+    definirEspaco(ALTURA_DA_FAIXA);
+    return () => definirEspaco(0);
+  }, [definirEspaco]);
   const nome = patient ? firstName(patient.user_name) : 'O paciente';
   // Confirmado em outro celular enquanto estava minimizado: a faixa não pode
   // continuar dizendo "sem resposta".
   const confirmado = Boolean(alerta.acknowledged_at);
-  const titulo = confirmado ? `${helpKindLabel[alerta.kind]} · confirmado` : `${helpKindLabel[alerta.kind]} sem resposta`;
+  const titulo = confirmado ? `${helpKindLabel[alerta.kind]}, confirmado` : `${helpKindLabel[alerta.kind]} sem resposta`;
   const detalhe = confirmado ? 'Toque para ver ou marcar como resolvido.' : urgent ? `${nome} ainda espera. Toque para responder.` : 'Toque para ver o aviso.';
   return (
-    <View pointerEvents="box-none" style={[styles.minimizadoWrap, { top: insets.top + spacing.sm }]}>
+    <View
+      pointerEvents="box-none"
+      testID="faixa-do-alerta"
+      onLayout={(e) => definirEspaco(e.nativeEvent.layout.height)}
+      style={[styles.minimizadoWrap, { top: insets.top + spacing.sm }]}
+    >
       <PressableScale
         onPress={restorePendingAlert}
         haptic="medium"
@@ -130,10 +173,6 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
   const { colors } = useTheme();
   const entrada = useEntrada();
   const insets = useSafeAreaInsets();
-  // Tela baixa ou fonte do sistema grande: sai o bloco decorativo (anéis +
-  // ícone, ~190 dp que não encolhiam) e o espaço fica para o texto.
-  const { height, fontScale } = useWindowDimensions();
-  const compacto = height < 720 || fontScale > 1.15;
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState<'ack' | 'resolve' | null>(null);
   const [falha, setFalha] = useState<string | null>(null);
@@ -155,21 +194,11 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
   }, [alertId, recebidoEm]);
-  // Confirmado agora, com a tela aberta: "Resolvido" espera um instante.
-  const [resolverTravado, setResolverTravado] = useState(false);
-  const ackVisto = useRef({ id: alertId, ack });
-  useEffect(() => {
-    const antes = ackVisto.current;
-    ackVisto.current = { id: alertId, ack };
-    if (antes.id !== alertId || !ack) {
-      setResolverTravado(false);
-      return;
-    }
-    if (antes.ack) return;
-    setResolverTravado(true);
-    const t = setTimeout(() => setResolverTravado(false), TRAVA_DO_RESOLVIDO_MS);
-    return () => clearTimeout(t);
-  }, [alertId, ack]);
+  // Um toque duplo não pode cair no botão que acabou de nascer no mesmo lugar
+  // do rodapé: "Resolvido" depois da confirmação, ou o "Estou indo!" de OUTRO
+  // pedido que assumiu a tela (um socorro mais grave, ou o seguinte sem
+  // resposta — revisão de UX de 19/10/2026). Ver `useTravaDosBotoes`.
+  const trava = useTravaDosBotoes(alertId, ack);
   /** O pedido esperou (fila offline do computador) antes de chegar ao servidor? */
   const chegouAtrasado = new Date(recebidoEm).getTime() - new Date(alerta.created_at).getTime() >= ATRASO_RELEVANTE_MS;
 
@@ -217,7 +246,11 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
   /** O cronômetro local zerou e o servidor ainda não escalou (ele roda a cada minuto). */
   const prazoEsgotado = remaining === 0;
   const contacts = settings?.emergency_contacts ?? [];
-  const gradient = urgent ? colors.gradientDanger : colors.gradientHero;
+  const fundo = urgent ? FUNDO_DO_SOCORRO : brand.navy;
+  const { titulo, motivoNaManchete } = mancheteDoAlerta(alerta);
+  const linhaDoTopo = `${motivoNaManchete ? helpKindLabel[alerta.kind] : urgent ? 'Emergência' : 'Aviso da sessão'} às ${hm(alerta.created_at)}`;
+  /** Quanto do prazo ainda resta (1 → 0); zero depois de escalado. */
+  const fracaoDoPrazo = escalado ? 0 : Math.max(0, Math.min(1, remaining / Math.max(1, timeout)));
 
   /**
    * `acknowledgeAlert` e `resolveAlert` escrevem no banco e REJEITAM quando a
@@ -230,7 +263,7 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
    * "Seu cuidador viu o pedido às HH:MM" quando está com internet.
    */
   const executar = async (acao: 'ack' | 'resolve') => {
-    if (busy || (acao === 'resolve' && resolverTravado)) return;
+    if (busy || (acao === 'resolve' ? trava.resolver : trava.confirmar)) return;
     setBusy(acao);
     setFalha(null);
     try {
@@ -255,55 +288,32 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
   // aparecem assim que o prazo estoura (local ou pelo carimbo do servidor), ou
   // depois da confirmação.
   const mostrarContatos = contacts.length > 0 && (ack || (urgent && (prazoEsgotado || Boolean(escalado))));
-  const icone: keyof typeof Ionicons.glyphMap = urgent ? 'hand-left' : alerta.kind === 'postura' ? 'body' : alerta.kind === 'fadiga' ? 'moon' : alerta.kind === 'dispositivo' ? 'desktop' : 'refresh';
-  // O vermelho da emergência é o mesmo nos dois temas; os textos sobre ele
-  // usam as cores do tema claro para o contraste não depender do tema.
-  const corIcone = urgent ? lightColors.dangerStrong : lightColors.primaryStrong;
 
   return (
-    <LinearGradient
-      colors={gradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0.4, y: 1 }}
-      style={[styles.root, { paddingTop: insets.top + spacing.lg }]}
-      accessibilityViewIsModal
-    >
+    <View style={[styles.root, { backgroundColor: fundo, paddingTop: insets.top + spacing.lg }]} accessibilityViewIsModal>
       <StatusBar style="light" />
       <ScrollView style={styles.flex} contentContainerStyle={styles.rolagem} testID="rolagem-do-alerta" showsVerticalScrollIndicator>
         <Animated.View entering={entrada.cascata(0)} style={styles.top}>
-          <View style={[styles.kicker, { backgroundColor: colors.onDarkFill }]}>
+          <View style={styles.kicker}>
             {/* Pulsa enquanto ninguém respondeu; parado depois da confirmação. */}
             {ack ? <View style={[styles.kickerDot, { backgroundColor: colors.onDark }]} /> : <LiveDot color={colors.onDark} />}
-            <Text variant="label" tone="onDark">
-              {urgent ? 'Emergência' : 'Aviso da sessão'} · {hm(alerta.created_at)}
+            <Text variant="label" tone="onDarkMuted">
+              {linhaDoTopo}
             </Text>
           </View>
-          <Text variant="display" tone="onDark" accessibilityRole="header" style={styles.title}>
-            {helpKindLabel[alerta.kind]}
+          <Text variant={titulo.length <= MANCHETE_GRANDE ? 'alarme' : 'display'} tone="onDark" accessibilityRole="header" style={styles.title}>
+            {titulo}
           </Text>
           <Text variant="h3" tone="onDarkMuted" weight="medium">
             {urgent ? `${nome} precisa de você agora.` : patient?.user_name ?? 'Paciente'}
           </Text>
         </Animated.View>
 
-        {!compacto ? (
-          <View style={styles.center} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden testID="alerta-decoracao">
-            <PulseRings paused={ack} />
-            <View style={[styles.iconCircle, { backgroundColor: colors.onDark }]}>
-              <Ionicons name={icone} size={sizes.icon.hero} color={corIcone} />
-            </View>
-          </View>
-        ) : (
-          <View style={styles.espaco} />
-        )}
-
-        <Animated.View entering={entrada.cascata(2)} style={styles.bottom}>
-          {alerta.message ? (
-            <View style={[styles.msgBox, { backgroundColor: colors.onDarkFill }]}>
-              <Text variant="body" tone="onDark" center>
-                {alerta.message}
-              </Text>
-            </View>
+        <Animated.View entering={entrada.cascata(1)} style={styles.bottom}>
+          {alerta.message && !motivoNaManchete ? (
+            <Text variant="body" tone="onDark" style={[styles.mensagem, { borderLeftColor: colors.onDarkBorder }]}>
+              {alerta.message}
+            </Text>
           ) : null}
 
           {/* Pedido que esperou na fila offline do computador: o horário do
@@ -323,11 +333,13 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
               ainda não chegou — o servidor roda a cada minuto; (3) contagem
               regressiva. Em nenhum deles alguém é telefonado sozinho. */}
           {urgent && !ack ? (
-            <View style={styles.prazoRow}>
-              <Ionicons name={escalado ? 'send' : 'time-outline'} size={sizes.icon.sm} color={colors.onDarkMuted} style={styles.prazoIcon} />
+            <View style={styles.prazo}>
+              <View style={[styles.trilho, { backgroundColor: colors.onDarkFill }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden testID="barra-do-prazo">
+                <View testID="restante-do-prazo" style={[styles.restante, { backgroundColor: colors.onDark, width: `${Math.round(fracaoDoPrazo * 100)}%` }]} />
+              </View>
               {/* Sem região "ao vivo": a contagem muda a cada segundo e o leitor
                   de tela repetiria o texto sem parar. O alerta já é anunciado ao abrir. */}
-              <Text variant="bodySmall" tone="onDarkMuted" style={styles.flex} testID="prazo">
+              <Text variant="bodySmall" tone="onDarkMuted" testID="prazo">
                 {textoPrazo}
               </Text>
             </View>
@@ -353,10 +365,10 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
                   haptic="medium"
                   accessibilityRole="button"
                   accessibilityLabel={`Ligar para ${c.name}`}
-                  style={[styles.contact, { backgroundColor: colors.onDarkFill, borderColor: colors.onDarkBorder }]}
+                  style={[styles.contact, { borderColor: colors.onDarkBorder }]}
                 >
                   <Ionicons name="call" size={sizes.icon.sm} color={colors.onDark} />
-                  <Text variant="bodySmall" tone="onDark" weight="semibold" style={styles.flexShrink}>
+                  <Text variant="body" tone="onDark" weight="semibold" style={styles.flexShrink}>
                     {c.name}
                   </Text>
                 </PressableScale>
@@ -388,6 +400,7 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
               size="xl"
               icon={falha ? 'refresh' : 'checkmark-circle'}
               loading={busy === 'ack'}
+              disabled={trava.confirmar}
               accessibilityHint={urgent ? `Avisa ${nome} e os outros celulares que você está indo` : undefined}
               onPress={() => void executar('ack')}
             />
@@ -407,64 +420,39 @@ function Conteudo({ alerta, urgent }: { alerta: HelpRequest; urgent: boolean }) 
               size="lg"
               icon={falha ? 'refresh' : 'checkmark-done'}
               loading={busy === 'resolve'}
-              disabled={resolverTravado}
+              disabled={trava.resolver}
               onPress={() => void executar('resolve')}
             />
             <Button title="Ver depois" variant="glass" onPress={dismissPendingAlert} />
           </>
         )}
       </View>
-    </LinearGradient>
+    </View>
   );
-}
-
-/** Anéis que pulsam a partir do ícone. Com "reduzir movimento": um anel parado. */
-function PulseRings({ paused }: { paused: boolean }) {
-  const { reduceMotion } = useTheme();
-  if (reduceMotion) return <Ring delay={0} paused estatico />;
-  return (
-    <>
-      {[0, 1, 2].map((i) => (
-        <Ring key={i} delay={i * (motion.duration.pulse / 3)} paused={paused} />
-      ))}
-    </>
-  );
-}
-
-function Ring({ delay, paused, estatico }: { delay: number; paused: boolean; estatico?: boolean }) {
-  const { colors } = useTheme();
-  const p = useSharedValue(estatico ? 0.35 : 0);
-  useEffect(() => {
-    if (estatico) return;
-    p.value = 0;
-    p.value = withDelay(delay, withRepeat(withSequence(withTiming(1, { duration: paused ? motion.duration.pulse * 1.8 : motion.duration.pulse, easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 0 })), -1, false));
-    return () => cancelAnimation(p);
-  }, [delay, paused, p, estatico]);
-  const s = useAnimatedStyle(() => ({ opacity: (1 - p.value) * (paused ? 0.25 : 0.55), transform: [{ scale: 1 + p.value * 1.9 }] }));
-  return <Animated.View style={[styles.ring, { borderColor: colors.onDark }, s]} />;
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   flexShrink: { flexShrink: 1 },
   root: { flex: 1, paddingHorizontal: layout.gutter + spacing.xs, zIndex: zIndex.overlay },
-  rolagem: { flexGrow: 1, gap: spacing.md, paddingBottom: spacing.md, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
+  // O texto fica no meio da área livre (quem acorda olha para o centro); com
+  // muito conteúdo, a rolagem começa do topo normalmente.
+  rolagem: { flexGrow: 1, justifyContent: 'center', gap: spacing.md, paddingBottom: spacing.xxl, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
   rodape: { gap: spacing.sm, paddingTop: spacing.md, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
-  espaco: { flexGrow: 1, minHeight: spacing.sm },
   minimizadoWrap: { position: 'absolute', left: layout.gutter, right: layout.gutter, zIndex: zIndex.overlay },
-  minimizado: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: sizes.touch + spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.lg },
+  minimizado: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: ALTURA_DA_FAIXA, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.lg },
   top: { alignItems: 'flex-start' },
-  kicker: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill },
+  kicker: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: sizes.icon.lg },
   kickerDot: { width: sizes.dot, height: sizes.dot, borderRadius: radius.pill },
-  title: { marginTop: spacing.lg },
-  center: { alignItems: 'center', justifyContent: 'center', flexGrow: 1, minHeight: sizes.emergencyIcon * 1.6 },
-  iconCircle: { width: sizes.emergencyIcon, height: sizes.emergencyIcon, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', width: sizes.emergencyIcon, height: sizes.emergencyIcon, borderRadius: radius.pill, borderWidth: sizes.borderThick + 1 },
-  bottom: { gap: spacing.md, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
-  msgBox: { borderRadius: radius.lg, padding: spacing.lg },
+  title: { marginTop: spacing.md, marginBottom: spacing.sm },
+  bottom: { gap: spacing.lg, marginTop: spacing.xxl, width: '100%', maxWidth: layout.maxContent, alignSelf: 'center' },
+  mensagem: { borderLeftWidth: sizes.borderThick, paddingLeft: spacing.md },
+  prazo: { gap: spacing.sm },
+  trilho: { height: spacing.sm, borderRadius: radius.pill, overflow: 'hidden' },
+  restante: { height: '100%', borderRadius: radius.pill },
   prazoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   prazoIcon: { marginTop: spacing.xxs },
   falha: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.md, padding: spacing.md },
   contacts: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  contact: { flexGrow: 1, flexBasis: '45%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: sizes.button.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: sizes.border },
+  contact: { flexGrow: 1, flexBasis: '45%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: sizes.button.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: sizes.borderThick },
 });

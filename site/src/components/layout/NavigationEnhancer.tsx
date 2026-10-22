@@ -1,8 +1,8 @@
-import { useEffect } from 'react'
-import { flushSync } from 'react-dom'
+import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { isRouteLoaded, preloadRoute } from '@/routes'
 import { prefersReducedMotion } from '@/hooks/useReducedMotion'
+import { aguardarPaginaNova, depoisDaPintura, interceptarParaPiscar, piscar, type Palpebras } from './piscada'
 
 /* ============================================================
    Duas melhorias de navegação, sem dependência nova:
@@ -11,20 +11,15 @@ import { prefersReducedMotion } from '@/hooks/useReducedMotion'
       pedaço da rota já começa a baixar. Quando a pessoa clica, quase
       sempre está pronto — e o esqueleto de carregamento nem aparece.
 
-   2. Transição de rota com a View Transitions API, quando o navegador
-      tem `document.startViewTransition` e a pessoa não pediu menos
-      movimento. O clique é interceptado na fase de captura (antes do
-      <Link> do react-router), a navegação roda dentro de flushSync e o
-      navegador cruza as duas imagens da página. Onde a API não existe,
-      nada é interceptado e vale o fade do `.anim-page` de sempre.
-
-   O BrowserRouter não expõe a API de view transitions (só o data router),
-   por isso a interceptação é feita aqui.
+   2. A piscada entre páginas (piscada.ts, 20/10/2026). O clique num link
+      para outra página é interceptado na fase de captura (antes do <Link>
+      do react-router): as pálpebras fecham sobre a página antiga, o
+      roteador troca a rota por baixo delas, a página nova é montada e
+      pintada uma vez — e só então elas abrem. Em todos os navegadores: a
+      capa é do DOM, sem a View Transitions API (até 20/10/2026 a troca
+      usava a API, com o cruzamento das duas imagens da página). Com
+      movimento reduzido, nada é interceptado.
    ============================================================ */
-
-type DocWithVT = Document & {
-  startViewTransition?: (cb: () => void | Promise<void>) => { finished: Promise<void> }
-}
 
 function internalHref(target: EventTarget | null): string | null {
   const a = (target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
@@ -36,53 +31,71 @@ function internalHref(target: EventTarget | null): string | null {
   return href
 }
 
+type Piscada = { palpebras: Palpebras; fase: 'fechando' | 'abrindo' }
+
 export function NavigationEnhancer() {
   const navigate = useNavigate()
   const location = useLocation()
+  // Lido no clique: o ouvinte não precisa ser trocado a cada rota.
+  const onde = useRef(location.pathname)
+  onde.current = location.pathname
+  // A piscada em curso, se houver.
+  const atual = useRef<Piscada | null>(null)
 
   useEffect(() => {
-    const vt = (document as DocWithVT).startViewTransition
-    if (typeof vt === 'function') document.documentElement.classList.add('vt')
-
     const onHint = (e: Event) => {
       const href = internalHref(e.target)
       if (href) void preloadRoute(href)
     }
 
     const onClick = (e: MouseEvent) => {
-      if (e.defaultPrevented || e.button !== 0) return
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
       const href = internalHref(e.target)
-      if (!href) return
-      const start = (document as DocWithVT).startViewTransition
-      if (typeof start !== 'function' || prefersReducedMotion()) return
+      const intercepta = interceptarParaPiscar({
+        href,
+        pathnameAtual: onde.current,
+        botao: e.button,
+        comModificador: e.metaKey || e.ctrlKey || e.shiftKey || e.altKey,
+        jaTratado: e.defaultPrevented,
+        reduzido: prefersReducedMotion(),
+      })
+      if (!intercepta || !href) return
 
-      const current = location.pathname + location.search + location.hash
-      if (href === current) return
-
+      // Só o padrão: o <Link> vê `defaultPrevented` e não navega, mas o
+      // onClick de quem o usa roda — a gaveta do celular fecha já no toque, e
+      // a piscada não acontece escondida atrás dela.
       e.preventDefault()
-      e.stopPropagation()
+      // Com as pálpebras fechando, o destino já foi escolhido: o segundo
+      // clique não faz nada. Abrindo, a página nova já responde: o clique
+      // começa outra piscada.
+      if (atual.current?.fase === 'fechando') return
+      atual.current?.palpebras.tirar()
 
-      const go = () => {
-        start.call(document, () => {
-          flushSync(() => navigate(href))
+      const palpebras = piscar()
+      const esta: Piscada = { palpebras, fase: 'fechando' }
+      atual.current = esta
+      // As pálpebras fecham já no clique; enquanto isso o pedaço da rota
+      // termina de chegar (até 350 ms; preloadRoute nunca rejeita).
+      const pedaco = isRouteLoaded(href)
+        ? Promise.resolve()
+        : Promise.race([preloadRoute(href), new Promise<void>((r) => window.setTimeout(r, 350))])
+
+      void Promise.all([palpebras.fechadas, pedaco])
+        .then(async () => {
+          navigate(href)
+          await aguardarPaginaNova(href)
+          await depoisDaPintura()
         })
-      }
-
-      // Se o pedaço ainda não chegou, espera um pouco por ele (até 350 ms):
-      // a transição cruza para a página pronta, não para o esqueleto.
-      if (isRouteLoaded(href)) {
-        go()
-      } else {
-        let done = false
-        const finish = () => {
-          if (done) return
-          done = true
-          go()
-        }
-        void preloadRoute(href).then(finish)
-        window.setTimeout(finish, 350)
-      }
+        .catch(() => {
+          // Uma falha aqui não pode prender a pessoa na página fechada.
+          navigate(href)
+        })
+        .finally(() => {
+          if (atual.current !== esta) return
+          esta.fase = 'abrindo'
+          void palpebras.abrir().then(() => {
+            if (atual.current === esta) atual.current = null
+          })
+        })
     }
 
     document.addEventListener('mouseover', onHint, { passive: true })
@@ -95,7 +108,18 @@ export function NavigationEnhancer() {
       document.removeEventListener('touchstart', onHint)
       document.removeEventListener('click', onClick, true)
     }
-  }, [navigate, location])
+  }, [navigate])
+
+  // Desmontado no meio de uma piscada, a capa não fica na tela. (Só ao
+  // desmontar: o efeito de cima roda de novo a cada rota, porque o
+  // `navigate` do BrowserRouter muda com ela, e a piscada continua.)
+  useEffect(
+    () => () => {
+      atual.current?.palpebras.tirar()
+      atual.current = null
+    },
+    [],
+  )
 
   return null
 }

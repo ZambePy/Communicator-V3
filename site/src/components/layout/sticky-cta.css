@@ -11,7 +11,8 @@
     right: 0;
     bottom: 0;
     padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
-    background: linear-gradient(180deg, rgba(6, 18, 35, 0), rgba(6, 18, 35, 0.94) 38%);
+    background: var(--v3-noite);
+    border-top: 1px solid var(--line);
     transform: translateY(110%);
     visibility: hidden;
     transition:
@@ -25,6 +26,13 @@
     transition:
       transform var(--dur) var(--ease-out),
       visibility 0s;
+  }
+
+  /* Com a barra à vista, o que recebe foco ou é rolado até lá para aparecer
+     acima dela (a barra tem ~75 px). Quando o foco está no conteúdo a barra
+     sai (StickyCta.tsx); isto cobre o resto, como as âncoras. */
+  html:has(.sticky-cta.is-visible) {
+    scroll-padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }
 
   /* O aviso de cookies ocupa a base da tela: a barra espera. */

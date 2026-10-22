@@ -29,7 +29,7 @@ describe('banner — estados do engine', () => {
 
   it('um erro de câmera com mensagem própria vence o estado genérico', () => {
     render(<GazeStatusBanner {...base} state="sem_camera" cameraError="Nenhuma câmera encontrada." />);
-    expect(screen.getByText(/câmera não está disponível/i)).toBeInTheDocument();
+    expect(screen.getByText(/não estou conseguindo usar a câmera/i)).toBeInTheDocument();
     expect(screen.queryByText(/parou de enviar imagem/i)).not.toBeInTheDocument();
   });
 
@@ -64,7 +64,7 @@ describe('banner — calibração suspensa pela janela fora do tamanho', () => {
 
   it('fica abaixo dos erros de câmera', () => {
     render(<GazeStatusBanner {...base} state="tracking" cameraError="Dispositivo em uso." avisoDeTela="Janela menor." />);
-    expect(screen.getByText(/câmera não está disponível/i)).toBeInTheDocument();
+    expect(screen.getByText(/não estou conseguindo usar a câmera/i)).toBeInTheDocument();
     expect(screen.queryByText('Janela menor.')).not.toBeInTheDocument();
   });
 });

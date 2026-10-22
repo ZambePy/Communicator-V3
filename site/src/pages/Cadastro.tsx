@@ -1,6 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { AmbientBackground } from '@/components/effects/AmbientBackground'
 import { Reveal } from '@/components/effects/Reveal'
 import { Stepper } from '@/components/ui/Stepper'
 import { Field, SelectField, CheckField } from '@/components/ui/Field'
@@ -14,6 +13,7 @@ import { PasswordStrength } from '@/components/ui/PasswordStrength'
 import { TRIAL_DAYS } from '@/data/content'
 import { usePlans } from '@/hooks/usePlans'
 import './checkout.css'
+import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 const STEPS = ['Quem paga', 'Quem usa', 'Confirmação']
 
@@ -140,8 +140,7 @@ export default function Cadastro() {
 
   return (
     <div className="flow">
-      <AmbientBackground variante="suave" />
-
+      <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
         <Reveal anim="fade">
           <span className="eyebrow">Avaliação gratuita</span>
@@ -403,11 +402,11 @@ export default function Cadastro() {
                     label={
                       <>
                         Li e aceito os{' '}
-                        <Link to="/termos" style={{ color: 'var(--ok)', fontWeight: 600 }}>
+                        <Link to="/termos" className="link-ok">
                           termos de uso
                         </Link>{' '}
                         e a{' '}
-                        <Link to="/privacidade" style={{ color: 'var(--ok)', fontWeight: 600 }}>
+                        <Link to="/privacidade" className="link-ok">
                           política de privacidade
                         </Link>
                         .
@@ -459,7 +458,7 @@ export default function Cadastro() {
         <Reveal anim="fade" delay={320}>
           <p className="flow__foot">
             Já tem conta?{' '}
-            <Link to="/entrar" className="underline-grow" style={{ color: 'var(--ok)' }}>
+            <Link to="/entrar" className="underline-grow">
               Entrar
             </Link>
           </p>
