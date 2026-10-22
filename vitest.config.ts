@@ -46,5 +46,14 @@ export default defineConfig({
      * sobrescreve este. Mexer só aqui não tem efeito lá.
      */
     testTimeout: 20_000,
+    /**
+     * Teto dos `beforeEach`/`afterEach`. O default do vitest (10 s) derrubou o
+     * CI de 22/10/2026 no Windows do GitHub: o primeiro `beforeEach` de
+     * `engine.reinicioLento.test.ts` (cria o engine e chama `start()`, tudo com
+     * mocks) passou de 10 s sob a suíte cheia, e o mesmo arquivo leva ~2,4 s no
+     * Linux e ~7 s no PC do dono. Nenhum hook espera timer real; 30 s é margem
+     * para máquina lenta, sem segurar um hook travado de fato por muito tempo.
+     */
+    hookTimeout: 30_000,
   },
 });
