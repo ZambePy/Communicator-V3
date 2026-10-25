@@ -7,7 +7,7 @@ Fontes (versionadas no repositório):
 Saídas:
     site/public/brand/irisflow-cuidador.svg            positivo (fundo claro)
     site/public/brand/irisflow-cuidador-negativo.svg   negativo (fundo escuro)
-    app/src/components/marcaCuidador.ts                o símbolo e o "cuidador" em caminhos SVG,
+    app/src/components/caminhosDaMarcaCuidador.ts      o símbolo e o "cuidador" em caminhos SVG,
                                                        para o app desenhar a marca sem carregar a fonte
 
 O texto é convertido em contorno (HarfBuzz para o espaçamento, fontTools para as
@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SIMBOLO = ROOT / 'site/public/brand/irisflow-simbolo.svg'
 FONTE = ROOT / 'frontend/src/assets/fonts/Boldonse.ttf'
 BRAND = ROOT / 'site/public/brand'
-TS = ROOT / 'app/src/components/marcaCuidador.ts'
+TS = ROOT / 'app/src/components/caminhosDaMarcaCuidador.ts'
 
 PALAVRA = 'cuidador'
 AZUL = '#1B54A8'      # lâminas (oficial)

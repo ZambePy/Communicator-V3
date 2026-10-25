@@ -31,6 +31,7 @@
       "environment": "preview",
       "env": {
         "EXPO_PUBLIC_APP_ENV": "preview",
+        "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a",
         "EXPO_PUBLIC_SUPABASE_URL": "https://xouznaqxhqzjdgeshlmh.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhvdXpuYXF4aHF6amRnZXNobG1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxMjYyODcsImV4cCI6MjEwNTcwMjI4N30.QCQMB5mqsgUvSu3sJBBkfJs2VC-F4vBVEqVKHdp6ujc"
       },

@@ -36,6 +36,14 @@ vi.mock('../../context/ToastContext', () => ({ useToast: () => toastMock }));
 // ficam de verdade: são o que o teste confere.
 vi.mock('../QuickPhrasesScreen', () => ({ TEXTOS_DAS_FRASES_RAPIDAS: ['Preciso de ajuda.', 'Obrigado.'] }));
 vi.mock('../core/PictogramScreen', () => ({ TEXTOS_DOS_PICTOGRAMAS: ['Quero água.', 'Estou com dor.'] }));
+// O modelo do assistente (as frases que o paciente mais usa) também é pesado de
+// carregar e não é o que estes testes conferem: sem frases do paciente.
+vi.mock('../../services/assistente', () => ({ carregarModelo: () => ({ frases: {} }) }));
+
+// A preparação carrega módulos com `import()`. Com a suíte inteira rodando, a
+// máquina fica ocupada e isso passa de 1 s (o prazo padrão do `waitFor`):
+// foi o que derrubou o `npm run publicar` em 25/10/2026. Prazo folgado aqui.
+const FOLGA = { timeout: 15_000 };
 
 import { VozScreen, TERMO_DE_CONSENTIMENTO } from './VozScreen';
 import { aquecerCache } from '../../services/voz';
@@ -118,7 +126,7 @@ describe('VozScreen', () => {
     // O clique começou a preparação (o ícone vira o círculo que gira)…
     expect(botao.querySelector('.animate-spin')).not.toBeNull();
     // …e ela termina depois de mandar as frases ao cache.
-    await waitFor(() => expect(botao.querySelector('.animate-spin')).toBeNull());
+    await waitFor(() => expect(botao.querySelector('.animate-spin')).toBeNull(), FOLGA);
     // Toda chamada ao cache leva as frases do quarto (a preparação em segundo
     // plano de um teste anterior pode terminar durante este: é a mesma função).
     const chamadas = vi.mocked(aquecerCache).mock.calls;
@@ -135,7 +143,7 @@ describe('VozScreen', () => {
         expect(textos, `"${frase}" ficou fora do cache`).toContain(frase);
       }
     }
-  });
+  }, 30_000);
 
   // Relato de 22/10/2026: os quatro caminhos abaixo falam com o processo
   // principal por `invoke`, que REJEITA quando ele lança. Sem `catch`, a
@@ -192,11 +200,11 @@ describe('VozScreen', () => {
       montar();
       const botao = screen.getByText(/Preparar frases rápidas/).closest('button')!;
       fireEvent.click(botao);
-      await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+      await waitFor(() => expect(toastMock.error).toHaveBeenCalled(), FOLGA);
       expect(textoDoErro()).toMatch(/preparar as frases/i);
-      await waitFor(() => expect(botao.querySelector('.animate-spin')).toBeNull());
+      await waitFor(() => expect(botao.querySelector('.animate-spin')).toBeNull(), FOLGA);
       aviso.mockRestore();
-    });
+    }, 30_000);
   });
 
   it('termo cobre autorização, uso local e remoção', () => {

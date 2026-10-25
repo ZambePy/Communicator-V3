@@ -90,7 +90,8 @@ describe('aviso de bloqueio da licença', () => {
       window.dispatchEvent(new Event('online'));
     });
 
-    await waitFor(() => expect(screen.getByText('splash')).toBeInTheDocument());
+    // Folga para a suíte inteira no PC: a revalidação ao voltar a internet passa de 1 s sob carga.
+    await waitFor(() => expect(screen.getByText('splash')).toBeInTheDocument(), { timeout: 5000 });
     expect(screen.queryByTestId('aviso-de-bloqueio')).toBeNull();
   });
 });

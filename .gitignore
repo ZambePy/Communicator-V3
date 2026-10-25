@@ -184,3 +184,6 @@ __pycache__/
 *.pyc
 playwright-report/
 test-results/
+
+# Cópia local do APK anterior do app do cuidador (scripts/publicar-apk-cuidador.ps1)
+_apk_anterior/

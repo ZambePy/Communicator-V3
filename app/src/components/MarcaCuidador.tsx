@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { brand, useTheme } from '@/theme';
 import { IrisLogo } from './IrisLogo';
-import { PALAVRA_CUIDADOR, PROPORCOES } from './marcaCuidador';
+import { PALAVRA_CUIDADOR, PROPORCOES } from './caminhosDaMarcaCuidador';
 
 /** O símbolo ocupa 83 % da caixa do `IrisLogo` (symbol.png: 425 de 512 px), com 8 % de margem embaixo. */
 const FRACAO_DO_SIMBOLO = 0.83;

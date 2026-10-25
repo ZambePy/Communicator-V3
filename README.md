@@ -2340,7 +2340,7 @@ oficial (`#1B54A8`). Para regenerar tudo:
 
 ```bash
 pip install fonttools uharfbuzz playwright pillow
-python app/scripts/gerar-marca-cuidador.py   # SVGs da marca + app/src/components/marcaCuidador.ts
+python app/scripts/gerar-marca-cuidador.py   # SVGs da marca + app/src/components/caminhosDaMarcaCuidador.ts
 python app/scripts/gerar-icones.py           # ícones, capa e imagem da loja (confere tamanhos e zona segura)
 ```
 
