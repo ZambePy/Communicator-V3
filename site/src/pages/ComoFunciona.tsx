@@ -4,7 +4,7 @@ import { PassosComTela, Estagios } from '@/components/produto/Passos'
 import { Capitulo, Detalhe, Recursos } from '@/components/pagina/Blocos'
 import { Reveal } from '@/components/effects/Reveal'
 import { DwellDemo } from '@/components/sections/DwellDemo'
-import { CalibracaoAoVivo } from '@/components/produto/CalibracaoAoVivo'
+import { PreparoDoOlhar } from '@/components/produto/PreparoDoOlhar'
 import { CallToAction } from '@/components/sections/CallToAction'
 import { EscritaPeloOlhar } from '@/components/home/olhar/EscritaPeloOlhar'
 import { Button } from '@/components/ui/Button'
@@ -19,9 +19,9 @@ import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
  * /como-funciona — do primeiro uso à seleção pelo olhar. A abertura mostra os
  * quatro passos com as telas de verdade; depois vêm o caminho do vídeo até o
  * clique, o teclado escrevendo com o olhar (que veio da abertura da home na
- * rodada 3, 21/10/2026: lá voltou a gravação real), a calibração ponto a
- * ponto (uma vez, quando chega à tela), a prancha para experimentar, as
- * travas contra o clique sem querer e para quem o IrisFlow serve.
+ * rodada 3, 21/10/2026: lá voltou a gravação real), o preparo e a
+ * calibração, a prancha para experimentar, as travas contra o clique sem
+ * querer e para quem o IrisFlow serve.
  */
 export default function ComoFunciona() {
   const program = useBetaProgram()
@@ -87,18 +87,20 @@ export default function ComoFunciona() {
         <div className="container calib-faixa__grade">
           <div>
             <h2 id="calibracao-titulo" className="titulo-capitulo">
-              Treze pontos, cerca de um minuto.
+              Cerca de um minuto para aprender o seu olhar.
             </h2>
             <p className="texto-capitulo">
-              A pessoa só acompanha com os olhos o alvo que anda pela tela. Em cada ponto ele encolhe, para
-              o olhar firmar no meio dele.
+              Antes de calibrar, o app confere o rosto, a luz e a distância e diz o que ajustar. Depois, a
+              pessoa só acompanha com os olhos um ponto que anda pela tela.
             </p>
             <p className="calib-faixa__nota">
-              A ordem dos pontos não é a de leitura. Ela é escolhida para que um movimento lento da
-              cabeça não seja confundido com o olhar. No fim, o resultado vem em palavras.
+              No fim, o resultado vem em palavras. Se algum ponto não ficou bom, só ele é refeito.
             </p>
           </div>
-          <CalibracaoAoVivo />
+          <figure className="calib-faixa__painel">
+            <PreparoDoOlhar />
+            <figcaption>Ilustração do preparo e do resultado, como aparecem no app.</figcaption>
+          </figure>
         </div>
       </section>
 

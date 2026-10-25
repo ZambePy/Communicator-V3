@@ -17,49 +17,25 @@
   --respiro-topo: clamp(48px, 9vh, 104px);
   position: relative;
   padding-block: calc(var(--header-h) + var(--respiro-topo)) clamp(56px, 9vh, 104px);
+  isolation: isolate;
+  overflow: hidden;
 }
 
-/* O texto da abertura e, ao lado dele, o motivo dos 13 pontos (FundoDaPagina.tsx,
-   CampoDoTopo.tsx). O campo mora só na altura do texto (não na da imagem do
-   produto que pode vir embaixo): com ela, as fileiras do meio ficavam atrás da
-   foto e sobravam bolinhas soltas. */
+.page-head__conteudo {
+  position: relative;
+  z-index: 1;
+}
+
 .page-head__topo {
   position: relative;
 }
 
-/* Sobe até a linha do cabeçalho fixo (o respiro de cima da faixa) e desce até o
-   fim do texto. Em tela larga ocupa o terço da direita do contêiner, onde a
-   faixa está vazia (o título termina antes); em tela estreita cobre a largura do
-   texto, bem apagado. Atrás do texto (vem antes dele no DOM), sem pegar clique. */
-.page-head__fundo {
-  position: absolute;
-  top: calc(-1 * var(--respiro-topo));
-  right: 0;
-  bottom: 0;
-  left: 0;
-  pointer-events: none;
-}
-
-@media (min-width: 961px) {
-  .page-head__fundo {
-    left: 70%;
-  }
-  /* Aberturas centralizadas não têm lado vazio: o campo ocupa a largura toda. */
-  .page-head--centro .page-head__fundo {
-    left: 0;
-  }
-}
-
-/* O mesmo motivo nas páginas sem faixa de abertura (formulários e fluxos): uma
-   camada solta no topo do <main>, por baixo de todo o conteúdo (z-index negativo
-   dentro do contexto de empilhamento do .main) e esmaecida para baixo, em vez
-   de terminar numa borda. O cartão do formulário tem fundo próprio e fica por cima. */
+/* Páginas sem faixa de abertura (formulários e fluxos): o fundo vivo numa
+   camada solta no topo do <main>, por baixo do conteúdo e esmaecido para baixo. */
 .fundo-da-pagina {
   position: absolute;
-  inset: var(--header-h) 0 auto 0;
-  /* Termina antes de onde as faixas de abertura costumam acabar (~450 px), para os
-     pontos não passarem da borda dela para a faixa seguinte. */
-  height: clamp(300px, 46vh, 440px);
+  inset: 0 0 auto 0;
+  height: clamp(380px, 58vh, 560px);
   z-index: -1;
   pointer-events: none;
   overflow: clip;
@@ -67,11 +43,8 @@
   mask-image: linear-gradient(to bottom, #000 40%, transparent);
 }
 
-/* Quando a página abre com uma faixa escura própria (.on-dark, de fundo opaco,
-   como a do Cuidador), a camada por baixo ficaria escondida por ela. Aí vai por
-   cima, com `lighten`: só clareia o que é mais escuro que o azul dos pontos. O
-   fundo recebe os pontos; o texto e os botões, mais claros, ficam exatamente
-   como estavam (a mesma ideia da luz do olhar, luz-do-olhar.css). */
+/* Se a página abre com uma faixa escura própria (opaca), a camada vai por
+   cima com `lighten`: clareia só o fundo, o texto fica como estava. */
 .fundo-da-pagina:has(+ .on-dark) {
   z-index: 1;
   mix-blend-mode: lighten;

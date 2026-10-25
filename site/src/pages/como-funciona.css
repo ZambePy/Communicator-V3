@@ -146,3 +146,38 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* ---------- preparo e calibração ---------- */
+.calib-faixa__grade {
+  display: grid;
+  gap: var(--sp-6);
+  align-items: center;
+}
+
+.calib-faixa__nota {
+  margin: var(--sp-4) 0 0;
+  max-width: 46ch;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.calib-faixa__painel {
+  margin: 0;
+  width: 100%;
+  max-width: 560px;
+  justify-self: center;
+}
+
+.calib-faixa__painel figcaption {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-min);
+  color: var(--text-dim);
+  text-align: center;
+}
+
+@media (min-width: 1000px) {
+  .calib-faixa__grade {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: var(--sp-8);
+  }
+}

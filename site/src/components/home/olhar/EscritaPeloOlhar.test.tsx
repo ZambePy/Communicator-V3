@@ -16,17 +16,10 @@ const { motorFalso } = vi.hoisted(() => {
   const motorFalso = {
     ligacoes: null as Ligacoes | null,
     chamadas: 0,
-    assumidas: 0,
     motor: {
       agendar: () => {},
       parar: () => {},
       recomecar: () => {},
-      assumir: () => {
-        motorFalso.assumidas += 1
-      },
-      mover: () => {},
-      soltar: () => {},
-      acionar: () => {},
       desligar: () => {},
     },
   }
@@ -59,7 +52,6 @@ function movimentoReduzido(sim: boolean) {
 afterEach(() => {
   window.matchMedia = matchMediaOriginal
   motorFalso.chamadas = 0
-  motorFalso.assumidas = 0
   motorFalso.ligacoes = null
 })
 
@@ -129,20 +121,15 @@ describe('<EscritaPeloOlhar />', () => {
     }
   })
 
-  it('o mouse assume só se mexendo de verdade; o toque e o movimento "de mentira" (página rolando), não', async () => {
+  it('o mouse sobre o teclado não muda nada: a demonstração só toca sozinha', async () => {
     movimentoReduzido(false)
     const { container } = montar()
     await waitFor(() => expect(motorFalso.chamadas).toBe(1))
     const tela = container.querySelector('.olhar__tela')!
-    const mover = (init: Record<string, unknown>) => {
-      const e = new MouseEvent('pointermove', { bubbles: true, clientX: 50, clientY: 50 })
-      for (const [k, v] of Object.entries(init)) Object.defineProperty(e, k, { value: v })
-      fireEvent(tela, e)
-    }
-    mover({ pointerType: 'touch', movementX: 4, movementY: 2 })
-    mover({ pointerType: 'mouse', movementX: 0, movementY: 0 })
-    expect(motorFalso.assumidas).toBe(0)
-    mover({ pointerType: 'mouse', movementX: 4, movementY: 0 })
-    expect(motorFalso.assumidas).toBe(1)
+    const e = new MouseEvent('pointermove', { bubbles: true, clientX: 50, clientY: 50 })
+    Object.defineProperty(e, 'pointerType', { value: 'mouse' })
+    fireEvent(tela, e)
+    expect(tela.className).toBe('olhar__tela')
+    expect(screen.queryByText(/Pare o mouse/)).toBeNull()
   })
 })

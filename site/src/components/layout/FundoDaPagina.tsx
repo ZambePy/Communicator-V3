@@ -1,30 +1,15 @@
 import { createContext, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from 'react'
-import { CampoDoTopo } from '@/components/v3/CampoDoTopo'
+import { Atmosfera } from '@/components/fundo/Atmosfera'
 
 /**
- * O fundo das páginas internas (rodada 4, 21/10/2026): no topo de cada página
- * interna, o motivo discreto dos 13 pontos da calibração, o mesmo sistema da
- * abertura da home sem repetir a abertura (v3/CampoDoTopo.tsx). A luz do olhar,
- * que acompanha o mouse, é do site inteiro e mora no Layout.
+ * O fundo vivo do topo das páginas de dentro.
  *
- * Uso: a página escreve `<FundoDaPagina />` (ou `variante="calmo"`) antes da
- * `<PageHead />`. Quem DESENHA é a faixa de abertura, por dentro dela: a faixa
- * tem fundo opaco, e uma camada fora dela ficaria por baixo (ou por cima do
- * texto). Por isso este componente só PEDE o fundo, e a PageHead o pinta entre
- * o fundo da faixa e o título.
+ * A página escreve `<FundoDaPagina />` (ou `variante="calmo"`, para leitura e
+ * formulários) antes da `<PageHead />`. Quem desenha é a própria PageHead,
+ * dentro da faixa dela. Páginas sem PageHead ganham uma camada solta no topo
+ * do <main>, esmaecida para baixo, por baixo do conteúdo.
  *
- * Páginas sem faixa de abertura (formulários e fluxos, com o título dentro do
- * próprio cartão) ganham o mesmo motivo numa camada solta no topo do <main>,
- * por baixo de todo o conteúdo e esmaecida para baixo: o cartão, que tem fundo
- * próprio, fica por cima.
- *
- * - `padrao`: os 13 pontos entram na ordem da calibração, um anel de fixação
- *   enche no ponto do centro uma vez, e o campo fica parado.
- * - `calmo`: para páginas de leitura, formulário e fluxo, onde nada deve
- *   chamar a atenção: os pontos só assentam, mais apagados, e não há anel.
- *
- * Sem o provedor (fora do Layout: em um teste de página, por exemplo), não faz
- * nada, e a faixa fica lisa como antes.
+ * Fora do Layout (num teste de página, por exemplo) não faz nada.
  */
 export type VarianteDoFundo = 'padrao' | 'calmo'
 
@@ -89,7 +74,7 @@ export function FundoDaPagina({ variante = 'padrao' }: { variante?: VarianteDoFu
   if (!pedir || temAbertura) return null
   return (
     <div className="fundo-da-pagina" aria-hidden="true">
-      <CampoDoTopo variante={variante} />
+      <Atmosfera variante={variante === 'calmo' ? 'calmo' : 'topo'} />
     </div>
   )
 }

@@ -11,8 +11,7 @@
   padding: 4px 12px;
   border: 1px solid var(--accent-line);
   border-radius: var(--r-pill);
-  /* Opaco: o campo dos 13 pontos passa por trás do selo na abertura da home, e
-     um fundo translúcido deixava o círculo aparecer através dele. */
+  /* Opaco: o fundo vivo da abertura passa por trás do selo. */
   background: var(--v3-superficie);
   color: var(--text);
   font-size: var(--fs-min);

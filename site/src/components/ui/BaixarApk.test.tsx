@@ -18,6 +18,7 @@ describe('BaixarApk', () => {
     expect(botao).toHaveAttribute('href', lojas.apk)
     expect(botao).not.toHaveAttribute('target')
     expect(screen.getByText(/instalar apps desta fonte/)).toBeInTheDocument()
+    expect(screen.getByText(/parar em/)).toBeInTheDocument()
   })
 
   it('antes do lançamento, diz o dia em vez de oferecer o arquivo', () => {

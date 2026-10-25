@@ -1,8 +1,6 @@
 /* ============================================================
    Cartão em 3D da tela de pagamento (CartaoAnimado.tsx).
-   Três camadas: .cartao3d dá a perspectiva, .cartao3d__corpo inclina com o
-   mouse (transição curta) e .cartao3d__giro vira para o verso (transição
-   longa), cada uma com a sua própria transição.
+   .cartao3d dá a perspectiva e .cartao3d__giro vira para o verso.
    ============================================================ */
 
 .cartao3d {
@@ -14,14 +12,10 @@
 }
 
 .cartao3d__corpo {
-  --incl-x: 0deg;
-  --incl-y: 0deg;
   position: relative;
   width: 100%;
   height: 100%;
   transform-style: preserve-3d;
-  transform: rotateX(var(--incl-x)) rotateY(var(--incl-y));
-  transition: transform 180ms var(--ease-out);
 }
 
 .cartao3d__giro {
@@ -201,7 +195,7 @@
   }
 }
 
-/* Movimento reduzido: o giro e a inclinação já ficam instantâneos pela regra
+/* Movimento reduzido: o giro já fica instantâneo pela regra
    global; aqui o pulso vira um brilho parado, que ainda indica o estado. */
 @media (prefers-reduced-motion: reduce) {
   .cartao3d--processando .cartao3d__face {

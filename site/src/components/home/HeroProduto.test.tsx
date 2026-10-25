@@ -10,14 +10,8 @@ import { BETA_PROGRAM_RESERVA, type BetaProgram } from '@/services/api'
 import { BETA_CTA, HERO } from '@/data/content'
 
 /* A abertura da home: antes do lançamento a chamada é a da beta, com o dia;
-   depois, "Baixar grátis". O dono recusou (21/10/2026) a grade, o feixe de
-   luz, a marca d'água, o olho de partículas e a aurora — o título e o texto
-   ficam sobre o marinho da marca e o produto de verdade (o monitor da seção
-   seguinte) é o visual. Depois de aprovar esse desenho, pediu efeitos de fundo
-   e animações (21/10/2026, 21:53): entraram só os que nascem do produto — o
-   campo dos 13 pontos da calibração, quase invisível, atrás do texto, e o
-   título que se fecha como o anel de fixação. O teclado animado está em "Como
-   funciona". */
+   depois, "Baixar grátis". O fundo vivo mora na Home, atrás da abertura e do
+   monitor; aqui só o texto, as chamadas e os fatos. */
 
 const { apiFake } = vi.hoisted(() => ({ apiFake: { programa: null as BetaProgram | null } }))
 
@@ -92,18 +86,11 @@ describe('<HeroProduto />', () => {
     expect(secao.querySelector('.olhar, .olhar__grade, video')).toBeNull()
   })
 
-  it('o único efeito de fundo é o campo dos 13 pontos da calibração: atrás do texto, decorativo, sem nada no foco', () => {
+  it('sem os 13 pontos da calibração: a abertura não desenha alvos atrás do texto', () => {
     const { container } = montar()
     const secao = container.querySelector('section.hero-produto')!
-    const campo = secao.querySelector('.v3-campo')!
-    expect(campo).not.toBeNull()
-    expect(campo).toHaveAttribute('aria-hidden', 'true')
-    expect(campo.querySelectorAll('.v3-campo__ponto')).toHaveLength(13)
-    // Vem antes do texto (fica atrás) e é o único SVG da abertura além dos ícones dos botões.
-    expect(secao.firstElementChild).toBe(campo)
-    expect(Array.from(secao.querySelectorAll('svg')).filter((s) => !campo.contains(s) && !s.closest('.btn'))).toEqual([])
-    expect(campo.querySelector('a, button, input, [tabindex]')).toBeNull()
-    // O texto continua com o mesmo conteúdo e o título na mesma árvore.
+    expect(secao.querySelector('.v3-campo, .v3-campo__ponto')).toBeNull()
+    expect(Array.from(secao.querySelectorAll('svg')).filter((s) => !s.closest('.btn'))).toEqual([])
     expect(secao.querySelector('.hero-produto__grade h1')).not.toBeNull()
   })
 

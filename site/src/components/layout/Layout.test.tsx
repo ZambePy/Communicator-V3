@@ -5,13 +5,11 @@ import { Layout } from './Layout'
 import { FundoDaPagina } from './FundoDaPagina'
 import { PageHead } from './PageHead'
 import { esquecerBetaProgram } from '@/hooks/useBetaProgram'
-import { MOVIMENTO_REDUZIDO, PONTEIRO_FINO, responderMidia } from '@/test/observador'
+import { PONTEIRO_FINO, responderMidia } from '@/test/observador'
 import { FUTURO_DO_ROTEADOR } from '@/test/futuro-do-roteador'
 
-/* O Layout é o que as rotas têm em comum. Desde a rodada 4 (21/10/2026, pedido
-   do dono: "efeitos de fundo em todas as páginas, o mesmo sistema da home") ele
-   leva a luz do olhar para o site inteiro e liga as páginas internas ao fundo
-   dos 13 pontos. */
+/* O Layout é o que as rotas têm em comum: liga as páginas internas ao fundo
+   vivo e não tem nenhum efeito que siga o mouse. */
 
 vi.mock('@/context/AccountContext', () => ({
   useAccount: () => ({ authenticated: false, loading: false, account: null }),
@@ -44,27 +42,14 @@ function rota(caminho: string, pagina: React.ReactNode) {
   )
 }
 
-const luz = () => document.body.querySelector('.v3-luz')
-
 describe('<Layout />', () => {
-  it('a luz do olhar vale em qualquer página, não só na home (com mouse)', () => {
+  it('nenhum efeito segue o mouse: nada de luz nem anel no <body>, com ou sem mouse', () => {
     restaurarMidia = responderMidia(PONTEIRO_FINO)
     rota('/sobre', <PageHead title="Sobre" />)
-    expect(luz()).not.toBeNull()
+    expect(document.querySelector('.v3-luz, .v3-cursor')).toBeNull()
   })
 
-  it('sem mouse (toque) a luz não existe', () => {
-    rota('/sobre', <PageHead title="Sobre" />)
-    expect(luz()).toBeNull()
-  })
-
-  it('com movimento reduzido a luz não existe, mesmo com mouse', () => {
-    restaurarMidia = responderMidia(PONTEIRO_FINO, MOVIMENTO_REDUZIDO)
-    rota('/sobre', <PageHead title="Sobre" />)
-    expect(luz()).toBeNull()
-  })
-
-  it('uma página que pede <FundoDaPagina /> ganha os 13 pontos na faixa de abertura', () => {
+  it('uma página que pede <FundoDaPagina /> ganha o fundo vivo na faixa de abertura', () => {
     const { container } = rota(
       '/planos',
       <>
@@ -72,14 +57,14 @@ describe('<Layout />', () => {
         <PageHead title="Planos" />
       </>,
     )
-    const fundo = container.querySelector('main .page-head__fundo')
+    const fundo = container.querySelector('main .page-head > .atmosfera')
     expect(fundo).not.toBeNull()
-    expect(fundo!.querySelectorAll('.v3-campo__ponto')).toHaveLength(13)
-    expect(fundo!.querySelector('.v3-campo')).toHaveClass('v3-campo--calmo')
+    expect(fundo).toHaveClass('atmosfera--calmo')
+    expect(container.querySelector('.v3-campo, .v3-campo__ponto')).toBeNull()
   })
 
   it('uma página que não pede, não ganha (as faixas lisas continuam lisas)', () => {
     const { container } = rota('/termos', <PageHead title="Termos" />)
-    expect(container.querySelector('.page-head__fundo')).toBeNull()
+    expect(container.querySelector('.atmosfera')).toBeNull()
   })
 })

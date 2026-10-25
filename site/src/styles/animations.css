@@ -1,25 +1,145 @@
 /* ============================================================
-   Movimento do site (redesenho de 19/10/2026).
+   Movimento do site.
 
-   Regra: o que se mexe sozinho é pouco e diz alguma coisa. Ficaram:
-   - a abertura da home, uma vez (o título e o teclado entram juntos);
-   - o aro de fixação dos botões principais, que fecha com o ponteiro parado
-     em cima — o gesto do produto, respondendo a um gesto da pessoa;
-   - as confirmações (código certo, mensagem enviada) e o carregamento.
-   Em 20/10/2026 entrou o movimento que é mecânica do próprio IrisFlow, e só
-   ele: o olhar escrevendo na abertura da home, a piscada entre páginas, os
-   13 pontos da calibração (Como funciona) e a frase que chega ao celular de
-   quem cuida (Cuidador) — cada um uma vez, ou em resposta à pessoa.
-   Saíram as partículas, as manchas de luz, a varredura, o título que sobe
-   palavra por palavra e a entrada de cada bloco ao rolar. Tudo respeita
-   prefers-reduced-motion (global.css).
-   Rodada 3 (21/10/2026): o v3 trouxe as partículas, a aurora da chamada final
-   e o anel que acompanha o ponteiro. O dono recusou o "efeito" no mesmo dia
-   ("parece feito por IA"): as partículas e a aurora saíram. Ficou o anel do
-   ponteiro (o gesto do produto) e UM movimento de abertura, o monitor que sobe
-   uma vez para o lugar (`monitor-sobe`, em components/home/capitulos.css).
-   O movimento reduzido para tudo.
+   - Entradas ao rolar: .reveal (Reveal.tsx + RevelarAoRolar.tsx).
+   - Entrada das aberturas das páginas de dentro, a cada troca de rota.
+   - Microinterações de botões e cartões (button.css, cartoes.css).
+   - Fundos vivos: components/fundo/atmosfera.css.
+   - A piscada entre páginas (piscada.ts).
+
+   Só transform/translate e opacity animam. Com movimento reduzido, nada
+   disso acontece (regra global em global.css e as regras abaixo).
    ============================================================ */
+
+/* ---------- entradas ao rolar ----------
+   Escondido só quando o observador está ligado (classe js-reveal no <html>).
+   A entrada usa `translate`, e não `transform`, para não brigar com o
+   transform do hover dos cartões. */
+.js-reveal .reveal:not(.is-visto) {
+  opacity: 0;
+}
+
+.js-reveal .reveal.is-visto {
+  animation: revelar-sobe var(--dur-revelar) var(--ease-out) var(--reveal-atraso, 0ms) both;
+}
+
+.js-reveal .reveal.is-visto[data-reveal='fade'] {
+  animation-name: revelar-aparece;
+}
+
+.js-reveal .reveal.is-visto[data-reveal='zoom'] {
+  animation-name: revelar-cresce;
+}
+
+.js-reveal .reveal.is-visto[data-reveal='left'] {
+  animation-name: revelar-direita;
+}
+
+.js-reveal .reveal.is-visto[data-reveal='right'] {
+  animation-name: revelar-esquerda;
+}
+
+@keyframes revelar-sobe {
+  from {
+    opacity: 0;
+    translate: 0 28px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes revelar-aparece {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes revelar-cresce {
+  from {
+    opacity: 0;
+    scale: 0.96;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes revelar-direita {
+  from {
+    opacity: 0;
+    translate: -28px 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes revelar-esquerda {
+  from {
+    opacity: 0;
+    translate: 28px 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js-reveal .reveal:not(.is-visto),
+  .js-reveal .reveal.is-visto {
+    opacity: 1;
+    animation: none;
+  }
+}
+
+/* ---------- abertura das páginas de dentro ----------
+   O <main> é remontado a cada rota: o rótulo, o título, a frase e as ações
+   sobem em cascata, logo depois que a piscada abre. */
+.page-head__inner > * {
+  animation: abertura-sobe 700ms var(--ease-out) both;
+}
+
+.page-head__inner > :nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.page-head__inner > :nth-child(3) {
+  animation-delay: 160ms;
+}
+
+.page-head__inner > :nth-child(4) {
+  animation-delay: 240ms;
+}
+
+.page-head__visual {
+  animation: abertura-sobe 900ms var(--ease-out) 260ms both;
+}
+
+@keyframes abertura-sobe {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-head__inner > *,
+  .page-head__visual {
+    animation: none;
+  }
+}
 
 /* ---------- anel que se expande (confirmação de sucesso) ---------- */
 @keyframes ring-expand {
@@ -257,9 +377,8 @@
   border-radius: var(--r-lg);
 }
 
-/* ---------- entradas das aberturas ----------
-   As páginas de dentro abrem paradas: o título já está lá quando a página
-   chega. A abertura da home tem a sua própria entrada (hero-produto.css). */
+/* Classes antigas de entrada, mantidas sem efeito (a abertura agora anima
+   pelo .page-head__inner, acima). */
 .anim-entrada,
 .anim-entrada--2,
 .anim-entrada--3,

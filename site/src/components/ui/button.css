@@ -1,7 +1,8 @@
-/* Botões (Button.tsx). Chapados: sem degradê, sem halo, sem brilho que
-   segue o ponteiro. A hierarquia vem da cor: o principal é papel sobre o
+/* Botões (Button.tsx). A hierarquia vem da cor: o principal é papel sobre o
    marinho (15,7:1), o secundário é contorno, o fantasma é só texto. Alvos
-   grandes, como no app: 48 px de altura, 56 px no tamanho grande. */
+   grandes, como no app: 48 px de altura, 56 px no tamanho grande.
+   No hover, o botão sobe 2 px, ganha sombra e, no principal, um reflexo de
+   luz atravessa a superfície. Nada segue o ponteiro. */
 
 .btn {
   position: relative;
@@ -25,7 +26,14 @@
     background-color var(--dur-fast) ease,
     border-color var(--dur-fast) ease,
     color var(--dur-fast) ease,
-    transform var(--dur-fast) ease;
+    box-shadow var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .btn:hover:not(:disabled):not([aria-disabled='true']) {
+    transform: translateY(-2px);
+  }
 }
 
 .btn--lg {
@@ -78,6 +86,28 @@
 .btn--primary:hover:not(:disabled),
 .btn--teal:hover:not(:disabled) {
   background: #ffffff;
+  box-shadow: var(--glow);
+}
+
+/* O reflexo: uma faixa de luz que atravessa o botão uma vez por hover. */
+.btn--primary::before,
+.btn--teal::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 35%, rgba(169, 198, 247, 0.5) 50%, transparent 65%) no-repeat;
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  pointer-events: none;
+}
+
+@media (hover: hover) {
+  .btn--primary:hover:not(:disabled)::before,
+  .btn--teal:hover:not(:disabled)::before {
+    transition: background-position 800ms var(--ease-out);
+    background-position: 0% 0;
+  }
 }
 
 /* Pressionado: um tom abaixo do papel e 1 px para baixo (o transform está acima).
@@ -174,6 +204,7 @@
 .btn--secondary:hover:not(:disabled) {
   border-color: var(--papel);
   background: rgba(243, 246, 251, 0.06);
+  box-shadow: 0 12px 26px -16px rgba(2, 7, 16, 0.9);
 }
 
 .btn--secondary:active:not(:disabled):not([aria-disabled='true']) {

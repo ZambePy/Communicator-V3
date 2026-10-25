@@ -57,7 +57,7 @@ afterAll(() => {
 describe('<Home /> v3', () => {
   it('a demonstração real é a seção logo depois da abertura, num monitor (sem brilho)', () => {
     const { container } = montar()
-    const secoes = Array.from(container.querySelectorAll('main > section, .v3 > section'))
+    const secoes = Array.from(container.querySelectorAll('main > section, .home-topo__conteudo > section, .v3 > section'))
     expect(secoes[0].querySelector('h1')).not.toBeNull()
     const demo = secoes[1]
     const video = demo.querySelector('video')!
@@ -87,21 +87,25 @@ describe('<Home /> v3', () => {
     const chamada = container.querySelector('.v3-chamada-final')!
     expect(chamada).not.toBeNull()
     expect(within(chamada as HTMLElement).getByRole('heading', { level: 2 })).toHaveTextContent('A pessoa continua lá.')
-    // O campo sólido: nenhuma aurora nem luz atrás dele.
-    expect(chamada.querySelector('section.cta')).not.toBeNull()
-    expect(chamada.querySelector('.v3-aurora, .v3-aurora__luz, svg.v3-aurora__onda')).toBeNull()
+    // A chamada tem o fundo vivo próprio e o painel da voz no lugar dos 13 pontos.
+    expect(chamada.querySelector('section.cta > .atmosfera--chamada')).not.toBeNull()
+    expect(chamada.querySelector('.voz')).not.toBeNull()
   })
 
-  it('sem efeito de fundo na página inteira: nada de grade, feixe, marca d\'água, partículas nem aurora', () => {
+  it('o fundo vivo aparece no topo (abertura e monitor juntos) e na chamada final, sem canvas nem WebGL', () => {
     const { container } = montar()
-    for (const seletor of ['.v3-grade', '.v3-feixe', '.v3-marca-dagua', '.v3-particulas', '.v3-ancora', '[data-particulas]', '[data-particulas-secao]', '.v3-aurora', 'canvas']) {
-      expect(container.querySelector(seletor), seletor).toBeNull()
-    }
+    const fundos = Array.from(container.querySelectorAll<HTMLElement>('.atmosfera'))
+    expect(fundos.map((f) => f.className)).toEqual([
+      expect.stringContaining('atmosfera--abertura'),
+      expect.stringContaining('atmosfera--chamada'),
+    ])
+    expect(container.querySelector('.home-topo > .atmosfera + .home-topo__conteudo .hero-produto')).not.toBeNull()
+    expect(container.querySelector('canvas')).toBeNull()
   })
 
-  it('os efeitos novos são só decoração: fora do leitor de tela, sem nada no foco, sem canvas nem WebGL', () => {
+  it('os efeitos são só decoração: fora do leitor de tela e sem nada no foco', () => {
     const { container } = montar()
-    for (const seletor of ['.v3-campo', '.v3-chega', 'svg.capitulos__fixa', '.v3-arco__curva', '.ilustracao--alvos']) {
+    for (const seletor of ['.atmosfera', '.v3-chega', 'svg.capitulos__fixa', '.v3-arco__curva', '.voz']) {
       const achados = Array.from(container.querySelectorAll<HTMLElement>(seletor))
       expect(achados.length, seletor).toBeGreaterThan(0)
       for (const el of achados) {
@@ -109,14 +113,14 @@ describe('<Home /> v3', () => {
         expect(el.querySelector('a, button, input, select, textarea, [tabindex]'), seletor).toBeNull()
       }
     }
-    expect(container.querySelector('canvas')).toBeNull()
   })
 
-  it('a abertura leva o campo dos 13 pontos atrás do texto; o resto da home não ganha outro', () => {
+  it('nenhum alvo de calibração nem efeito que siga o mouse na home', () => {
     const { container } = montar()
-    expect(container.querySelectorAll('.v3-campo')).toHaveLength(1)
-    expect(container.querySelector('section.hero-produto > .v3-campo')).not.toBeNull()
-    expect(container.querySelectorAll('.v3-campo__ponto')).toHaveLength(13)
+    for (const seletor of ['.v3-campo', '.v3-campo__ponto', '.ilustracao--alvos', '.calib', '.v3-cursor', '.v3-luz']) {
+      expect(container.querySelector(seletor), seletor).toBeNull()
+    }
+    expect(document.querySelector('.v3-cursor, .v3-luz')).toBeNull()
   })
 
   /* Auditoria P2-14 (21/10/2026): a ressalva dos alertas aparecia duas vezes na home (no

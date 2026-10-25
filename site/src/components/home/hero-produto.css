@@ -1,13 +1,5 @@
-/* Abertura da home (HeroProduto.tsx).
-
-   Sem efeito nenhum (pedido do dono de 21/10/2026): o fundo é o marinho da
-   marca, chapado, e a altura é a do conteúdo — não a da tela. O que ocupa o
-   resto da primeira tela é o topo do monitor com a gravação real do app, na
-   seção seguinte (Capitulos).
-
-   Computador: duas colunas, 5 : 7 como em Capitulos. O título grande na
-   esquerda; na direita, alinhados pela base dele, o parágrafo, as chamadas e
-   os fatos. Celular: uma coluna. */
+/* Abertura da home (HeroProduto.tsx). Computador: duas colunas, 5 : 7, como
+   em Capitulos. Celular: uma coluna. */
 
 .hero-produto {
   position: relative;
@@ -15,7 +7,6 @@
 }
 
 .hero-produto__grade {
-  /* Por cima do campo de pontos (CampoDeCalibracao), que fica atrás de tudo. */
   position: relative;
   z-index: 1;
   display: grid;

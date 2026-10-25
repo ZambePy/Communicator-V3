@@ -4,11 +4,11 @@ type Anim = 'up' | 'fade' | 'zoom' | 'left' | 'right'
 
 type Props = {
   children: ReactNode
-  /** Aceito por compatibilidade; não anima mais (ver abaixo). */
+  /** Como o bloco entra: subindo (padrão), só aparecendo, crescendo ou de lado. */
   anim?: Anim
-  /** Aceito por compatibilidade; não anima mais. */
+  /** Atraso da entrada, em ms (para cascatas). */
   delay?: number
-  /** Aceito por compatibilidade; não anima mais. */
+  /** Aceito por compatibilidade. */
   duration?: number
   as?: ElementType
   className?: string
@@ -18,18 +18,15 @@ type Props = {
 }
 
 /**
- * Invólucro dos blocos de conteúdo.
- *
- * Até o redesenho de 19/10/2026, cada bloco entrava em cena ao cruzar a
- * janela (subindo e esmaecendo). Saiu: entrada em todo bloco é o padrão das
- * páginas geradas em série, cansa quem lê devagar e já deixou conteúdo
- * invisível com zoom alto (ver useInView). O conteúdo agora está na página
- * quando ela chega. O componente fica como invólucro — o elemento, a classe e
- * o id continuam — para as páginas não precisarem mudar todas de uma vez.
+ * Bloco que entra em cena ao chegar na tela. Quem observa a rolagem é um
+ * observador só, para o site inteiro (RevelarAoRolar, no Layout). Sem
+ * JavaScript, sem IntersectionObserver ou com movimento reduzido, o bloco já
+ * está lá desde o começo.
  */
-export function Reveal({ children, as: Tag = 'div', className = '', style, id }: Props) {
+export function Reveal({ children, anim = 'up', delay = 0, as: Tag = 'div', className = '', style, id }: Props) {
+  const estilo = delay ? ({ ...style, '--reveal-atraso': `${delay}ms` } as CSSProperties) : style
   return (
-    <Tag id={id} className={`reveal${className ? ` ${className}` : ''}`} style={style}>
+    <Tag id={id} className={`reveal${className ? ` ${className}` : ''}`} data-reveal={anim} style={estilo}>
       {children}
     </Tag>
   )

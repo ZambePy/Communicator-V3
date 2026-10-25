@@ -7,7 +7,7 @@ import { Faq } from '@/components/sections/Faq'
 import { ArcoDeCondicoes } from '@/components/v3/ArcoDeCondicoes'
 import { ChamadaFinal } from '@/components/v3/ChamadaFinal'
 import { CartoesNumerados } from '@/components/v3/CartoesNumerados'
-import { CursorDeFixacao } from '@/components/v3/CursorDeFixacao'
+import { Atmosfera } from '@/components/fundo/Atmosfera'
 import { ListaDeModulos } from '@/components/v3/ListaDeModulos'
 import {
   CONDICOES_NO_ARCO,
@@ -20,38 +20,19 @@ import {
 import { MODULOS_EM_TELA } from '@/data/produto'
 import '@/components/home/home.css'
 
-/* A home (rodada 3, 21/10/2026), sem efeitos: o produto de verdade é a estrela.
-   O dono recusou o fundo "de efeito" do v3 (grade, feixe de luz, marca d'água,
-   olho de partículas e aurora; 21/10/2026, "parece feito por IA"): o fundo é o
-   marinho da marca, chapado.
-
-   abertura (o título e o monitor, que sobe uma vez) → a gravação real no
-   monitor, com os capítulos e "Testar com o meu olhar" → o que um olhar faz
-   (seis cartões; ao lado, a tela real do cartão ativo) → os módulos com a tela
-   real → o preço do aparelho que ele substitui → para quem (o arco) → quem
-   cuida (celular) → planos → perguntas → a chamada final, no azul da marca.
-
-   Tudo dentro de um .v3 (o marinho por baixo). As faixas alternam entre o
-   marinho da marca (#0B1B3A) e o marinho fundo (#081530), para marcar o ritmo
-   sem enfeite: abertura e gravação (marca), cartões (fundo), módulos (marca),
-   preço (fundo), arco (marca), quem cuida (fundo), planos e perguntas (marca). A privacidade, que tinha faixa
-   própria, virou o cartão 04 (e segue nas perguntas). O teclado animado foi
-   para "Como funciona".
-
-   Efeitos de fundo e animações (pedido do dono, 21/10/2026, depois de aprovar
-   o desenho: "só falta o efeito de fundo e mais animações"). O conceito é
-   "o olhar percorre a página" e tudo nasce do produto: os 13 pontos da
-   calibração atrás da abertura, a luz que segue o ponteiro como o ponto de
-   olhar (LuzDoOlhar, que desde a rodada 4 mora no Layout e vale para o site todo), o anel de fixação que enche nos passos, o
-   traço do arco, a frase que chega ao celular e o anel que percorre os 13
-   pontos na chamada final. Continuam fora, por pedido dele: o olho de
-   partículas, a grade, o feixe de luz, a marca d'água e a aurora. */
+/* A home: a abertura e o monitor com a gravação real dividem o mesmo fundo
+   vivo (Atmosfera); depois, o que um olhar faz, os módulos, o preço, para
+   quem, quem cuida, planos, perguntas e a chamada final. */
 export default function Home() {
   return (
     <div className="v3">
-      <CursorDeFixacao />
-      <HeroProduto />
-      <Capitulos />
+      <div className="home-topo">
+        <Atmosfera variante="abertura" />
+        <div className="home-topo__conteudo">
+          <HeroProduto />
+          <Capitulos />
+        </div>
+      </div>
       <CartoesNumerados itens={RECURSOS_DO_OLHAR} titulo={O_QUE_UM_OLHAR_FAZ.titulo} texto={O_QUE_UM_OLHAR_FAZ.texto} />
       <ListaDeModulos modulos={MODULOS_EM_TELA} titulo={MODULOS_NA_HOME.titulo} texto={MODULOS_NA_HOME.texto} link={MODULOS_NA_HOME.link} />
       <ContrastePreco />

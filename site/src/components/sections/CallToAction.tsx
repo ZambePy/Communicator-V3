@@ -1,5 +1,6 @@
 import { Fragment } from 'react'
-import { AlvosDeCalibracao } from '@/components/effects/Ilustracoes'
+import { Atmosfera } from '@/components/fundo/Atmosfera'
+import { VozQueSai } from './VozQueSai'
 import { Button } from '@/components/ui/Button'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { diaPorExtenso } from '@/lib/lancamento'
@@ -30,9 +31,8 @@ type Props = {
 const TITULO_DA_HOME = ['A pessoa continua lá.', 'Só falta a voz.'] as const
 
 /** Chamada final das páginas de conteúdo: uma frase, duas ações e, antes do
- *  lançamento, o dia em que o download abre. É a única faixa no azul da
- *  marca, chapado — o fecho de toda página —, com a tela da calibração ao
- *  lado: o primeiro passo depois do clique. */
+ *  lançamento, o dia em que o download abre. A faixa no azul da marca, com o
+ *  fundo vivo e, ao lado, a frase escolhida com o olhar virando voz. */
 export function CallToAction({ titulo = TITULO_DA_HOME, texto, principal, secundario }: Props = {}) {
   const program = useBetaProgram()
   const lancou = useJaLancou(program.launchAt)
@@ -46,6 +46,7 @@ export function CallToAction({ titulo = TITULO_DA_HOME, texto, principal, secund
 
   return (
     <section className="cta" aria-labelledby="cta-titulo">
+      <Atmosfera variante="chamada" />
       <div className="container cta__inner">
         <div className="cta__texto">
           <h2 id="cta-titulo" className="cta__title">
@@ -90,8 +91,8 @@ export function CallToAction({ titulo = TITULO_DA_HOME, texto, principal, secund
         </div>
 
         <figure className="cta__desenho">
-          <AlvosDeCalibracao />
-          <figcaption>Os 13 pontos da calibração, a primeira tela do IrisFlow.</figcaption>
+          <VozQueSai />
+          <figcaption>A frase escolhida com o olhar, falada em voz alta.</figcaption>
         </figure>
       </div>
     </section>

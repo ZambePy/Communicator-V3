@@ -1,31 +1,21 @@
 /* ============================================================
-   Design tokens da IrisFlow — redesenho de 19/10/2026, ajustado em 21/10/2026.
+   Design system da IrisFlow: as variáveis que o site inteiro usa.
 
-   Paleta do plano de negócios (tópico 2.3, Branding), a mesma do app:
-   - Azul-marinho  #0B1B3A  a pupila do símbolo: o chão da página inteira
-   - Marinho fundo #081530  as faixas que alternam com ele (abertura, rodapé)
-   - Azul          #1B54A8  institucional: o cartão ativo e a chamada final,
-                            como campo de cor sólido, nunca brilho
-   - Verde-teal    #00A693  confirmação: o aro de fixação que fecha, o "ok"
-   - Brancos       texto e a chamada principal
+   Para ajustar o visual, mexa aqui:
+   - cores da marca ........ --navy, --blue, --teal (e os tons de cada uma)
+   - superfícies e texto ... --v3-* e --text*, com o contraste conferido em
+                             components/v3/acessibilidade.test.ts
+   - forma ................. --r-* (raios)
+   - profundidade .......... --shadow-*, --sombra-flutua, --brilho-borda
+   - movimento ............. --ease-*, --dur-* (durações)
+   - tipografia ............ --font-*, --fs-*
+   Os fundos vivos têm as cores e a intensidade no topo de
+   components/fundo/atmosfera.css.
 
-   O site tem um tema só, escuro — o mesmo do app, cujo tema padrão é o
-   marinho. A cor é usada chapada: superfícies em tons de marinho, o azul da
-   marca como campo, o teal só onde algo se confirma.
-
-   Rodada 3 (21/10/2026): o dono mandou um vídeo de referência e o fundo
-   desceu para o quase preto, com grade, feixe de luz e partículas. No mesmo
-   dia ele viu o resultado e o recusou ("parece feito por IA"): o fundo voltou
-   ao marinho da marca, sem grade, feixe, marca d'água, partículas nem aurora;
-   o que fica na memória é o produto de verdade (a gravação do app no monitor
-   e as telas reais). Os tokens --v3-* seguem aqui porque as outras páginas e
-   a home os usam; os NOMES são da rodada 3 (por isso "noite"), os valores são
-   o marinho. As faixas (.on-dark, .on-raised) apontam para eles: o site
-   inteiro muda de fundo junto, sem nenhum componente precisar saber. As cores
-   da marca (--navy, --blue, --teal) continuam as mesmas.
-
-   Como antes, as faixas trocam os mesmos tokens (.on-dark, .on-raised) e
-   nenhum componente precisa saber em que fundo está.
+   Paleta (plano de negócios, tópico 2.3): marinho #0B1B3A como chão, azul
+   #1B54A8 institucional, teal #00A693 para confirmação e brancos no texto.
+   As faixas (.on-dark, .on-raised) trocam os tokens de fundo e nenhum
+   componente precisa saber em que fundo está.
    ============================================================ */
 
 /* ---------- fontes da marca, servidas pelo próprio site ----------
@@ -241,11 +231,15 @@
   --danger-soft: rgba(255, 154, 157, 0.1);
   --danger-line: rgba(255, 154, 157, 0.32);
 
-  /* --- profundidade: bordas, não sombras; sombra funda só sob a mídia --- */
+  /* --- profundidade --- */
   --shadow-sm: 0 1px 0 rgba(2, 7, 16, 0.35);
   --shadow-md: 0 18px 40px -24px rgba(2, 7, 16, 0.8);
   --shadow-lg: 0 40px 80px -40px rgba(2, 7, 16, 0.9);
-  --glow: none;
+  /* o que sobe no hover (cartões, botões) */
+  --sombra-flutua: 0 28px 50px -30px rgba(2, 7, 16, 0.9);
+  /* fio de luz na borda de cima das superfícies */
+  --brilho-borda: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --glow: 0 14px 30px -12px rgba(169, 198, 247, 0.55);
 
   /* --- tipografia --- */
   --font-display: 'Sora', 'Segoe UI Variable Display', 'Segoe UI', system-ui, -apple-system,
@@ -294,6 +288,8 @@
   --dur-fast: 160ms;
   --dur: 280ms;
   --dur-slow: 600ms;
+  /* entrada dos blocos ao rolar (animations.css) */
+  --dur-revelar: 760ms;
   /* o tempo de fixação padrão do app: o aro dos botões fecha nele */
   --dur-fixacao: 1500ms;
 

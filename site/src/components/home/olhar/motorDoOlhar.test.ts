@@ -176,36 +176,4 @@ describe('o laço da abertura', () => {
       m.motor.desligar()
     }
   })
-
-  it('o mouse assume: parado numa tecla pelo tempo de fixação, ela aciona', () => {
-    // Só os temporizadores; os quadros continuam nas mãos do teste.
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      const m = ligar()
-      naTela(true)
-      // No meio da primeira tecla (A B C / D E F).
-      m.motor.assumir({ x: 100, y: 155 })
-      expect(m.modo.current).toBe('pessoa')
-      rodar(900)
-      vi.advanceTimersByTime(300)
-      const abriu = m.avisos.estados.find((e) => e.nivel.tipo === 'grupo')
-      expect(abriu).toEqual({ nivel: { tipo: 'grupo', grupo: 0 }, texto: '' })
-      // Clicar também aciona (depois da pausa da seleção).
-      m.motor.acionar('c4')
-      vi.advanceTimersByTime(300)
-      expect(m.estado.current.texto).toBe('E')
-      // O mouse saiu: o ponto apaga e o laço para.
-      m.motor.soltar()
-      rodar(600)
-      expect(filaDeQuadros.size).toBe(0)
-      expect(Number(m.ponto.style.opacity)).toBe(0)
-      // Voltou: o ponto reaparece e segue o mouse de novo.
-      m.motor.mover({ x: 300, y: 155 })
-      rodar(300)
-      expect(Number(m.ponto.style.opacity)).toBeGreaterThan(0.9)
-      m.motor.desligar()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
 })

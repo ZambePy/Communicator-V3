@@ -6,8 +6,8 @@ import { NavigationEnhancer } from './NavigationEnhancer'
 import { CookieNotice } from './CookieNotice'
 import { StickyCta } from './StickyCta'
 import { FundoDaPaginaProvider } from './FundoDaPagina'
-import { LuzDoOlhar } from '@/components/v3/LuzDoOlhar'
 import { FronteiraDeErro } from './FronteiraDeErro'
+import { RevelarAoRolar } from '@/components/effects/RevelarAoRolar'
 import { RouteMeta } from '@/hooks/useDocumentMeta'
 import { SkeletonCard } from '@/components/ui/Skeleton'
 import './layout.css'
@@ -102,10 +102,7 @@ export function Layout() {
       <ScrollManager />
       <RouteMeta />
       <NavigationEnhancer />
-      {/* A luz do olhar acompanha o mouse em todas as páginas (rodada 4,
-          21/10/2026, pedido do dono: o fundo é o mesmo sistema em todo o site).
-          Só com mouse e sem movimento reduzido; mora no <body> (portal). */}
-      <LuzDoOlhar />
+      <RevelarAoRolar />
       <Header />
       {/* A key remonta o <main> a cada rota; `data-rota` diz à piscada
           entre páginas (piscada.ts) que a página nova chegou. Sem

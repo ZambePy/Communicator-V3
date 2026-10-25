@@ -4,6 +4,17 @@
    sublinhado ficam em styles/global.css.) A faixa de privacidade saiu na
    rodada 3 (21/10/2026): virou o cartão 04 de "O que um olhar faz". */
 
+/* ---------- topo da home: abertura e monitor sobre o fundo vivo ---------- */
+.home-topo {
+  position: relative;
+  isolation: isolate;
+}
+
+.home-topo__conteudo {
+  position: relative;
+  z-index: 1;
+}
+
 /* ---------- passos numerados ----------
    São uma sequência de verdade (primeiro a conta, depois a instalação...),
    por isso levam número: grande, em Sora, alinhado ao título — sem bolinha
@@ -280,4 +291,56 @@
     border-left: 0;
     border-top: 1px solid var(--line-strong);
   }
+}
+
+/* ---------- luz parada nas faixas do meio ----------
+   Sem movimento: só um halo da cor da marca em um canto de cada faixa, para
+   a página ganhar profundidade e ritmo sem competir com o conteúdo. */
+.v3-modulos,
+.contraste,
+.v3-para-quem,
+.cuidador-destaque,
+.planos-resumo {
+  position: relative;
+  isolation: isolate;
+}
+
+.v3-modulos::before,
+.contraste::before,
+.v3-para-quem::before,
+.cuidador-destaque::before,
+.planos-resumo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(50% 60% at 100% 0%, rgba(27, 84, 168, 0.22), transparent 70%);
+}
+
+.contraste::before {
+  background: radial-gradient(45% 55% at 0% 100%, rgba(0, 166, 147, 0.12), transparent 70%);
+}
+
+.v3-para-quem::before {
+  background: radial-gradient(60% 50% at 50% 0%, rgba(77, 134, 224, 0.16), transparent 70%);
+}
+
+.cuidador-destaque::before {
+  background: radial-gradient(45% 60% at 15% 50%, rgba(0, 166, 147, 0.14), transparent 70%);
+}
+
+/* Separador de luz entre as faixas: uma linha fina que acende no meio. */
+.v3-modulos::after,
+.v3-para-quem::after,
+.planos-resumo::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: min(720px, 80%);
+  height: 1px;
+  translate: -50% 0;
+  background: linear-gradient(90deg, transparent, rgba(169, 198, 247, 0.45), transparent);
+  pointer-events: none;
 }

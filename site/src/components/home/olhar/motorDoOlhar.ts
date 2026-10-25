@@ -3,13 +3,10 @@ import {
   TECLAS_DA_GRADE,
   chaveDoNivel,
   prefixoComum,
-  selecionar,
-  teclasAtivas,
   type EstadoDoTeclado,
   type IdDaTecla,
 } from './maquinaDoTeclado'
-import { montarRoteiro, posicaoDoOlhar, quadroNoTempo, tremor, type Ponto, type Pouso } from './roteiroDoOlhar'
-import { SEM_PERMANENCIA, avancarPermanencia, seguirOMouse, teclaNoPonto, type Retangulo } from './olharDoMouse'
+import { montarRoteiro, posicaoDoOlhar, quadroNoTempo, type Ponto, type Pouso } from './roteiroDoOlhar'
 
 /**
  * O motor da abertura da home: o laço de quadros que move o ponto do olhar,
@@ -23,7 +20,7 @@ import { SEM_PERMANENCIA, avancarPermanencia, seguirOMouse, teclaNoPonto, type R
  *   tecla sob o olhar.
  */
 
-export type Modo = 'auto' | 'pessoa' | 'fim'
+export type Modo = 'auto' | 'fim'
 
 export type PecasDaTecla = { el: HTMLElement; calor: HTMLElement; traco: HTMLElement }
 
@@ -54,10 +51,6 @@ export type Motor = {
   agendar: () => void
   parar: () => void
   recomecar: () => void
-  assumir: (p: Ponto) => void
-  mover: (p: Ponto) => void
-  soltar: () => void
-  acionar: (tecla: IdDaTecla) => void
   desligar: () => void
 }
 
@@ -72,27 +65,15 @@ export function ligarMotor(l: Ligacoes): Motor {
   let tempo = 0
   let visivel = typeof IntersectionObserver === 'undefined'
   let aba = document.visibilityState !== 'hidden'
-  let geometria: { centros: Record<Pouso, Ponto>; retangulos: Retangulo[] } | null = null
+  let geometria: { centros: Record<Pouso, Ponto> } | null = null
   let sobOlhar: IdDaTecla | null = null
   let acesaAgora: IdDaTecla | null = null
   let falaAgora = false
   let apagandoAgora = false
   let idDaFala = 0
-  const mouse = { dentro: false, ponto: { x: 0, y: 0 } }
   let olho: Ponto | null = null
   let opacidade = 0
-  let permanencia = SEM_PERMANENCIA
-  const timers = new Set<number>()
-
-  const depois = (ms: number, fn: () => void) => {
-    const id = window.setTimeout(() => {
-      timers.delete(id)
-      fn()
-    }, ms)
-    timers.add(id)
-  }
-
-  /** Centros e retângulos de tudo, relativos à tela (onde o ponto é desenhado). */
+  /** Centros de tudo, relativos à tela (onde o ponto é desenhado). */
   const medir = () => {
     const base = tela.getBoundingClientRect()
     const centroDe = (el: Element | null | undefined): Ponto => {
@@ -102,22 +83,14 @@ export function ligarMotor(l: Ligacoes): Motor {
     }
     const pecas = l.teclas()
     const centros = {} as Record<Pouso, Ponto>
-    const retangulos: Retangulo[] = []
-    for (const id of TODAS) {
-      const el = pecas[id]?.el
-      centros[id] = centroDe(el)
-      if (el) {
-        const r = el.getBoundingClientRect()
-        retangulos.push({ tecla: id, x: r.left - base.left, y: r.top - base.top, largura: r.width, altura: r.height })
-      }
-    }
+    for (const id of TODAS) centros[id] = centroDe(pecas[id]?.el)
     centros.repouso = centroDe(l.grade())
     // O olho que confere a frase pousa perto do fim dela, onde fica o cursor.
     const tx = l.texto()?.getBoundingClientRect()
     centros.texto = tx
       ? { x: tx.right - base.left - Math.min(56, tx.width * 0.2), y: tx.top - base.top + tx.height / 2 }
       : centros.repouso
-    geometria = { centros, retangulos }
+    geometria = { centros }
   }
 
   const mudarEstado = (novo: EstadoDoTeclado, origem: IdDaTecla | null) => {
@@ -191,10 +164,7 @@ export function ligarMotor(l: Ligacoes): Motor {
     l.aoMudarModo(m)
   }
 
-  const deveRodar = () =>
-    visivel &&
-    aba &&
-    ((l.modo.current === 'auto' && !l.pausado.current) || (l.modo.current === 'pessoa' && (mouse.dentro || opacidade > 0)))
+  const deveRodar = () => visivel && aba && l.modo.current === 'auto' && !l.pausado.current
 
   const agendar = () => {
     if (!quadro && deveRodar()) quadro = window.requestAnimationFrame(tique)
@@ -228,107 +198,21 @@ export function ligarMotor(l: Ligacoes): Motor {
     return true
   }
 
-  /** Um quadro com a pessoa no comando: o ponto segue o mouse e a fixação conta. */
-  const passoDaPessoa = (dt: number, agora: number): boolean => {
-    if (!geometria) medir()
-    if (!geometria) return false
-    if (mouse.dentro) {
-      olho = olho ? seguirOMouse(olho, mouse.ponto, dt) : { ...mouse.ponto }
-      opacidade = Math.min(1, opacidade + dt / 180)
-    } else {
-      opacidade = Math.max(0, opacidade - dt / 250)
-    }
-    const ativas = new Set(teclasAtivas(l.estado.current))
-    const alvos = geometria.retangulos.filter((r) => ativas.has(r.tecla))
-    const tecla = mouse.dentro && olho ? teclaNoPonto(olho, alvos) : null
-    const r = avancarPermanencia(permanencia, tecla, agora)
-    permanencia = r.permanencia
-    pintarFixacao(tecla, r.progresso)
-    if (olho) {
-      const tr = tremor(agora)
-      pintarPonto({ x: olho.x + tr.x, y: olho.y + tr.y }, opacidade)
-    }
-    if (r.disparou) acionar(r.disparou)
-    return mouse.dentro || opacidade > 0
-  }
-
   function tique(agora: number) {
     quadro = 0
     // Um quadro longo (máquina ocupada) não vira um salto no tempo.
     const dt = ultimo === null ? 16 : Math.min(50, agora - ultimo)
     ultimo = agora
-    const segue =
-      l.modo.current === 'auto' ? passoAutomatico(dt) : l.modo.current === 'pessoa' ? passoDaPessoa(dt, agora) : false
+    const segue = l.modo.current === 'auto' ? passoAutomatico(dt) : false
     if (segue) agendar()
     else ultimo = null
   }
 
-  /**
-   * A pessoa aciona uma tecla: pela fixação do mouse ou num clique. A tecla
-   * acende com o que foi escolhido nela e, um instante depois, a tela muda —
-   * como no roteiro. Um segundo acionamento nesse instante não conta.
-   */
-  let pendente = false
-  function acionar(id: IdDaTecla) {
-    if (pendente || selecionar(l.estado.current, id).efeito === 'nada') return
-    pendente = true
-    acender(id)
-    depois(roteiro.tempos.disparoMs, () => {
-      pendente = false
-      acender(null)
-      const { estado: novo, efeito } = selecionar(l.estado.current, id)
-      if (efeito === 'nada') return
-      mudarEstado(novo, id)
-      if (efeito === 'falou') {
-        sinalizarFala(false)
-        sinalizarFala(true)
-        const esta = idDaFala
-        depois(roteiro.tempos.falouMs, () => {
-          if (esta === idDaFala) sinalizarFala(false)
-        })
-      }
-    })
-  }
-
-  const assumir = (p: Ponto) => {
-    mouse.dentro = true
-    mouse.ponto = p
-    medir()
-    if (l.modo.current !== 'pessoa') {
-      mudarModo('pessoa')
-      acender(null)
-      sinalizarFala(false)
-      // A frase que estava sumindo some de vez: a pessoa começa do vazio.
-      if (apagandoAgora) mudarEstado(INICIO, null)
-      sinalizarApagar(false)
-      permanencia = SEM_PERMANENCIA
-      if (opacidade <= 0 || !olho) olho = { ...p }
-    }
-    agendar()
-  }
-
-  const mover = (p: Ponto) => {
-    // Voltou para o teclado depois de sair: a página pode ter rolado, mede de novo.
-    if (!mouse.dentro) medir()
-    mouse.dentro = true
-    mouse.ponto = p
-    agendar()
-  }
-
-  const soltar = () => {
-    mouse.dentro = false
-    agendar()
-  }
-
   const recomecar = () => {
     parar()
-    timers.forEach((t) => window.clearTimeout(t))
-    timers.clear()
-    pendente = false
     tempo = 0
     olho = null
     opacidade = 0
-    permanencia = SEM_PERMANENCIA
     if (sobOlhar) limparTecla(sobOlhar)
     sobOlhar = null
     acender(null)
@@ -375,10 +259,8 @@ export function ligarMotor(l: Ligacoes): Motor {
     io?.disconnect()
     ro?.disconnect()
     document.removeEventListener('visibilitychange', aoMudarAba)
-    timers.forEach((t) => window.clearTimeout(t))
-    timers.clear()
   }
 
   agendar()
-  return { agendar, parar, recomecar, assumir, mover, soltar, acionar, desligar }
+  return { agendar, parar, recomecar, desligar }
 }

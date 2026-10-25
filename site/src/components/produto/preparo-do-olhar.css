@@ -1,0 +1,133 @@
+/* Painel do preparo (PreparoDoOlhar.tsx), no estilo das telas do app. */
+.preparo {
+  display: grid;
+  gap: var(--sp-5);
+  padding: clamp(22px, 3vw, 32px);
+  border-radius: var(--r-xl);
+  background: linear-gradient(170deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.preparo__topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--fs-min);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.preparo__rotulo {
+  color: var(--accent);
+}
+
+.preparo__lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.preparo__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  transition: border-color var(--dur) var(--ease-out), background-color var(--dur) var(--ease-out);
+  transition-delay: calc(var(--ordem) * 450ms + 300ms);
+}
+
+.preparo__item strong {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.preparo__detalhe {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+}
+
+.preparo__check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+  transition: background-color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
+  transition-delay: inherit;
+}
+
+.preparo__check svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--navy-deep);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.preparo__check path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 360ms var(--ease-out);
+  transition-delay: calc(var(--ordem) * 450ms + 420ms);
+}
+
+.preparo.is-pronto .preparo__item {
+  border-color: var(--ok-line);
+  background: var(--ok-soft);
+}
+
+.preparo.is-pronto .preparo__check {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+.preparo.is-pronto .preparo__check path {
+  stroke-dashoffset: 0;
+}
+
+.preparo__resultado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--dur-slow) var(--ease-out) 1.75s, transform var(--dur-slow) var(--ease-out) 1.75s;
+}
+
+.preparo.is-pronto .preparo__resultado {
+  opacity: 1;
+  transform: none;
+}
+
+.preparo__selo {
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  background: var(--ok);
+  color: var(--navy-deep);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+}
+
+.preparo__frase {
+  color: var(--text-soft);
+}
+
+.preparo.is-parado *,
+.preparo.is-parado {
+  transition: none !important;
+}

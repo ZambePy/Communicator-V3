@@ -1,23 +1,27 @@
-/* Chamada final (CallToAction.tsx): a faixa no azul da marca, chapado.
+/* Chamada final (CallToAction.tsx): a faixa no azul da marca, com o fundo vivo.
    Os tokens de texto e de linha são trocados aqui, como nas outras faixas:
-   papel 6,7:1 e o texto de apoio 5,8:1 sobre #1B54A8. */
+   o texto de apoio fica quase branco, para manter 4,5:1 sobre as manchas de luz. */
 .cta {
   --bg: var(--blue);
   --text: #ffffff;
-  --text-soft: #dbe6f8;
-  --text-dim: #dbe6f8;
+  --text-soft: #ffffff;
+  --text-dim: #e4ecf9;
   --line: rgba(255, 255, 255, 0.24);
   --line-strong: rgba(255, 255, 255, 0.5);
   --accent: #ffffff;
   --surface-2: #174a96;
 
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
   padding-block: clamp(88px, 13vh, 152px);
   background: var(--bg);
   color: var(--text);
 }
 
 .cta__inner {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: var(--sp-7);
   align-items: center;
@@ -71,16 +75,10 @@
   color: var(--text-soft);
 }
 
-/* A tela da calibração ao lado (só no computador), com a legenda dizendo o
-   que ela é. */
+/* O painel da voz ao lado (só no computador). */
 .cta__desenho {
   display: none;
   margin: 0;
-}
-
-.cta__desenho .ilustracao {
-  display: block;
-  width: 100%;
 }
 
 .cta__desenho figcaption {

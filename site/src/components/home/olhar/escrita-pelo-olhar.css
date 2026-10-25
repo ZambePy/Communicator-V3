@@ -38,13 +38,7 @@
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
-  /* O toque continua rolando a página: só o mouse assume o teclado. */
   touch-action: pan-y;
-}
-
-/* Com o mouse no comando, o ponto é o cursor: a seta some de dentro da tela. */
-.olhar__tela.is-pessoa {
-  cursor: none;
 }
 
 /* ---------- barra de cima: Voltar, Falar e a frase ---------- */
@@ -426,17 +420,6 @@
 .olhar__explica {
   max-width: 52ch;
   padding-top: 0.6rem;
-}
-
-/* A frase do mouse só onde há mouse. */
-.olhar__mouse {
-  display: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .olhar__mouse {
-    display: inline;
-  }
 }
 
 .olhar__controle {

@@ -10,10 +10,11 @@
   padding-block: clamp(24px, 4vh, 48px) var(--faixa);
 }
 
-/* Sem a linha de topo das outras faixas (.on-raised): a abertura e esta seção
-   são uma composição só. */
+/* A abertura e esta seção são uma composição só, sobre o mesmo fundo vivo
+   (Home.tsx): sem a linha de topo e sem fundo próprio. */
 .capitulos.on-raised {
   box-shadow: none;
+  background: transparent;
 }
 
 /* No computador: o título e os passos numa coluna, a tela na outra, parada

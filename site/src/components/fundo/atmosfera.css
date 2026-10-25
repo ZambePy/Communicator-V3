@@ -1,0 +1,250 @@
+/* Fundo vivo (Atmosfera.tsx). As cores e as intensidades de cada variante
+   ficam nas variáveis do topo: para mudar o clima, mexa só nelas. */
+
+.atmosfera {
+  --cor-1: 27, 84, 168; /* azul da marca */
+  --cor-2: 77, 134, 224; /* azul claro */
+  --cor-3: 0, 166, 147; /* teal */
+  --cor-4: 47, 102, 194; /* azul médio */
+  --forca: 1.15;
+  --grao: 0.07;
+  --brilho-particula: 169, 198, 247;
+
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+
+.atmosfera--abertura,
+.atmosfera--topo,
+.atmosfera--calmo {
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+}
+
+.atmosfera--topo {
+  --forca: 0.75;
+}
+
+.atmosfera--calmo {
+  --forca: 0.5;
+  --grao: 0.045;
+}
+
+/* Na chamada final o chão já é o azul da marca: as manchas clareiam. */
+.atmosfera--chamada {
+  --cor-1: 77, 134, 224;
+  --cor-2: 120, 160, 230;
+  --cor-3: 67, 214, 195;
+  --cor-4: 8, 21, 48;
+  --forca: 0.6;
+  --grao: 0.07;
+  --brilho-particula: 255, 255, 255;
+}
+
+/* Na chamada, a luz fica do lado do painel e uma mancha escura fica atrás do
+   texto, para o texto de apoio manter o contraste. */
+.atmosfera--chamada .atmosfera__mancha--1 {
+  left: auto;
+  right: -12%;
+}
+
+.atmosfera--chamada .atmosfera__mancha--4 {
+  display: block;
+  width: 60vmax;
+  height: 60vmax;
+  left: -18%;
+  top: 0;
+  background: radial-gradient(closest-side, rgba(var(--cor-4), 0.55), rgba(var(--cor-4), 0) 70%);
+}
+
+/* ---------- manchas (mesh gradient) ---------- */
+.atmosfera__malha {
+  position: absolute;
+  inset: -20%;
+  opacity: var(--forca);
+}
+
+.atmosfera__mancha {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+  animation: mancha-deriva var(--dur-mancha, 32s) var(--ease-in-out) infinite alternate;
+}
+
+.atmosfera__mancha--1 {
+  width: 62vmax;
+  height: 62vmax;
+  left: -6%;
+  top: -18%;
+  background: radial-gradient(closest-side, rgba(var(--cor-1), 0.7), rgba(var(--cor-1), 0) 72%);
+  --dur-mancha: 34s;
+}
+
+.atmosfera__mancha--2 {
+  width: 48vmax;
+  height: 48vmax;
+  right: -8%;
+  top: -10%;
+  background: radial-gradient(closest-side, rgba(var(--cor-2), 0.34), rgba(var(--cor-2), 0) 70%);
+  --dur-mancha: 27s;
+  animation-name: mancha-deriva-2;
+}
+
+.atmosfera__mancha--3 {
+  width: 40vmax;
+  height: 40vmax;
+  left: 38%;
+  top: 22%;
+  background: radial-gradient(closest-side, rgba(var(--cor-3), 0.32), rgba(var(--cor-3), 0) 70%);
+  --dur-mancha: 38s;
+  animation-name: mancha-deriva-3;
+}
+
+.atmosfera__mancha--4 {
+  width: 34vmax;
+  height: 34vmax;
+  left: 8%;
+  top: 40%;
+  background: radial-gradient(closest-side, rgba(var(--cor-4), 0.4), rgba(var(--cor-4), 0) 70%);
+  --dur-mancha: 30s;
+  animation-name: mancha-deriva-2;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes mancha-deriva {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(9%, 7%, 0) scale(1.12);
+  }
+}
+
+@keyframes mancha-deriva-2 {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  to {
+    transform: translate3d(-11%, 9%, 0) scale(0.92);
+  }
+}
+
+@keyframes mancha-deriva-3 {
+  from {
+    transform: translate3d(0, 0, 0) scale(0.9);
+  }
+  to {
+    transform: translate3d(-14%, -8%, 0) scale(1.15);
+  }
+}
+
+/* ---------- aurora: uma faixa de luz que ondula devagar ---------- */
+.atmosfera__aurora {
+  position: absolute;
+  left: -25%;
+  right: -25%;
+  top: 4%;
+  height: 46%;
+  opacity: calc(0.55 * var(--forca));
+  background: linear-gradient(
+    100deg,
+    transparent 8%,
+    rgba(var(--cor-3), 0.28) 24%,
+    rgba(var(--cor-2), 0.32) 40%,
+    transparent 52%,
+    rgba(var(--cor-1), 0.36) 66%,
+    rgba(var(--cor-3), 0.18) 80%,
+    transparent 94%
+  );
+  -webkit-mask-image: radial-gradient(60% 52% at 50% 50%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(60% 52% at 50% 50%, #000 30%, transparent 100%);
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+  animation: aurora-ondula 22s var(--ease-in-out) infinite alternate;
+}
+
+@keyframes aurora-ondula {
+  0% {
+    transform: translate3d(-6%, 0, 0) rotate(-6deg) scaleY(0.8);
+    opacity: calc(0.35 * var(--forca));
+  }
+  50% {
+    transform: translate3d(2%, 4%, 0) rotate(-2deg) scaleY(1.1);
+    opacity: calc(0.6 * var(--forca));
+  }
+  100% {
+    transform: translate3d(7%, -2%, 0) rotate(-8deg) scaleY(0.9);
+    opacity: calc(0.42 * var(--forca));
+  }
+}
+
+/* ---------- partículas que sobem sozinhas ---------- */
+.atmosfera__particulas span {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--t);
+  height: var(--t);
+  border-radius: 50%;
+  background: rgb(var(--brilho-particula));
+  box-shadow: 0 0 calc(var(--t) * 3) rgba(var(--brilho-particula), 0.6);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: particula-sobe var(--d) linear var(--a) infinite;
+}
+
+@keyframes particula-sobe {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  70% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate3d(12px, var(--sobe), 0);
+    opacity: 0;
+  }
+}
+
+/* Celular: metade das partículas, para não pesar em aparelho fraco. */
+@media (max-width: 720px) {
+  .atmosfera__particulas span:nth-child(2n) {
+    display: none;
+  }
+  .atmosfera:not(.atmosfera--chamada) .atmosfera__mancha--4 {
+    display: none;
+  }
+}
+
+/* ---------- grão: a textura que tira a cara de "degradê de computador" ---------- */
+.atmosfera__grao {
+  position: absolute;
+  inset: 0;
+  opacity: var(--grao);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+}
+
+/* Fora da tela, nada anda. */
+.atmosfera[data-pausado='sim'] *,
+.atmosfera[data-pausado='sim'] *::before,
+.atmosfera[data-pausado='sim'] *::after {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atmosfera * {
+    animation: none !important;
+  }
+  .atmosfera__particulas {
+    display: none;
+  }
+}

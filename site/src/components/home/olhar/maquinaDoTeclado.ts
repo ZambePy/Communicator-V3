@@ -10,8 +10,8 @@
  * palavra sugerida troca a palavra começada, a frase sugerida substitui tudo e
  * NÃO fala sozinha — quem fala é a tecla Falar.
  *
- * Funções puras: a abertura (roteiroDoOlhar.ts) e o mouse (olharDoMouse.ts)
- * só chamam `selecionar` e desenham o que `celulas` devolve.
+ * Funções puras: a abertura (roteiroDoOlhar.ts) só chama `selecionar` e
+ * desenha o que `celulas` devolve.
  */
 
 /** Os grupos da camada de letras, na ordem da grade (o `GROUPS` do app). */

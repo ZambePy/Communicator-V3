@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import {
@@ -28,9 +28,6 @@ import './escrita-pelo-olhar.css'
  * - Toca só com o teclado na tela e a aba à vista, duas frases, e para no
  *   quadro final com "Ver de novo". Pausar e continuar a qualquer momento
  *   (WCAG 2.2.2).
- * - Com o mouse no teclado, a pessoa assume: o ponto segue o mouse com o
- *   atraso de um cursor de olhar, e parar numa tecla a aciona (ou clicar).
- *   No toque nada muda: a abertura só toca, e a página rola.
  * - Com movimento reduzido: o quadro final, parado, com a frase escrita — e o
  *   motor nem é baixado.
  * - O desenho é decorativo para o leitor de tela, que recebe a descrição.
@@ -151,8 +148,6 @@ function Conteudo({ celula }: { celula: Celula }) {
   }
 }
 
-type Ponto = { x: number; y: number }
-
 export function EscritaPeloOlhar() {
   const reduzido = useReducedMotion()
   const idBase = useId().replace(/:/g, '')
@@ -270,27 +265,6 @@ export function EscritaPeloOlhar() {
     else motor.current?.agendar()
   }, [pausado])
 
-  const local = (e: PointerEvent<HTMLDivElement>): Ponto => {
-    const r = e.currentTarget.getBoundingClientRect()
-    return { x: e.clientX - r.left, y: e.clientY - r.top }
-  }
-  // Só o mouse (e a caneta) assume; o toque rola a página como sempre. E só
-  // com o mouse se mexendo de verdade: quando a página rola, ou um aviso
-  // some, com o ponteiro parado em cima, o navegador manda um movimento
-  // "de mentira" (sem deslocamento) — e a pessoa não pediu nada.
-  const ehPonteiro = (e: PointerEvent) => e.pointerType === 'mouse' || e.pointerType === 'pen'
-  const mexeu = (e: PointerEvent) => e.movementX !== 0 || e.movementY !== 0
-  const aoMover = (e: PointerEvent<HTMLDivElement>) => {
-    if (reduzido || !ehPonteiro(e)) return
-    if (modoRef.current === 'pessoa') motor.current?.mover(local(e))
-    else if (mexeu(e)) motor.current?.assumir(local(e))
-  }
-  const aoClicar = (e: MouseEvent<HTMLDivElement>) => {
-    if (reduzidoRef.current || modoRef.current !== 'pessoa') return
-    const id = (e.target as Element).closest<HTMLElement>('[data-tecla]')?.dataset.tecla as IdDaTecla | undefined
-    if (id) motor.current?.acionar(id)
-  }
-
   const grade = celulas(estado)
   const ativas = new Set(teclasAtivas(estado))
   const vazio = estado.texto === ''
@@ -315,10 +289,7 @@ export function EscritaPeloOlhar() {
       <div className="olhar" aria-hidden="true">
         <div
           ref={telaRef}
-          className={`olhar__tela${modo === 'pessoa' ? ' is-pessoa' : ''}`}
-          onPointerMove={aoMover}
-          onPointerLeave={(e) => ehPonteiro(e) && motor.current?.soltar()}
-          onClick={aoClicar}
+          className="olhar__tela"
         >
           <div className="olhar__barra">
             {(['voltar', 'falar'] as const).map((id) => (
@@ -379,7 +350,6 @@ export function EscritaPeloOlhar() {
       <figcaption className="olhar__legenda">
         <span className="olhar__explica">
           Simulação do teclado do IrisFlow: o ponto é o olhar.
-          <span className="olhar__mouse"> Pare o mouse numa tecla: é assim que o olhar escreve.</span>
         </span>
         {!reduzido &&
           (modo === 'auto' ? (

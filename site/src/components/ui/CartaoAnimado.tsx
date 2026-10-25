@@ -1,4 +1,3 @@
-import { useRef, type PointerEvent } from 'react'
 import './cartao-animado.css'
 
 export type EstadoCartao = 'parado' | 'processando' | 'sucesso' | 'erro'
@@ -18,11 +17,11 @@ type Props = {
 }
 
 /**
- * Cartão em 3D da tela de pagamento. Inclina um pouco seguindo o mouse, vira
- * para o verso enquanto o código de segurança está em foco e acende um brilho
+ * Cartão em 3D da tela de pagamento. Vira para o verso enquanto o código de
+ * segurança está em foco e acende um brilho
  * durante a confirmação: azul processando, verde-água no sucesso e vermelho no
  * erro. É só visual: fica escondido dos leitores de tela, que leem os campos.
- * Com "reduzir movimento" ligado no sistema, vira sem animação e não inclina.
+ * Com "reduzir movimento" ligado no sistema, vira sem animação.
  */
 export function CartaoAnimado({
   numero,
@@ -34,30 +33,13 @@ export function CartaoAnimado({
   estado = 'parado',
   className = '',
 }: Props) {
-  const corpo = useRef<HTMLDivElement>(null)
-
-  const inclinar = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== 'mouse' || !corpo.current) return
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return
-    const r = e.currentTarget.getBoundingClientRect()
-    const x = (e.clientX - r.left) / r.width - 0.5
-    const y = (e.clientY - r.top) / r.height - 0.5
-    corpo.current.style.setProperty('--incl-x', `${(-y * 10).toFixed(2)}deg`)
-    corpo.current.style.setProperty('--incl-y', `${(x * 14).toFixed(2)}deg`)
-  }
-
-  const soltar = () => {
-    corpo.current?.style.setProperty('--incl-x', '0deg')
-    corpo.current?.style.setProperty('--incl-y', '0deg')
-  }
-
   const classes = ['cartao3d', `cartao3d--${estado}`, virado ? 'is-virado' : '', className]
     .filter(Boolean)
     .join(' ')
 
   return (
-    <div className={classes} aria-hidden="true" onPointerMove={inclinar} onPointerLeave={soltar}>
-      <div className="cartao3d__corpo" ref={corpo}>
+    <div className={classes} aria-hidden="true">
+      <div className="cartao3d__corpo">
         <div className="cartao3d__giro">
           <div className="cartao3d__face cartao3d__frente">
             <div className="cartao3d__linha">

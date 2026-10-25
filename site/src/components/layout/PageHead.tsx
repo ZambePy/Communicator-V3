@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { CampoDoTopo } from '@/components/v3/CampoDoTopo'
+import { Atmosfera } from '@/components/fundo/Atmosfera'
 import { useDeclararAbertura, useFundoDaPagina } from './FundoDaPagina'
 
 type Props = {
@@ -22,15 +22,9 @@ type Props = {
 }
 
 /**
- * Abertura das páginas de dentro: a faixa do marinho fundo, como a da home,
- * para o cabeçalho se comportar igual no topo de qualquer rota. Pouco texto —
- * título, uma frase e, quando existe, a imagem do produto logo abaixo. Sem o
- * título que subia palavra por palavra: o título já está lá quando a página
- * chega.
- *
- * Quando a página pede `<FundoDaPagina />`, a faixa desenha por dentro de si o
- * motivo dos 13 pontos da calibração (CampoDoTopo), entre o fundo dela e o
- * texto: um momento de entrada e depois parado.
+ * Abertura das páginas de dentro: título, uma frase e, quando existe, a imagem
+ * do produto logo abaixo. Quando a página pede `<FundoDaPagina />`, a faixa
+ * ganha o fundo vivo da marca (Atmosfera) atrás do texto.
  */
 export function PageHead({ eyebrow, title, lead, children, visual, centro = false }: Props) {
   // Título da aba e meta description vêm de src/seo/pages.ts (RouteMeta).
@@ -40,13 +34,9 @@ export function PageHead({ eyebrow, title, lead, children, visual, centro = fals
     <header
       className={`page-head on-dark${centro ? ' page-head--centro' : ''}${visual ? ' page-head--com-visual' : ''}`}
     >
-      <div className="container">
+      {fundo && <Atmosfera variante={fundo === 'calmo' ? 'calmo' : 'topo'} />}
+      <div className="container page-head__conteudo">
         <div className="page-head__topo">
-          {fundo && (
-            <div className="page-head__fundo" aria-hidden="true">
-              <CampoDoTopo variante={fundo} />
-            </div>
-          )}
           <div className="page-head__inner">
             {eyebrow && <p className="page-head__rotulo">{eyebrow}</p>}
             <h1 className="page-head__titulo">{title}</h1>

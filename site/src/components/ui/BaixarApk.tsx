@@ -53,7 +53,7 @@ export function BaixarApk({ lancou, liberaEm, compacto = false, url }: Props) {
       <Button href={arquivo} externo={false} size="lg" icon={<Icon name="download" size={20} />}>
         Baixar para Android
       </Button>
-      <p className="baixar-apk__tamanho">Arquivo APK, cerca de 110 MB. Prefira o Wi-Fi.</p>
+      <p className="baixar-apk__tamanho">Arquivo APK, para celulares Android de 64 bits. Prefira o Wi-Fi.</p>
       {emNavegadorEmbutido() && (
         <p className="baixar-apk__aviso" role="note">
           Você abriu esta página por dentro de outro aplicativo, que não baixa arquivos. Toque nos três pontinhos e
@@ -66,6 +66,10 @@ export function BaixarApk({ lancou, liberaEm, compacto = false, url }: Props) {
           <li>Abra o arquivo baixado.</li>
           <li>
             Se o Android pedir, permita <strong>instalar apps desta fonte</strong> e toque em Instalar.
+          </li>
+          <li>
+            Se o download parar em <strong>pausado</strong>, toque em <strong>Retomar</strong>. Se continuar parado, cancele
+            e baixe de novo pelo Chrome, com o Wi-Fi ligado.
           </li>
         </ol>
       )}

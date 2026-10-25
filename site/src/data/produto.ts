@@ -293,7 +293,7 @@ export const PASSOS_DO_PRIMEIRO_USO: PassoComTela[] = [
 export const ESCRITA_PELO_OLHAR = {
   titulo: 'O olhar escrevendo.',
   texto:
-    'O teclado do IrisFlow em miniatura: o ponto faz o papel do olhar. Ele para num grupo de letras, que se abre, e depois na letra. Com o mouse em cima, quem escreve é você.',
+    'O teclado do IrisFlow em miniatura: o ponto faz o papel do olhar. Ele para num grupo de letras, que se abre, e depois na letra, até a frase ser falada em voz alta.',
 }
 
 /** Do vídeo da webcam ao clique: os seis estágios, uma linha cada. */
