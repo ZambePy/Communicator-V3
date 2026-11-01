@@ -18,10 +18,10 @@ interface Props extends Omit<TextInputProps, 'style'> {
 export const TextField = forwardRef<TextInput, Props>(function TextField({ label, icon, right, error, style, onFocus, onBlur, ...rest }, ref) {
   const { colors, mode } = useTheme();
   const [foco, setFoco] = useState(false);
-  const borda = error ? colors.danger : foco ? colors.primary : colors.borderStrong;
+  const borda = error ? colors.danger : foco ? colors.primary : colors.fieldBorder;
   return (
     <View style={style}>
-      <Text variant="caption" weight="semibold" tone="muted" style={styles.label}>
+      <Text variant="bodySmall" weight="semibold" style={styles.label}>
         {label}
       </Text>
       <View style={[styles.box, { backgroundColor: colors.surface, borderColor: borda, borderWidth: foco || error ? sizes.borderThick : sizes.border }]}>
@@ -57,8 +57,8 @@ export const TextField = forwardRef<TextInput, Props>(function TextField({ label
 });
 
 const styles = StyleSheet.create({
-  label: { marginBottom: spacing.xs },
-  box: { minHeight: sizes.input, borderRadius: radius.md, paddingLeft: spacing.lg, paddingRight: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  label: { marginBottom: spacing.sm },
+  box: { minHeight: sizes.input, borderRadius: radius.md + 2, paddingLeft: spacing.lg, paddingRight: spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // O foco já aparece na borda do campo (2 dp, azul); no web, o contorno padrão
   // do navegador por dentro dela seria um segundo anel.
   input: { flex: 1, minHeight: sizes.input - spacing.xs, fontFamily: fonts.regular, fontSize: typeScale.body.fontSize, paddingVertical: spacing.sm, outlineWidth: 0 },

@@ -9,6 +9,11 @@ type Props = {
   frase: string
   /** As iniciais do avatar, como no cartão do paciente do app ("CS"). */
   iniciais?: string
+  /**
+   * `tela` (padrão): o cartão do app, dentro da tela do celular. `fora` (home,
+   * desde 31/10/2026): um cartão claro que sai da borda esquerda do celular.
+   */
+  variante?: 'tela' | 'fora'
 }
 
 /**
@@ -29,7 +34,7 @@ type Props = {
  * tela. Com movimento reduzido, ou sem IntersectionObserver, já está lá: o
  * componente só esconde o cartão quando vai de fato animá-lo.
  */
-export function MensagemQueChega({ nome, frase, iniciais }: Props) {
+export function MensagemQueChega({ nome, frase, iniciais, variante = 'tela' }: Props) {
   const reduzido = useReducedMotion()
   const ref = useRef<HTMLDivElement>(null)
   const animar = !reduzido && typeof IntersectionObserver !== 'undefined'
@@ -53,7 +58,7 @@ export function MensagemQueChega({ nome, frase, iniciais }: Props) {
   }, [animar])
 
   return (
-    <div ref={ref} className={`v3-chega${animar ? (chegou ? ' is-chegando' : ' is-aguardando') : ''}`} aria-hidden="true">
+    <div ref={ref} className={`v3-chega${variante === 'fora' ? ' v3-chega--fora' : ''}${animar ? (chegou ? ' is-chegando' : ' is-aguardando') : ''}`} aria-hidden="true">
       <span className="v3-chega__avatar">{iniciais ?? nome.slice(0, 1).toUpperCase()}</span>
       <span className="v3-chega__texto">
         <span className="v3-chega__legenda">{nome} escreveu, agora</span>

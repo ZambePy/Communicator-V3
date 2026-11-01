@@ -18,7 +18,9 @@ export type ButtonVariant =
   /** Sobre o vermelho da emergência: fundo branco, texto vermelho. */
   | 'lightDanger'
   /** Sobre fundo escuro ou vermelho, ação secundária: só o contorno. */
-  | 'glass';
+  | 'glass'
+  /** Sobre fundo escuro, ação secundária: só o texto (tutorial). */
+  | 'ghostOnDark';
 
 interface Props {
   title: string;
@@ -45,13 +47,14 @@ export function Button({ title, onPress, variant = 'primary', icon, loading, dis
     primary: { bg: colors.primaryStrong, fg: colors.onPrimary },
     secondary: { bg: colors.primaryTint, fg: colors.primary },
     outline: { bg: 'transparent', fg: colors.primary, border: colors.borderStrong },
-    ghost: { bg: 'transparent', fg: colors.primary },
+    ghost: { bg: 'transparent', fg: colors.text },
     accent: { bg: colors.accentStrong, fg: colors.onPrimary },
     danger: { bg: colors.dangerStrong, fg: colors.onPrimary },
     dangerOutline: { bg: 'transparent', fg: colors.dangerText, border: colors.border },
     light: { bg: colors.onDark, fg: colors.primaryStrong },
     lightDanger: { bg: colors.onDark, fg: colors.dangerText },
     glass: { bg: 'transparent', fg: colors.onDark, border: colors.onDarkBorder },
+    ghostOnDark: { bg: 'transparent', fg: colors.onDark },
   };
   // `lightDanger`/`light` ficam sobre fundo escuro: o texto usa as cores do tema
   // CLARO para manter o contraste também no modo escuro.
@@ -92,7 +95,8 @@ export function Button({ title, onPress, variant = 'primary', icon, loading, dis
 }
 
 const styles = StyleSheet.create({
-  base: { borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
+  // Pílula, como nas telas de 31/10/2026.
+  base: { borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   label: { textAlign: 'center' },
 });

@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest'
 /* Auditoria P3-3 (21/10/2026): no celular, os botões dos passos do vídeo (24 px
    de altura) e os links dos cartões (25 px) ficavam abaixo dos 44 px que o
    público (tremor, cansaço) precisa. O respiro é padding, que conta como alvo, e
-   a margem o devolve ao fluxo: o desenho não muda. */
+   a margem o devolve ao fluxo: o desenho não muda. Os cartões numerados
+   saíram da home em 31/10/2026; as condições, que viraram uma lista de links,
+   entram no lugar deles. */
 
 const AQUI = dirname(fileURLToPath(import.meta.url))
 const SRC = resolve(AQUI, '../..')
@@ -26,11 +28,12 @@ describe('alvos de toque de 44 px', () => {
     expect(css).toMatch(/min-height\s*:\s*44px/)
   })
 
-  it('o link do título do cartão ganha 11 px de respiro em cima e embaixo, devolvidos na margem', () => {
-    const css = corpo(ler('components/v3/cartoes.css'), '.v3-cartao__titulo a')
-    expect(css).toMatch(/padding-block\s*:\s*11px/)
-    expect(css).toMatch(/margin-block\s*:\s*-11px/)
-    expect(css).toMatch(/display\s*:\s*inline-block/)
+  it('cada condição da home é um link inteiro, com 18 px ou mais de respiro em cima e embaixo', () => {
+    const css = ler('components/home/condicoes.css')
+    expect(corpo(css, '.condicoes__link')).toMatch(/display\s*:\s*block/)
+    expect(corpo(css, '.condicoes__link')).toMatch(/padding\s*:\s*26px/)
+    const celular = css.slice(css.indexOf('@media (max-width: 760px)'))
+    expect(celular).toMatch(/\.condicoes__link\s*\{\s*padding-block\s*:\s*18px/)
   })
 
   it('existe o utilitário .link-alvo (44 px) para links sozinhos numa linha', () => {

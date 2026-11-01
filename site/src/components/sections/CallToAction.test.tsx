@@ -25,13 +25,21 @@ const montar = (ui = <CallToAction />) =>
 describe('<CallToAction />', () => {
   beforeEach(() => esquecerBetaProgram())
 
-  it('sem props é o fecho da home, com o apoio novo e o download', () => {
-    montar()
+  it('sem props é o fecho da home, com o apoio e o download (o sistema no rótulo, sem linha repetida)', () => {
+    const { container } = montar()
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('A pessoa continua lá. Só falta a voz.')
     expect(screen.getByText(/veja se funciona no seu caso\. É grátis na beta e não pede cartão\./)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Baixar grátis' })).toHaveAttribute('href', '/baixar')
+    expect(screen.getByRole('link', { name: 'Baixar grátis para Windows' })).toHaveAttribute('href', '/baixar')
     expect(screen.getByRole('link', { name: 'Falar com a equipe' })).toHaveAttribute('href', '/contato')
-    expect(screen.getByText('Download gratuito para Windows')).toBeInTheDocument()
+    expect(screen.queryByText(/^Download/)).toBeNull()
+    // Desde 31/10/2026 o fecho é a faixa da noite, sem fundo vivo nem painel da voz.
+    expect(container.querySelector('.atmosfera, .voz, figure')).toBeNull()
+  })
+
+  it('texto={false} tira a frase de apoio (o fecho da home)', () => {
+    montar(<CallToAction texto={false} />)
+    expect(screen.queryByText(/veja se funciona no seu caso/)).toBeNull()
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Só falta a voz.')
   })
 
   it('a página passa o fecho dela: título e texto próprios', () => {
@@ -55,7 +63,7 @@ describe('<CallToAction />', () => {
     expect(links[0]).toHaveTextContent('Falar com a equipe')
     expect(links[0]).toHaveAttribute('href', '/contato')
     expect(screen.queryByText(/Download/)).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Baixar grátis' })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Baixar grátis/ })).toBeNull()
   })
 
   it('o segundo botão pode ser trocado', () => {

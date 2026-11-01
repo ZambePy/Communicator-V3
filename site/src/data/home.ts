@@ -46,7 +46,7 @@ export const DEMO_CUIDADOR: Demo = {
 
 /** A explicação curta da solução, no alto dos capítulos. */
 export const COMO_FUNCIONA_EM_UMA_FRASE =
-  'A webcam acompanha para onde você olha, e o cursor vai junto. Para clicar, basta manter o olhar num botão por um instante. Se mudar de ideia, é só desviar.'
+  'A webcam acompanha para onde a pessoa olha, e o cursor vai junto. Para clicar, basta manter o olhar num botão por um instante. Para desistir, é só desviar.'
 
 export type Capitulo = {
   id: string
@@ -75,9 +75,8 @@ export const CAPITULOS: Capitulo[] = [
   {
     id: 'falar',
     rotulo: 'Escrever',
-    titulo: 'Escreva com o olhar. O computador fala.',
-    texto:
-      'Primeiro o grupo de letras, depois a letra. O teclado sugere palavras e guarda as frases do dia a dia, que saem em voz alta na hora.',
+    titulo: 'Escreve, e o computador fala.',
+    texto: 'Primeiro o grupo de letras, depois a letra. As sugestões completam a palavra.',
     inicio: 0,
     legendas: [
       { de: 0, texto: 'O círculo é o cursor do olhar.' },
@@ -105,8 +104,7 @@ export const CAPITULOS: Capitulo[] = [
     id: 'aprender',
     rotulo: 'Aprender',
     titulo: 'Cada pessoa no seu ritmo.',
-    texto:
-      'A calibração leva cerca de um minuto e o tutorial de dez passos ensina na prática. Quanto tempo o olhar fica parado para clicar, quem decide é a pessoa.',
+    texto: 'A calibração leva cerca de um minuto, e o tempo do olhar parado se ajusta a quem usa.',
     inicio: 16.1,
     legendas: [
       { de: 16.1, texto: 'O tutorial ensina com a prática.' },
@@ -133,18 +131,41 @@ export const CONTRASTE = {
     valor: 'A webcam que já está em casa',
     nota: 'grátis na beta; depois, a partir de R$ 249 por mês',
   },
+  /** A faixa azul da home: os mesmos dois lados, com os números grandes. */
+  faixa: {
+    dedicado: { valor: 'R$ 15 a 120 mil', nota: 'Equipamento importado, com sensor próprio, pago de uma vez.' },
+    irisflow: { valor: 'A webcam de casa' },
+  },
+}
+
+/** A nota do lado IrisFlow na faixa azul: o menor preço vem de usePlans (banco ou reserva). */
+export function notaDoIrisflowNaFaixa(menorPreco: number, betaAtiva: boolean): string {
+  const depois = `a partir de R$\u00a0${menorPreco} por mês, sem fidelidade.`
+  return betaAtiva ? `Grátis na beta. Depois, ${depois}` : `${depois[0].toUpperCase()}${depois.slice(1)}`
 }
 
 export const CUIDADOR_DESTAQUE = {
   titulo: 'Quem cuida acompanha de qualquer lugar.',
-  texto: 'O app IrisFlow Cuidador mostra no celular o que a pessoa escreve, os pedidos de ajuda e o resumo do dia.',
+  texto: 'O que a pessoa escreve chega no celular de quem cuida. A resposta é falada na tela do computador.',
   pontos: [
-    'O que você responde é falado na tela dela.',
-    'O pedido de socorro ocupa a tela toda e é reenviado se ninguém confirmar.',
-    'Ajustes do computador feitos de longe.',
+    'Pedido de socorro na tela inteira, reenviado se ninguém confirmar',
+    'Respostas rápidas: sim, não, já estou indo',
+    'Ajustes do computador feitos de longe',
   ],
-  // A ressalva dos alertas não repete aqui: a home a mostra uma vez só, no cartão "Pedir socorro",
-  // onde a promessa do alerta no celular aparece primeiro (auditoria P2-14, 21/10/2026).
+  /** A conversa de verdade no app (a mesma captura de /cuidador), no celular da faixa. */
+  tela: {
+    src: '/media/cuidador/conversa.webp',
+    alt: 'Conversa no app IrisFlow Cuidador: a pessoa escreve "Estou com sede", a resposta da família é falada na tela dela e, embaixo, as respostas rápidas.',
+    largura: 784,
+    altura: 1544,
+  },
+  /** O cartão que chega ao celular quando a faixa entra na tela. */
+  chega: { nome: 'Carlos', iniciais: 'CS', frase: 'Quero água.' },
+  botaoAndroid: 'Baixar o app para Android',
+  botaoConhecer: 'Conhecer o app',
+  // A ressalva dos alertas (RESSALVA_DOS_ALERTAS) aparece uma vez só na home, aqui, logo depois
+  // da promessa do socorro no celular (auditoria P2-14, 21/10/2026). Os cartões numerados, onde
+  // ela morava, saíram no redesenho de 31/10/2026.
 }
 
 export const PRIVACIDADE = {
@@ -295,21 +316,66 @@ export const MODULOS_NA_HOME = {
   link: 'Ver todos os módulos',
 }
 
-/** "Para quem": as condições, numa curva. */
+/** "Para quem": as condições, numa lista de duas colunas. */
 export const PARA_QUEM_O_OLHAR = {
   titulo: 'Quando o corpo para, o olhar continua.',
   texto: 'Em muitas condições, o olhar é o último movimento que sobra. Cada caso é diferente, por isso a beta é gratuita: dá para testar antes de depender dela.',
 }
 
-export const CONDICOES_NO_ARCO: { nome: string; to: string }[] = [
-  { nome: 'ELA', to: '/como-funciona#para-ela' },
-  { nome: 'AVC de tronco', to: '/como-funciona#para-avc' },
-  { nome: 'Lesão medular alta', to: '/como-funciona#para-lesao-medular' },
-  { nome: 'Paralisia cerebral', to: '/como-funciona#para-paralisia-cerebral' },
+/** As condições da home, cada uma com uma linha do que o IrisFlow muda nela. */
+export const CONDICOES_NA_HOME: { nome: string; linha: string; to: string }[] = [
+  { nome: 'ELA', linha: 'Quando a fala e as mãos já não respondem.', to: '/como-funciona#para-ela' },
+  { nome: 'AVC de tronco', linha: 'Para voltar a responder, pedir e conversar.', to: '/como-funciona#para-avc' },
+  {
+    nome: 'Lesão medular alta',
+    linha: 'O computador inteiro pelo olhar: navegar, assistir, escrever.',
+    to: '/como-funciona#para-lesao-medular',
+  },
+  { nome: 'Paralisia cerebral', linha: 'Pranchas e frases no ritmo de quem usa.', to: '/como-funciona#para-paralisia-cerebral' },
   // As duas últimas estão em "Outra condição?" da página Como funciona.
-  { nome: 'Síndrome do encarceramento', to: '/como-funciona#para-quem' },
-  { nome: 'Distrofias', to: '/como-funciona#para-quem' },
+  {
+    nome: 'Síndrome do encarceramento',
+    linha: 'Quando só os olhos se movem, eles bastam para falar.',
+    to: '/como-funciona#para-quem',
+  },
+  { nome: 'Distrofias', linha: 'Os ajustes acompanham a força que muda com o tempo.', to: '/como-funciona#para-quem' },
 ]
+
+/** A faixa dos planos na home: o cartão da beta (ou os preços, sem a beta). */
+export const PLANOS_NA_HOME = {
+  tituloBeta: 'Na beta, tudo é grátis.',
+  /** Antes da data do fim da beta (dd/mm/aaaa, de beta_program.ends_at). */
+  ate: 'até',
+  textoBeta: 'Sem cartão e sem cobrança. Estes são os preços previstos para depois:',
+  tituloSemBeta: 'Um plano para cada momento.',
+  textoSemBeta: 'Todos com 15 dias para testar antes de pagar e cancelamento a qualquer momento.',
+  porMes: 'por mês',
+  link: 'Comparar os planos',
+}
+
+/**
+ * O teclado da abertura (PalcoDoTeclado.tsx): uma ilustração parada do
+ * teclado em dois passos do app, como no desenho aprovado. Não é interativo.
+ */
+export const TECLADO_DO_PALCO = {
+  descricao:
+    'Teclado do IrisFlow em uso: a frase "Estou com se" está sendo escrita, e o olhar está parado no grupo de letras S, T, U, V, W e X, com o anel de fixação quase fechado. Ao lado, as sugestões sede, sono e saudade.',
+  frase: 'Estou com se',
+  grupos: [
+    ['ABC', 'DEF'],
+    ['GHI', 'JKL'],
+    ['MNO', 'PQR'],
+    ['STU', 'VWX'],
+    ['YZ'],
+  ],
+  /** O grupo sob o olhar, com o anel quase fechado. */
+  grupoNoOlhar: 3,
+  sugestoes: ['sede', 'sono', 'saudade'],
+  falar: 'Falar',
+  legendaForte: 'Segure o olhar',
+  legenda: 'num grupo até o anel fechar.',
+  legendaDepois: 'Depois, escolha a letra.',
+}
 
 /** Perguntas que ficam na home; a lista completa segue no FAQ do content.ts. */
 export const PERGUNTAS_DA_HOME = [

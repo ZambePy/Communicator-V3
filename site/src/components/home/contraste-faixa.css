@@ -1,0 +1,62 @@
+/* O preço na home (ContrastePreco variante="faixa"): o azul da marca inteiro,
+   o título e os dois números grandes lado a lado. O número do aparelho
+   importado fica num azul mais claro e apagado; o do IrisFlow, em branco. O
+   fio entre os dois lados é o único traço. */
+
+.contraste-faixa__conta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  margin: clamp(40px, 5vw, 72px) 0 0;
+}
+
+.contraste-faixa__lado {
+  margin: 0;
+}
+
+.contraste-faixa__lado--irisflow {
+  padding-left: clamp(32px, 4vw, 56px);
+  border-left: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.contraste-faixa__rotulo {
+  font-size: 1.125rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #dce6f7;
+}
+
+.contraste-faixa__numero {
+  margin: 18px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.75rem, 1.2rem + 4.6vw, 5.25rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+  color: #ffffff;
+}
+
+/* O preço do aparelho: o azul claro da marca, um passo atrás (4,6:1 sobre o azul). */
+.contraste-faixa__lado--dedicado .contraste-faixa__numero {
+  color: #b9cff3;
+}
+
+.contraste-faixa__nota {
+  max-width: 30ch;
+  margin: 18px 0 0;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  color: #dce6f7;
+}
+
+@media (max-width: 760px) {
+  .contraste-faixa__conta {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+  .contraste-faixa__lado--irisflow {
+    padding: 48px 0 0;
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.35);
+  }
+}

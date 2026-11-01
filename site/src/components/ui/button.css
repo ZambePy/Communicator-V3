@@ -1,8 +1,9 @@
 /* Botões (Button.tsx). A hierarquia vem da cor: o principal é papel sobre o
-   marinho (15,7:1), o secundário é contorno, o fantasma é só texto. Alvos
+   marinho (15,7:1); o secundário é contorno; o fantasma é só texto. Alvos
    grandes, como no app: 48 px de altura, 56 px no tamanho grande.
-   No hover, o botão sobe 2 px, ganha sombra e, no principal, um reflexo de
-   luz atravessa a superfície. Nada segue o ponteiro. */
+   Retorno do toque: o fundo muda no hover e o botão encolhe a 0,97 ao ser
+   pressionado (ease-out forte, 160 ms). Sem brilho, sem reflexo, sem sombra
+   colorida: nada segue o ponteiro. */
 
 .btn {
   position: relative;
@@ -12,7 +13,7 @@
   justify-content: center;
   gap: var(--sp-2);
   padding: 0.75rem 1.4rem;
-  border: 1.5px solid transparent;
+  border: 2px solid transparent;
   border-radius: var(--r-md);
   font-family: var(--font-body);
   font-size: 1rem;
@@ -26,14 +27,7 @@
     background-color var(--dur-fast) ease,
     border-color var(--dur-fast) ease,
     color var(--dur-fast) ease,
-    box-shadow var(--dur) var(--ease-out),
-    transform var(--dur) var(--ease-out);
-}
-
-@media (hover: hover) {
-  .btn:hover:not(:disabled):not([aria-disabled='true']) {
-    transform: translateY(-2px);
-  }
+    transform 160ms var(--ease-forte);
 }
 
 .btn--lg {
@@ -55,7 +49,7 @@
 }
 
 .btn:active:not(:disabled):not([aria-disabled='true']) {
-  transform: translateY(1px);
+  transform: scale(0.97);
 }
 
 .btn.is-loading {
@@ -86,31 +80,9 @@
 .btn--primary:hover:not(:disabled),
 .btn--teal:hover:not(:disabled) {
   background: #ffffff;
-  box-shadow: var(--glow);
 }
 
-/* O reflexo: uma faixa de luz que atravessa o botão uma vez por hover. */
-.btn--primary::before,
-.btn--teal::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(110deg, transparent 35%, rgba(169, 198, 247, 0.5) 50%, transparent 65%) no-repeat;
-  background-size: 300% 100%;
-  background-position: 100% 0;
-  pointer-events: none;
-}
-
-@media (hover: hover) {
-  .btn--primary:hover:not(:disabled)::before,
-  .btn--teal:hover:not(:disabled)::before {
-    transition: background-position 800ms var(--ease-out);
-    background-position: 0% 0;
-  }
-}
-
-/* Pressionado: um tom abaixo do papel e 1 px para baixo (o transform está acima).
+/* Pressionado: um tom abaixo do papel e um pouco menor (o transform está acima).
    O hover clareia, o clique escurece: a mão sente a diferença. */
 .btn--primary:active:not(:disabled):not([aria-disabled='true']),
 .btn--teal:active:not(:disabled):not([aria-disabled='true']) {
@@ -197,14 +169,13 @@
 
 .btn--secondary {
   background: transparent;
-  border-color: rgba(243, 246, 251, 0.42);
+  border-color: rgba(243, 246, 251, 0.78);
   color: var(--text);
 }
 
 .btn--secondary:hover:not(:disabled) {
   border-color: var(--papel);
-  background: rgba(243, 246, 251, 0.06);
-  box-shadow: 0 12px 26px -16px rgba(2, 7, 16, 0.9);
+  background: rgba(243, 246, 251, 0.08);
 }
 
 .btn--secondary:active:not(:disabled):not([aria-disabled='true']) {
@@ -256,3 +227,4 @@
   line-height: 1.45;
   color: var(--text-soft);
 }
+

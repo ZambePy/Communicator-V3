@@ -166,6 +166,28 @@
   line-height: 1.6;
 }
 
+/* ---------- o nome na largura toda ----------
+   O tamanho vem da largura do contêiner (cqw), para "IrisFlow" ocupar a
+   coluna de texto de ponta a ponta em qualquer tela, sem passar dela. A
+   entrelinha curta deixa a base das letras rente ao fim da página. */
+.footer__marca {
+  container-type: inline-size;
+  overflow: hidden;
+}
+
+.footer__nome {
+  margin: 0;
+  padding-top: var(--sp-4);
+  font-family: var(--font-display);
+  font-size: 26.2cqw;
+  font-weight: 700;
+  line-height: 0.8;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  color: var(--v3-superficie);
+  user-select: none;
+}
+
 @media (max-width: 900px) {
   .footer__inner {
     grid-template-columns: 1fr 1fr;

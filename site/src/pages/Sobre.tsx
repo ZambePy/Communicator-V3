@@ -36,7 +36,6 @@ export default function Sobre() {
     <>
       <FundoDaPagina />
       <PageHead
-        eyebrow="A empresa"
         title="Para nenhuma família ficar sem voz."
         lead="Somos três pessoas fazendo um comunicador por olhar que funciona no computador que a família já tem, sem aparelho de dezenas de milhares de reais."
         visual={

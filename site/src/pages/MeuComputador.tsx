@@ -47,7 +47,6 @@ export default function MeuComputador() {
     <>
       <FundoDaPagina />
       <PageHead
-        eyebrow="Antes de baixar"
         title="Meu computador funciona?"
         lead="Um teste rápido, aqui no navegador: sistema, câmera, placa de vídeo, processador e memória. Nada é enviado, e a câmera só liga quando você pedir."
       />

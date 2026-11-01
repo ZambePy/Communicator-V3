@@ -158,3 +158,20 @@
     display: none;
   }
 }
+
+/* ---------- coluna (home, ao lado do cartão da beta) ---------- */
+.faq__title--coluna {
+  margin: 0 0 var(--sp-5);
+  font-size: clamp(1.875rem, 1.4rem + 1.4vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.faq--coluna .faq__list {
+  border-top-color: var(--line);
+}
+
+.faq--coluna .faq__item {
+  border-bottom-color: var(--line);
+}

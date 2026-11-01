@@ -20,7 +20,7 @@ interface Props {
 /** Botão só de ícone, sempre com 48 × 48 dp de área de toque. */
 export function IconButton({ icon, accessibilityLabel, accessibilityHint, onPress, variant = 'plain', disabled, style, testID }: Props) {
   const { colors } = useTheme();
-  const bg = variant === 'tinted' ? colors.surfaceAlt : variant === 'primary' ? colors.primaryTint : variant === 'onDark' ? colors.onDarkFill : 'transparent';
+  const bg = variant === 'tinted' ? colors.surface : variant === 'primary' ? colors.primaryTint : variant === 'onDark' ? colors.onDarkFill : 'transparent';
   const fg = variant === 'onDark' ? colors.onDark : variant === 'primary' ? colors.primary : colors.text;
   return (
     <PressableScale

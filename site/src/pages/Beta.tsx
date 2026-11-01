@@ -747,7 +747,6 @@ function InscricoesFechadas({ program }: { program: BetaProgram }) {
     <div className="flow">
       <FundoDaPagina variante="calmo" />
       <div className="container container--narrow flow__inner">
-        <span className="eyebrow">Programa beta</span>
         <h1 className="flow__title">As inscrições da beta estão fechadas no momento.</h1>
         <p className="lead flow__lead">
           A turma atual vai até {formatDate(program.endsAt)}. Deixe seu contato e avisamos quando

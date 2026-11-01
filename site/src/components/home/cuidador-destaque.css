@@ -1,0 +1,95 @@
+/* O app de quem cuida na home (CuidadorDestaque.tsx), na faixa da noite. O
+   celular à esquerda, com o cartão que chega saindo da borda dele; o texto à
+   direita. Só transform e opacity animam (o cartão, uma vez, e as entradas). */
+
+.cuidador-destaque__grade {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: clamp(48px, 5.5vw, 80px);
+  align-items: center;
+}
+
+.cuidador-destaque__celular {
+  position: relative;
+  width: min(100%, 340px);
+  margin: 0 40px 0 auto;
+}
+
+.cuidador-destaque__marca {
+  width: auto;
+  height: 44px;
+}
+
+.cuidador-destaque .cuidador-destaque__titulo {
+  margin-top: 28px;
+  max-width: 13ch;
+}
+
+.cuidador-destaque__pontos {
+  display: grid;
+  gap: 16px;
+  margin: 36px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1.125rem;
+  line-height: 1.5;
+  color: #e6ecf5;
+}
+
+.cuidador-destaque__pontos li {
+  position: relative;
+  margin: 0;
+  padding-left: 26px;
+}
+
+/* O ponto da confirmação: teal claro, como o retorno do app. */
+.cuidador-destaque__pontos li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--teal-300);
+}
+
+.cuidador-destaque__ressalva {
+  max-width: 52ch;
+  margin: 20px 0 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--v3-texto-3);
+}
+
+.cuidador-destaque__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 36px;
+}
+
+@media (max-width: 900px) {
+  .cuidador-destaque__grade {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cuidador-destaque__celular {
+    width: min(100%, 280px);
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 600px) {
+  .cuidador-destaque__celular {
+    width: 250px;
+  }
+  .cuidador-destaque__pontos {
+    font-size: 1rem;
+  }
+  .cuidador-destaque__acoes {
+    flex-direction: column;
+  }
+  .cuidador-destaque__acoes .btn {
+    width: 100%;
+  }
+}

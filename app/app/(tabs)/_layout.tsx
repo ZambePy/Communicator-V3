@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ColorValue, StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components';
 import { useApp } from '@/store/AppProvider';
 import { SemPaciente } from '@/features/SemPaciente';
-import { radius, sizes, spacing, useTheme } from '@/theme';
+import { motion, radius, sizes, spacing, useReduceMotion, useTheme } from '@/theme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -20,15 +21,34 @@ type IconName = keyof typeof Ionicons.glyphMap;
  */
 function TabIcon({ name, active, color, badge, badgeTone = 'primary' }: { name: IconName; active: boolean; color: ColorValue; badge?: number; badgeTone?: 'primary' | 'danger' }) {
   const { colors } = useTheme();
+  const reduzir = useReduceMotion();
+  // A troca de aba em si não anima (são telas irmãs, usadas dezenas de vezes
+  // por dia); só o ícone escolhido dá um pequeno salto, e o selo novo, um pulso.
+  const escala = useSharedValue(1);
+  const selo = useSharedValue(1);
+  const antes = useRef(active);
+  const seloAntes = useRef(badge ?? 0);
+  useEffect(() => {
+    if (!reduzir && active && !antes.current) escala.value = withSequence(withTiming(0.86, { duration: motion.duration.press }), withSpring(1, motion.spring.pop));
+    antes.current = active;
+  }, [active, reduzir, escala]);
+  useEffect(() => {
+    if (!reduzir && (badge ?? 0) > seloAntes.current) selo.value = withSequence(withTiming(1.25, { duration: motion.duration.press }), withSpring(1, motion.spring.pop));
+    seloAntes.current = badge ?? 0;
+  }, [badge, reduzir, selo]);
+  const estiloDoIcone = useAnimatedStyle(() => ({ transform: [{ scale: escala.value }] }));
+  const estiloDoSelo = useAnimatedStyle(() => ({ transform: [{ scale: selo.value }] }));
   return (
     <View style={styles.icon}>
-      <Ionicons name={active ? name : (`${name}-outline` as IconName)} size={sizes.icon.md} color={color} />
+      <Animated.View style={estiloDoIcone}>
+        <Ionicons name={active ? name : (`${name}-outline` as IconName)} size={sizes.icon.lg - 2} color={color} />
+      </Animated.View>
       {badge ? (
-        <View style={[styles.badge, { backgroundColor: badgeTone === 'danger' ? colors.dangerStrong : colors.primaryStrong, borderColor: colors.tabBar }]}>
-          <Text variant="badge" style={{ color: colors.onPrimary }} maxFontSizeMultiplier={1}>
+        <Animated.View style={[styles.badge, { backgroundColor: badgeTone === 'danger' ? colors.danger : colors.selected, borderColor: colors.tabBar }, estiloDoSelo]}>
+          <Text variant="badge" style={{ color: badgeTone === 'danger' ? colors.background : colors.onSelected }} maxFontSizeMultiplier={1}>
             {badge > 9 ? '9+' : badge}
           </Text>
-        </View>
+        </Animated.View>
       ) : null}
     </View>
   );
@@ -60,7 +80,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: colors.text,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarLabel: ({ children, focused, color }) => <TabLabel focused={focused} color={color}>{children}</TabLabel>,
         // A barra não flutua sobre o conteúdo: nada fica escondido atrás dela,
@@ -78,13 +98,14 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
+      {/* Quatro abas (31/10/2026). Relatórios saiu da barra: abre pelo Início ("Ver relatórios"), rota /relatorios. */}
       <Tabs.Screen name="index" options={{ title: 'Início', tabBarIcon: ({ focused, color }) => <TabIcon name="home" active={focused} color={color} /> }} />
       <Tabs.Screen
         name="conversa"
         options={{
           title: 'Conversa',
           tabBarAccessibilityLabel: unreadCount ? `Conversa, ${unreadCount} ${unreadCount === 1 ? 'mensagem nova' : 'mensagens novas'}` : 'Conversa',
-          tabBarIcon: ({ focused, color }) => <TabIcon name="chatbubbles" active={focused} color={color} badge={unreadCount} />,
+          tabBarIcon: ({ focused, color }) => <TabIcon name="chatbox" active={focused} color={color} badge={unreadCount} />,
         }}
       />
       <Tabs.Screen
@@ -95,7 +116,6 @@ export default function TabsLayout() {
           tabBarIcon: ({ focused, color }) => <TabIcon name="notifications" active={focused} color={color} badge={openAlerts} badgeTone="danger" />,
         }}
       />
-      <Tabs.Screen name="relatorios" options={{ title: 'Relatórios', tabBarIcon: ({ focused, color }) => <TabIcon name="stats-chart" active={focused} color={color} /> }} />
       <Tabs.Screen name="ajustes" options={{ title: 'Ajustes', tabBarIcon: ({ focused, color }) => <TabIcon name="settings" active={focused} color={color} /> }} />
     </Tabs>
   );

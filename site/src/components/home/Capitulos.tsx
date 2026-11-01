@@ -9,11 +9,18 @@ import { useVideoNaTela } from '@/hooks/useDemo'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { capituloNoTempo, legendaNoTempo, progressoNoCapitulo } from './capitulosDoVideo'
 import { TesteComOOlhar } from './TesteComOOlhar'
+import { Reveal } from '@/components/effects/Reveal'
 import './aparelhos.css'
 import './capitulos.css'
 
 /**
  * O produto em três capítulos, contados pela gravação real do Communicator.
+ *
+ * Redesenho de 31/10/2026: a faixa da noite logo depois da abertura.
+ * O título e o texto em cima, na largura toda; embaixo, a gravação à esquerda
+ * e os três passos à direita. A gravação não entra mais sozinha ao carregar
+ * (o único movimento da abertura agora é o teclado vivo): o título e o texto
+ * entram ao rolar, como nas outras faixas, e o monitor logo depois.
  *
  * Rodada 3 (21/10/2026): esta é a seção logo abaixo da abertura — a prova de
  * que funciona, que o dono sentiu falta no topo. A gravação volta para dentro
@@ -199,18 +206,17 @@ export function Capitulos() {
   const textoDaLegenda = (capitulo.legendas[legenda] ?? capitulo.legendas[0]).texto
 
   return (
-    <section className="capitulos on-raised" id="produto" aria-labelledby="capitulos-titulo">
+    <section className="capitulos home-faixa on-dark" id="produto" aria-labelledby="capitulos-titulo">
       <div className="container capitulos__grade">
-        <header className="capitulos__cabeca">
-          <p className="eyebrow">IrisFlow Communicator</p>
-          <h2 id="capitulos-titulo" className="titulo-capitulo">
+        <Reveal as="header" anim="up" className="capitulos__cabeca">
+          <h2 id="capitulos-titulo" className="home-titulo">
             Feito para ser usado só com os olhos.
           </h2>
-          <p className="capitulos__lead">{COMO_FUNCIONA_EM_UMA_FRASE}</p>
-        </header>
+          <p className="home-sub capitulos__lead">{COMO_FUNCIONA_EM_UMA_FRASE}</p>
+        </Reveal>
 
         <div className="capitulos__palco">
-          <div className="capitulos__cena">
+          <Reveal className="capitulos__cena" delay={120}>
             <div className="capitulos__corpo">
               <div className="monitor capitulos__monitor">
                 <div className="monitor__corpo">
@@ -260,7 +266,7 @@ export function Capitulos() {
                 {textoDaLegenda}
               </p>
             </div>
-          </div>
+          </Reveal>
           <span id={`${idBase}-descricao`} className="sr-only">
             {DEMO_COMMUNICATOR.descricao}
           </span>

@@ -1,0 +1,120 @@
+/* A abertura da home (AberturaHome.tsx), sobre o marinho da marca. Computador: texto em 5
+   partes, o palco em 6. Celular: uma coluna. Só transform e opacity animam
+   (a entrada, uma vez). */
+
+.abertura {
+  background: var(--v3-noite-2);
+  padding-block: calc(var(--header-h) + clamp(24px, 5vh, 56px)) clamp(64px, 10vh, 112px);
+}
+
+.abertura__grade {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 40px;
+  align-items: center;
+}
+
+.abertura__titulo {
+  margin: 0;
+  max-width: 5.2em;
+  font-family: var(--font-display);
+  font-size: clamp(3.5rem, 16.4vw, 6.5rem);
+  font-weight: 700;
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+  color: var(--v3-papel);
+  text-wrap: balance;
+}
+
+.abertura__lead {
+  max-width: 30ch;
+  margin: 24px 0 0;
+  font-size: clamp(1.125rem, 1rem + 0.45vw, 1.3125rem);
+  line-height: 1.5;
+  color: var(--v3-texto-2);
+}
+
+.abertura__acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.abertura__fatos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  color: var(--v3-texto-3);
+}
+
+.abertura__fatos li {
+  margin: 0;
+}
+
+/* ---------- a entrada: uma vez, em cascata ---------- */
+.abertura__entra {
+  animation: abertura-entra 640ms var(--ease-forte) calc(60ms + var(--entra, 0) * 70ms) both;
+}
+
+@keyframes abertura-entra {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .abertura__entra {
+    animation: none;
+  }
+}
+
+/* ---------- computador: duas colunas ---------- */
+@media (min-width: 961px) {
+  .abertura__grade {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: clamp(40px, 4vw, 56px);
+  }
+  .abertura__titulo {
+    font-size: clamp(4.5rem, 7.6vw, 7.375rem);
+  }
+  .abertura__lead {
+    margin-top: 32px;
+  }
+  .abertura__acoes {
+    margin-top: 36px;
+  }
+  .abertura__fatos {
+    margin-top: 28px;
+  }
+}
+
+/* ---------- celular: chamadas na largura toda ---------- */
+@media (max-width: 600px) {
+  .abertura {
+    padding-block: calc(var(--header-h) + 20px) 64px;
+  }
+  .abertura__grade {
+    gap: 36px;
+  }
+  .abertura__lead {
+    margin-top: 20px;
+  }
+  .abertura__acoes {
+    flex-direction: column;
+    margin-top: 28px;
+  }
+  .abertura__acoes .btn {
+    width: 100%;
+  }
+}

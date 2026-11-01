@@ -1,42 +1,32 @@
-/* Capítulos do produto (Capitulos.tsx): os passos à esquerda e a gravação,
-   reta, à direita. O tempo do vídeo decide o passo aceso, o aro de cada passo
-   e a legenda. Só `transform`, `opacity` e o traço do anel (`stroke-dashoffset`)
+/* Capítulos do produto (Capitulos.tsx): a gravação, reta, à esquerda e os
+   três passos à direita (desde 31/10/2026). A troca de passo aceso é na hora
+   (cor sem transição). O tempo do vídeo decide o passo aceso, o aro de cada
+   passo e a legenda. Só `transform`, `opacity` e o traço do anel (`stroke-dashoffset`)
    animam (o teste confere); com movimento reduzido, a regra global de
    global.css zera as transições. */
 
-.capitulos {
-  /* Começa logo depois do título da abertura: o monitor é o visual dela, e o
-     topo dele tem de aparecer na primeira tela. */
-  padding-block: clamp(24px, 4vh, 48px) var(--faixa);
-}
+/* Redesenho de 31/10/2026: a faixa da noite logo depois da abertura (o
+   respiro vem de .home-faixa, em faixas.css). */
 
-/* A abertura e esta seção são uma composição só, sobre o mesmo fundo vivo
-   (Home.tsx): sem a linha de topo e sem fundo próprio. */
-.capitulos.on-raised {
-  box-shadow: none;
-  background: transparent;
-}
-
-/* No computador: o título e os passos numa coluna, a tela na outra, parada
-   ao lado deles enquanto a página rola (sticky). Embaixo, na largura toda,
-   "Testar com o meu olhar" — FORA da grade: a tela presa acompanha a rolagem
-   até o fim da grade em que está e, com o teste dentro dela, passava por cima
-   do botão e do painel (revisão das capturas, 21/10/2026). */
+/* No computador: o título e o texto em cima, na largura toda; embaixo, a
+   gravação (8 partes), parada enquanto os passos (4 partes) rolam ao lado
+   (sticky). Depois, na largura toda, "Testar com o meu olhar" — FORA da
+   grade: a tela presa acompanha a rolagem até o fim da grade em que está e,
+   com o teste dentro dela, passava por cima do botão e do painel (revisão das
+   capturas, 21/10/2026). */
 .capitulos__grade {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
   grid-template-areas:
-    'cabeca palco'
-    'passos palco';
-  grid-template-rows: auto 1fr;
-  column-gap: clamp(40px, 6vw, 96px);
-  row-gap: clamp(40px, 6vh, 64px);
+    'cabeca cabeca'
+    'palco passos';
+  column-gap: clamp(40px, 4vw, 56px);
+  row-gap: clamp(40px, 5vw, 64px);
+  align-items: start;
 }
 
 .capitulos__teste {
-  margin-top: clamp(40px, 6vh, 64px);
-  padding-top: var(--sp-6);
-  border-top: 1px solid var(--line);
+  margin-top: clamp(40px, 5vw, 56px);
 }
 
 .capitulos__cabeca {
@@ -44,11 +34,7 @@
 }
 
 .capitulos__lead {
-  font-size: var(--fs-lead);
-  line-height: 1.55;
-  color: var(--text-soft);
-  max-width: 42ch;
-  margin: 0;
+  margin-bottom: 0;
 }
 
 /* ---------- os passos ---------- */
@@ -83,7 +69,6 @@
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--text-dim);
-  transition: color var(--dur) ease;
 }
 
 .capitulos__passo.is-ativo .capitulos__marca {
@@ -163,7 +148,7 @@
 }
 
 .capitulos__titulo {
-  font-size: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+  font-size: clamp(1.25rem, 1.15rem + 0.3vw, 1.5rem);
   line-height: 1.2;
   letter-spacing: -0.02em;
   /* As margens já descontam os 10 px de respiro do botão (abaixo): o desenho do
@@ -187,7 +172,11 @@
   text-align: left;
   color: var(--text-soft);
   cursor: pointer;
-  transition: color var(--dur) ease;
+  transition: transform 160ms var(--ease-forte);
+}
+
+.capitulos__botao:active {
+  transform: scale(0.98);
 }
 
 .capitulos__botao:hover,
@@ -199,11 +188,10 @@
    assim o contraste continua acima de 4,5:1. */
 .capitulos__texto {
   font-size: 1.0625rem;
-  line-height: 1.6;
+  line-height: 1.55;
   color: var(--text-dim);
   max-width: 44ch;
   margin: 0;
-  transition: color var(--dur) ease;
 }
 
 .capitulos__passo.is-ativo .capitulos__texto {
@@ -224,38 +212,27 @@
 }
 
 /* ---------- o monitor ----------
-   O monitor genérico de aparelhos.css, reto, com uma sombra funda embaixo e
-   um fio claro na borda. Sem brilho (pedido do dono, 21/10/2026). Ao carregar
-   a página ele sobe uma vez para o lugar: o único movimento da abertura. */
+   No desenho de 31/10/2026, só a tela numa moldura de 10 px do azul-noite,
+   sem pé nem brilho (o dono recusou o brilho no monitor). Entra ao rolar
+   (Reveal), depois do título. */
 .capitulos__corpo {
   z-index: 1;
-  animation: monitor-sobe 700ms var(--ease-out) 120ms both;
-}
-
-@keyframes monitor-sobe {
-  from {
-    opacity: 0;
-    transform: translateY(36px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 .capitulos__monitor .monitor__moldura {
-  background: #0a0f1a;
-  box-shadow:
-    inset 0 0 0 1px rgba(169, 198, 247, 0.2),
-    0 40px 80px -40px rgba(0, 0, 0, 0.9);
+  padding: 10px;
+  border-radius: 20px;
+  background: #16294d;
+  box-shadow: none;
 }
 
-.capitulos__monitor .monitor__pescoco {
-  background: #121a29;
+.capitulos__monitor .monitor__tela {
+  border-radius: 12px;
 }
 
+.capitulos__monitor .monitor__pescoco,
 .capitulos__monitor .monitor__base {
-  background: #1a2436;
+  display: none;
 }
 
 .capitulos__video {
@@ -295,7 +272,9 @@
   }
 }
 
-/* ---------- celular e tablet: a tela acima dos passos ---------- */
+/* ---------- celular e tablet: título, tela e passos, um embaixo do outro ----------
+   Desde 31/10/2026 o produto da primeira tela do celular é o teclado vivo da
+   abertura (auditoria P2-7): a gravação não precisa mais subir antes do título. */
 @media (max-width: 960px) {
   .capitulos__grade {
     grid-template-columns: minmax(0, 1fr);
@@ -303,33 +282,21 @@
       'cabeca'
       'palco'
       'passos';
-    grid-template-rows: auto;
-    row-gap: var(--sp-7);
+    row-gap: 36px;
   }
   .capitulos__palco {
     position: relative;
     top: auto;
   }
-  .capitulos__teste {
-    margin-top: var(--sp-7);
-  }
 }
 
-/* Celular: a gravação sobe para antes do título da seção. É o produto de
-   verdade, e quem chega pelo celular (muitas vezes quem cuida e decide) o vê
-   na primeira tela, sem rolar. A ordem de leitura e de foco não muda: só o
-   título e o texto, que não recebem foco, trocam de lugar com o monitor
-   (auditoria de 21/10/2026, P2-7). */
-@media (max-width: 720px) {
-  .capitulos {
-    padding-block: var(--sp-4) var(--faixa);
+@media (max-width: 600px) {
+  .capitulos__monitor .monitor__moldura {
+    padding: 6px;
+    border-radius: 14px;
   }
-  .capitulos__grade {
-    grid-template-areas:
-      'palco'
-      'cabeca'
-      'passos';
-    row-gap: var(--sp-6);
+  .capitulos__monitor .monitor__tela {
+    border-radius: 9px;
   }
 }
 

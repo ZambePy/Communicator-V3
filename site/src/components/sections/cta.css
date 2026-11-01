@@ -1,48 +1,32 @@
-/* Chamada final (CallToAction.tsx): a faixa no azul da marca, com o fundo vivo.
-   Os tokens de texto e de linha são trocados aqui, como nas outras faixas:
-   o texto de apoio fica quase branco, para manter 4,5:1 sobre as manchas de luz. */
+/* Chamada final (CallToAction.tsx), desde 31/10/2026 o fecho do desenho
+   aprovado da home: uma faixa da noite (#081530) que corre direto para o
+   rodapé, da mesma cor. A frase grande em Sora 700 é o desenho; embaixo, as
+   duas ações. Sem fundo vivo, sem painel ao lado. */
 .cta {
-  --bg: var(--blue);
-  --text: #ffffff;
-  --text-soft: #ffffff;
-  --text-dim: #e4ecf9;
-  --line: rgba(255, 255, 255, 0.24);
-  --line-strong: rgba(255, 255, 255, 0.5);
-  --accent: #ffffff;
-  --surface-2: #174a96;
-
+  --bg: var(--v3-noite);
   position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  padding-block: clamp(88px, 13vh, 152px);
+  padding-block: clamp(96px, 10.4vw, 150px) clamp(32px, 4vw, 56px);
   background: var(--bg);
   color: var(--text);
 }
 
-.cta__inner {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  gap: var(--sp-7);
-  align-items: center;
-}
-
 .cta__title {
-  font-size: clamp(2.25rem, 1.5rem + 2.6vw, 3.5rem);
-  line-height: 1.04;
-  letter-spacing: -0.036em;
-  margin: 0 0 var(--sp-5);
+  max-width: 13ch;
+  margin: 0;
+  font-size: clamp(2.75rem, 1.4rem + 5.2vw, 6rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
 }
 
-/* Uma frase por linha no computador: a pausa entre as duas é a frase. */
 .cta__title span {
   display: inline;
 }
 
 .cta__lead {
-  font-size: var(--fs-lead);
   max-width: 46ch;
-  margin-bottom: var(--sp-6);
+  margin: var(--sp-5) 0 0;
+  font-size: var(--fs-lead);
   color: var(--text-soft);
 }
 
@@ -50,65 +34,22 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-3);
-}
-
-/* O botão principal fica papel com texto marinho (8,7:1); o secundário,
-   contorno branco. */
-.cta .btn--secondary {
-  border-color: rgba(255, 255, 255, 0.6);
-  color: #fff;
-}
-
-.cta .btn--secondary:hover:not(:disabled) {
-  border-color: #fff;
-  background: rgba(255, 255, 255, 0.08);
+  margin-top: clamp(32px, 3vw, 44px);
 }
 
 .cta__data {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2) var(--sp-3);
-  margin: var(--sp-6) 0 0;
+  margin: var(--sp-5) 0 0;
   font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--text-soft);
 }
 
-/* O painel da voz ao lado (só no computador). */
-.cta__desenho {
-  display: none;
-  margin: 0;
-}
-
-.cta__desenho figcaption {
-  margin-top: var(--sp-3);
-  font-size: var(--fs-sm);
-  color: var(--text-soft);
-  text-align: center;
-}
-
-/* No celular, os dois botões empilhados na largura toda, como na abertura da
-   home — lado a lado eles quebravam em larguras diferentes. */
+/* No celular, os dois botões empilhados na largura toda, como na abertura. */
 @media (max-width: 720px) {
   .cta__actions {
     flex-direction: column;
   }
   .cta__actions .btn {
-    width: 100%;
-  }
-}
-
-@media (min-width: 960px) {
-  .cta__inner {
-    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-    gap: var(--sp-8);
-  }
-  .cta__title span {
-    display: block;
-  }
-  .cta__desenho {
-    display: block;
     width: 100%;
   }
 }

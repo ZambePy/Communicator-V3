@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Linking, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button, IconButton, ListRow, Notice, PressableScale, Screen, ScreenHeader, SectionTitle, SegmentedControl, StatusPill, Text, TextField } from '@/components';
-import { DwellMs, FilterPreset, isBetaPlan, KeyboardLayout } from '@/data/types';
+import { Button, IconButton, ListRow, Notice, Screen, ScreenHeader, SectionTitle, SegmentedControl, StatusPill, Text, TextField } from '@/components';
+import { DwellMs, FilterPreset, isBetaPlan } from '@/data/types';
 import { buildInfo } from '@/lib/buildInfo';
 import { legalLinks } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
 import { useApp } from '@/store/AppProvider';
-import { layout, opacity, radius, sizes, spacing, ThemePreference, useTheme } from '@/theme';
+import { layout, radius, sizes, spacing, ThemePreference, useTheme } from '@/theme';
 import { mensagemDeErro } from '@/utils/errors';
 import { semOContato } from '@/utils/contatos';
 import { brl, firstName, timeAgo } from '@/utils/format';
@@ -143,10 +142,8 @@ export default function Ajustes() {
 
         {/* A mudança não chegou ao banco: dizer isso, em vez de deixar o
             controle voltar sozinho ao valor antigo sem explicação. */}
-        {falha ? <Notice tone="danger" title="Mudança não salva" text={`${falha} Os controles mostram o que continua valendo. Toque de novo para tentar.`} style={styles.notice} /> : null}
-        {semLinha ? (
-          <Notice tone="info" icon="cloud-outline" title="Ainda não sincronizado" text={`O computador de ${nome} usa os próprios ajustes. O que você mudar aqui passa a valer lá — só o que mudar.`} style={styles.notice} />
-        ) : null}
+        {falha ? <Notice tone="danger" title="Mudança não salva" text={`${falha} Toque de novo para tentar.`} style={styles.notice} /> : null}
+        {semLinha ? <Notice tone="info" icon="cloud-outline" title="Ainda não sincronizado" text="O computador usa os ajustes dele até você mudar algo aqui." style={styles.notice} /> : null}
 
         <SectionTitle title={patient ? `Computador de ${nome}` : 'Computador do paciente'} first />
         <Grupo>
@@ -164,7 +161,7 @@ export default function Ajustes() {
             />
           </Bloco>
 
-          <Bloco>
+          <Bloco ultimo>
             <Setting title="Suavização do olhar" hint="Estável ajuda com tremor; responsivo, com controle firme." />
             <SegmentedControl<FilterPreset>
               value={settings?.filter_preset ?? null}
@@ -178,55 +175,9 @@ export default function Ajustes() {
             />
           </Bloco>
 
-          {/* Teclado e sensibilidade: o campo existe em patient_settings, mas o
-              computador ainda não aplica nenhum dos dois. Mostrados desligados,
-              com "Em breve", em vez de fingir que um toque aqui muda algo lá. */}
-          <Bloco>
-            <Setting title="Teclado" hint="O computador ainda não aplica este ajuste; o teclado segue como está configurado lá." emBreve />
-            <SegmentedControl<KeyboardLayout>
-              value={null}
-              onChange={() => undefined}
-              disabled
-              accessibilityLabel="Layout do teclado, em breve"
-              options={[
-                { value: 'frequencia', label: 'Frequência' },
-                { value: 'alfabetico', label: 'A–Z', accessibilityLabel: 'Alfabético' },
-                { value: 'qwerty', label: 'QWERTY' },
-              ]}
-            />
-          </Bloco>
-
-          <Bloco ultimo>
-            <Setting title="Sensibilidade" hint="O computador ainda não aplica este ajuste." emBreve />
-            {/* Dez níveis em duas fileiras de cinco: cada alvo tem pelo menos
-                48 dp nas duas direções (dez barras numa fileira ficariam com
-                metade disso na largura). */}
-            <View style={[styles.sens, { opacity: opacity.disabled }]} accessibilityRole="radiogroup" accessibilityLabel="Sensibilidade, de 1 a 10, em breve" accessibilityState={{ disabled: true }}>
-              {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                <PressableScale
-                  key={n}
-                  disabled
-                  haptic={false}
-                  style={[styles.sensItem, { backgroundColor: colors.surfaceAlt }]}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: false, checked: false, disabled: true }}
-                  accessibilityLabel={`Nível ${n} de 10`}
-                >
-                  <Text variant="body" weight="semibold" style={{ color: colors.textMuted }}>
-                    {n}
-                  </Text>
-                </PressableScale>
-              ))}
-            </View>
-            <View style={styles.sensLegend}>
-              <Text variant="caption" tone="muted">
-                Menos
-              </Text>
-              <Text variant="caption" tone="muted">
-                Mais
-              </Text>
-            </View>
-          </Bloco>
+          {/* Teclado e sensibilidade (o computador ainda não aplica) ficam
+              fora da tela até ele aplicar (31/10/2026): antes apareciam
+              desligados, com "Em breve" e uma explicação cada. */}
         </Grupo>
 
         {/* Emergência — o prazo é lido pela função agendada do servidor: passado
@@ -240,7 +191,7 @@ export default function Ajustes() {
                   Prazo para responder
                 </Text>
                 <Text variant="caption" tone="muted">
-                  Sem confirmação, o alerta é reenviado a todos os celulares.
+                  Depois disso, o alerta vai para todos os celulares.
                 </Text>
               </View>
             </View>
@@ -276,13 +227,10 @@ export default function Ajustes() {
             }}
           />
         </Grupo>
-        <Text variant="caption" tone="muted" style={styles.footnote}>
-          Ligar é sempre com você: o app não telefona sozinho.
-        </Text>
 
-        <SectionTitle title="Paciente" />
+        <SectionTitle title="A pessoa" />
         <Grupo>
-          <ListRow icon="person-circle-outline" title={patient?.user_name ?? 'Paciente'} subtitle="Perfil e computadores" onPress={() => router.push('/paciente')} />
+          <ListRow icon="person-circle-outline" title={patient?.user_name ?? 'A pessoa'} subtitle="Nome, relação e computadores" onPress={() => router.push('/paciente')} />
           <ListRow icon="albums-outline" title="Frases rápidas" subtitle={`O que aparece na tela de ${nome}`} tone="accent" onPress={() => router.push('/frases')} />
           <ListRow
             icon="desktop-outline"
@@ -291,18 +239,19 @@ export default function Ajustes() {
             tone={online ? 'accent' : 'muted'}
             onPress={() => router.push('/paciente')}
           />
-          <ListRow icon="mic-outline" title="Voz" subtitle={settings?.voice ?? 'O computador informa depois do primeiro ajuste'} tone="muted" last />
+          {settings?.voice ? <ListRow icon="mic-outline" title="Voz" subtitle={settings.voice} tone="muted" last /> : null}
         </Grupo>
 
         <SectionTitle title="Conta" />
         <Grupo>
+          <ListRow icon="person-outline" title="Meu perfil" subtitle={profile?.buyer_name ?? undefined} onPress={() => router.push('/perfil')} />
           <ListRow
             icon={beta ? 'sparkles-outline' : 'card-outline'}
             title={beta ? 'Programa beta' : plan ? `Plano ${plan.name}` : 'Sem assinatura'}
             subtitle={beta ? detalheDaBeta(license, subscription) : subscription ? `${brl(subscription.price_brl)} por mês, ${subscription.status === 'avaliacao' ? 'em período de avaliação' : subscription.status}` : undefined}
             onPress={() => router.push('/assinatura')}
           />
-          <ListRow icon="mail-outline" title={profile?.buyer_name ?? '—'} subtitle={profile?.email} tone="muted" last />
+          <ListRow icon="mail-outline" title="E-mail da conta" subtitle={profile?.email} tone="muted" last />
         </Grupo>
 
         <SectionTitle title="Aparência" />
@@ -324,18 +273,12 @@ export default function Ajustes() {
         <Grupo>
           <ListRow icon="shield-checkmark-outline" title="Política de privacidade" subtitle="Como tratamos os dados (LGPD)" role="link" onPress={() => abrirLink(legalLinks.privacy)} />
           <ListRow icon="reader-outline" title="Termos de uso" tone="muted" role="link" onPress={() => abrirLink(legalLinks.terms)} />
-          <ListRow icon="trash-outline" title="Excluir conta e dados" subtitle="Pedido por e-mail, em até 15 dias" tone="danger" last onPress={excluir} />
+          <ListRow icon="trash-outline" title="Excluir conta e dados" tone="danger" last onPress={excluir} />
         </Grupo>
 
         <Button title={saindo ? 'Saindo…' : 'Sair da conta'} variant="dangerOutline" icon="log-out-outline" loading={saindo} onPress={sair} style={styles.logout} />
 
-        <View style={styles.about}>
-          <Ionicons name="lock-closed-outline" size={sizes.icon.xs} color={colors.textMuted} />
-          <Text variant="caption" tone="muted" center style={styles.flexShrink}>
-            Imagens da câmera ficam só no computador do paciente.
-          </Text>
-        </View>
-        <Text variant="caption" tone="muted" center>
+        <Text variant="caption" tone="muted" center style={styles.about}>
           IrisFlow Cuidador {buildInfo()}
         </Text>
       </Screen>
@@ -374,15 +317,12 @@ function Bloco({ children, ultimo = false }: { children: React.ReactNode; ultimo
   return <View style={[styles.bloco, !ultimo && { borderBottomWidth: sizes.hairline, borderBottomColor: colors.border }]}>{children}</View>;
 }
 
-function Setting({ title, hint, emBreve = false }: { title: string; hint: string; emBreve?: boolean }) {
+function Setting({ title, hint }: { title: string; hint: string }) {
   return (
     <View style={styles.setting}>
-      <View style={styles.settingTitle}>
-        <Text variant="h3" accessibilityRole="header" style={styles.flexShrink}>
-          {title}
-        </Text>
-        {emBreve ? <StatusPill label="Em breve" tone="muted" /> : null}
-      </View>
+      <Text variant="h3" accessibilityRole="header">
+        {title}
+      </Text>
       <Text variant="caption" tone="muted">
         {hint}
       </Text>
@@ -461,18 +401,10 @@ const styles = StyleSheet.create({
   grupo: { marginHorizontal: -spacing.lg, borderTopWidth: sizes.hairline, borderBottomWidth: sizes.hairline },
   bloco: { paddingHorizontal: spacing.lg, paddingVertical: spacing.xl },
   setting: { marginBottom: spacing.md, gap: spacing.xs },
-  settingTitle: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: spacing.md, rowGap: spacing.xxs },
-  sens: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  // 5 por fileira nos celulares comuns (base de 16% + 4 vãos; o que sobra é
-  // repartido igualmente). `minWidth` garante os 48 dp mesmo em tela estreita,
-  // onde a fileira passa a ter 4.
-  sensItem: { flexBasis: '16%', flexGrow: 1, minWidth: sizes.touch, minHeight: sizes.touch, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  sensLegend: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm },
   prazo: { gap: spacing.md, padding: spacing.lg, borderBottomWidth: sizes.hairline },
   prazoTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: radius.pill, padding: spacing.xxs },
   stepperValue: { flex: 1 },
-  footnote: { marginTop: spacing.sm, paddingHorizontal: spacing.xs },
   logout: { marginTop: spacing.xxxl },
   about: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, marginTop: spacing.xxl, marginBottom: spacing.xs },
   modalRoot: { flex: 1, justifyContent: 'flex-end' },

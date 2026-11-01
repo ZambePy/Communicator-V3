@@ -235,6 +235,14 @@ export interface Message {
   created_at: string;
   read_at: string | null;
   spoken: boolean; // vocalizado na tela do paciente
+  /**
+   * Só no app (nunca vem do banco): o id provisório que a mensagem do cuidador
+   * teve enquanto era enviada. Fica na versão gravada para a linha da conversa
+   * manter a mesma chave — o balão não pisca nem anima de novo ao confirmar.
+   */
+  clientId?: string;
+  /** Só no app: envio otimista em andamento ou que falhou (tocar tenta de novo). Ausente = gravado no banco. */
+  envio?: 'enviando' | 'falhou';
 }
 
 export interface QuickPhrase {
@@ -273,6 +281,71 @@ export interface AuthUser {
   email: string;
 }
 
+// ---------- cadastro no app (31/10/2026) ----------
+
+/** Passo 1 do cadastro: o mesmo `auth.signUp` do site (`site/src/services/api.ts → criarContaBeta`). */
+export interface NovaConta {
+  nome: string;
+  email: string;
+  senha: string;
+  newsletter?: boolean;
+}
+
+/** `sessao`: o projeto não exige confirmar o e-mail e a conta já entrou; `confirmar`: o código foi enviado. */
+export type ResultadoDoCadastro = 'sessao' | 'confirmar';
+
+/** Passo 3: para quem é o IrisFlow (vira a linha de `beneficiaries` pela RPC `complete_beta_registration`). */
+export interface DadosDaPessoa {
+  userName: string;
+  relation: Relation;
+  /** Opcional na tela; sem escolha vai `prefiro-nao`. */
+  condition?: Condition | null;
+}
+
+export interface MudancaDoPerfil {
+  buyer_name?: string;
+  /** Só dígitos (10 ou 11), ou `null` para apagar. */
+  phone?: string | null;
+}
+
+export type MudancaDaPessoa = Partial<Pick<Beneficiary, 'user_name' | 'relation' | 'condition'>>;
+
+/** Este e-mail já tem conta: o cadastro manda para o login. */
+export class EmailJaCadastrado extends Error {
+  constructor() {
+    super('Este e-mail já tem uma conta. Entre com ele.');
+    this.name = 'EmailJaCadastrado';
+  }
+}
+
+/** Os 4 dígitos não conferem (ou não há cadastro esperando confirmação com o e-mail). */
+export class CodigoIncorreto extends Error {
+  constructor() {
+    super('Código errado. Confira os 4 números no e-mail.');
+    this.name = 'CodigoIncorreto';
+  }
+}
+
+/** 10 códigos errados em 24 h (`confirmar_codigo`, erro P0429). */
+export class CodigoBloqueado extends Error {
+  constructor() {
+    super('Muitas tentativas com o código errado. Use o botão do e-mail ou tente de novo amanhã.');
+    this.name = 'CodigoBloqueado';
+  }
+}
+
+/** Inscrições da beta fechadas, ou vagas esgotadas (`complete_beta_registration`, P0001). */
+export class CadastroFechado extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = 'CadastroFechado';
+  }
+}
+
+export function ehErro(e: unknown, nome: 'EmailJaCadastrado' | 'CodigoIncorreto' | 'CodigoBloqueado' | 'CadastroFechado'): boolean {
+  return e instanceof Error && e.name === nome;
+}
+
 /**
  * Outro celular (ou o computador) gravou os ajustes depois da leitura em que
  * a mudança se baseou. Nada foi gravado; quem chama recarrega e reaplica.
@@ -303,6 +376,8 @@ export interface RealtimeHandlers {
    * recarrega os dados aqui.
    */
   onSubscribed?: () => void;
+  /** Cada mudança de estado do canal (`SUBSCRIBED`, `CHANNEL_ERROR`, `TIMED_OUT`, `CLOSED`). */
+  onStatus?: (status: string) => void;
 }
 
 /**
@@ -345,6 +420,29 @@ export interface DataProvider {
    * para onde o link do e-mail aponta; a URL é configurada no painel do Supabase.
    */
   requestPasswordReset(email: string): Promise<void>;
+
+  // cadastro (31/10/2026: no app, a mesma sequência do site)
+  /**
+   * Cria a conta (`auth.signUp` com `buyer_name`, `newsletter` e
+   * `terms_accepted_at`). Rejeita com `EmailJaCadastrado` quando o e-mail já
+   * tem conta confirmada.
+   */
+  signUp(nova: NovaConta): Promise<ResultadoDoCadastro>;
+  /** Manda de novo o e-mail com o código. Rejeita só por limite de envio ou rede. */
+  reenviarCodigo(email: string): Promise<void>;
+  /**
+   * Confere os 4 dígitos (`confirmar_codigo`) e abre a sessão neste celular
+   * (`verifyOtp` com `token_hash`, tipo `email`). Com `senha`, grava a senha do
+   * passo 1 (o Supabase não troca a senha de um cadastro ainda não confirmado).
+   * Rejeita com `CodigoIncorreto` ou `CodigoBloqueado`.
+   */
+  confirmarCodigo(email: string, codigo: string, senha?: string): Promise<AuthUser>;
+  /** Passo 3: `complete_beta_registration` (cria a pessoa e a assinatura beta). Rejeita com `CadastroFechado`. */
+  completarCadastro(dados: DadosDaPessoa): Promise<void>;
+  /** Nome e celular do cuidador (`profiles`, RLS `profiles_update_own`). */
+  atualizarPerfil(mudanca: MudancaDoPerfil): Promise<Profile>;
+  /** Nome, relação e condição da pessoa (`beneficiaries`, RLS `beneficiaries_update_own`). */
+  atualizarPaciente(id: string, mudanca: MudancaDaPessoa): Promise<Beneficiary>;
 
   // conta
   getProfile(): Promise<Profile>;
@@ -394,6 +492,8 @@ export interface DataProvider {
 
   // tempo real
   subscribe(beneficiaryId: string, handlers: RealtimeHandlers): () => void;
+  /** O app voltou para a frente: reabre o WebSocket se o sistema o derrubou em segundo plano. */
+  reconectarTempoReal(): void;
 
   // push
   /** Rejeita quando o token não foi gravado (sem sessão, RLS, rede). */

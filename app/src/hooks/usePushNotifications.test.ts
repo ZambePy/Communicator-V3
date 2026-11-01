@@ -15,6 +15,10 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import {
   _esquecerAlarmesLocais,
+  CANAL_MENSAGENS,
+  decidirApresentacao,
+  definirConversaEmFoco,
+  destinoDoToque,
   esperaDoRegistro,
   isExpoGo,
   obterTokenDoAparelho,
@@ -56,7 +60,7 @@ const mockNotifications = {
   dismissNotificationAsync: jest.fn(async (_id: string) => undefined),
   cancelScheduledNotificationAsync: jest.fn(async (_id: string) => undefined),
   getAllScheduledNotificationsAsync: jest.fn(async (): Promise<unknown[]> => []),
-  AndroidImportance: { MAX: 5, DEFAULT: 3 },
+  AndroidImportance: { MAX: 5, HIGH: 4, DEFAULT: 3 },
   AndroidNotificationPriority: { MAX: 'max' },
   SchedulableTriggerInputTypes: { TIME_INTERVAL: 'timeInterval' },
 };
@@ -501,3 +505,65 @@ describe('alarme local que repete até alguém confirmar (achado 11)', () => {
   });
 });
 
+
+// ---------- 31/10/2026: push da mensagem do paciente ----------
+describe('mensagem do paciente por push', () => {
+  const Haptics = require('expo-haptics');
+  afterEach(() => definirConversaEmFoco(null));
+
+  it('o canal "mensagens" existe no Android: importância alta, som e vibração, sem furar o Não perturbe', async () => {
+    Platform.OS = 'android';
+    constants.expoConfig.extra.eas.projectId = PROJETO;
+    await renderHook(() => usePushNotifications(true));
+    await waitFor(() => expect(mockNotifications.setNotificationChannelAsync).toHaveBeenCalledWith(CANAL_MENSAGENS, expect.anything()));
+    const [, canal] = (mockNotifications.setNotificationChannelAsync.mock.calls as unknown as [string, Record<string, unknown>][]).find((c) => c[0] === 'mensagens')!;
+    expect(canal).toMatchObject({ importance: 4, sound: 'default', bypassDnd: false });
+    expect(Array.isArray(canal.vibrationPattern)).toBe(true);
+  });
+
+  it('com a Conversa DESTA pessoa na frente: sem faixa e sem som, mas vibra (uma vez por mensagem)', () => {
+    (Haptics.notificationAsync as jest.Mock).mockClear();
+    definirConversaEmFoco('b1');
+    const dados = { type: 'mensagem', beneficiaryId: 'b1', messageId: 'm-push-1' };
+    expect(decidirApresentacao(dados, 'b1', 'active')).toEqual({ shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false });
+    expect(Haptics.notificationAsync).toHaveBeenCalledTimes(1);
+    decidirApresentacao(dados, 'b1', 'active');
+    expect(Haptics.notificationAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('Conversa de OUTRA pessoa, outra tela ou app em segundo plano: a faixa aparece', () => {
+    const dados = { type: 'mensagem', beneficiaryId: 'b1', messageId: 'm-2' };
+    expect(decidirApresentacao(dados, 'b2', 'active').shouldShowBanner).toBe(true);
+    expect(decidirApresentacao(dados, null, 'active').shouldShowBanner).toBe(true);
+    expect(decidirApresentacao(dados, 'b1', 'background').shouldShowBanner).toBe(true);
+  });
+
+  it('o socorro nunca é escondido, nem com a Conversa aberta', () => {
+    expect(decidirApresentacao({ kind: 'emergencia', beneficiary_id: 'b1', help_request_id: 'h1' }, 'b1', 'active')).toEqual({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true });
+  });
+
+  it('o handler registrado usa essa decisão', async () => {
+    constants.expoConfig.extra.eas.projectId = PROJETO;
+    await renderHook(() => usePushNotifications(true));
+    await waitFor(() => expect(mockNotifications.setNotificationHandler).toHaveBeenCalled());
+    const { handleNotification } = (mockNotifications.setNotificationHandler.mock.calls as unknown as [{ handleNotification: (n: unknown) => Promise<unknown> }][]).at(-1)![0];
+    definirConversaEmFoco('b1');
+    const r = await handleNotification({ request: { content: { data: { type: 'mensagem', beneficiaryId: 'b1', messageId: 'm-3' } } } });
+    expect(r).toMatchObject({ shouldShowBanner: false });
+  });
+
+  it('tocar numa mensagem abre a Conversa da pessoa; num alerta, os Alertas', () => {
+    expect(destinoDoToque({ type: 'mensagem', beneficiaryId: 'b1', messageId: 'm' })).toEqual({ pacienteId: 'b1', rota: '/(tabs)/conversa' });
+    expect(destinoDoToque({ kind: 'emergencia', beneficiary_id: 'b2', help_request_id: 'h' })).toEqual({ pacienteId: 'b2', rota: '/(tabs)/alertas' });
+    expect(destinoDoToque({})).toEqual({ pacienteId: null, rota: '/(tabs)/alertas' });
+  });
+
+  it('o toque numa notificação de mensagem chega ao onOpen com o tipo e os ids', async () => {
+    constants.expoConfig.extra.eas.projectId = PROJETO;
+    const onOpen = jest.fn();
+    await renderHook(() => usePushNotifications(true, { onOpen }));
+    const ouvinte = (mockNotifications.addNotificationResponseReceivedListener.mock.calls as unknown as [(r: unknown) => void][]).at(-1)![0];
+    ouvinte({ notification: { request: { content: { data: { type: 'mensagem', beneficiaryId: 'b1', messageId: 'm-9' } } } } });
+    expect(onOpen).toHaveBeenCalledWith({ type: 'mensagem', beneficiaryId: 'b1', messageId: 'm-9' });
+  });
+});

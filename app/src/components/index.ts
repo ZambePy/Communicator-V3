@@ -23,3 +23,7 @@ export * from './ListRow';
 export * from './TextField';
 export * from './ErrorBanner';
 export * from './Skeleton';
+export * from './PassosDoCadastro';
+export * from './CampoDeCodigo';
+export * from './FolhaDeEdicao';
+export * from './GrupoDeLinhas';

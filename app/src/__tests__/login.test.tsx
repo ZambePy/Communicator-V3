@@ -16,7 +16,12 @@ const mockApp = {
   error: null as string | null,
 };
 jest.mock('@/store/AppProvider', () => ({ useApp: () => mockApp }));
-jest.mock('expo-router', () => ({ useRouter: () => ({ back: jest.fn(), push: jest.fn(), replace: jest.fn() }) }));
+const mockPush = jest.fn();
+let mockParams: Record<string, string> = {};
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ back: jest.fn(), push: mockPush, replace: jest.fn(), canGoBack: () => true }),
+  useLocalSearchParams: () => mockParams,
+}));
 
 const devOriginal = (global as unknown as { __DEV__: boolean }).__DEV__;
 function definirDev(v: boolean) {
@@ -24,6 +29,8 @@ function definirDev(v: boolean) {
 }
 
 beforeEach(() => {
+  mockParams = {};
+  mockPush.mockClear();
   mockApp.signIn.mockClear();
   mockApp.requestPasswordReset.mockClear();
   mockApp.error = null;
@@ -67,5 +74,22 @@ describe('Login', () => {
     await fireEvent.press(screen.getByText('Entrar'));
     await waitFor(() => expect(screen.getByText(/Sem internet no momento/)).toBeTruthy());
     expect(screen.queryByText(/Network request failed/)).toBeNull();
+  });
+
+  // 31/10/2026: a conta é criada dentro do app, não no site.
+  it('"Criar conta" abre o cadastro no app (sem link para o site)', async () => {
+    definirDev(false);
+    await render(<Login />);
+    expect(screen.queryByText(/Inscreva-se na beta/)).toBeNull();
+    await fireEvent.press(screen.getByText('Criar conta'));
+    expect(mockPush).toHaveBeenCalledWith('/(auth)/criar-conta');
+  });
+
+  it('vindo do cadastro com e-mail que já tem conta, o e-mail vem preenchido e a senha vazia', async () => {
+    definirDev(true);
+    mockParams = { email: 'ana@exemplo.com.br' };
+    await render(<Login />);
+    expect(screen.getByDisplayValue('ana@exemplo.com.br')).toBeTruthy();
+    expect(screen.queryByDisplayValue(CONTA_DE_TESTE.senha)).toBeNull();
   });
 });

@@ -1,39 +1,21 @@
-/* Os módulos na home (ListaDeModulos.tsx), rodada 3 (21/10/2026).
-   A lista numerada à esquerda, em fios finos; à direita, presa enquanto a
-   lista rola, a tela real do módulo num monitor de contorno fino, sem brilho
-   (o dono recusou o "efeito" em 21/10/2026). */
+/* Os módulos na home (ListaDeModulos.tsx), no degrau mais claro do marinho
+   (redesenho de 31/10/2026). A lista à esquerda, em fios finos, sem números
+   (não é uma sequência); à direita, presa enquanto a lista rola, a tela real
+   do módulo num painel da noite, com a legenda embaixo. Sem brilho. Só
+   opacity e transform animam. */
 
 .v3-modulos {
-  position: relative;
-  padding-block: var(--faixa);
-  background: var(--v3-noite-2);
   overflow-x: clip;
 }
 
 .v3-modulos__cabeca {
-  margin-bottom: clamp(32px, 6vh, 64px);
-}
-
-.v3-modulos__titulo {
-  margin: 0 0 var(--sp-3);
-  font-size: var(--fs-h2);
-  line-height: 1.06;
-  letter-spacing: -0.032em;
-  max-width: 18ch;
-}
-
-.v3-modulos__texto {
-  margin: 0;
-  max-width: 52ch;
-  font-size: var(--fs-lead);
-  line-height: 1.55;
-  color: var(--v3-texto-2);
+  margin-bottom: clamp(36px, 4.5vw, 64px);
 }
 
 .v3-modulos__grade {
   display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(0, 6fr);
-  gap: clamp(32px, 5vw, 88px);
+  grid-template-columns: minmax(0, 4fr) minmax(0, 7fr);
+  gap: clamp(32px, 4.5vw, 64px);
   align-items: start;
 }
 
@@ -42,7 +24,6 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--v3-fio);
 }
 
 .v3-modulos__item {
@@ -53,46 +34,45 @@
 .v3-modulos__linha {
   width: 100%;
   min-height: 60px;
-  display: grid;
-  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--sp-2) var(--sp-3);
-  padding: 12px 14px 12px 10px;
+  justify-content: space-between;
+  gap: 6px 12px;
+  padding: 12px 0;
   border: 0;
-  border-radius: 10px;
   background: transparent;
   color: var(--v3-texto-2);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition:
-    background-color var(--dur-fast) ease,
-    color var(--dur-fast) ease;
+  transition: transform 160ms var(--ease-forte);
+}
+
+.v3-modulos__linha:active {
+  transform: scale(0.99);
+}
+
+.v3-modulos__linha:hover .v3-modulos__nome {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 5px;
+  text-decoration-color: var(--v3-fio-forte);
 }
 
 .v3-modulos__linha:hover,
 .v3-modulos__linha.is-ativa {
-  background: var(--v3-superficie);
   color: var(--v3-papel);
 }
 
-.v3-modulos__numero {
-  font-family: var(--font-display);
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--v3-texto-3);
-  font-variant-numeric: tabular-nums;
-}
-
-.v3-modulos__linha.is-ativa .v3-modulos__numero {
-  color: var(--v3-iris);
-}
-
 .v3-modulos__nome {
-  font-family: var(--font-display);
-  font-size: 1.125rem;
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.v3-modulos__linha.is-ativa .v3-modulos__nome {
   font-weight: 600;
-  letter-spacing: -0.012em;
 }
 
 .v3-modulos__etiquetas {
@@ -102,21 +82,21 @@
   gap: 6px;
 }
 
+/* As etiquetas: texto em íris sobre a superfície (9,8:1), sem contorno. */
 .v3-etiqueta {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: var(--r-pill);
-  border: 1px solid var(--v3-fio-forte);
+  background: var(--v3-superficie-2);
   font-size: var(--fs-min);
-  font-weight: 500;
-  line-height: 1.4;
-  color: var(--v3-texto-2);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--v3-iris);
   white-space: nowrap;
 }
 
 .v3-etiqueta--experimental {
-  border-color: var(--warn-line);
   color: var(--warn);
 }
 
@@ -124,22 +104,23 @@
   margin-top: var(--sp-5);
 }
 
-/* ---------- a prévia: o monitor ---------- */
+/* ---------- a prévia: a tela num painel escuro ---------- */
 .v3-modulos__previa {
   position: sticky;
-  top: calc(var(--header-h) + clamp(24px, 6vh, 64px));
+  top: calc(var(--header-h) + 32px);
   margin: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--v3-noite);
+  box-shadow:
+    inset 0 0 0 1px var(--v3-fio),
+    0 40px 80px -48px rgba(2, 7, 16, 0.9);
 }
 
 .v3-modulos__tela {
   position: relative;
   aspect-ratio: 16 / 9;
-  border-radius: 16px;
-  overflow: hidden;
-  background: #0a0f1a;
-  box-shadow:
-    0 0 0 1px rgba(169, 198, 247, 0.2),
-    0 30px 60px -36px rgba(0, 0, 0, 0.8);
+  background: var(--v3-noite);
 }
 
 .v3-modulos__imagem {
@@ -153,7 +134,7 @@
   transition: opacity 360ms ease;
 }
 
-/* A anterior fica por baixo até a nova carregar: o monitor nunca fica vazio. */
+/* A anterior fica por baixo até a nova carregar: a tela nunca fica vazia. */
 .v3-modulos__imagem.is-anterior[data-carregada] {
   z-index: 1;
   opacity: 1;
@@ -165,12 +146,15 @@
 }
 
 .v3-modulos__legenda {
-  position: relative;
-  margin-top: var(--sp-4);
-  max-width: 56ch;
-  font-size: var(--fs-sm);
+  margin: 0;
+  padding: 18px 22px 20px;
+  font-size: 1rem;
   line-height: 1.55;
   color: var(--v3-texto-2);
+}
+
+.v3-modulos__legenda strong {
+  color: var(--v3-papel);
 }
 
 .v3-modulos__miniatura {
@@ -185,11 +169,10 @@
   .v3-modulos__previa {
     display: none;
   }
-  .v3-modulos__linha {
-    grid-template-columns: 2.25rem minmax(0, 1fr);
+  .v3-modulos__nome {
+    font-size: 1.0625rem;
   }
   .v3-modulos__etiquetas {
-    grid-column: 2;
     justify-content: flex-start;
   }
   .v3-modulos__miniatura {
@@ -199,12 +182,12 @@
     aspect-ratio: 16 / 9;
     object-fit: cover;
     object-position: 50% 0;
-    margin: 4px 0 14px;
+    margin: 4px 0 16px;
     border-radius: 12px;
-    box-shadow: 0 0 0 1px rgba(169, 198, 247, 0.2);
-    /* Mostra o que mudou: a tela da linha escolhida surge, em vez de aparecer de
-       repente. Só opacity (a altura já está reservada pelo aspect-ratio). */
-    animation: modulos-miniatura-surge 260ms var(--ease-out) both;
+    background: var(--v3-noite);
+    box-shadow: 0 0 0 1px var(--v3-fio);
+    /* A tela da linha escolhida surge (só opacity; a altura já está reservada). */
+    animation: modulos-miniatura-surge 260ms var(--ease-forte) both;
   }
 }
 

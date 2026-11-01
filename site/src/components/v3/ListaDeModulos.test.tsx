@@ -6,7 +6,8 @@ import { MODULOS_EM_TELA } from '@/data/produto'
 import { MODULOS_NA_HOME } from '@/data/home'
 import { FUTURO_DO_ROTEADOR } from '@/test/futuro-do-roteador'
 
-/* Os módulos na home (v3, 21/10/2026): uma lista numerada e, ao lado, a tela
+/* Os módulos na home (v3, 21/10/2026; sem os números desde 31/10/2026, porque
+   os módulos não são uma sequência): uma lista e, ao lado, a tela
    real do módulo sob o ponteiro. Nada só no passar do mouse: o foco do
    teclado e o toque escolhem a prévia do mesmo jeito. */
 
@@ -22,14 +23,16 @@ const botoes = () => within(screen.getByRole('list')).getAllByRole('button')
 const previa = (c: HTMLElement) => c.querySelector<HTMLImageElement>('.v3-modulos__previa img.is-ativa')
 
 describe('<ListaDeModulos />', () => {
-  it('uma linha por módulo, numerada de 01 em diante, com o nome do módulo', () => {
-    montar()
+  it('uma linha por módulo, com o nome do módulo e sem número na frente', () => {
+    const { container } = montar()
     const linhas = botoes()
     expect(linhas).toHaveLength(MODULOS_EM_TELA.length)
     linhas.forEach((b, i) => {
-      expect(b).toHaveTextContent(String(i + 1).padStart(2, '0'))
+      expect(b).not.toHaveTextContent(String(i + 1).padStart(2, '0'))
       expect(b).toHaveTextContent(MODULOS_EM_TELA[i].nome)
     })
+    expect(container.querySelector('.v3-modulos__numero')).toBeNull()
+    expect(container.querySelector('ol')).toBeNull()
     expect(linhas[0]).toHaveAttribute('aria-current', 'true')
   })
 

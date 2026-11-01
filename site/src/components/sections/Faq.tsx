@@ -9,6 +9,12 @@ type Props = {
   perguntas?: string[]
   /** Link para a lista completa, quando a seção mostra só uma parte. */
   verTodas?: string
+  /**
+   * `faixa` (padrão): a seção inteira, com o título parado à esquerda.
+   * `coluna` (home, desde 31/10/2026): título e perguntas numa coluna, para
+   * ficar ao lado do cartão da beta.
+   */
+  variante?: 'faixa' | 'coluna'
 }
 
 /**
@@ -48,11 +54,60 @@ function Resposta({ id, aberta, children }: { id: string; aberta: boolean; child
   )
 }
 
-export function Faq({ perguntas, verTodas }: Props = {}) {
+export function Faq({ perguntas, verTodas, variante = 'faixa' }: Props = {}) {
   const [open, setOpen] = useState<number | null>(0)
   const itens = perguntas
     ? perguntas.map((q) => FAQ.find((f) => f.q === q)).filter((f): f is (typeof FAQ)[number] => Boolean(f))
     : FAQ
+
+  const lista = (
+    <ul className="faq__list">
+      {itens.map((item, i) => {
+        const isOpen = open === i
+        return (
+          <Reveal key={item.q} anim="up" delay={Math.min(i, 5) * 60} as="li">
+            <div className={`faq__item${isOpen ? ' is-open' : ''}`}>
+              <h3 className="faq__q">
+                <button
+                  type="button"
+                  onClick={() => setOpen(isOpen ? null : i)}
+                  aria-expanded={isOpen}
+                  aria-controls={`faq-${i}`}
+                >
+                  <span>{item.q}</span>
+                  <span className="faq__icon" aria-hidden="true">
+                    <span />
+                    <span />
+                  </span>
+                </button>
+              </h3>
+              <Resposta id={`faq-${i}`} aberta={isOpen}>
+                <p>{item.a}</p>
+              </Resposta>
+            </div>
+          </Reveal>
+        )
+      })}
+    </ul>
+  )
+
+  if (variante === 'coluna') {
+    return (
+      <section className="faq faq--coluna" id="perguntas" aria-labelledby="faq-titulo">
+        <Reveal anim="up">
+          <h2 id="faq-titulo" className="faq__title faq__title--coluna">
+            O que as famílias mais perguntam.
+          </h2>
+        </Reveal>
+        {lista}
+        {verTodas && (
+          <Link to={verTodas} className="link-seta faq__todas">
+            Ver todas as perguntas
+          </Link>
+        )}
+      </section>
+    )
+  }
 
   return (
     <section className="faixa faq" id="perguntas">
@@ -70,34 +125,7 @@ export function Faq({ perguntas, verTodas }: Props = {}) {
         </Reveal>
 
         <div className="faq__corpo">
-        <ul className="faq__list">
-          {itens.map((item, i) => {
-            const isOpen = open === i
-            return (
-              <Reveal key={item.q} anim="up" delay={Math.min(i, 5) * 60} as="li">
-                <div className={`faq__item${isOpen ? ' is-open' : ''}`}>
-                  <h3 className="faq__q">
-                    <button
-                      type="button"
-                      onClick={() => setOpen(isOpen ? null : i)}
-                      aria-expanded={isOpen}
-                      aria-controls={`faq-${i}`}
-                    >
-                      <span>{item.q}</span>
-                      <span className="faq__icon" aria-hidden="true">
-                        <span />
-                        <span />
-                      </span>
-                    </button>
-                  </h3>
-                  <Resposta id={`faq-${i}`} aberta={isOpen}>
-                    <p>{item.a}</p>
-                  </Resposta>
-                </div>
-              </Reveal>
-            )
-          })}
-        </ul>
+        {lista}
 
         {verTodas && (
           <Link to={verTodas} className="link-seta faq__todas faq__todas--fim">

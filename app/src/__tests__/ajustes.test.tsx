@@ -10,7 +10,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import Ajustes from '../../app/(tabs)/ajustes';
 import type { PatientSettings } from '@/data/types';
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+const mockPush = jest.fn();
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 
 type Mudanca = Partial<PatientSettings> | ((atual: PatientSettings | null) => Partial<PatientSettings>);
 const mockApp = {
@@ -48,24 +49,24 @@ beforeEach(() => {
 });
 
 describe('Ajustes', () => {
-  it('teclado e sensibilidade aparecem "Em breve", desligados, e tocar não grava nada', async () => {
+  // 31/10/2026: o que o computador ainda não aplica sai da tela (antes ficava
+  // desligado, com "Em breve" e uma explicação cada — texto demais).
+  it('teclado e sensibilidade (o computador ainda não aplica) não aparecem', async () => {
     mockApp.settings = ajustes({ keyboard_layout: 'qwerty', sensitivity: 7 });
     await render(<Ajustes />);
-
-    expect(screen.getAllByText('Em breve')).toHaveLength(2);
-    expect(screen.getAllByText(/O computador ainda não aplica este ajuste/)).toHaveLength(2);
-
-    const qwerty = screen.getByLabelText('QWERTY');
-    expect(qwerty).toHaveProp('accessibilityState', expect.objectContaining({ disabled: true, selected: false }));
-    await fireEvent.press(qwerty);
-
-    const nivel7 = screen.getByLabelText('Nível 7 de 10');
-    expect(nivel7).toHaveProp('accessibilityState', expect.objectContaining({ disabled: true, selected: false }));
-    await fireEvent.press(nivel7);
-
+    expect(screen.queryByText('Em breve')).toBeNull();
+    expect(screen.queryByText(/O computador ainda não aplica/)).toBeNull();
+    expect(screen.queryByLabelText('QWERTY')).toBeNull();
+    expect(screen.queryByLabelText('Nível 7 de 10')).toBeNull();
+    expect(screen.queryByText('Teclado')).toBeNull();
+    expect(screen.queryByText('Sensibilidade')).toBeNull();
     expect(mockApp.updateSettings).not.toHaveBeenCalled();
-    // O valor antigo gravado por versões anteriores não aparece como se valesse.
-    expect(screen.queryByText(/Nível 7 de 10\./)).toBeNull();
+  });
+
+  it('leva a Meu perfil', async () => {
+    await render(<Ajustes />);
+    await fireEvent.press(screen.getByText('Meu perfil'));
+    expect(mockPush).toHaveBeenCalledWith('/perfil');
   });
 
   it('tempo de fixação e suavização continuam gravando', async () => {

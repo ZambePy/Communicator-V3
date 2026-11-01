@@ -83,6 +83,16 @@ export function getSupabase(): SupabaseClient {
         persistSession: true,
         detectSessionInUrl: false,
       },
+      // Tempo real (31/10/2026): o padrão do realtime-js percebia a conexão
+      // morta só no heartbeat seguinte (25 s) e reconectava devagar. Com 15 s e
+      // novas tentativas curtas, a mensagem que chega com a rede oscilando
+      // entra antes; ao voltar para a frente o AppProvider ainda reconecta na
+      // hora (`reconectarTempoReal`).
+      realtime: {
+        heartbeatIntervalMs: 15_000,
+        timeout: 10_000,
+        reconnectAfterMs: (tentativas: number) => [1_000, 2_000, 4_000, 8_000][tentativas - 1] ?? 10_000,
+      },
     });
     // Recomendação do Supabase para React Native: com o app em segundo plano
     // os timers param e o refresh automático perde a hora; ao voltar para a

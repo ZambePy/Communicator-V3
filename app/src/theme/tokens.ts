@@ -19,6 +19,12 @@
  * separados — `accent` (#00A693) é ótimo para ícone e gráfico, mas como texto
  * sobre branco fica em 3:1; o texto teal usa `accentText`, e o botão teal, `accentStrong`.
  *
+ * Redesenho de 31/10/2026 (telas aprovadas em mock/app.src.html): o fundo continua o
+ * marinho #0B1B3A; superfícies #12284A e #183260; texto #F3F6FB e #A9B8D0; ação
+ * #2F66C2 (fundo de botão) e #A9C6F7 (texto/ícone azul e chip escolhido); teal
+ * #43D6C3 só para "online/confirmado/falado"; o rosado #FF9A9D só para emergência.
+ * Títulos em Sora, texto em Inter, corpo nunca abaixo de 16 px.
+ *
  * NADA de cor, tamanho ou espaçamento solto nas telas: tudo sai daqui.
  */
 import { Platform, StyleSheet } from 'react-native';
@@ -27,6 +33,8 @@ import { Platform, StyleSheet } from 'react-native';
 export const brand = {
   blue: '#1B54A8',
   blueDeep: '#143F80',
+  /** O azul de ação das telas de 31/10/2026 (fundo de botão, balão do cuidador). */
+  action: '#2F66C2',
   /** Halo do símbolo (IrisLogo). */
   azure: '#4F86D9',
   /** O fundo do tema escuro e a pupila do símbolo — o mesmo marinho do site. */
@@ -98,6 +106,16 @@ export interface ThemeColors {
   gradientBrand: readonly [string, string, string];
   gradientHero: readonly [string, string];
   gradientDanger: readonly [string, string];
+  // ---- 31/10/2026 ----
+  /** Superfície um degrau acima de `surface` (respostas rápidas, chips). */
+  surfaceRaised: string;
+  /** Fundo do chip escolhido e o texto sobre ele. */
+  selected: string;
+  onSelected: string;
+  /** Contorno de campo e de chip em repouso (o foco usa `primary`). */
+  fieldBorder: string;
+  /** Ponto inativo do tutorial. */
+  dotIdle: string;
   // ---- componentes ----
   chartBar: string;
   chartToday: string;
@@ -110,14 +128,14 @@ export const lightColors: ThemeColors = {
   mode: 'light',
   background: '#F4F6FA',
   surface: '#FFFFFF',
-  surfaceAlt: '#EBF0F7',
+  surfaceAlt: '#E9EEF6',
   surfaceElevated: '#FFFFFF',
   border: '#DCE3EE',
   borderStrong: '#7A889C',
   text: brand.navy,
   textMuted: '#4A5B78',
   primary: brand.blue,
-  primaryStrong: brand.blue,
+  primaryStrong: brand.action,
   primaryTint: '#E6EEFA',
   onPrimary: brand.white,
   accent: brand.teal,
@@ -141,6 +159,11 @@ export const lightColors: ThemeColors = {
   gradientBrand: [brand.navy, brand.navy, brand.navy],
   gradientHero: [brand.navy, brand.navy],
   gradientDanger: ['#9E1B16', '#9E1B16'],
+  surfaceRaised: '#E9EEF6',
+  selected: brand.navy,
+  onSelected: brand.white,
+  fieldBorder: '#7A889C',
+  dotIdle: '#C3CDDD',
   chartBar: '#7FA3DB',
   chartToday: brand.blue,
   shadow: brand.navy,
@@ -152,30 +175,30 @@ export const darkColors: ThemeColors = {
   mode: 'dark',
   background: brand.navy,
   surface: '#12284A',
-  surfaceAlt: '#17305A',
+  surfaceAlt: '#183260',
   surfaceElevated: '#1D3966',
-  border: 'rgba(169,198,247,0.16)',
+  border: '#1E3762',
   borderStrong: '#6B83A8',
   text: '#F3F6FB',
-  textMuted: '#A9B9D0',
+  textMuted: '#A9B8D0',
   primary: '#A9C6F7',
-  primaryStrong: '#2F66C2',
+  primaryStrong: brand.action,
   primaryTint: 'rgba(169,198,247,0.12)',
   onPrimary: brand.white,
   accent: '#43D6C3',
   accentText: '#43D6C3',
   accentStrong: '#016F63',
-  // No escuro, os blocos de estado não são tingidos (vermelho ou âmbar
-  // translúcido sobre o marinho virava um roxo ou um marrom sujos): o bloco é
-  // neutro e o estado vem do fio à esquerda, do ícone e do título coloridos.
-  accentTint: '#163056',
-  danger: '#FF8A8E',
+  // Teal-escuro chapado (a resposta "Já estou indo" e o "Falado na tela").
+  accentTint: '#0E3B45',
+  // O rosado é só da emergência: no escuro, o bloco do pedido de ajuda é o
+  // vinho #4A1F2E com o contorno #FF9A9D (mock 08 Alertas).
+  danger: '#FF9A9D',
   dangerText: '#FF9A9D',
   dangerStrong: '#C62828',
-  dangerTint: '#163056',
+  dangerTint: '#4A1F2E',
   warning: '#F0C46B',
   warningText: '#F0C46B',
-  warningTint: '#163056',
+  warningTint: '#183260',
   onDark: brand.white,
   onDarkMuted: 'rgba(255,255,255,0.86)',
   onDarkFill: 'rgba(255,255,255,0.14)',
@@ -184,12 +207,38 @@ export const darkColors: ThemeColors = {
   gradientBrand: [brand.navy, brand.navy, brand.navy],
   gradientHero: [brand.navy, brand.navy],
   gradientDanger: ['#9E1B16', '#9E1B16'],
+  surfaceRaised: '#183260',
+  selected: '#A9C6F7',
+  onSelected: brand.navy,
+  fieldBorder: '#4A6390',
+  dotIdle: '#2B4675',
   chartBar: '#4D86E0',
   chartToday: '#A9C6F7',
   shadow: '#000000',
-  tabBar: brand.navy,
-  skeleton: '#17305A',
+  tabBar: '#0A1833',
+  skeleton: '#183260',
 };
+
+/**
+ * Cores das iniciais (avatar sem foto): a mesma pessoa sempre na mesma cor
+ * (`corDoAvatar`). Tons claros com texto escuro do mesmo matiz, legíveis nos
+ * dois temas. Sem violeta.
+ */
+export const avatarPalette: readonly { bg: string; fg: string }[] = [
+  { bg: '#C9E9E4', fg: '#0B5A50' },
+  { bg: '#F3D9B1', fg: '#5A3A0B' },
+  { bg: '#D6E2FA', fg: '#1B3F80' },
+  { bg: '#F2D0D3', fg: '#7A1F2B' },
+  { bg: '#D9EBC8', fg: '#2F5512' },
+];
+
+/** Índice estável de uma pessoa na paleta do avatar (hash simples do id ou do nome). */
+export function corDoAvatar(chave: string | null | undefined): { bg: string; fg: string } {
+  const s = (chave ?? '').trim();
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return avatarPalette[h % avatarPalette.length];
+}
 
 /** Escala de espaçamento (múltiplos de 4). */
 export const spacing = {
@@ -235,14 +284,18 @@ export const sizes = {
   /** Símbolo da IrisFlow: `sm` cabeçalho · `md` login · `lg` boas-vindas · `xl` splash/carregando. */
   logo: { sm: 44, md: 56, lg: 72, xl: 96 },
   icon: { xs: 16, sm: 18, md: 22, lg: 28, xl: 36, hero: 48 },
-  avatar: { sm: 40, md: 48, lg: 88 },
+  avatar: { sm: 40, md: 48, lg: 96 },
   /** Quadrados/círculos com ícone: `sm` métricas · `md` linhas de lista · `lg` destaques · `xl` estados vazios. */
   tile: { sm: 36, md: 40, lg: 56, xl: 68 },
   /** Altura mínima de uma linha de lista. */
   row: 64,
-  button: { md: 52, lg: 60, xl: 68 },
+  button: { md: 52, lg: 56, xl: 68 },
   input: 56,
   tabBar: 64,
+  /** Altura da ilustração do tutorial. */
+  ilustracao: 340,
+  /** Caixa de cada dígito do código do e-mail. */
+  digito: 72,
   badge: 20,
   dot: 8,
   hairline: StyleSheet.hairlineWidth,
@@ -291,7 +344,7 @@ export type FontWeight = 'regular' | 'medium' | 'semibold' | 'bold' | 'display' 
 
 /**
  * Escala tipográfica (tamanho / altura de linha / tracking), nas proporções clássicas
- * (16 · 18 · 21 · 24 · 28 · 36). Corpo mínimo de 15 px e legenda de 14 px — o público é
+ * (16 · 18 · 21 · 24 · 30 · 36). Corpo mínimo de 16 px e legenda de 14 px — o público é
  * de cuidadores, muitos idosos. As únicas exceções são o rótulo da barra de abas (13 px,
  * limitado pelo espaço de cinco abas) e o número do selo.
  *
@@ -301,12 +354,13 @@ export type FontWeight = 'regular' | 'medium' | 'semibold' | 'bold' | 'display' 
 export const typeScale = {
   alarme: { fontSize: 44, lineHeight: 50, letterSpacing: -1.2 },
   display: { fontSize: 36, lineHeight: 42, letterSpacing: -0.9 },
-  h1: { fontSize: 28, lineHeight: 34, letterSpacing: -0.6 },
+  h1: { fontSize: 30, lineHeight: 34, letterSpacing: -0.75 },
   fala: { fontSize: 24, lineHeight: 32, letterSpacing: -0.3 },
   h2: { fontSize: 21, lineHeight: 28, letterSpacing: -0.3 },
   h3: { fontSize: 18, lineHeight: 24, letterSpacing: -0.1 },
   body: { fontSize: 16, lineHeight: 24, letterSpacing: 0 },
-  bodySmall: { fontSize: 15, lineHeight: 22, letterSpacing: 0 },
+  // 16 px como o corpo (piso do redesenho de 31/10/2026), com entrelinha mais curta.
+  bodySmall: { fontSize: 16, lineHeight: 22, letterSpacing: 0 },
   caption: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1 },
   label: { fontSize: 14, lineHeight: 20, letterSpacing: 0.1 },
   tab: { fontSize: 13, lineHeight: 16, letterSpacing: 0 },
@@ -347,9 +401,20 @@ export const zIndex = {
   overlay: 100,
 } as const;
 
-/** Durações e molas. Tudo é cortado quando o sistema pede "reduzir movimento". */
+/**
+ * Durações e molas. Tudo é cortado quando o sistema pede "reduzir movimento".
+ * Curvas de Emil Kowalski (skill animate-expo): saída forte para o que entra e
+ * sai, `ease-in-out` para o que se move na tela, nunca `ease-in`.
+ */
+export const easing = {
+  /** cubic-bezier(0.23, 1, 0.32, 1) */
+  out: [0.23, 1, 0.32, 1] as const,
+  /** cubic-bezier(0.77, 0, 0.175, 1) */
+  inOut: [0.77, 0, 0.175, 1] as const,
+};
+
 export const motion = {
-  duration: { fast: 160, base: 260, slow: 420, pulse: 1800, breath: 2400 },
+  duration: { press: 120, fast: 160, base: 240, slow: 420, pulse: 1800, breath: 2400 },
   /** Atraso entre itens de uma lista que entra em cascata. */
   stagger: 45,
   /** Escala no toque: botões e chips. */
@@ -360,6 +425,10 @@ export const motion = {
     press: { damping: 15, stiffness: 320 },
     release: { damping: 14, stiffness: 260 },
     slide: { damping: 18, stiffness: 200 },
+    /** Assentar sem passar do ponto (entrada de mensagem, cartão do tutorial). */
+    settle: { duration: 400, dampingRatio: 1 },
+    /** Um leve balanço: ícone da aba ao ser escolhido. */
+    pop: { duration: 300, dampingRatio: 0.6 },
   },
 } as const;
 

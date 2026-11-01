@@ -3,24 +3,25 @@ import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import Home from './Home'
 import { esquecerBetaProgram } from '@/hooks/useBetaProgram'
-import { BETA, BETA_PLAN, PLANS } from '@/data/content'
-import { CONDICOES_NO_ARCO, DEMO_COMMUNICATOR, RECURSOS_DO_OLHAR, TESTE_AO_VIVO } from '@/data/home'
+import { BETA, BETA_PLAN, HERO, PLANS } from '@/data/content'
+import { CONDICOES_NA_HOME, CONTRASTE, DEMO_COMMUNICATOR, TECLADO_DO_PALCO, TESTE_AO_VIVO } from '@/data/home'
 import { RESSALVA_DOS_ALERTAS } from '@/data/cuidador'
 import { MODULOS_EM_TELA } from '@/data/produto'
+import { BETA_PROGRAM_RESERVA, type BetaProgram } from '@/services/api'
 import { FUTURO_DO_ROTEADOR } from '@/test/futuro-do-roteador'
 
-/* A home (21/10/2026): a demonstração real é a seção logo abaixo da abertura,
-   num monitor sem brilho; depois os seis cartões (com a tela real ao lado), os
-   módulos, as condições no arco e a chamada final no azul da marca. O conteúdo
-   de venda (beta e planos) não muda. O dono recusou o olho de partículas, a
-   grade, o feixe, a marca d'água e a aurora; pediu depois (21/10/2026) efeitos
-   de fundo e animações, e entraram os que nascem do produto — o campo dos 13
-   pontos, a luz do olhar, o anel dos passos, o traço do arco, a frase que chega
-   ao celular e o anel da chamada final. */
+/* A home do redesenho de 31/10/2026, na identidade escura da IrisFlow: a
+   abertura com o teclado em demonstração (ilustração parada), a gravação real
+   com os três passos e o teste com o olhar, as telas do app, o preço no azul
+   da marca, as seis condições numa lista, quem cuida, a beta com as perguntas
+   e o fecho. Saíram os seis cartões numerados, o arco das condições e o fundo
+   vivo da abertura e da chamada. */
+
+const { apiFake } = vi.hoisted(() => ({ apiFake: { programa: null as BetaProgram | null } }))
 
 vi.mock('@/services/api', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/services/api')>()
-  return { ...real, fetchBetaProgram: async () => real.BETA_PROGRAM_RESERVA }
+  return { ...real, fetchBetaProgram: async () => apiFake.programa ?? real.BETA_PROGRAM_RESERVA }
 })
 
 function montar() {
@@ -32,15 +33,14 @@ function montar() {
 }
 
 /* O cliente do Supabase avisa UMA vez por carregamento do módulo que não está
-   configurado (nos testes as variáveis ficam vazias de propósito, ver
-   vitest.config.ts). É o único aviso esperado aqui: espionado, afirmado e
-   fora do stderr (revisão de 21/10/2026, M3). Qual teste dispara depende da
-   ordem, então a regra é: nenhum aviso além desse, e no máximo um. */
+   configurado (nos testes as variáveis ficam vazias de propósito). É o único
+   aviso esperado aqui, e no máximo um. */
 let avisos: MockInstance<typeof console.warn>
 let totalDeAvisos = 0
 
 beforeEach(() => {
   esquecerBetaProgram()
+  apiFake.programa = null
   avisos = vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 
@@ -54,88 +54,129 @@ afterAll(() => {
   expect(totalDeAvisos).toBeLessThanOrEqual(1)
 })
 
-describe('<Home /> v3', () => {
-  it('a demonstração real é a seção logo depois da abertura, num monitor (sem brilho)', () => {
-    const { container } = montar()
-    const secoes = Array.from(container.querySelectorAll('main > section, .home-topo__conteudo > section, .v3 > section'))
-    expect(secoes[0].querySelector('h1')).not.toBeNull()
-    const demo = secoes[1]
-    const video = demo.querySelector('video')!
-    expect(video).not.toBeNull()
-    const fontes = Array.from(video.querySelectorAll('source')).map((s) => s.getAttribute('src'))
-    expect(fontes).toEqual([DEMO_COMMUNICATOR.webm, DEMO_COMMUNICATOR.mp4])
-    expect(video.closest('.monitor')).not.toBeNull()
-    expect(demo.querySelector('.v3-monitor-brilho')).toBeNull()
-    // Os capítulos continuam com a gravação.
-    // (o botão de cada passo diz "Mostrar no vídeo" na descrição, não no nome: P3-13)
-    const passos = within(demo as HTMLElement).getAllByRole('button', { description: /mostrar no vídeo/i })
-    expect(passos).toHaveLength(3)
-    // E o teste com o próprio olhar fica ali, atrás de um botão.
-    expect(within(demo as HTMLElement).getByRole('button', { name: TESTE_AO_VIVO.botao })).toBeInTheDocument()
-  })
+const secoes = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>('.home > section, .home > div > div > section'))
 
-  it('o teclado animado saiu da abertura (foi para Como funciona)', () => {
+describe('<Home /> (redesenho de 31/10/2026)', () => {
+  it('as seções na ordem do desenho aprovado', () => {
     const { container } = montar()
-    expect(container.querySelector('.olhar__grade')).toBeNull()
-  })
-
-  it('os seis cartões, os módulos, o arco das condições e a chamada final', () => {
-    const { container } = montar()
-    expect(container.querySelectorAll('.v3-cartao')).toHaveLength(RECURSOS_DO_OLHAR.length)
-    expect(container.querySelectorAll('.v3-modulos__linha')).toHaveLength(MODULOS_EM_TELA.length)
-    expect(container.querySelectorAll('.v3-arco__item')).toHaveLength(CONDICOES_NO_ARCO.length)
-    const chamada = container.querySelector('.v3-chamada-final')!
-    expect(chamada).not.toBeNull()
-    expect(within(chamada as HTMLElement).getByRole('heading', { level: 2 })).toHaveTextContent('A pessoa continua lá.')
-    // A chamada tem o fundo vivo próprio e o painel da voz no lugar dos 13 pontos.
-    expect(chamada.querySelector('section.cta > .atmosfera--chamada')).not.toBeNull()
-    expect(chamada.querySelector('.voz')).not.toBeNull()
-  })
-
-  it('o fundo vivo aparece no topo (abertura e monitor juntos) e na chamada final, sem canvas nem WebGL', () => {
-    const { container } = montar()
-    const fundos = Array.from(container.querySelectorAll<HTMLElement>('.atmosfera'))
-    expect(fundos.map((f) => f.className)).toEqual([
-      expect.stringContaining('atmosfera--abertura'),
-      expect.stringContaining('atmosfera--chamada'),
+    const titulos = Array.from(container.querySelectorAll('h1, h2')).map((h) => h.textContent?.trim())
+    expect(titulos).toEqual([
+      HERO.title,
+      'Feito para ser usado só com os olhos.',
+      'As telas do aplicativo.',
+      CONTRASTE.titulo,
+      'Quando o corpo para, o olhar continua.',
+      'Quem cuida acompanha de qualquer lugar.',
+      'Na beta, tudo é grátis.',
+      'O que as famílias mais perguntam.',
+      'A pessoa continua lá. Só falta a voz.',
     ])
-    expect(container.querySelector('.home-topo > .atmosfera + .home-topo__conteudo .hero-produto')).not.toBeNull()
-    expect(container.querySelector('canvas')).toBeNull()
+    expect(container.querySelectorAll('h1')).toHaveLength(1)
+    expect(secoes(container).length).toBeGreaterThanOrEqual(7)
   })
 
-  it('os efeitos são só decoração: fora do leitor de tela e sem nada no foco', () => {
+  it('a abertura: o h1 inteiro, o texto com para quem é, as duas chamadas e os fatos', async () => {
+    montar()
+    const h1 = screen.getByRole('heading', { level: 1 })
+    expect(h1).toHaveTextContent('Seu olhar tem voz.')
+    const abertura = h1.closest('section')!
+    expect(within(abertura).getByText(HERO.lead)).toBeInTheDocument()
+    expect(HERO.lead).toMatch(/perdeu a fala e o movimento/)
+    // Depois do lançamento (a reserva: 29/09/2026), a chamada é o download.
+    const principal = await within(abertura).findByRole('link', { name: 'Baixar grátis para Windows' })
+    expect(principal).toHaveAttribute('href', '/baixar')
+    expect(principal).toHaveClass('btn--chamada')
+    const secundaria = within(abertura).getByRole('link', { name: HERO.secondary })
+    expect(secundaria).toHaveAttribute('href', '/como-funciona')
+    expect(secundaria).not.toHaveClass('btn--chamada')
+    expect(principal.closest('[data-sticky-hide]')).not.toBeNull()
+    const fatos = within(within(abertura).getByRole('list', { name: 'Em resumo' })).getAllByRole('listitem')
+    expect(fatos.map((f) => f.textContent)).toEqual([HERO.fatoDaBeta, ...HERO.fatos])
+  })
+
+  it('antes do lançamento, a chamada da abertura leva à inscrição na beta', async () => {
+    apiFake.programa = { ...BETA_PROGRAM_RESERVA, launchAt: '2099-11-10T03:00:00Z' }
+    montar()
+    const abertura = screen.getByRole('heading', { level: 1 }).closest('section')!
+    expect(await within(abertura).findByRole('link', { name: 'Entrar na beta' })).toHaveAttribute('href', '/beta')
+    expect(within(abertura).queryByRole('link', { name: /Baixar grátis/ })).toBeNull()
+  })
+
+  it('o teclado da abertura é só demonstração: uma imagem com nome, sem nada que receba foco', () => {
     const { container } = montar()
-    for (const seletor of ['.atmosfera', '.v3-chega', 'svg.capitulos__fixa', '.v3-arco__curva', '.voz']) {
-      const achados = Array.from(container.querySelectorAll<HTMLElement>(seletor))
-      expect(achados.length, seletor).toBeGreaterThan(0)
-      for (const el of achados) {
-        expect(el.getAttribute('aria-hidden'), seletor).toBe('true')
-        expect(el.querySelector('a, button, input, select, textarea, [tabindex]'), seletor).toBeNull()
-      }
-    }
+    const palco = container.querySelector<HTMLElement>('.palco')!
+    expect(palco).toHaveAttribute('role', 'img')
+    expect(palco).toHaveAttribute('aria-label', TECLADO_DO_PALCO.descricao)
+    expect(palco.querySelector('a, button, input, [tabindex]')).toBeNull()
+    expect(palco.querySelectorAll('.palco__tecla')).toHaveLength(6)
+    expect(palco.querySelectorAll('.palco__tecla.is-alvo')).toHaveLength(1)
+    expect(palco.querySelector('.palco__tecla.is-alvo')).toHaveTextContent('STUVWX')
+    expect(palco.querySelector('.palco__frase')).toHaveTextContent(TECLADO_DO_PALCO.frase)
   })
 
-  it('nenhum alvo de calibração nem efeito que siga o mouse na home', () => {
+  it('a gravação real com os três passos e o teste com o próprio olhar', () => {
     const { container } = montar()
-    for (const seletor of ['.v3-campo', '.v3-campo__ponto', '.ilustracao--alvos', '.calib', '.v3-cursor', '.v3-luz']) {
-      expect(container.querySelector(seletor), seletor).toBeNull()
-    }
-    expect(document.querySelector('.v3-cursor, .v3-luz')).toBeNull()
+    const demo = container.querySelector<HTMLElement>('#produto')!
+    const video = demo.querySelector('video')!
+    expect(Array.from(video.querySelectorAll('source')).map((s) => s.getAttribute('src'))).toEqual([
+      DEMO_COMMUNICATOR.webm,
+      DEMO_COMMUNICATOR.mp4,
+    ])
+    expect(video.closest('.monitor')).not.toBeNull()
+    expect(within(demo).getAllByRole('button', { description: /mostrar no vídeo/i })).toHaveLength(3)
+    expect(within(demo).getByRole('button', { name: TESTE_AO_VIVO.botao })).toBeInTheDocument()
+    // Sem rótulo acima do título.
+    expect(demo.querySelector('.eyebrow')).toBeNull()
   })
 
-  /* Auditoria P2-14 (21/10/2026): a ressalva dos alertas aparecia duas vezes na home (no
-     cartão "Pedir socorro" e na seção do cuidador). Entra uma vez só, onde a promessa é feita
-     pela primeira vez. O mapa da dor não tem mais ressalva (a beta.12 sai em 22/10/2026). */
-  it('a ressalva dos alertas aparece uma vez só na home, e o mapa da dor não tem ressalva', () => {
+  it('as telas do app sem números (não são uma sequência) e as seis condições com a linha de cada uma', () => {
+    const { container } = montar()
+    expect(container.querySelectorAll('.v3-modulos__linha')).toHaveLength(MODULOS_EM_TELA.length)
+    expect(container.querySelector('.v3-modulos__numero')).toBeNull()
+    const condicoes = Array.from(container.querySelectorAll<HTMLAnchorElement>('.condicoes__link'))
+    expect(condicoes).toHaveLength(CONDICOES_NA_HOME.length)
+    condicoes.forEach((a, i) => {
+      expect(a).toHaveTextContent(CONDICOES_NA_HOME[i].nome)
+      expect(a).toHaveTextContent(CONDICOES_NA_HOME[i].linha)
+      expect(a.getAttribute('href')).toBe(CONDICOES_NA_HOME[i].to)
+      expect(CONDICOES_NA_HOME[i].to).toMatch(/^\/como-funciona#para-/)
+    })
+  })
+
+  it('o preço no azul da marca, com o menor plano vindo dos dados', () => {
+    const { container } = montar()
+    const faixa = container.querySelector<HTMLElement>('.contraste-faixa')!
+    expect(faixa).toHaveClass('home-faixa--azul')
+    expect(faixa).toHaveTextContent(CONTRASTE.faixa.dedicado.valor)
+    expect(faixa).toHaveTextContent(CONTRASTE.faixa.irisflow.valor)
+    expect(faixa).toHaveTextContent(`a partir de R$ ${Math.min(...PLANS.map((p) => p.price))} por mês`)
+  })
+
+  it('quem cuida: a captura real da conversa, o cartão que chega (decoração) e as chamadas', () => {
+    const { container } = montar()
+    const faixa = screen.getByRole('heading', { name: 'Quem cuida acompanha de qualquer lugar.' }).closest('section')!
+    const img = within(faixa).getByRole('img', { name: /Conversa no app IrisFlow Cuidador/ })
+    expect(img).toHaveAttribute('src', '/media/cuidador/conversa.webp')
+    expect(img).toHaveAttribute('width', '784')
+    expect(img).toHaveAttribute('height', '1544')
+    const chega = container.querySelector('.v3-chega--fora')!
+    expect(chega).toHaveAttribute('aria-hidden', 'true')
+    expect(chega).toHaveTextContent('Quero água.')
+    expect(within(faixa).getByRole('link', { name: 'Conhecer o app' })).toHaveAttribute('href', '/cuidador')
+    // Sem endereço de loja nem APK configurados nos testes: a reserva de antes (a disponibilidade em /cuidador).
+    expect(within(faixa).getByRole('link', { name: 'Baixar o app para Android' })).toHaveAttribute('href', '/cuidador#disponibilidade')
+  })
+
+  /* Auditoria P2-14 (21/10/2026): a ressalva dos alertas entra uma vez só. Desde
+     31/10/2026, na faixa de quem cuida (os cartões numerados saíram). */
+  it('a ressalva dos alertas aparece uma vez só, na faixa de quem cuida', () => {
     const { container } = montar()
     const texto = (container.textContent ?? '').replace(/\s+/g, ' ')
-    const vezes = (trecho: string) => texto.split(trecho).length - 1
-    expect(vezes(RESSALVA_DOS_ALERTAS)).toBe(1)
-    expect(texto).not.toMatch(/próxima versão do instalador|chega na beta 12/i)
+    expect(texto.split(RESSALVA_DOS_ALERTAS).length - 1).toBe(1)
+    expect(container.querySelector('.cuidador-destaque')).toHaveTextContent(RESSALVA_DOS_ALERTAS)
   })
 
-  it('beta e planos sem mudança: a home diz que na beta tudo é grátis, com os preços previstos', () => {
-    // O modo beta continua ligado e os valores de reserva são os mesmos.
+  it('beta e planos sem mudança: R$ 0 até o fim da beta e os três preços previstos, dos dados', () => {
     expect(BETA).toEqual({
       ativo: true,
       versaoReserva: '1.0.0-beta.12',
@@ -151,8 +192,53 @@ describe('<Home /> v3', () => {
     expect(BETA_PLAN.price).toBe(0)
 
     const { container } = montar()
-    expect(screen.getByRole('heading', { name: 'Na beta, tudo é grátis.' })).toBeInTheDocument()
-    const precos = Array.from(container.querySelectorAll('.plano-mini__preco strong')).map((s) => s.textContent)
-    expect(precos).toEqual(['249', '399', '649'])
+    const cartao = container.querySelector<HTMLElement>('.plano-beta')!
+    expect(within(cartao).getByRole('heading', { name: 'Na beta, tudo é grátis.' })).toBeInTheDocument()
+    expect(cartao.querySelector('.plano-beta__preco')).toHaveTextContent('R$ 0até 31/03/2027')
+    const precos = Array.from(cartao.querySelectorAll('.plano-beta__valor')).map((s) => s.textContent)
+    expect(precos).toEqual(['R$ 249', 'R$ 399', 'R$ 649'])
+  })
+
+  it('as perguntas da home ao lado do cartão, com o link para todas', () => {
+    montar()
+    const faq = screen.getByRole('heading', { name: 'O que as famílias mais perguntam.' }).closest('section')!
+    expect(within(faq).getAllByRole('button', { expanded: true })).toHaveLength(1)
+    expect(within(faq).getByRole('link', { name: 'Ver todas as perguntas' })).toHaveAttribute('href', '/planos#perguntas')
+  })
+
+  it('o fecho: a frase grande e as duas chamadas, sem fundo vivo', async () => {
+    const { container } = montar()
+    const fecho = container.querySelector<HTMLElement>('section.cta')!
+    expect(within(fecho).getByRole('heading', { level: 2 })).toHaveTextContent('A pessoa continua lá. Só falta a voz.')
+    expect(await within(fecho).findByRole('link', { name: 'Baixar grátis para Windows' })).toHaveAttribute('href', '/baixar')
+    expect(within(fecho).getByRole('link', { name: 'Falar com a equipe' })).toHaveAttribute('href', '/contato')
+    expect(fecho.querySelector('.cta__lead')).toBeNull()
+  })
+
+  it('sem fundo vivo, sem canvas e nada que siga o mouse', () => {
+    const { container } = montar()
+    for (const seletor of ['.atmosfera', 'canvas', '.v3-campo', '.v3-cursor', '.v3-luz', '.calib', '.v3-cartao', '.v3-arco__item']) {
+      expect(container.querySelector(seletor), seletor).toBeNull()
+    }
+  })
+
+  it('o que é só desenho fica fora do leitor de tela e do foco', () => {
+    const { container } = montar()
+    for (const seletor of ['.v3-chega', 'svg.capitulos__fixa', '.monitor__pescoco']) {
+      const achados = Array.from(container.querySelectorAll<HTMLElement>(seletor))
+      expect(achados.length, seletor).toBeGreaterThan(0)
+      for (const el of achados) {
+        expect(el.getAttribute('aria-hidden'), seletor).toBe('true')
+        expect(el.querySelector('a, button, input, select, textarea, [tabindex]'), seletor).toBeNull()
+      }
+    }
+  })
+
+  it('toda imagem tem largura e altura (sem salto de layout)', () => {
+    const { container } = montar()
+    for (const img of Array.from(container.querySelectorAll('img'))) {
+      expect(img.getAttribute('width'), img.getAttribute('src') ?? '').toMatch(/^\d+$/)
+      expect(img.getAttribute('height'), img.getAttribute('src') ?? '').toMatch(/^\d+$/)
+    }
   })
 })

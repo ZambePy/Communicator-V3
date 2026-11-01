@@ -31,3 +31,19 @@ export const haptics = {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
   },
 };
+
+/**
+ * Ids das mensagens que já vibraram neste celular. A mesma mensagem pode chegar
+ * por dois caminhos quase juntos (o tempo real e o push com a Conversa aberta):
+ * ela vibra uma vez só.
+ */
+const vibradas: string[] = [];
+
+/** Mensagem nova do paciente: vibra uma vez por mensagem. Devolve se vibrou agora. */
+export function vibrarPorMensagem(id: string | null | undefined): boolean {
+  if (!id || vibradas.includes(id)) return false;
+  vibradas.push(id);
+  if (vibradas.length > 50) vibradas.shift();
+  haptics.sucesso();
+  return true;
+}

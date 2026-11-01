@@ -84,12 +84,10 @@ export default function Relatorios() {
 
   const totals = useMemo(() => {
     const s = ultimos7;
-    const errs = s.map((x) => x.calibration_error_px).filter((x): x is number => x !== null);
     const hits = s.map((x) => x.hit_rate_150px).filter((x): x is number => x !== null);
     return {
       minutes: s.reduce((a, x) => a + durationMin(x), 0),
       utterances: s.reduce((a, x) => a + x.utterances, 0),
-      avgErr: errs.length ? Math.round(errs.reduce((a, b) => a + b, 0) / errs.length) : null,
       avgHit: hits.length ? hits.reduce((a, b) => a + b, 0) / hits.length : null,
       help: s.reduce((a, x) => a + x.help_requests, 0),
     };
@@ -97,7 +95,7 @@ export default function Relatorios() {
 
   return (
     <Screen refreshing={refreshing} onRefresh={allowed ? onRefresh : undefined}>
-      <ScreenHeader eyebrow={patient?.user_name} title="Relatórios" />
+      <ScreenHeader eyebrow={patient?.user_name} title="Relatórios" onBack={() => router.back()} />
 
       {!allowed ? (
         <BloqueioDoPlano />
@@ -124,14 +122,15 @@ export default function Relatorios() {
             <Numero valor={String(totals.utterances)} rotulo={totals.utterances === 1 ? 'frase falada' : 'frases faladas'} grande />
             <View style={styles.numeros}>
               <Numero valor={formatDuration(totals.minutes)} rotulo="de uso" medio />
-              <Numero valor={totals.avgHit != null ? `${Math.round(totals.avgHit * 100)}%` : '—'} rotulo="de acerto" medio acessivel={totals.avgHit != null ? undefined : 'Acerto médio ainda sem dados'} />
+              <Numero valor={totals.avgHit != null ? `${Math.round(totals.avgHit * 100)}%` : 'Sem dados'} rotulo="de acerto" medio acessivel={totals.avgHit != null ? undefined : 'Acerto médio ainda sem dados'} />
             </View>
             <WeekChart days={week} />
           </Card>
 
+          {/* Sem px nem "erro de calibração" aqui (31/10/2026): números técnicos
+              ficam só no detalhe de cada sessão. */}
           <SectionTitle title="Na semana" />
           <View style={styles.numeros}>
-            <Numero valor={totals.avgErr != null ? `${totals.avgErr} px` : '—'} rotulo="erro médio de calibração" nota="referência: 57 px" />
             <Numero valor={String(totals.help)} rotulo={totals.help === 1 ? 'pedido de ajuda' : 'pedidos de ajuda'} alerta={totals.help > 2} />
           </View>
 
@@ -144,7 +143,7 @@ export default function Relatorios() {
                 key={s.id}
                 icon={orfa(s) ? 'help-circle-outline' : s.status === 'ended' ? 'time-outline' : 'radio-button-on'}
                 title={orfa(s) ? `${dateShort(s.started_at)}, interrompida` : `${dateShort(s.started_at)}, ${formatDuration(durationMin(s))}`}
-                subtitle={orfa(s) ? 'O computador parou sem encerrar; fica fora dos totais.' : [`${s.utterances} ${s.utterances === 1 ? 'frase' : 'frases'}`, s.calibration_error_px != null ? `erro de ${Math.round(s.calibration_error_px)} px` : null, hasFatigueData(s) ? fatigueLabel[s.fatigue].toLowerCase() : null].filter(Boolean).join(', ')}
+                subtitle={orfa(s) ? 'O computador parou sem encerrar; fica fora dos totais.' : [`${s.utterances} ${s.utterances === 1 ? 'frase' : 'frases'}`, hasFatigueData(s) ? fatigueLabel[s.fatigue].toLowerCase() : null].filter(Boolean).join(', ')}
                 tone={orfa(s) ? 'muted' : s.status !== 'ended' ? 'accent' : s.fatigue === 'alta' || s.drift_kind === 'erratico' ? 'warning' : 'primary'}
                 onPress={() => router.push({ pathname: '/sessao/[id]', params: { id: s.id } })}
                 last={i === sessions.length - 1}

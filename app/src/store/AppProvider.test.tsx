@@ -25,6 +25,8 @@ import {
   ajustesMaisRecentes,
   chaveDoAlerta,
   comNovasTentativas,
+  confirmarMensagem,
+  mesclarComProvisorias,
   derivePendingAlert,
   escolherAlerta,
   escolherSessao,
@@ -98,6 +100,12 @@ const mockData = {
   resolveHelpRequest: jest.fn(async () => undefined),
   updateSettings: jest.fn(),
   revokeDevice: jest.fn(async () => undefined),
+  reconectarTempoReal: jest.fn(),
+  signUp: jest.fn(),
+  confirmarCodigo: jest.fn(),
+  completarCadastro: jest.fn(async () => undefined),
+  atualizarPerfil: jest.fn(),
+  atualizarPaciente: jest.fn(),
 };
 jest.mock('@/data/DataContext', () => ({ useData: () => mockData }));
 
@@ -568,5 +576,198 @@ describe('AppProvider — alarme local para todo pedido urgente sem confirmaçã
     await montar();
     await esperar(0);
     expect(tocando()).toEqual([]);
+  });
+});
+
+// ---------- 31/10/2026: mensagens mais rápidas ----------
+const doCuidador = (id: string, text: string, extra: Partial<Message> = {}): Message => ({ id, beneficiary_id: 'b1', sender: 'cuidador', kind: 'texto', text, created_at: new Date().toISOString(), read_at: null, spoken: false, ...extra });
+
+describe('envio otimista', () => {
+  it('a mensagem aparece NA HORA com "enviando", antes de o banco responder; depois vira a gravada com a mesma chave', async () => {
+    await montar();
+    await esperar(0);
+    let soltar: (m: Message) => void = () => undefined;
+    mockData.sendMessage.mockImplementationOnce(() => new Promise<Message>((r) => (soltar = r)));
+
+    let envio: Promise<void> = Promise.resolve();
+    await act(async () => {
+      envio = app.sendMessage('Já levo a água.');
+      await Promise.resolve();
+    });
+    const provisoria = app.messages.at(-1)!;
+    expect(provisoria).toMatchObject({ text: 'Já levo a água.', sender: 'cuidador', envio: 'enviando' });
+    expect(provisoria.clientId).toBe(provisoria.id);
+
+    await act(async () => {
+      soltar(doCuidador('srv-1', 'Já levo a água.'));
+      await envio;
+    });
+    expect(app.messages.filter((m) => m.text === 'Já levo a água.')).toHaveLength(1);
+    expect(app.messages.at(-1)).toMatchObject({ id: 'srv-1', clientId: provisoria.id });
+    expect(app.messages.at(-1)?.envio).toBeUndefined();
+  });
+
+  it('falhou: fica "falhou" na conversa, e tentar de novo envia a mesma mensagem', async () => {
+    await montar();
+    await esperar(0);
+    mockData.sendMessage.mockRejectedValueOnce(falhaDeRede());
+    await act(async () => {
+      await app.sendMessage('Oi').catch(() => undefined);
+    });
+    const falhou = app.messages.at(-1)!;
+    expect(falhou.envio).toBe('falhou');
+
+    mockData.sendMessage.mockResolvedValueOnce(doCuidador('srv-2', 'Oi'));
+    await act(async () => {
+      await app.reenviarMensagem(falhou.id);
+    });
+    expect(mockData.sendMessage).toHaveBeenLastCalledWith('b1', 'Oi', 'texto');
+    expect(app.messages.filter((m) => m.text === 'Oi')).toEqual([expect.objectContaining({ id: 'srv-2', clientId: falhou.id })]);
+  });
+
+  it('o evento do tempo real chega antes da resposta do insert: não duplica', async () => {
+    await montar();
+    await esperar(0);
+    let soltar: (m: Message) => void = () => undefined;
+    mockData.sendMessage.mockImplementationOnce(() => new Promise<Message>((r) => (soltar = r)));
+    let envio: Promise<void> = Promise.resolve();
+    await act(async () => {
+      envio = app.sendMessage('Sim', 'simnao');
+      await Promise.resolve();
+    });
+    const gravada = doCuidador('srv-3', 'Sim', { kind: 'simnao' });
+    await act(async () => handlersDoTempoReal?.onMessage?.(gravada));
+    expect(app.messages.filter((m) => m.text === 'Sim')).toHaveLength(1);
+    await act(async () => {
+      soltar(gravada);
+      await envio;
+    });
+    expect(app.messages.filter((m) => m.text === 'Sim')).toHaveLength(1);
+    // "Falado na tela" chega como UPDATE da mesma linha.
+    await act(async () => handlersDoTempoReal?.onMessage?.({ ...gravada, spoken: true }));
+    expect(app.messages.find((m) => m.id === 'srv-3')?.spoken).toBe(true);
+  });
+
+  it('uma recarga não apaga a mensagem que está sendo enviada', () => {
+    const provisoria = doCuidador('local-1', 'Já vou', { envio: 'enviando', clientId: 'local-1' });
+    expect(mesclarComProvisorias([], [provisoria])).toEqual([provisoria]);
+    const gravada = doCuidador('srv-9', 'Já vou');
+    expect(mesclarComProvisorias([gravada], [provisoria])).toEqual([{ ...gravada, clientId: 'local-1' }]);
+    expect(confirmarMensagem([provisoria], gravada, 'local-1')).toEqual([expect.objectContaining({ id: 'srv-9', clientId: 'local-1' })]);
+  });
+});
+
+describe('abertura e volta para a frente', () => {
+  it('a primeira inscrição logo depois da carga só busca mensagens e pedidos (antes: as 5 consultas de novo)', async () => {
+    await montar();
+    await esperar(0);
+    expect(mockData.listDevices).toHaveBeenCalledTimes(1);
+    expect(mockData.listMessages).toHaveBeenCalledTimes(1);
+
+    await act(async () => handlersDoTempoReal?.onSubscribed?.());
+    await esperar(0);
+    expect(mockData.listMessages).toHaveBeenCalledTimes(2);
+    expect(mockData.listHelpRequests).toHaveBeenCalledTimes(2);
+    // Sem recarregar o resto:
+    expect(mockData.listDevices).toHaveBeenCalledTimes(1);
+    expect(mockData.getCurrentSession).toHaveBeenCalledTimes(1);
+    expect(mockData.getSettings).toHaveBeenCalledTimes(1);
+
+    // Uma reinscrição depois (a conexão caiu e voltou) recarrega tudo.
+    await act(async () => handlersDoTempoReal?.onSubscribed?.());
+    await esperar(0);
+    expect(mockData.listDevices).toHaveBeenCalledTimes(2);
+  });
+
+  it('mensagem que chega pelo tempo real enquanto a carga volta não é apagada por ela', async () => {
+    let soltar: (l: Message[]) => void = () => undefined;
+    mockData.listMessages.mockImplementationOnce(() => new Promise<Message[]>((r) => (soltar = r)));
+    await montar();
+    await esperar(0);
+    const nova: Message = { id: 'p-durante', beneficiary_id: 'b1', sender: 'paciente', kind: 'texto', text: 'Chegou agora', created_at: new Date().toISOString(), read_at: null, spoken: true };
+    await act(async () => handlersDoTempoReal?.onMessage?.(nova));
+    // A carga começou antes e volta sem ela:
+    await act(async () => soltar([]));
+    await esperar(0);
+    expect(app.messages.map((m) => m.id)).toEqual(['p-durante']);
+    expect(app.unreadCount).toBe(1);
+  });
+
+  it('a recuperação do intervalo espera a carga de abertura voltar e grava depois dela', async () => {
+    let soltar: (l: Message[]) => void = () => undefined;
+    mockData.listMessages.mockImplementationOnce(() => new Promise<Message[]>((r) => (soltar = r)));
+    await montar();
+    await esperar(0);
+    const noIntervalo: Message = { id: 'p-gap', beneficiary_id: 'b1', sender: 'paciente', kind: 'texto', text: 'No intervalo', created_at: new Date().toISOString(), read_at: null, spoken: true };
+    mockData.listMessages.mockResolvedValueOnce([noIntervalo]);
+    await act(async () => handlersDoTempoReal?.onSubscribed?.());
+    await esperar(0);
+    // Ainda esperando a carga de abertura: nada da recuperação foi pedido.
+    expect(mockData.listMessages).toHaveBeenCalledTimes(1);
+    await act(async () => soltar([]));
+    await esperar(0);
+    expect(mockData.listMessages).toHaveBeenCalledTimes(2);
+    expect(app.messages.map((m) => m.id)).toEqual(['p-gap']);
+  });
+
+  it('o canal do tempo real abre assim que a lista de pacientes chega, sem esperar perfil, licença e assinatura', async () => {
+    let soltarPerfil: () => void = () => undefined;
+    mockData.getProfile.mockImplementationOnce(() => new Promise((r) => (soltarPerfil = () => r({ id: 'user-1', buyer_name: 'Maria', email: USUARIO.email, phone: null }))));
+    await montar();
+    await esperar(0);
+    expect(mockData.subscribe).toHaveBeenCalledWith('b1', expect.any(Object));
+    await act(async () => soltarPerfil());
+  });
+
+  it('de volta para a frente com o canal caído: reabre o WebSocket e refaz a inscrição', async () => {
+    await montar();
+    await esperar(0);
+    const ouvintes = () => (AppState.addEventListener as jest.Mock).mock.calls.filter((c) => c[0] === 'change').map((c) => c[1] as (e: string) => void);
+    await act(async () => handlersDoTempoReal?.onStatus?.('CHANNEL_ERROR'));
+    const inscricoes = mockData.subscribe.mock.calls.length;
+    await act(async () => {
+      ouvintes().forEach((f) => f('active'));
+    });
+    await esperar(0);
+    expect(mockData.reconectarTempoReal).toHaveBeenCalled();
+    expect(mockData.subscribe.mock.calls.length).toBe(inscricoes + 1);
+  });
+
+  it('mensagem nova do paciente pelo tempo real vibra uma vez só, mesmo se chegar de novo', async () => {
+    const Haptics = require('expo-haptics');
+    await montar();
+    await esperar(0);
+    (Haptics.notificationAsync as jest.Mock).mockClear();
+    const m: Message = { id: 'p-1', beneficiary_id: 'b1', sender: 'paciente', kind: 'texto', text: 'Estou com sede.', created_at: new Date().toISOString(), read_at: null, spoken: true };
+    await act(async () => handlersDoTempoReal?.onMessage?.(m));
+    await act(async () => handlersDoTempoReal?.onMessage?.(m));
+    expect(Haptics.notificationAsync).toHaveBeenCalledTimes(1);
+    expect(app.unreadCount).toBe(1);
+  });
+});
+
+describe('cadastro e perfil', () => {
+  it('completar o cadastro recarrega a conta (as abas aparecem com a pessoa)', async () => {
+    mockData.listBeneficiaries.mockResolvedValueOnce([]);
+    await montar();
+    await esperar(0);
+    expect(app.beneficiaries).toEqual([]);
+    await act(async () => {
+      await app.completarCadastro({ userName: 'Carlos', relation: 'conjuge', condition: 'ela' });
+    });
+    expect(mockData.completarCadastro).toHaveBeenCalledWith({ userName: 'Carlos', relation: 'conjuge', condition: 'ela' });
+    expect(app.patient?.id).toBe('b1');
+  });
+
+  it('editar a pessoa troca o nome na tela', async () => {
+    await montar();
+    await esperar(0);
+    mockData.atualizarPaciente.mockResolvedValueOnce({ ...PACIENTE, user_name: 'Carlão' });
+    await act(async () => {
+      await app.atualizarPaciente({ user_name: 'Carlão' });
+    });
+    expect(mockData.atualizarPaciente).toHaveBeenCalledWith('b1', { user_name: 'Carlão' });
+    expect(app.patient?.user_name).toBe('Carlão');
+    expect(app.beneficiaries[0].user_name).toBe('Carlão');
   });
 });

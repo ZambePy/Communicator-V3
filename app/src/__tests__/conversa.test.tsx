@@ -5,12 +5,12 @@
  */
 import React from 'react';
 import { AppState, StyleSheet } from 'react-native';
-import { act, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import Conversa from '../../app/(tabs)/conversa';
 import { EspacoDoTopoProvider, useDefinirEspacoDoTopo } from '@/components';
 import type { Message } from '@/data/types';
 import { spacing } from '@/theme';
-import { agruparPorDia } from '@/utils/conversa';
+import { agruparPorDia, estadoDoEnvio } from '@/utils/conversa';
 
 jest.mock('expo-router', () => {
   const React = require('react');
@@ -24,7 +24,8 @@ jest.mock('expo-router', () => {
 const mockApp = {
   patient: { id: 'b1', user_name: 'Carlos Souza' },
   messages: [] as Message[],
-  sendMessage: jest.fn(async () => undefined),
+  sendMessage: jest.fn(async (_t: string, _k?: string) => undefined),
+  reenviarMensagem: jest.fn(async (_id: string) => undefined),
   markRead: jest.fn(async () => undefined),
   session: null,
   devices: [],
@@ -133,5 +134,62 @@ describe('agruparPorDia', () => {
     expect(linhas.map((l) => (l.type === 'msg' ? l.message.id : `[${l.label}]`))).toEqual(['[' + (linhas[0] as { label: string }).label + ']', 'ontem-22h', 'atrasada', '[Hoje]', 'hoje-1', 'hoje-2']);
     const chaves = linhas.map((l) => l.key);
     expect(new Set(chaves).size).toBe(chaves.length);
+  });
+});
+
+// 31/10/2026: envio otimista — o balão aparece na hora e diz o estado.
+describe('Conversa — envio otimista', () => {
+  const minha = (id: string, extra: Partial<Message> = {}) => msg(id, new Date().toISOString(), { sender: 'cuidador', text: `minha ${id}`, ...extra });
+
+  beforeEach(() => {
+    mockApp.sendMessage.mockClear();
+    mockApp.reenviarMensagem.mockClear();
+  });
+
+  it('cada estado do balão em palavras: Enviando…, Enviado, Falado na tela, Não enviou', async () => {
+    mockApp.messages = [
+      minha('a', { envio: 'enviando', clientId: 'a' }),
+      minha('b'),
+      minha('c', { spoken: true }),
+      minha('d', { envio: 'falhou', clientId: 'd' }),
+    ];
+    await render(<Conversa />);
+    expect(screen.getByText('Enviando…')).toBeTruthy();
+    expect(screen.getByText('Enviado')).toBeTruthy();
+    expect(screen.getByText('Falado na tela')).toBeTruthy();
+    expect(screen.getByText('Não enviou. Tocar para tentar de novo')).toBeTruthy();
+    expect(estadoDoEnvio(minha('x', { envio: 'falhou' })).tom).toBe('danger');
+  });
+
+  it('tocar no balão que falhou tenta de novo', async () => {
+    mockApp.messages = [minha('d', { envio: 'falhou', clientId: 'd' })];
+    await render(<Conversa />);
+    await fireEvent.press(screen.getByTestId('balao-falhou'));
+    expect(mockApp.reenviarMensagem).toHaveBeenCalledWith('d');
+  });
+
+  it('enviar limpa o campo na hora e não trava: dá para escrever e mandar a próxima', async () => {
+    let soltar: () => void = () => undefined;
+    mockApp.sendMessage.mockImplementationOnce(() => new Promise<undefined>((r) => (soltar = () => r(undefined))));
+    await render(<Conversa />);
+    await fireEvent.changeText(screen.getByLabelText('Mensagem para Carlos'), 'Já levo a água.');
+    await fireEvent.press(screen.getByLabelText('Enviar'));
+    expect(mockApp.sendMessage).toHaveBeenCalledWith('Já levo a água.', 'texto');
+    // O primeiro envio ainda não voltou:
+    expect(screen.getByLabelText('Mensagem para Carlos').props.value).toBe('');
+    expect(screen.getByLabelText('Mensagem para Carlos').props.editable).not.toBe(false);
+    await fireEvent.changeText(screen.getByLabelText('Mensagem para Carlos'), 'Mais alguma coisa?');
+    await fireEvent.press(screen.getByLabelText('Enviar'));
+    expect(mockApp.sendMessage).toHaveBeenCalledTimes(2);
+    await act(async () => soltar());
+  });
+
+  it('respostas de um toque: Já estou indo, Sim, Não e Fazer pergunta', async () => {
+    await render(<Conversa />);
+    await fireEvent.press(screen.getByLabelText('Enviar “Já estou indo” para Carlos'));
+    expect(mockApp.sendMessage).toHaveBeenCalledWith('Já estou indo', 'frase');
+    await fireEvent.press(screen.getByLabelText('Enviar “Sim” para Carlos'));
+    expect(mockApp.sendMessage).toHaveBeenCalledWith('Sim', 'simnao');
+    expect(screen.getByText('Fazer pergunta')).toBeTruthy();
   });
 });

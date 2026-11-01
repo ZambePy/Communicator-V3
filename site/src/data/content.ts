@@ -51,29 +51,22 @@ export const BRAND = {
   code: `https://github.com/${RELEASES_REPO}`,
 }
 
-/** Texto do hero da home. */
+/** Texto da abertura da home (redesenho aprovado em 31/10/2026). */
 export const HERO = {
-  title: 'Seu olhar tem voz',
+  /** O h1 inteiro, como está na tela. */
+  title: 'Seu olhar tem voz.',
   /**
-   * O começo do título, em peso leve (rodada 3, 21/10/2026): o olhar é leve,
-   * a voz pesa. O resto do `title` sai em Sora 700.
+   * O que ele faz e para quem, numa frase só (auditoria de 21/10/2026, P1-1:
+   * para quem é tem de estar na primeira tela).
    */
-  tituloLeve: 'Seu olhar',
-  /** Trecho do título na cor de destaque. */
-  titleAccent: 'voz',
-  /**
-   * Para quem é, dito na primeira tela (auditoria de 21/10/2026, P1-1: a
-   * pessoa entendia o que o produto faz e como, mas não para quem era; ELA e
-   * AVC só apareciam na quarta seção). Uma frase, em linguagem de quem chega.
-   */
-  publico: 'Para quem perdeu a fala e o movimento, como na ELA, no AVC ou numa lesão medular.',
-  /** O que ele faz, na frase logo depois de para quem é. */
-  lead: 'O IrisFlow Communicator usa uma webcam comum para escrever, falar em voz alta e controlar o computador só com o olhar.',
-  /** Chamada principal fora da beta (na beta, é a do BETA_CTA). */
+  lead: 'Escrever, falar em voz alta e usar o computador só com os olhos, com a webcam que já está em casa. Para quem perdeu a fala e o movimento, como na ELA.',
+  /** Chamada principal fora da beta (na beta, é a do download ou a do BETA_CTA). */
   primary: 'Ver os planos',
   secondary: 'Ver como funciona',
-  /** Os fatos sob as chamadas, junto com o sistema (PLATFORMS). Sem "webcam comum", que o parágrafo já diz. */
-  fatos: ['A imagem da câmera fica no computador'],
+  /** O primeiro fato, só enquanto a beta está no ar. */
+  fatoDaBeta: 'Grátis durante a beta, sem cartão',
+  /** Os fatos sob as chamadas. */
+  fatos: ['A imagem da câmera não sai do computador'],
 }
 
 /* ---------------- quem espera do outro lado ----------------

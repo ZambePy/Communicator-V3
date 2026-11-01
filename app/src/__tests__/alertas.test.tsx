@@ -52,12 +52,12 @@ describe('Alertas', () => {
     await waitFor(() => expect(mockApp.refresh).toHaveBeenCalled());
   });
 
-  it('"Estou ciente" e "Resolvido" chamam as ações; a falha aparece sem texto técnico', async () => {
+  it('"Ciente" e "Resolvido" chamam as ações; a falha aparece sem texto técnico', async () => {
     mockApp.helpRequests = [alerta()];
     mockApp.acknowledgeAlert.mockRejectedValueOnce(new Error('new row violates row-level security policy'));
     await render(<Alertas />);
 
-    await fireEvent.press(screen.getByText('Estou ciente'));
+    await fireEvent.press(screen.getByText('Ciente'));
     await waitFor(() => expect(screen.getByText('Nada foi registrado')).toBeTruthy());
     expect(mockApp.acknowledgeAlert).toHaveBeenCalledWith('hr-1');
     expect(screen.queryByText(/row-level/)).toBeNull();
@@ -71,6 +71,30 @@ describe('Alertas', () => {
     await render(<Alertas />);
     expect(screen.getByText('Notificações desligadas')).toBeTruthy();
     expect(screen.getByText('Ativar nos ajustes do celular')).toBeTruthy();
+  });
+
+  // 31/10/2026: sem avisos fixos no topo — só o que vale para o pedido aberto.
+  it('sem o parágrafo fixo do prazo nem "os alertas chegam com o app aberto"', async () => {
+    mockApp.pushError = 'registro';
+    await render(<Alertas />);
+    expect(screen.queryByText(/Sem confirmação em 45 s/)).toBeNull();
+    expect(screen.queryByText(/Por enquanto, os alertas chegam com o app aberto/)).toBeNull();
+  });
+
+  it('pedido de ajuda aberto: diz quem pediu e quanto falta para ir aos outros celulares', async () => {
+    mockApp.helpRequests = [alerta({ kind: 'ajuda', message: 'DOR MUITO FORTE', received_at: new Date(Date.now() - 15_000).toISOString() })];
+    await render(<Alertas />);
+    expect(screen.getByText('Paciente pediu ajuda: dor muito forte.')).toBeTruthy();
+    expect(screen.getByText(/Ainda ninguém respondeu\. Em (2[89]|30) s vai para os outros celulares\./)).toBeTruthy();
+    expect(screen.getByText('Estou indo')).toBeTruthy();
+  });
+
+  it('o que já foi resolvido fica em "Antes", uma linha cada', async () => {
+    mockApp.helpRequests = [alerta({ id: 'hr-2', kind: 'dispositivo', message: 'Câmera parou de ler o olhar', resolved_at: new Date().toISOString() })];
+    await render(<Alertas />);
+    expect(screen.getByText('Antes')).toBeTruthy();
+    expect(screen.getByText('Câmera parou de ler o olhar')).toBeTruthy();
+    expect(screen.getByText('Tudo tranquilo por aqui')).toBeTruthy();
   });
 
   // APP-2: a decisão era pela string de erro — fechar o aviso bastava para a
@@ -87,7 +111,7 @@ describe('Alertas', () => {
     mockApp.helpRequests = [alerta()];
     await render(<Alertas />);
     expect(screen.getByTestId('alertas-desatualizados')).toBeTruthy();
-    expect(screen.getByText('Estou ciente')).toBeTruthy();
+    expect(screen.getByText('Ciente')).toBeTruthy();
   });
 
   // Revisão de UX de 19/10/2026 (achado 12): depois de "Estou ciente", o botão
@@ -97,17 +121,17 @@ describe('Alertas', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
 
-    it('o segundo toque de "Estou ciente" não resolve o socorro: "Resolvido" espera um instante', async () => {
+    it('o segundo toque de "Estou indo" não resolve o socorro: "Resolvido" espera um instante', async () => {
       const socorro = alerta({ kind: 'emergencia', message: 'FALTA DE AR' });
       mockApp.helpRequests = [socorro];
       const tela = await render(<Alertas />);
 
-      await fireEvent.press(screen.getByText('Estou ciente'));
+      await fireEvent.press(screen.getByText('Estou indo'));
       await waitFor(() => expect(mockApp.acknowledgeAlert).toHaveBeenCalledWith('hr-1'));
-      // O banco confirmou: "Estou ciente" sai e "Resolvido" ocupa a linha toda.
+      // O banco confirmou: "Estou indo" sai e "Resolvido" ocupa a linha toda.
       mockApp.helpRequests = [{ ...socorro, acknowledged_at: new Date().toISOString() }];
       await tela.rerender(<Alertas />);
-      expect(screen.queryByText('Estou ciente')).toBeNull();
+      expect(screen.queryByText('Estou indo')).toBeNull();
 
       await fireEvent.press(screen.getByText('Resolvido'));
       expect(mockApp.resolveAlert).not.toHaveBeenCalled();

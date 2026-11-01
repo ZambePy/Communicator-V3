@@ -7,7 +7,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from '@/theme';
 import { DataProviderRoot } from '@/data/DataContext';
 import { AppProvider, useApp } from '@/store/AppProvider';
-import { PushPayload, usePushNotifications } from '@/hooks/usePushNotifications';
+import { destinoDoToque, PushPayload, usePushNotifications } from '@/hooks/usePushNotifications';
+import { useTutorialVisto } from '@/lib/tutorial';
 import { EmergencyOverlay } from '@/features/EmergencyOverlay';
 import { ServicoIndisponivel } from '@/features/ServicoIndisponivel';
 import { ErrorBanner, EspacoDoTopoProvider } from '@/components';
@@ -70,29 +71,38 @@ function Navigation() {
   const segments = useSegments();
   const router = useRouter();
 
-  // Toque no push: seleciona o paciente do alerta, recarrega (o AppProvider
-  // deriva `pendingAlert` do pedido aberto → overlay) e abre a aba de Alertas.
+  // Toque no push. Mensagem do paciente (31/10/2026): seleciona a pessoa e
+  // abre a Conversa — a recarga ao voltar para a frente traz a mensagem.
+  // Alerta: seleciona o paciente, recarrega (o AppProvider deriva
+  // `pendingAlert` do pedido aberto → overlay) e abre a aba de Alertas.
   const abrirPeloPush = useCallback(
     (payload: PushPayload) => {
-      if (payload.beneficiary_id && beneficiaries.some((b) => b.id === payload.beneficiary_id)) selectPatient(payload.beneficiary_id);
-      void refresh();
-      router.push('/(tabs)/alertas');
+      const { pacienteId, rota } = destinoDoToque(payload);
+      if (pacienteId && beneficiaries.some((b) => b.id === pacienteId)) selectPatient(pacienteId);
+      if (rota === '/(tabs)/alertas') void refresh();
+      router.push(rota);
     },
     [beneficiaries, selectPatient, refresh, router],
   );
   usePushNotifications(Boolean(user), { onOpen: abrirPeloPush, onRegisterError: reportPushError });
 
+  // O tutorial aparece só na primeira abertura; depois, sem conta, o login.
+  const tutorialVisto = useTutorialVisto();
+
   // Guarda de autenticação: redireciona conforme o estado de login.
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || tutorialVisto === null) return;
     // `parear` (código QR do computador, 19/10/2026) vale com e sem conta: a
     // própria tela decide para onde ir — sem conta ela não pode cair nas
     // boas-vindas, e depois de entrar mostra a confirmação antes do início.
     if (segments[0] === 'parear') return;
     const inAuth = segments[0] === '(auth)' || segments[0] === 'onboarding';
-    if (!user && !inAuth) router.replace('/onboarding');
-    if (user && inAuth) router.replace('/(tabs)');
-  }, [ready, user, segments, router]);
+    // O cadastro (31/10/2026) abre a sessão no passo 2 e segue no passo 3 na
+    // mesma tela: ela mesma leva ao início quando termina.
+    const noCadastro = segments[0] === '(auth)' && (segments as string[])[1] === 'criar-conta';
+    if (!user && !inAuth) router.replace(tutorialVisto ? '/(auth)/login' : '/onboarding');
+    if (user && inAuth && !noCadastro) router.replace('/(tabs)');
+  }, [ready, user, segments, router, tutorialVisto]);
 
   // Boas-vindas é a única tela sobre gradiente escuro: ícones claros na barra.
   const telaEscura = segments[0] === 'onboarding';
@@ -108,9 +118,12 @@ function Navigation() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background }, animation: 'fade_from_bottom' }}>
         <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
         <Stack.Screen name="(auth)/login" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="(auth)/criar-conta" options={{ animation: 'slide_from_right', gestureEnabled: false }} />
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
         <Stack.Screen name="frases" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="paciente" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="paciente" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="perfil" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="relatorios" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="assinatura" options={{ presentation: 'modal' }} />
         <Stack.Screen name="sessao/[id]" options={{ animation: 'slide_from_right' }} />
       </Stack>

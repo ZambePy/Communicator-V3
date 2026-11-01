@@ -102,19 +102,20 @@ describe('<MensagemQueChega />', () => {
   })
 })
 
-describe('no destaque de quem cuida', () => {
-  it('o cartão chega dentro da tela do celular, depois da gravação, e o resto da seção não muda', () => {
+describe('no destaque de quem cuida (home, desde 31/10/2026)', () => {
+  it('o cartão sai da borda do celular com a captura real da conversa, e a seção tem um só', () => {
     const { container } = render(
       <MemoryRouter future={FUTURO_DO_ROTEADOR}>
         <CuidadorDestaque />
       </MemoryRouter>,
     )
-    const tela = container.querySelector('.celular__tela')!
-    const el = tela.querySelector('.v3-chega')!
-    expect(el).not.toBeNull()
-    expect(el.previousElementSibling?.matches('video, .demo-pausa, span')).toBe(true)
+    const el = container.querySelector('.v3-chega')!
+    expect(el).toHaveClass('v3-chega--fora')
+    // Observa o celular inteiro: mora dentro de .celular, fora da tela dele.
+    expect(el.closest('.celular')).not.toBeNull()
+    expect(el.closest('.celular__tela')).toBeNull()
     expect(container.querySelectorAll('.v3-chega')).toHaveLength(1)
-    expect(container.querySelector('video')).not.toBeNull()
+    expect(container.querySelector('.celular__tela img')).toHaveAttribute('src', '/media/cuidador/conversa.webp')
     expect(container.querySelector('h2')).not.toBeNull()
   })
 })

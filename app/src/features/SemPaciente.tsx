@@ -1,22 +1,18 @@
 import React, { useState } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
-import { Button, EmptyState, Screen } from '@/components';
-import { siteRoute } from '@/lib/config';
+import { StyleSheet, View } from 'react-native';
+import { Button, Screen } from '@/components';
 import { useApp } from '@/store/AppProvider';
 import { spacing } from '@/theme';
+import { CadastroDaPessoa } from './CadastroDaPessoa';
 
 /**
- * Conta sem paciente cadastrado.
- *
- * Acontece quando a pessoa criou o login mas não terminou a inscrição da beta
- * no site (e-mail a confirmar, ou vagas encerradas no meio do caminho). Antes,
- * todas as abas ficavam em esqueleto de carregamento para sempre, a conversa
- * "enviava" sem enviar e os ajustes diziam "Salvo" sem salvar — sem nenhuma
- * pista do que fazer. Aqui a tela diz o que falta, leva ao site e deixa
- * recarregar ou sair.
+ * Conta sem pessoa cadastrada (criou a conta e parou no meio, ou as vagas da
+ * beta fecharam no caminho). Desde 31/10/2026 a pessoa é cadastrada aqui mesmo,
+ * com o passo 3 do cadastro — antes a tela mandava terminar a inscrição no site.
+ * Puxar para baixo recarrega (cadastrou pelo site enquanto isso).
  */
 export function SemPaciente() {
-  const { profile, refresh, signOut } = useApp();
+  const { refresh, signOut } = useApp();
   const [atualizando, setAtualizando] = useState(false);
 
   const atualizar = async () => {
@@ -29,22 +25,18 @@ export function SemPaciente() {
   };
 
   return (
-    <Screen contentContainerStyle={styles.centro}>
-      <EmptyState
-        icon="person-add-outline"
-        title="Falta cadastrar o paciente"
-        body={`${profile?.email ? `A conta ${profile.email}` : 'Esta conta'} ainda não tem um paciente. Termine a inscrição da beta no site, com este mesmo e-mail, e depois toque em Atualizar.`}
-        action={{ label: 'Abrir a inscrição no site', icon: 'open-outline', onPress: () => void Linking.openURL(siteRoute('/beta')).catch(() => undefined) }}
-      />
-      <View style={styles.acoes}>
-        <Button title="Atualizar" icon="refresh" loading={atualizando} onPress={() => void atualizar()} />
-        <Button title="Sair da conta" variant="ghost" icon="log-out-outline" onPress={() => void signOut()} />
+    <Screen refreshing={atualizando} onRefresh={() => void atualizar()} contentContainerStyle={styles.conteudo}>
+      <View style={styles.topo} />
+      <CadastroDaPessoa acao="Pronto" />
+      <View style={styles.sair}>
+        <Button title="Sair da conta" variant="ghost" onPress={() => void signOut()} />
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  centro: { flexGrow: 1, justifyContent: 'center' },
-  acoes: { gap: spacing.sm, marginTop: spacing.lg },
+  conteudo: { flexGrow: 1 },
+  topo: { height: spacing.xxl },
+  sair: { marginTop: spacing.md },
 });

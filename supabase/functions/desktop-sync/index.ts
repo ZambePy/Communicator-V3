@@ -41,6 +41,8 @@
 //   session.end        { session_id, utterances?, chars_typed?, modules_used?, occurred_at?, sent_at? } → { ok }
 //   calibration.result { session_id?, calibration: {...}, report: {...}, occurred_at?, sent_at? } → { ok, id }
 //   message.send       { id?, text, kind, occurred_at?, sent_at? }  → { ok, id }   (sender = paciente)
+//                      (+ push para os celulares da conta, depois da resposta e
+//                       sem segurar a gravação; `sistema` não avisa — ./mensagemPush.ts)
 //                      (`id`: UUID gerado no computador; um reenvio com o mesmo id
 //                       não grava a mensagem duas vezes)
 //   message.spoken     { message_id, occurred_at?, sent_at? }  → { ok }       (msg do cuidador vocalizada)
@@ -91,6 +93,7 @@ import { avisaPorPush, celularesParaAvisar, mensagensDePush, pushDoReenvio, resu
 import { avisoDeDispositivoExcedido, idDoCliente, sessoesDoHeartbeat, statusDoErroDoBanco } from './respostas.ts';
 import { estadoDoPareamento, respostaDaCriacao } from './pareamento.ts';
 import { gerarCodigo, hashDoCodigo } from './codigoDoCelular.ts';
+import { avisarMensagem, emSegundoPlano, type PushDeMensagem } from './mensagemPush.ts';
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
@@ -199,6 +202,43 @@ async function notifyCaregiver(beneficiaryId: string, kind: string, body: string
     if (error) console.error('[desktop-sync] tokens inválidos não removidos', error.message);
   }
   return resumo;
+}
+
+/**
+ * Mensagem do paciente → push para os celulares da conta (31/10/2026). Corre
+ * DEPOIS da resposta ao computador (`emSegundoPlano`) e com prazo curto: uma
+ * Expo lenta ou fora do ar não atrasa nem derruba a gravação, que já foi feita.
+ */
+function avisarMensagemDoPaciente(beneficiaryId: string, messageId: string, kind: string, text: string) {
+  emSegundoPlano(
+    avisarMensagem(
+      {
+        beneficiario: () => supabase.from('beneficiaries').select('profile_id, user_name').eq('id', beneficiaryId).maybeSingle(),
+        tokens: (perfil) => supabase.from('push_tokens').select('token').eq('profile_id', perfil),
+        enviar: async (corpo: PushDeMensagem[], prazoMs: number) => {
+          const res = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              accept: 'application/json',
+              ...(Deno.env.get('EXPO_ACCESS_TOKEN') ? { authorization: `Bearer ${Deno.env.get('EXPO_ACCESS_TOKEN')}` } : {}),
+            },
+            body: JSON.stringify(corpo),
+            signal: AbortSignal.timeout(prazoMs),
+          });
+          let json: unknown = null;
+          try { json = await res.json(); } catch { /* sem corpo */ }
+          return { ok: res.ok, json };
+        },
+        removerTokens: async (tokens) => {
+          const { error } = await supabase.from('push_tokens').delete().in('token', tokens);
+          if (error) throw new Error(error.message);
+        },
+        registrar: (linha) => console.error(linha),
+      },
+      { beneficiaryId, messageId, kind, text },
+    ),
+  );
 }
 
 /**
@@ -375,7 +415,10 @@ Deno.serve(async (req) => {
           .upsert({ id: idMensagem, ...linha }, { onConflict: 'id', ignoreDuplicates: true })
           .select('id');
         if (error) return erroDoBanco(error);
-        if (gravada?.length) return json({ ok: true, id: gravada[0].id });
+        if (gravada?.length) {
+          avisarMensagemDoPaciente(b, gravada[0].id, kind, text);
+          return json({ ok: true, id: gravada[0].id });
+        }
         const { data: existente, error: erroDaBusca } = await supabase
           .from('messages').select('beneficiary_id').eq('id', idMensagem).maybeSingle();
         if (erroDaBusca) return erroDoBanco(erroDaBusca);
@@ -384,6 +427,8 @@ Deno.serve(async (req) => {
       }
       const { data, error } = await supabase.from('messages').insert(linha).select('id').single();
       if (error) return erroDoBanco(error);
+      // Reenvio (`repetido`, acima) não avisa de novo: o primeiro envio já avisou.
+      avisarMensagemDoPaciente(b, data.id, kind, text);
       return json({ ok: true, id: data.id });
     }
 

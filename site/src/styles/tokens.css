@@ -190,6 +190,7 @@
   --v3-cartao-ativo: #1b54a8;
   --v3-cartao-ativo-texto: #dbe6f8;
 
+
   color-scheme: dark;
 
   /* --- superfícies: o marinho da marca é o fundo da página --- */
@@ -285,6 +286,8 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  /* o retorno do toque (pressionar, passar por cima): ease-out forte, 150 a 250 ms */
+  --ease-forte: cubic-bezier(0.23, 1, 0.32, 1);
   --dur-fast: 160ms;
   --dur: 280ms;
   --dur-slow: 600ms;

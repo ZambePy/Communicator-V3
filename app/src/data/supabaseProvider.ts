@@ -18,18 +18,27 @@ import {
   AuthUser,
   Beneficiary,
   BetaRegistration,
+  CadastroFechado,
+  CodigoBloqueado,
+  CodigoIncorreto,
   ConflitoDeAjustes,
+  DadosDaPessoa,
   DataProvider,
+  EmailJaCadastrado,
   Device,
   HelpRequest,
   License,
   Message,
   MessageKind,
+  MudancaDaPessoa,
+  MudancaDoPerfil,
+  NovaConta,
   PatientSettings,
   Plan,
   Profile,
   QuickPhrase,
   RealtimeHandlers,
+  ResultadoDoCadastro,
   Session,
   Subscription,
 } from './types';
@@ -217,6 +226,134 @@ export class SupabaseProvider implements DataProvider {
     // dois casos, e este é o único lugar em que a distinção poderia escapar.
     if (/not found|não encontrado/i.test(error.message)) return;
     throw new Error(traduzErroReset(error.message));
+  }
+
+  // ---------- cadastro no app (31/10/2026) ----------
+  // A MESMA sequência do site (`site/src/services/api.ts`: criarContaBeta →
+  // conferirCodigo → verificarLinkDoEmail → definirSenhaAposConfirmar →
+  // responderPesquisa), para a conta nascer igual pelos dois caminhos.
+
+  async signUp(nova: NovaConta): Promise<ResultadoDoCadastro> {
+    const email = nova.email.trim().toLowerCase();
+    const { data, error } = await this.sb.auth.signUp({
+      email,
+      password: nova.senha,
+      options: {
+        // O gatilho `on_auth_user_created` (handle_new_user) copia isto para `profiles`.
+        data: {
+          buyer_name: nova.nome.trim().replace(/\s+/g, ' '),
+          newsletter: Boolean(nova.newsletter),
+          terms_accepted_at: new Date().toISOString(),
+        },
+        // O botão do e-mail (alternativa ao código) abre a página de confirmação do site.
+        emailRedirectTo: siteRoute('/confirmar-email'),
+      },
+    });
+    if (error) {
+      if ((error as { code?: string }).code === 'user_already_exists' || /already registered/i.test(error.message)) throw new EmailJaCadastrado();
+      throw new Error(traduzErroDoCadastro(error.message));
+    }
+    // Com "Confirm email" ligado, o Supabase responde a um e-mail JÁ confirmado
+    // como se fosse conta nova (sem erro, sem sessão), mas sem identidades — e
+    // não manda e-mail nenhum. Sem isto a pessoa esperaria um código que não vem.
+    const identidades = (data.user as { identities?: unknown[] } | null)?.identities;
+    if (data.user && Array.isArray(identidades) && identidades.length === 0) throw new EmailJaCadastrado();
+    return data.session ? 'sessao' : 'confirmar';
+  }
+
+  async reenviarCodigo(email: string): Promise<void> {
+    const { error } = await this.sb.auth.resend({
+      type: 'signup',
+      email: email.trim().toLowerCase(),
+      options: { emailRedirectTo: siteRoute('/confirmar-email') },
+    });
+    if (error) throw new Error(traduzErroDoCadastro(error.message));
+  }
+
+  async confirmarCodigo(email: string, codigo: string, senha?: string): Promise<AuthUser> {
+    const { data, error } = await this.sb.rpc('confirmar_codigo', { p_email: email.trim().toLowerCase(), p_codigo: codigo });
+    if (error) {
+      // P0429: 10 códigos errados em 24 h (limite da função, contra chute).
+      if (error.code === 'P0429') throw new CodigoBloqueado();
+      throw error;
+    }
+    if (typeof data !== 'string' || data === '') throw new CodigoIncorreto();
+    const { data: sessao, error: erroDaSessao } = await this.sb.auth.verifyOtp({ token_hash: data, type: 'email' });
+    if (erroDaSessao || !sessao.user) throw new Error(traduzErroDoCadastro(erroDaSessao?.message));
+    if (senha) {
+      // Quem refez a inscrição com outra senha ficava com a do primeiro cadastro.
+      // A conta já está confirmada e aberta: uma falha aqui não desfaz isso.
+      const { error: erroDaSenha } = await this.sb.auth.updateUser({ password: senha });
+      if (erroDaSenha && (erroDaSenha as { code?: string }).code !== 'same_password') {
+        console.warn('[IrisFlow Cuidador] senha do cadastro não regravada:', erroDaSenha.message);
+      }
+    }
+    return { id: sessao.user.id, email: sessao.user.email ?? email.trim().toLowerCase() };
+  }
+
+  async completarCadastro(dados: DadosDaPessoa): Promise<void> {
+    // A função sobrescreve `profiles.newsletter`: devolve o que a conta escolheu ao nascer.
+    const { data: perfil } = await this.sb.from('profiles').select('newsletter').maybeSingle();
+    const { error } = await this.sb.rpc('complete_beta_registration', {
+      p_phone: null, // null mantém (o celular entra depois, em Meu perfil)
+      p_user_name: dados.userName.trim().replace(/\s+/g, ' '),
+      p_relation: dados.relation,
+      p_condition: dados.condition ?? 'prefiro-nao',
+      p_os: 'nao-sei', // o computador informa quando entrar com a conta
+      p_document: null,
+      p_wants_caregiver_app: true, // quem se cadastra pelo app do cuidador quer o app do cuidador
+      p_feedback_consent: false,
+      p_how_found: null,
+      p_newsletter: Boolean((perfil as { newsletter?: boolean } | null)?.newsletter),
+      p_prescriber_name: null,
+      p_prescriber_role: null,
+    });
+    if (!error) return;
+    // P0001: inscrições fechadas ou vagas esgotadas — a mensagem do banco já é para gente.
+    if (error.code === 'P0001') throw new CadastroFechado(error.message);
+    if (error.code === '23514' || /user_name_check/.test(error.message)) throw new Error('O nome precisa ter pelo menos 2 letras.');
+    throw error;
+  }
+
+  async atualizarPerfil(mudanca: MudancaDoPerfil): Promise<Profile> {
+    const user = await this.getUser();
+    if (!user) throw new Error('Sua sessão expirou. Entre de novo para continuar.');
+    const campos: Record<string, string | null> = {};
+    if (mudanca.buyer_name !== undefined) {
+      const nome = mudanca.buyer_name.trim().replace(/\s+/g, ' ');
+      if (!nome) throw new Error('Escreva seu nome.');
+      campos.buyer_name = nome;
+    }
+    if (mudanca.phone !== undefined) {
+      const digitos = (mudanca.phone ?? '').replace(/\D/g, '');
+      if (digitos && !celularValido(digitos)) throw new Error('Use DDD e número: 10 ou 11 dígitos.');
+      campos.phone = digitos || null;
+    }
+    // Só `buyer_name`, `phone` e `newsletter` têm UPDATE liberado (migração 20260927104927).
+    const { data, error } = await this.sb.from('profiles').update(campos).eq('id', user.id).select('id, buyer_name, email, phone').single();
+    if (error) throw error;
+    return data as Profile;
+  }
+
+  async atualizarPaciente(id: string, mudanca: MudancaDaPessoa): Promise<Beneficiary> {
+    const campos: MudancaDaPessoa = {};
+    if (mudanca.user_name !== undefined) {
+      const nome = mudanca.user_name.trim().replace(/\s+/g, ' ');
+      if (nome.replace(/[^A-Za-zÀ-ÿ]/g, '').length < 2) throw new Error('O nome precisa ter pelo menos 2 letras.');
+      campos.user_name = nome;
+    }
+    if (mudanca.relation !== undefined) campos.relation = mudanca.relation;
+    if (mudanca.condition !== undefined) campos.condition = mudanca.condition;
+    const { data, error } = await this.sb
+      .from('beneficiaries')
+      .update(campos)
+      .eq('id', id)
+      .select('id, profile_id, user_name, relation, condition, os, prescriber_name, prescriber_role')
+      .maybeSingle();
+    if (error) throw error;
+    // Nenhuma linha: a RLS negou em silêncio (não é a pessoa desta conta).
+    if (!data) throw new Error('Esta pessoa não está acessível para a conta deste celular.');
+    return data as Beneficiary;
   }
 
   // ---------- conta ----------
@@ -482,11 +619,20 @@ export class SupabaseProvider implements DataProvider {
       // quem chama recarrega: o tempo real não reenvia o que chegou enquanto
       // o canal estava fora, e um socorro nesse intervalo ficaria invisível.
       .subscribe((status) => {
+        handlers.onStatus?.(status);
         if (status === 'SUBSCRIBED') handlers.onSubscribed?.();
       });
     return () => {
       this.sb.removeChannel(channel);
     };
+  }
+
+  reconectarTempoReal() {
+    // Em segundo plano o sistema suspende o WebSocket; o realtime-js só percebe
+    // no próximo heartbeat. Ao voltar para a frente, reabre na hora (os canais
+    // se reinscrevem sozinhos e o `onSubscribed` recarrega o que faltou).
+    const rt = this.sb.realtime;
+    if (!rt.isConnected()) rt.connect();
   }
 
   async registerPushToken(token: string) {
@@ -610,6 +756,26 @@ function traduzErro(msg?: string) {
   if (/invalid login credentials/i.test(msg)) return 'E-mail ou senha incorretos.';
   if (/email not confirmed/i.test(msg)) return 'Confirme seu e-mail antes de entrar.';
   if (/network/i.test(msg)) return 'Sem conexão. Verifique sua internet.';
+  return msg;
+}
+
+/** Celular brasileiro com DDD: 10 ou 11 dígitos (o CHECK de `profiles.phone`). */
+export function celularValido(digitos: string): boolean {
+  return /^\d{10,11}$/.test(digitos);
+}
+
+/** Falhas do `signUp`, do `resend` e do `verifyOtp`, em português. */
+export function traduzErroDoCadastro(msg?: string): string {
+  if (!msg) return 'Não deu para criar a conta agora. Tente de novo em instantes.';
+  const espera = msg.match(/after (\d+) seconds?/i);
+  if (espera) return `Aguarde ${espera[1]} segundos para pedir outro e-mail.`;
+  if (/rate limit|too many/i.test(msg)) return 'Muitos e-mails em pouco tempo. Aguarde alguns minutos e tente de novo.';
+  if (/password/i.test(msg) && /(at least|characters|weak|short)/i.test(msg)) return 'A senha precisa ter pelo menos 8 caracteres.';
+  if (/signups? not allowed|signup.*disabled/i.test(msg)) return 'O cadastro está fechado agora. Tente de novo mais tarde.';
+  if (/invalid.*email|validate email|email address/i.test(msg)) return 'Confira o e-mail digitado.';
+  if (/expired|invalid/i.test(msg)) return 'O código venceu. Peça outro e-mail.';
+  if (/error sending/i.test(msg)) return 'Não conseguimos enviar o e-mail agora. Tente de novo daqui a pouco.';
+  if (/network|fetch/i.test(msg)) return 'Sem internet no momento. Confira a conexão e tente de novo.';
   return msg;
 }
 

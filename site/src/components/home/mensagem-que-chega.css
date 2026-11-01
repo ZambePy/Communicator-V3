@@ -80,6 +80,48 @@
   }
 }
 
+/* Fora da tela (home, desde 31/10/2026): um cartão de papel que sai da borda
+   esquerda do celular, como uma notificação que acabou de chegar. Tinta sobre
+   papel (16:1); a sombra tem deslocamento e desfoque, sem halo. */
+.v3-chega--fora {
+  left: -90px;
+  right: auto;
+  top: 120px;
+  width: 250px;
+  padding: 14px 18px 16px;
+  border-radius: 18px;
+  background: var(--papel);
+  box-shadow: 0 24px 48px -20px rgba(0, 0, 0, 0.6);
+}
+
+.v3-chega--fora .v3-chega__avatar {
+  display: none;
+}
+
+.v3-chega--fora .v3-chega__legenda {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #43536e;
+}
+
+.v3-chega--fora .v3-chega__frase {
+  margin-top: 2px;
+  font-size: 1.5rem;
+  color: var(--navy);
+}
+
+@media (max-width: 600px) {
+  .v3-chega--fora {
+    left: -30px;
+    top: 70px;
+    width: 200px;
+    padding: 12px 14px;
+  }
+  .v3-chega--fora .v3-chega__frase {
+    font-size: 1.1875rem;
+  }
+}
+
 /* Movimento reduzido: o cartão já está lá. */
 @media (prefers-reduced-motion: reduce) {
   .v3-chega.is-aguardando,

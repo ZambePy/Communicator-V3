@@ -3,29 +3,43 @@ import { AppState, FlatList, KeyboardAvoidingView, ScrollView, StyleSheet, TextI
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { LinearTransition } from 'react-native-reanimated';
-import { ConversationSkeleton, EmptyState, IconButton, LiveDot, Notice, PressableScale, Text, useEspacoDoTopo } from '@/components';
+import Animated from 'react-native-reanimated';
+import { Avatar, ConversationSkeleton, EmptyState, IconButton, LiveDot, PressableScale, Text, useEspacoDoTopo } from '@/components';
 import { Message } from '@/data/types';
+import { definirConversaEmFoco, limparAvisosDaConversa } from '@/hooks/usePushNotifications';
 import { useApp } from '@/store/AppProvider';
 import { fonts, layout, motion, radius, sizes, spacing, typeScale, useEntrada, useTheme } from '@/theme';
-import { mensagemDeErro } from '@/utils/errors';
 import { firstName, hm } from '@/utils/format';
-import { agruparPorDia, LinhaDaConversa } from '@/utils/conversa';
+import { agruparPorDia, estadoDoEnvio, LinhaDaConversa } from '@/utils/conversa';
 import { ehPerguntaSimNao, excessoDaPergunta, lerResposta, ligarRespostas, MAXIMO_DA_PERGUNTA } from '@/utils/perguntaSimNao';
 import { AvisoDoLimiteDaPergunta, CartaoDaPergunta, CartaoDaResposta, ChipDaPergunta, DicaDaPergunta } from '@/features/PerguntaSimNao';
 
-const SUGESTOES = ['Já estou indo', 'Precisa de algo?', 'Quer água?', 'Está confortável?', 'Vou trocar de posição', 'Te amo'];
+/** Respostas de um toque, as mesmas do Início (mock 07), e duas sugestões depois da pergunta. */
+const RAPIDAS: { texto: string; kind: Message['kind'] }[] = [
+  { texto: 'Já estou indo', kind: 'frase' },
+  { texto: 'Sim', kind: 'simnao' },
+  { texto: 'Não', kind: 'simnao' },
+];
+const SUGESTOES = ['Quer água?', 'Está confortável?'];
 
+/**
+ * Conversa (redesenho de 31/10/2026). O que mudou:
+ *  - envio otimista: o balão aparece na hora com "Enviando…", depois "Enviado"
+ *    e "Falado na tela"; se falhar, "Não enviou. Tocar para tentar de novo". O
+ *    campo nunca trava enquanto envia;
+ *  - mensagem nova entra com movimento (só as novas, não a lista inteira ao abrir);
+ *  - com esta Conversa na frente, o push da mesma pessoa não vira faixa (o
+ *    balão já está entrando) — só vibra;
+ *  - sem parágrafos fixos no topo: o estado do computador é uma linha curta.
+ */
 export default function Conversa() {
   const { colors, mode } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   // Faixa do alerta minimizado no topo: o cabeçalho fixo desce por baixo dela (revisão de UX de 19/10/2026).
   const faixa = useEspacoDoTopo();
-  const { patient, messages, sendMessage, markRead, session, devices, unreadCount, patientLoaded, patientVerified, refresh } = useApp();
+  const { patient, messages, sendMessage, reenviarMensagem, markRead, session, devices, unreadCount, patientLoaded, patientVerified, refresh } = useApp();
   const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
-  const [falha, setFalha] = useState<string | null>(null);
   /** O campo está compondo uma pergunta de sim ou não (pedido de 21/10/2026). */
   const [perguntando, setPerguntando] = useState(false);
   const list = useRef<FlatList<LinhaDaConversa>>(null);
@@ -47,16 +61,22 @@ export default function Conversa() {
     }, []),
   );
 
+  // Com a Conversa desta pessoa na frente, o push de mensagem dela não vira
+  // faixa (`decidirApresentacao`), e as que estavam na bandeja saem.
+  const pacienteId = patient?.id ?? null;
+  const vendo = focada && naFrente;
+  useEffect(() => {
+    if (!vendo || !pacienteId) return;
+    definirConversaEmFoco(pacienteId);
+    void limparAvisosDaConversa(pacienteId);
+    return () => definirConversaEmFoco(null);
+  }, [vendo, pacienteId]);
+
   // Ao abrir a aba, ao voltar para o app com ela aberta e a cada mensagem nova
   // chegando enquanto o cuidador olha: marca como lidas.
   useEffect(() => {
-    if (focada && naFrente && unreadCount > 0) markRead().catch(() => undefined);
-  }, [focada, naFrente, unreadCount, markRead]);
-
-  useEffect(() => {
-    const t = setTimeout(() => list.current?.scrollToEnd({ animated: true }), 120);
-    return () => clearTimeout(t);
-  }, [messages.length]);
+    if (vendo && unreadCount > 0) markRead().catch(() => undefined);
+  }, [vendo, unreadCount, markRead]);
 
   const rows = useMemo(() => agruparPorDia(messages), [messages]);
   // Cada resposta do paciente ligada à pergunta que ela responde.
@@ -65,56 +85,60 @@ export default function Conversa() {
   const excesso = excessoDaPergunta(text, perguntando);
   const device = devices.find((d) => !d.revoked_at);
   const online = device?.online ?? false;
-  const nome = patient ? firstName(patient.user_name) : 'o paciente';
+  const nome = patient ? firstName(patient.user_name) : 'a pessoa';
 
-  /** Envia; `true` se chegou. */
-  const send = async (t: string, kind: Message['kind'] = 'texto'): Promise<boolean> => {
+  // Só as mensagens que chegam DEPOIS de a tela abrir entram com movimento.
+  const vistas = useRef<Set<string> | null>(null);
+  if (vistas.current === null && patientLoaded) vistas.current = new Set(rows.map((r) => r.key));
+  const ehNova = (chave: string) => Boolean(vistas.current && !vistas.current.has(chave));
+  useEffect(() => {
+    if (!vistas.current) return;
+    for (const r of rows) vistas.current.add(r.key);
+  }, [rows]);
+  // A última fala do paciente é a maior (mock 07).
+  const ultimaDoPaciente = useMemo(() => [...messages].reverse().find((m) => m.sender === 'paciente' && m.kind !== 'sistema')?.id ?? null, [messages]);
+
+  /** Envia na hora (otimista): o campo não trava e o balão já aparece. */
+  const send = (t: string, kind: Message['kind'] = 'texto') => {
     const value = t.trim();
-    if (!value || sending) return false;
-    setSending(true);
-    setFalha(null);
-    try {
-      await sendMessage(value, kind);
-      return true;
-    } catch (e) {
-      setFalha(mensagemDeErro(e, 'Não foi possível enviar agora.'));
-      return false;
-    } finally {
-      setSending(false);
-    }
+    if (!value) return false;
+    // A falha fica no próprio balão ("Não enviou. Tocar para tentar de novo").
+    sendMessage(value, kind).catch(() => undefined);
+    return true;
   };
 
   /**
    * O que está no campo: mensagem, ou pergunta de sim ou não (`simnao`, que o
-   * computador mostra grande, com o NÃO e o SIM dos lados). Limpar só depois do
-   * sucesso: uma falha de envio não pode apagar o texto do cuidador sem nada ter
-   * chegado ao paciente.
+   * computador mostra grande, com o NÃO e o SIM dos lados). O texto sai do
+   * campo na hora: se o envio falhar, ele continua no balão para tentar de novo.
    */
-  const enviarDoCampo = async () => {
+  const enviarDoCampo = () => {
     // O `maxLength` do campo não corta o que já estava escrito quando a pergunta foi ligada
     // (revisão final de 21/10/2026): o excesso trava o envio, também pelo "Enviar" do teclado.
     if (excesso > 0) return;
-    if (await send(text, perguntando ? 'simnao' : 'texto')) {
+    if (send(text, perguntando ? 'simnao' : 'texto')) {
       setText('');
       setPerguntando(false);
     }
   };
 
-  const status = session ? 'Escrevendo com os olhos agora' : online ? 'Computador ligado' : device ? 'Computador desligado. As mensagens esperam na fila.' : 'Nenhum computador conectado';
-  const podeEnviar = Boolean(text.trim()) && !sending && excesso === 0;
+  const status = session ? 'Escrevendo agora' : online ? 'Computador ligado' : device ? 'Computador desligado' : 'Nenhum computador conectado';
+  const corDoStatus = session || online ? colors.accentText : colors.textMuted;
+  const podeEnviar = Boolean(text.trim()) && excesso === 0;
 
   return (
     <KeyboardAvoidingView style={[styles.flex, { backgroundColor: colors.background }]} behavior="padding">
       {/* Cabeçalho fixo */}
       <View testID="cabecalho-da-conversa" style={[styles.header, { paddingTop: insets.top + spacing.sm + faixa, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
-        <PressableScale onPress={() => router.push('/paciente')} accessibilityRole="button" accessibilityLabel={`${patient?.user_name ?? 'Paciente'}. ${status}. Abrir perfil`} scaleTo={motion.pressScaleCard} style={styles.headerWho}>
+        <PressableScale onPress={() => router.push('/paciente')} accessibilityRole="button" accessibilityLabel={`${patient?.user_name ?? 'Pessoa'}. ${status}. Abrir perfil`} scaleTo={motion.pressScaleCard} style={styles.headerWho}>
+          <Avatar name={patient?.user_name} chave={patient?.id} size="sm" umaLetra />
           <View style={styles.flex}>
-            <Text variant="h3" numberOfLines={1} accessibilityRole="header">
-              {patient?.user_name ?? 'Paciente'}
+            <Text variant="h3" weight="heading" numberOfLines={1} accessibilityRole="header">
+              {nome}
             </Text>
             <View style={styles.statusRow}>
-              {session ? <LiveDot color={colors.accent} /> : <View style={[styles.dot, { backgroundColor: online ? colors.accent : colors.textMuted }]} />}
-              <Text variant="caption" tone="muted" style={styles.flex} numberOfLines={2}>
+              {session ? <LiveDot color={colors.accent} /> : <View style={[styles.dot, { backgroundColor: corDoStatus }]} />}
+              <Text variant="caption" weight="medium" style={[styles.flex, { color: corDoStatus }]} numberOfLines={1}>
                 {status}
               </Text>
             </View>
@@ -128,37 +152,56 @@ export default function Conversa() {
         data={rows}
         keyExtractor={(r) => r.key}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (item.type === 'day' ? <DayLabel label={item.label} /> : <Linha m={item.message} nome={nome} respostaDe={ligacoes.respostaDe} />)}
+        renderItem={({ item }) =>
+          item.type === 'day' ? (
+            <DayLabel label={item.label} />
+          ) : (
+            <Linha
+              m={item.message}
+              nome={nome}
+              respostaDe={ligacoes.respostaDe}
+              nova={ehNova(item.key)}
+              grande={item.message.id === ultimaDoPaciente}
+              onTentarDeNovo={() => void reenviarMensagem(item.message.id).catch(() => undefined)}
+            />
+          )
+        }
         ListEmptyComponent={
           !patientLoaded ? (
             <ConversationSkeleton />
           ) : !patientVerified ? (
             <EmptyState icon="cloud-offline-outline" title="Não deu para carregar a conversa" body="Confira a internet e tente de novo." action={{ label: 'Tentar de novo', icon: 'refresh', onPress: () => void refresh() }} />
           ) : (
-            <EmptyState icon="chatbubbles-outline" title="Nenhuma mensagem ainda" body={`Quando ${nome} escrever com os olhos, aparece aqui. O que você mandar é falado na tela do computador.`} />
+            <EmptyState icon="chatbubbles-outline" title="Nenhuma mensagem ainda" body={`Quando ${nome} escrever com o olhar, aparece aqui.`} />
           )
         }
-        onContentSizeChange={() => list.current?.scrollToEnd({ animated: false })}
+        // Rola para o fim quando a lista cresce (sem a espera de 120 ms de antes).
+        onContentSizeChange={() => list.current?.scrollToEnd({ animated: Boolean(vistas.current) })}
         keyboardShouldPersistTaps="handled"
       />
 
       {/* Respostas prontas + campo */}
-      <View style={[styles.composer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-        {falha ? <Notice tone="danger" title="Não enviado" text={`${falha} O texto continua no campo. Toque em enviar para tentar de novo.`} style={styles.falha} /> : null}
+      <View style={[styles.composer, { backgroundColor: colors.background }]}>
+        {device && !online ? (
+          <Text variant="caption" tone="muted" style={styles.aviso} testID="aviso-desligado">
+            {nome} vê quando o computador ligar.
+          </Text>
+        ) : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
-          <ChipDaPergunta ativo={perguntando} onPress={() => setPerguntando((p) => !p)} disabled={sending} nome={nome} />
-          <Chip label="Sim" icon="checkmark" tone="accent" onPress={() => void send('Sim', 'simnao')} disabled={sending} nome={nome} />
-          <Chip label="Não" icon="close" tone="danger" onPress={() => void send('Não', 'simnao')} disabled={sending} nome={nome} />
+          {RAPIDAS.map((r) => (
+            <Chip key={r.texto} label={r.texto} onPress={() => void send(r.texto, r.kind)} nome={nome} />
+          ))}
+          <ChipDaPergunta ativo={perguntando} onPress={() => setPerguntando((p) => !p)} nome={nome} />
           {SUGESTOES.map((s) => (
-            <Chip key={s} label={s} onPress={() => void send(s, 'frase')} disabled={sending} nome={nome} />
+            <Chip key={s} label={s} onPress={() => void send(s, 'frase')} nome={nome} />
           ))}
         </ScrollView>
         {perguntando ? <DicaDaPergunta nome={nome} /> : null}
         {excesso > 0 ? <AvisoDoLimiteDaPergunta excesso={excesso} /> : null}
         <View style={styles.inputRow}>
           <TextInput
-            style={[styles.input, { color: colors.text, backgroundColor: colors.surfaceAlt, borderColor: perguntando ? colors.primary : colors.border }]}
-            placeholder={perguntando ? `Pergunta de sim ou não para ${nome}` : `Escreva; ${nome} ouve na tela`}
+            style={[styles.input, { color: colors.text, backgroundColor: colors.surface, borderColor: perguntando ? colors.primary : 'transparent' }]}
+            placeholder={perguntando ? `Pergunta de sim ou não para ${nome}` : `Escreva. ${nome} ouve na tela.`}
             placeholderTextColor={colors.textMuted}
             value={text}
             onChangeText={setText}
@@ -167,7 +210,7 @@ export default function Conversa() {
             // "Enviar" no teclado manda a mensagem (em vez de quebrar linha), como antes.
             returnKeyType="send"
             submitBehavior="blurAndSubmit"
-            onSubmitEditing={() => void enviarDoCampo()}
+            onSubmitEditing={() => enviarDoCampo()}
             keyboardAppearance={mode}
             selectionColor={colors.primary}
             accessibilityLabel={perguntando ? `Pergunta de sim ou não para ${nome}` : `Mensagem para ${nome}`}
@@ -175,14 +218,14 @@ export default function Conversa() {
             maxFontSizeMultiplier={1.6}
           />
           <PressableScale
-            onPress={() => void enviarDoCampo()}
+            onPress={() => enviarDoCampo()}
             disabled={!podeEnviar}
             haptic="medium"
             accessibilityRole="button"
             accessibilityLabel={perguntando ? 'Enviar pergunta' : 'Enviar'}
             accessibilityHint={perguntando ? 'Envia a pergunta para a tela do computador' : 'Envia para ser falado na tela'}
-            accessibilityState={{ disabled: !podeEnviar, busy: sending }}
-            style={[styles.sendBtn, { backgroundColor: podeEnviar ? colors.primaryStrong : colors.surfaceAlt }]}
+            accessibilityState={{ disabled: !podeEnviar }}
+            style={[styles.sendBtn, { backgroundColor: podeEnviar ? colors.primaryStrong : colors.surface }]}
           >
             <Ionicons name="send" size={sizes.icon.md} color={podeEnviar ? colors.onPrimary : colors.textMuted} />
           </PressableScale>
@@ -192,14 +235,11 @@ export default function Conversa() {
   );
 }
 
-function Chip({ label, icon, tone = 'primary', onPress, disabled, nome }: { label: string; icon?: keyof typeof Ionicons.glyphMap; tone?: 'primary' | 'accent' | 'danger'; onPress: () => void; disabled?: boolean; nome: string }) {
+function Chip({ label, onPress, nome }: { label: string; onPress: () => void; nome: string }) {
   const { colors } = useTheme();
-  const fg = tone === 'accent' ? colors.accentText : tone === 'danger' ? colors.dangerText : colors.primary;
-  const bg = colors.surfaceAlt;
   return (
-    <PressableScale onPress={onPress} disabled={disabled} haptic="medium" accessibilityRole="button" accessibilityLabel={`Enviar “${label}” para ${nome}`} style={[styles.chip, { backgroundColor: bg }]}>
-      {icon ? <Ionicons name={icon} size={sizes.icon.sm} color={fg} /> : null}
-      <Text variant="bodySmall" weight="semibold" style={{ color: fg }}>
+    <PressableScale onPress={onPress} haptic="medium" accessibilityRole="button" accessibilityLabel={`Enviar “${label}” para ${nome}`} style={[styles.chip, { backgroundColor: colors.surfaceRaised }]}>
+      <Text variant="bodySmall" weight="semibold">
         {label}
       </Text>
     </PressableScale>
@@ -218,20 +258,23 @@ function DayLabel({ label }: { label: string }) {
 
 /**
  * Mensagem de sistema com estilo próprio — NÃO é um rótulo de dia. Do
- * paciente ("Estou bem", enviado pela tela do computador): pílula teal com
- * remetente e hora, para que o cuidador veja que foi um sinal deliberado e
- * quando. Do servidor (escalonamento sem confirmação): âmbar, com alerta.
+ * paciente ("Estou bem", enviado pela tela do computador): teal, com remetente
+ * e hora. Do servidor (escalonamento sem confirmação): âmbar, com alerta.
  */
-function SystemNote({ m, nome }: { m: Message; nome: string }) {
+function SystemNote({ m, nome, nova }: { m: Message; nome: string; nova: boolean }) {
   const { colors } = useTheme();
   const entrada = useEntrada();
   const doPaciente = m.sender === 'paciente';
-  const bg = doPaciente ? colors.accentTint : colors.warningTint;
   const fg = doPaciente ? colors.accentText : colors.warningText;
   const icon: keyof typeof Ionicons.glyphMap = doPaciente ? 'checkmark-circle' : 'alert-circle';
   const remetente = doPaciente ? nome : 'IrisFlow';
   return (
-    <Animated.View entering={entrada.suave()} style={[styles.systemNote, { backgroundColor: bg, borderLeftColor: fg }]} accessible accessibilityLabel={`${remetente}: ${m.text}, às ${hm(m.created_at)}`}>
+    <Animated.View
+      entering={nova ? entrada.suave() : undefined}
+      style={[styles.systemNote, { backgroundColor: colors.surface }]}
+      accessible
+      accessibilityLabel={`${remetente}: ${m.text}, às ${hm(m.created_at)}`}
+    >
       <Ionicons name={icon} size={sizes.icon.md} color={fg} />
       <View style={styles.flexShrink}>
         <Text variant="body" weight="semibold" style={{ color: fg }}>
@@ -246,18 +289,16 @@ function SystemNote({ m, nome }: { m: Message; nome: string }) {
 }
 
 /**
- * Uma linha da conversa (redesenho de 19/10/2026). O que {nome} escreveu com
- * os olhos aparece como transcrição — sem balão, em Sora, com um fio na cor do
- * céu à esquerda que marca a voz dele. O que o cuidador manda é a resposta:
- * balão azul compacto, à direita. A diferença de peso é de propósito: cada
- * letra do paciente custou um olhar.
+ * Uma linha da conversa (mock 07): o que {nome} escreveu com o olhar num balão
+ * à esquerda — a última fala maior, em Sora —; o que o cuidador manda, balão
+ * azul à direita, com o estado do envio embaixo.
  */
-function Linha({ m, nome, respostaDe }: { m: Message; nome: string; respostaDe: Map<string, Message> }) {
+function Linha({ m, nome, respostaDe, nova, grande, onTentarDeNovo }: { m: Message; nome: string; respostaDe: Map<string, Message>; nova: boolean; grande: boolean; onTentarDeNovo: () => void }) {
   const { colors } = useTheme();
   const entrada = useEntrada();
   const mine = m.sender === 'cuidador';
 
-  if (m.kind === 'sistema') return <SystemNote m={m} nome={nome} />;
+  if (m.kind === 'sistema') return <SystemNote m={m} nome={nome} nova={nova} />;
   // Pergunta sim/não do cuidador e a resposta do paciente a ela (21/10/2026).
   if (ehPerguntaSimNao(m)) return <CartaoDaPergunta m={m} resposta={respostaDe.get(m.id) ?? null} nome={nome} />;
   const resposta = lerResposta(m);
@@ -265,43 +306,52 @@ function Linha({ m, nome, respostaDe }: { m: Message; nome: string; respostaDe: 
 
   const sim = m.kind === 'simnao' && m.text.trim().toLowerCase().startsWith('s');
   const tipo = !mine && m.kind === 'frase' ? 'frase pronta' : !mine && m.kind === 'pictograma' ? 'pictograma' : null;
-  const estado = mine ? (m.spoken ? 'falado na tela' : 'na fila') : null;
-  const rotulo = `${mine ? 'Você' : nome}${tipo ? `, ${tipo}` : ''}: ${m.text}. ${hm(m.created_at)}${estado ? `, ${estado}` : ''}`;
+  const envio = mine ? estadoDoEnvio(m) : null;
+  const rotulo = `${mine ? 'Você' : nome}${tipo ? `, ${tipo}` : ''}: ${m.text}. ${hm(m.created_at)}${envio ? `, ${envio.texto}` : ''}`;
+  const corDoEnvio = envio?.tom === 'accent' ? colors.accentText : envio?.tom === 'danger' ? colors.dangerText : colors.textMuted;
 
   return (
-    <Animated.View entering={entrada.suave()} layout={entrada.reduzir ? undefined : LinearTransition} style={[styles.linha, mine && styles.linhaMinha]} accessible accessibilityLabel={rotulo}>
+    <Animated.View entering={nova ? entrada.mensagem(mine) : undefined} layout={entrada.layout()} style={[styles.linha, mine && styles.linhaMinha]}>
       {mine ? (
-        <View style={styles.colMinha}>
-          <View style={[styles.balao, { backgroundColor: colors.primaryStrong }]}>
+        <PressableScale
+          disabled={m.envio !== 'falhou'}
+          onPress={onTentarDeNovo}
+          haptic={m.envio === 'falhou' ? 'medium' : false}
+          accessibilityRole={m.envio === 'falhou' ? 'button' : undefined}
+          accessibilityLabel={rotulo}
+          accessibilityHint={m.envio === 'falhou' ? 'Toque para enviar de novo' : undefined}
+          style={styles.colMinha}
+          testID={m.envio ? `balao-${m.envio}` : undefined}
+        >
+          <View style={[styles.balao, styles.balaoMeu, { backgroundColor: colors.primaryStrong, opacity: m.envio === 'enviando' ? 0.75 : 1 }]}>
             <Text variant="body" tone="onPrimary">
               {m.text}
             </Text>
           </View>
           <View style={[styles.meta, styles.metaMinha]}>
-            <Text variant="caption" tone="muted">
-              {hm(m.created_at)}
-            </Text>
-            <Ionicons name={m.spoken ? 'volume-high' : 'time-outline'} size={sizes.icon.xs} color={m.spoken ? colors.accentText : colors.textMuted} />
-            <Text variant="caption" tone={m.spoken ? 'accent' : 'muted'}>
-              {estado}
+            {m.envio === 'falhou' ? <Ionicons name="refresh" size={sizes.icon.xs} color={corDoEnvio} /> : m.spoken ? <Ionicons name="volume-high" size={sizes.icon.xs} color={corDoEnvio} /> : null}
+            <Text variant="caption" weight={envio?.tom === 'muted' ? 'medium' : 'semibold'} style={{ color: corDoEnvio }}>
+              {envio?.texto}
             </Text>
           </View>
-        </View>
+        </PressableScale>
       ) : (
-        <View style={[styles.fala, { borderLeftColor: m.kind === 'simnao' ? (sim ? colors.accent : colors.danger) : colors.primary }]}>
-          {m.kind === 'simnao' ? (
-            <View style={styles.simNao}>
-              <Ionicons name={sim ? 'checkmark-circle' : 'close-circle'} size={sizes.icon.xl} color={sim ? colors.accentText : colors.dangerText} />
-              <Text variant="display" style={{ color: sim ? colors.accentText : colors.dangerText }}>
+        <View style={styles.colDele} accessible accessibilityLabel={rotulo}>
+          <View style={[styles.balao, styles.balaoDele, { backgroundColor: colors.surface }]}>
+            {m.kind === 'simnao' ? (
+              <View style={styles.simNao}>
+                <Ionicons name={sim ? 'checkmark-circle' : 'close-circle'} size={sizes.icon.xl} color={sim ? colors.accentText : colors.dangerText} />
+                <Text variant="display" style={{ color: sim ? colors.accentText : colors.dangerText }}>
+                  {m.text}
+                </Text>
+              </View>
+            ) : (
+              <Text variant={grande ? 'fala' : 'body'} weight={grande ? 'headingSemibold' : undefined}>
                 {m.text}
               </Text>
-            </View>
-          ) : (
-            <Text variant="h2" weight="headingSemibold">
-              {m.text}
-            </Text>
-          )}
-          <Text variant="caption" tone="muted" style={styles.metaFala}>
+            )}
+          </View>
+          <Text variant="caption" tone="muted" style={styles.metaDele}>
             {tipo ? `${tipo}, ` : ''}
             {hm(m.created_at)}
           </Text>
@@ -314,40 +364,40 @@ function Linha({ m, nome, respostaDe }: { m: Message; nome: string; respostaDe: 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   flexShrink: { flexShrink: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: layout.gutter, paddingBottom: spacing.md, borderBottomWidth: sizes.hairline },
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: layout.gutter, paddingBottom: spacing.md, borderBottomWidth: sizes.border },
   headerWho: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: sizes.touch },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xxs },
   dot: { width: sizes.dot, height: sizes.dot, borderRadius: radius.pill },
-  listContent: { paddingHorizontal: layout.gutter, paddingVertical: spacing.lg, gap: spacing.lg, flexGrow: 1 },
-  day: { marginTop: spacing.md },
-  systemNote: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, alignSelf: 'stretch', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.md, borderLeftWidth: sizes.accentBar },
+  listContent: { paddingHorizontal: layout.gutter, paddingVertical: spacing.lg, gap: spacing.md, flexGrow: 1 },
+  day: { alignSelf: 'center', marginVertical: spacing.xs },
+  systemNote: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, alignSelf: 'stretch', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.lg },
   linha: { flexDirection: 'row' },
   linhaMinha: { justifyContent: 'flex-end' },
-  colMinha: { maxWidth: '82%' },
-  balao: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.lg, borderBottomRightRadius: radius.xs },
-  // O fio à esquerda marca a voz do paciente: azul-céu numa fala, menta num
-  // "sim", rosado num "não".
-  fala: { flexShrink: 1, maxWidth: '94%', borderLeftWidth: sizes.borderThick + 1, paddingLeft: spacing.md, paddingVertical: spacing.xxs },
+  colMinha: { maxWidth: '80%', alignItems: 'flex-end' },
+  colDele: { maxWidth: '84%', alignItems: 'flex-start' },
+  balao: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.lg },
+  balaoMeu: { borderBottomRightRadius: radius.xs },
+  balaoDele: { borderBottomLeftRadius: radius.xs },
   simNao: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  metaFala: { marginTop: spacing.xs },
-  meta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs, paddingHorizontal: spacing.xs },
+  metaDele: { marginTop: spacing.xs },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
   metaMinha: { justifyContent: 'flex-end' },
-  composer: { paddingTop: spacing.md, paddingBottom: spacing.md, borderTopWidth: sizes.hairline, gap: spacing.sm },
-  falha: { marginHorizontal: layout.gutter },
+  composer: { paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm },
+  aviso: { paddingHorizontal: layout.gutter },
   chips: { paddingHorizontal: layout.gutter, gap: spacing.sm },
-  chip: { minHeight: sizes.touch, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, borderRadius: radius.md },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm, paddingHorizontal: layout.gutter },
+  chip: { minHeight: sizes.touch - spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, borderRadius: radius.pill },
+  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm + 2, paddingHorizontal: layout.gutter },
   input: {
     flex: 1,
-    minHeight: sizes.touch,
+    minHeight: sizes.button.md,
     maxHeight: sizes.composerMax,
-    borderRadius: radius.md,
-    borderWidth: sizes.border,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
+    borderRadius: radius.xl - 4,
+    borderWidth: sizes.borderThick,
+    paddingHorizontal: spacing.lg + 2,
+    paddingTop: spacing.md + 2,
+    paddingBottom: spacing.md + 2,
     fontFamily: fonts.regular,
     fontSize: typeScale.body.fontSize,
   },
-  sendBtn: { width: sizes.touch, height: sizes.touch, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  sendBtn: { width: sizes.button.md, height: sizes.button.md, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
 });

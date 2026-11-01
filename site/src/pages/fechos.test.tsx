@@ -90,8 +90,9 @@ describe('o rótulo acima do título não repete o nome da página', () => {
     expect(container.querySelector('.page-head__rotulo')).toBeNull()
   })
 
-  it('/sobre mantém o rótulo "A empresa", que diz algo a mais', () => {
+  // Desde 31/10/2026 nenhuma abertura tem rótulo acima do título (o dono pediu menos "tells").
+  it('/sobre também abre direto no título', () => {
     const { container } = montar(Sobre)
-    expect(container.querySelector('.page-head__rotulo')?.textContent).toBe('A empresa')
+    expect(container.querySelector('.page-head__rotulo')).toBeNull()
   })
 })

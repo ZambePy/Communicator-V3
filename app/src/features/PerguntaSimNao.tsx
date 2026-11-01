@@ -20,7 +20,6 @@ const PALAVRA: Record<LadoDaResposta, string> = { sim: 'SIM', nao: 'NÃO' };
 /** O chip que liga o campo para uma pergunta de sim ou não (e desliga, se tocado de novo). */
 export function ChipDaPergunta({ ativo, onPress, disabled, nome }: { ativo: boolean; onPress: () => void; disabled?: boolean; nome: string }) {
   const { colors } = useTheme();
-  const fg = ativo ? colors.onPrimary : colors.primary;
   return (
     <PressableScale
       onPress={onPress}
@@ -29,11 +28,11 @@ export function ChipDaPergunta({ ativo, onPress, disabled, nome }: { ativo: bool
       accessibilityRole="button"
       accessibilityLabel={`Escrever uma pergunta de sim ou não para ${nome}`}
       accessibilityState={{ selected: ativo, disabled }}
-      style={[styles.chip, { backgroundColor: ativo ? colors.primaryStrong : colors.surfaceAlt }]}
+      style={[styles.chip, { backgroundColor: ativo ? colors.primaryStrong : colors.surfaceRaised }]}
     >
-      <Ionicons name="help-circle-outline" size={sizes.icon.sm} color={fg} />
-      <Text variant="bodySmall" weight="semibold" style={{ color: fg }}>
-        Pergunta sim/não
+      <Ionicons name={ativo ? 'help-circle' : 'help-circle-outline'} size={sizes.icon.sm} color={ativo ? colors.onPrimary : colors.text} />
+      <Text variant="bodySmall" weight="semibold" style={{ color: ativo ? colors.onPrimary : colors.text }}>
+        Fazer pergunta
       </Text>
     </PressableScale>
   );
@@ -152,7 +151,7 @@ export function CartaoDaResposta({ m, lado, pergunta, nome }: { m: Message; lado
 }
 
 const styles = StyleSheet.create({
-  chip: { minHeight: sizes.touch, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, borderRadius: radius.md },
+  chip: { minHeight: sizes.touch, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, borderRadius: radius.pill },
   dica: { paddingHorizontal: spacing.lg },
   aviso: { marginHorizontal: spacing.lg },
   linhaMinha: { flexDirection: 'row', justifyContent: 'flex-end' },

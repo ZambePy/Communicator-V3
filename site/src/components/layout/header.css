@@ -23,6 +23,7 @@
   border-bottom-color: var(--line);
 }
 
+
 .header__inner {
   display: flex;
   align-items: center;

@@ -25,7 +25,7 @@ export const CONTA_DE_TESTE = { email: 'admin@irisflow.com', senha: 'irisflow202
  * Rotas do site usadas pelo app (existem em `site/src/routes.ts`): abertas no
  * navegador ou, como `/nova-senha`, destino do link do e-mail de recuperação.
  */
-export type SiteRoute = '/beta' | '/conta' | '/contato' | '/recuperar-senha' | '/nova-senha' | '/privacidade' | '/termos';
+export type SiteRoute = '/beta' | '/baixar' | '/conta' | '/contato' | '/recuperar-senha' | '/nova-senha' | '/confirmar-email' | '/privacidade' | '/termos';
 
 /** URL completa de uma rota do site, ex.: `siteRoute('/beta')` → `https://irisflow.ia.br/beta`. */
 export function siteRoute(route: SiteRoute): string {

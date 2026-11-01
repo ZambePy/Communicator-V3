@@ -45,6 +45,10 @@ const COLUMNS = [
  * quando a beta está no ar: o dia do lançamento, o mesmo do selo da beta
  * (beta_program.launch_at, com a reserva do content.ts). O relógio é pequeno
  * de propósito (auditoria P2-17): informa, não decora.
+ *
+ * Desde 31/10/2026 o rodapé termina com o nome IrisFlow na largura toda, em
+ * Sora 700, num tom só um degrau acima da noite (decoração, fora do leitor de
+ * tela).
  */
 export function Footer() {
   const program = useBetaProgram()
@@ -113,6 +117,12 @@ export function Footer() {
           até aqui envolveram um único operador da equipe, em ambiente controlado, e ainda não
           foram replicadas com pacientes do público-alvo.
         </p>
+      </div>
+
+      {/* O nome na largura toda fecha a página (desenho de 31/10/2026). Só
+          desenho: o nome já está no logo e no link do cabeçalho. */}
+      <div className="container footer__marca" aria-hidden="true">
+        <p className="footer__nome">IrisFlow</p>
       </div>
     </footer>
   )

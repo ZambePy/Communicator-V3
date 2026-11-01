@@ -1,6 +1,5 @@
 import { Fragment } from 'react'
-import { Atmosfera } from '@/components/fundo/Atmosfera'
-import { VozQueSai } from './VozQueSai'
+import { Reveal } from '@/components/effects/Reveal'
 import { Button } from '@/components/ui/Button'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { diaPorExtenso } from '@/lib/lancamento'
@@ -17,8 +16,8 @@ type Props = {
    * 21/10/2026, P2-16).
    */
   titulo?: string | readonly [string, string]
-  /** A frase de apoio. Sem ela, a da home. */
-  texto?: string
+  /** A frase de apoio. Sem ela, a padrão; `false` tira a frase (o fecho da home). */
+  texto?: string | false
   /**
    * O botão principal, quando não é o do download. Sem ele: "Entrar na beta"
    * antes do lançamento, "Baixar grátis" depois (um caminho só para o download).
@@ -30,15 +29,18 @@ type Props = {
 
 const TITULO_DA_HOME = ['A pessoa continua lá.', 'Só falta a voz.'] as const
 
-/** Chamada final das páginas de conteúdo: uma frase, duas ações e, antes do
- *  lançamento, o dia em que o download abre. A faixa no azul da marca, com o
- *  fundo vivo e, ao lado, a frase escolhida com o olhar virando voz. */
+/** Chamada final das páginas de conteúdo: uma frase grande, duas ações e,
+ *  antes do lançamento, o dia em que o download abre. Desde 31/10/2026 (o
+ *  fecho do desenho aprovado da home) é uma faixa da noite que corre direto
+ *  para o rodapé, sem fundo vivo nem painel ao lado: a frase é o desenho. */
 export function CallToAction({ titulo = TITULO_DA_HOME, texto, principal, secundario }: Props = {}) {
   const program = useBetaProgram()
   const lancou = useJaLancou(program.launchAt)
   const linhas = typeof titulo === 'string' ? [titulo] : titulo
   const apoio =
-    texto ??
+    texto === false
+      ? null
+      : texto ??
     `Instale no computador que já está em casa e veja se funciona no seu caso. ${
       BETA.ativo ? 'É grátis na beta e não pede cartão.' : 'Sem cartão para começar.'
     }`
@@ -46,9 +48,8 @@ export function CallToAction({ titulo = TITULO_DA_HOME, texto, principal, secund
 
   return (
     <section className="cta" aria-labelledby="cta-titulo">
-      <Atmosfera variante="chamada" />
       <div className="container cta__inner">
-        <div className="cta__texto">
+        <Reveal>
           <h2 id="cta-titulo" className="cta__title">
             {linhas.map((linha, i) => (
               <Fragment key={linha}>
@@ -57,43 +58,33 @@ export function CallToAction({ titulo = TITULO_DA_HOME, texto, principal, secund
               </Fragment>
             ))}
           </h2>
+          {apoio && <p className="cta__lead">{apoio}</p>}
+        </Reveal>
 
-          <p className="cta__lead">{apoio}</p>
-
-          <div className="cta__actions">
-            {principal ? (
-              <Button to={principal.to} size="lg" variant="teal" chamada>
-                {principal.label}
-              </Button>
-            ) : BETA.ativo ? (
-              <Button to={lancou ? '/baixar' : BETA_CTA.to} size="lg" variant="teal" chamada>
-                {lancou ? 'Baixar grátis' : BETA_CTA.labelLong}
-              </Button>
-            ) : (
-              <Button to="/cadastro" size="lg" variant="teal" chamada>
-                Começar os {TRIAL_DAYS} dias gratuitos
-              </Button>
-            )}
-            {secundario !== false && (
-              <Button to={secundario?.to ?? '/contato'} size="lg" variant="secondary">
-                {secundario?.label ?? 'Falar com a equipe'}
-              </Button>
-            )}
-          </div>
-
-          {doDownload && BETA.ativo && (
-            <p className="cta__data">
-              {lancou
-                ? `Download gratuito para ${BETA.sistemaDoLancamento}`
-                : `Download a partir de ${diaPorExtenso(program.launchAt)}`}
-            </p>
+        <Reveal className="cta__actions" delay={80}>
+          {principal ? (
+            <Button to={principal.to} size="lg" variant="teal" chamada>
+              {principal.label}
+            </Button>
+          ) : BETA.ativo ? (
+            <Button to={lancou ? '/baixar' : BETA_CTA.to} size="lg" variant="teal" chamada>
+              {lancou ? `Baixar grátis para ${BETA.sistemaDoLancamento}` : BETA_CTA.labelLong}
+            </Button>
+          ) : (
+            <Button to="/cadastro" size="lg" variant="teal" chamada>
+              Começar os {TRIAL_DAYS} dias gratuitos
+            </Button>
           )}
-        </div>
+          {secundario !== false && (
+            <Button to={secundario?.to ?? '/contato'} size="lg" variant="secondary">
+              {secundario?.label ?? 'Falar com a equipe'}
+            </Button>
+          )}
+        </Reveal>
 
-        <figure className="cta__desenho">
-          <VozQueSai />
-          <figcaption>A frase escolhida com o olhar, falada em voz alta.</figcaption>
-        </figure>
+        {doDownload && BETA.ativo && !lancou && (
+          <p className="cta__data">Download a partir de {diaPorExtenso(program.launchAt)}</p>
+        )}
       </div>
     </section>
   )

@@ -2,11 +2,12 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AppState as EstadoDoApp } from 'react-native';
 import { useData } from '@/data/DataContext';
 import { obterTokenDoAparelho, sincronizarAlarmesLocais, type FalhaPush, type PedidoDoAlarme } from '@/hooks/usePushNotifications';
-import { haptics } from '@/lib/haptics';
+import { haptics, vibrarPorMensagem } from '@/lib/haptics';
 import { firstName, helpKindLabel, textoLegivel } from '@/utils/format';
 import {
   AuthUser,
   Beneficiary,
+  DadosDaPessoa,
   Device,
   ehConflitoDeAjustes,
   HelpRequest,
@@ -16,9 +17,13 @@ import {
   licenseAllows,
   Message,
   MessageKind,
+  MudancaDaPessoa,
+  MudancaDoPerfil,
+  NovaConta,
   PatientSettings,
   Plan,
   Profile,
+  ResultadoDoCadastro,
   Session,
   Subscription,
 } from '@/data/types';
@@ -82,8 +87,26 @@ interface AppActions {
   clearError(): void;
   /** Registrado pelo hook de push; a tela de Alertas mostra o que fazer. */
   reportPushError(falha: FalhaPush | null): void;
-  /** Rejeita quando nada foi enviado (inclusive se a conta ainda não carregou). */
+  /**
+   * Envio OTIMISTA (31/10/2026): a mensagem entra na conversa na hora, com
+   * `envio: 'enviando'`; confirmada pelo banco, vira a linha gravada (mesma
+   * chave na tela); se falhar, fica com `envio: 'falhou'` para tocar e tentar
+   * de novo (`reenviarMensagem`). Rejeita quando nada foi enviado (inclusive
+   * se a conta ainda não carregou — aí nem entra na conversa).
+   */
   sendMessage(text: string, kind?: MessageKind): Promise<void>;
+  /** Tenta de novo uma mensagem que ficou com `envio: 'falhou'`. */
+  reenviarMensagem(clientId: string): Promise<void>;
+  // ----- cadastro no app (31/10/2026) -----
+  cadastrar(nova: NovaConta): Promise<ResultadoDoCadastro>;
+  reenviarCodigo(email: string): Promise<void>;
+  /** Confere o código e abre a sessão neste celular. */
+  confirmarCodigo(email: string, codigo: string, senha?: string): Promise<void>;
+  /** Cria a pessoa (passo 3) e recarrega a conta: as abas aparecem com ela. */
+  completarCadastro(dados: DadosDaPessoa): Promise<void>;
+  atualizarPerfil(mudanca: MudancaDoPerfil): Promise<void>;
+  /** Muda a pessoa acompanhada agora. */
+  atualizarPaciente(mudanca: MudancaDaPessoa): Promise<void>;
   markRead(): Promise<void>;
   acknowledgeAlert(id: string): Promise<void>;
   resolveAlert(id: string): Promise<void>;
@@ -250,6 +273,54 @@ export function inserirMensagem(lista: Message[], m: Message): Message[] {
   let i = lista.length;
   while (i > 0 && Date.parse(lista[i - 1].created_at) > t) i -= 1;
   return [...lista.slice(0, i), m, ...lista.slice(i)];
+}
+
+/** Mensagem do cuidador ainda não confirmada pelo banco (envio otimista). */
+export const ehProvisoria = (m: Message) => Boolean(m.envio);
+
+/**
+ * Uma mensagem do cuidador que o banco gravou toma o lugar da provisória
+ * correspondente: a do `clientId` dado (resposta do insert) ou, sem ele (o
+ * evento do tempo real chegou antes da resposta), a primeira provisória "enviando"
+ * com o mesmo texto e tipo. A gravada herda o `clientId` — a linha da conversa
+ * mantém a chave e o balão não anima de novo.
+ */
+export function confirmarMensagem(lista: Message[], gravada: Message, clientId?: string): Message[] {
+  const provisoria = lista.find((m) =>
+    clientId ? m.id === clientId : m.envio === 'enviando' && m.sender === gravada.sender && m.text === gravada.text && m.kind === gravada.kind,
+  );
+  if (!provisoria) return inserirMensagem(lista, gravada);
+  const semProvisoria = lista.filter((m) => m !== provisoria);
+  const jaGravada = semProvisoria.find((m) => m.id === gravada.id);
+  return inserirMensagem(semProvisoria, { ...(jaGravada ?? gravada), ...gravada, clientId: jaGravada?.clientId ?? provisoria.id, envio: undefined });
+}
+
+/**
+ * A lista do servidor, mais as provisórias deste celular que ainda não estão
+ * nela (enviando ou com falha). Uma recarga não pode apagar o que o cuidador
+ * acabou de escrever, nem a mensagem que falhou e espera o toque para tentar.
+ */
+export function mesclarComProvisorias(doServidor: Message[], atual: Message[]): Message[] {
+  const chaves = new Map(atual.filter((m) => m.clientId && !m.envio).map((m) => [m.id, m.clientId]));
+  let lista = doServidor.map((m) => (chaves.has(m.id) ? { ...m, clientId: chaves.get(m.id) } : m));
+  for (const p of atual.filter(ehProvisoria)) lista = confirmarMensagemSePuder(lista, p);
+  return lista;
+}
+
+function confirmarMensagemSePuder(lista: Message[], provisoria: Message): Message[] {
+  // Já gravada (a recarga trouxe a linha com o mesmo texto, sem chave): a
+  // provisória "enviando" vira a gravada; senão ela fica, na ordem.
+  if (provisoria.envio === 'enviando') {
+    const gravada = lista.find((m) => !m.clientId && m.sender === 'cuidador' && m.text === provisoria.text && m.kind === provisoria.kind && Date.parse(m.created_at) >= Date.parse(provisoria.created_at) - 60_000);
+    if (gravada) return lista.map((m) => (m === gravada ? { ...m, clientId: provisoria.id } : m));
+  }
+  return inserirMensagem(lista, provisoria);
+}
+
+let provisorias = 0;
+function idProvisorio(): string {
+  provisorias += 1;
+  return `local-${Date.now().toString(36)}-${provisorias}`;
 }
 
 /**
@@ -462,7 +533,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mostrarFalha();
       return false;
     }
-    const [ben, perfil, licenca, assinatura] = await Promise.allSettled([data.listBeneficiaries(), data.getProfile(), data.getLicense(), data.getSubscription()]);
+    // A lista de pacientes entra assim que chega (31/10/2026): é ela que abre o
+    // canal do tempo real. Antes ele esperava também o perfil, a licença e a
+    // assinatura — a mais lenta das quatro segurava a primeira mensagem.
+    const pacientes = data.listBeneficiaries();
+    pacientes
+      .then((lista) => {
+        if (descartada()) return;
+        patch((s) => ({
+          beneficiaries: lista,
+          patient: s.patient && lista.some((b) => b.id === s.patient?.id) ? s.patient : lista[0] ?? null,
+          accountLoaded: true,
+        }));
+      })
+      .catch(() => undefined);
+    const [ben, perfil, licenca, assinatura] = await Promise.allSettled([pacientes, data.getProfile(), data.getLicense(), data.getSubscription()]);
     if (descartada()) return true;
     patch((s) => {
       const p: Partial<AppState> = { loading: false };
@@ -532,9 +617,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ----- carga do paciente selecionado -----
   const patientId = state.patient?.id ?? null;
-  const loadPatient = useCallback(async (): Promise<boolean> => {
-    if (!patientId) return true;
+  /** Quando começou a última carga completa, por paciente (ver `onSubscribed`). */
+  const ultimaCarga = useRef<{ paciente: string | null; inicio: number }>({ paciente: null, inicio: 0 });
+  /** A carga em andamento: a recuperação do intervalo espera ela terminar, para gravar por cima dela. */
+  const cargaAtual = useRef<Promise<boolean> | null>(null);
+  /**
+   * Quando cada mensagem e pedido chegou pelo tempo real (id → relógio do
+   * celular). Uma carga que começou ANTES não os conhecia: a lista dela não
+   * pode apagar o que chegou enquanto ela voltava.
+   */
+  const chegadas = useRef(new Map<string, number>());
+  const anotarChegada = useCallback((id: string) => {
+    const m = chegadas.current;
+    m.set(id, Date.now());
+    if (m.size > 400) m.delete(m.keys().next().value as string);
+  }, []);
+  const manterChegadas = useCallback(
+    <T extends { id: string; created_at: string }>(doServidor: T[], atual: T[], inicio: number, ordem: 'asc' | 'desc'): T[] => {
+      const ids = new Set(doServidor.map((x) => x.id));
+      const extras = atual.filter((x) => !ids.has(x.id) && !(x as { envio?: unknown }).envio && (chegadas.current.get(x.id) ?? 0) >= inicio);
+      if (!extras.length) return doServidor;
+      const junto = [...doServidor, ...extras];
+      return junto.sort((a, b) => (ordem === 'asc' ? 1 : -1) * (Date.parse(a.created_at) - Date.parse(b.created_at)));
+    },
+    [],
+  );
+  const loadPatient = useCallback((): Promise<boolean> => {
+    if (!patientId) return Promise.resolve(true);
+    const carga = carregarPaciente(patientId);
+    cargaAtual.current = carga;
+    return carga;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, patientId, patch, mostrarFalha]);
+  async function carregarPaciente(patientId: string): Promise<boolean> {
     const descartada = () => pacienteAtual.current !== patientId || !usuarioAtual.current;
+    const inicio = Date.now();
+    ultimaCarga.current = { paciente: patientId, inicio };
     try {
       // Sem sessão válida as leituras seriam anônimas e voltariam vazias.
       await data.garantirSessao();
@@ -549,24 +667,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const session = isSessionLive(current, devices) ? current : null;
       const ajustes = ajustesMaisRecentes(ajustesDoServidor.current?.beneficiary_id === patientId ? ajustesDoServidor.current : null, settings);
       ajustesDoServidor.current = ajustes;
-      patch((s) => ({
-        devices,
-        session,
-        helpRequests,
-        messages,
-        settings: ajustes,
-        unreadCount: messages.filter((m) => m.sender === 'paciente' && !m.read_at).length,
-        // O alerta em tela ganha a versão atual do banco (confirmado ou
-        // resolvido em outro celular enquanto este estava sem conexão) e cede
-        // o lugar a um pedido que peça mais atenção — antes ele ficava, e um
-        // socorro novo esperava atrás de um aviso já confirmado.
-        ...trocarAlerta(
-          s,
-          escolherAlerta(s.pendingAlert ? helpRequests.find((h) => h.id === s.pendingAlert?.id) ?? s.pendingAlert : null, derivePendingAlert(helpRequests)),
-        ),
-        patientLoaded: true,
-        patientVerified: true,
-      }));
+      patch((s) => {
+        const pedidos = manterChegadas(helpRequests, s.helpRequests, inicio, 'desc');
+        const conversa = mesclarComProvisorias(manterChegadas(messages, s.messages, inicio, 'asc'), s.messages);
+        return {
+          devices,
+          session,
+          helpRequests: pedidos,
+          messages: conversa,
+          settings: ajustes,
+          unreadCount: conversa.filter((m) => m.sender === 'paciente' && !m.read_at).length,
+          // O alerta em tela ganha a versão atual do banco (confirmado ou
+          // resolvido em outro celular enquanto este estava sem conexão) e cede
+          // o lugar a um pedido que peça mais atenção — antes ele ficava, e um
+          // socorro novo esperava atrás de um aviso já confirmado.
+          ...trocarAlerta(
+            s,
+            escolherAlerta(s.pendingAlert ? pedidos.find((h) => h.id === s.pendingAlert?.id) ?? s.pendingAlert : null, derivePendingAlert(pedidos)),
+          ),
+          patientLoaded: true,
+          patientVerified: true,
+        };
+      });
       falhas.current.paciente = null;
       mostrarFalha();
       return true;
@@ -577,7 +699,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mostrarFalha();
       return false;
     }
-  }, [data, patientId, patch, mostrarFalha]);
+  }
 
   // Paciente novo: esqueletos até a primeira carga, e a base dos ajustes
   // recomeça. Depois, carrega com novas tentativas e sempre que o app volta
@@ -630,23 +752,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [data, patientId, patch]);
 
+  /**
+   * O canal acabou de se inscrever logo depois de uma carga completa: em vez
+   * de refazer as 5 consultas (antes a abertura fazia 10), busca só o que pode
+   * ter chegado entre a carga e a inscrição — mensagens e pedidos de ajuda.
+   */
+  const recuperarIntervalo = useCallback(async (): Promise<void> => {
+    if (!patientId) return;
+    const descartada = () => pacienteAtual.current !== patientId || !usuarioAtual.current;
+    // A carga de abertura pode ainda estar voltando: esta grava DEPOIS dela.
+    await cargaAtual.current?.catch(() => false);
+    const inicio = Date.now();
+    try {
+      const [helpRequests, messages] = await Promise.all([data.listHelpRequests(patientId), data.listMessages(patientId)]);
+      if (descartada()) return;
+      patch((s) => {
+        const pedidos = manterChegadas(helpRequests, s.helpRequests, inicio, 'desc');
+        const conversa = mesclarComProvisorias(manterChegadas(messages, s.messages, inicio, 'asc'), s.messages);
+        return {
+          helpRequests: pedidos,
+          messages: conversa,
+          unreadCount: conversa.filter((m) => m.sender === 'paciente' && !m.read_at).length,
+          ...trocarAlerta(
+            s,
+            escolherAlerta(s.pendingAlert ? pedidos.find((h) => h.id === s.pendingAlert?.id) ?? s.pendingAlert : null, derivePendingAlert(pedidos)),
+          ),
+        };
+      });
+    } catch {
+      // A próxima carga (nova tentativa, volta para a frente) traz o que faltou.
+      void loadPatient();
+    }
+  }, [data, patientId, patch, loadPatient, manterChegadas]);
+
   // ----- tempo real -----
+  /** Estado do canal agora (`SUBSCRIBED`, `CHANNEL_ERROR`…): ao voltar para a frente, um canal caído é refeito. */
+  const estadoDoCanal = useRef<string | null>(null);
+  /** Trocar este número refaz a inscrição do canal. */
+  const [geracaoDoCanal, setGeracaoDoCanal] = useState(0);
   useEffect(() => {
     if (!patientId) return;
+    estadoDoCanal.current = null;
+    let primeira = true;
     const off = data.subscribe(patientId, {
-      onMessage: (m) =>
+      onMessage: (m) => {
+        anotarChegada(m.id);
         patch((s) => {
           const exists = s.messages.some((x) => x.id === m.id);
-          const messages = inserirMensagem(s.messages, m);
-          if (!exists && m.sender === 'paciente') haptics.sucesso();
+          // Mensagem do cuidador (este celular ou outro): toma o lugar da provisória, se houver.
+          const messages = m.sender === 'cuidador' && !exists ? confirmarMensagem(s.messages, m) : inserirMensagem(s.messages, m);
+          if (!exists && m.sender === 'paciente' && m.kind !== 'sistema') vibrarPorMensagem(m.id);
           return { messages, unreadCount: messages.filter((x) => x.sender === 'paciente' && !x.read_at).length };
-        }),
+        });
+      },
       // Chega tanto no INSERT (pedido novo) quanto no UPDATE — o escalonamento
       // gravado pelo servidor (`escalated_at`), ou o reconhecimento/resolução
       // feito em outro celular da mesma conta. Só o INSERT vira alerta novo;
       // o UPDATE substitui a linha e, se for o alerta em tela, atualiza-o também,
       // porque o servidor é a fonte da verdade sobre o prazo.
-      onHelpRequest: (h) =>
+      onHelpRequest: (h) => {
+        anotarChegada(h.id);
         patch((s) => {
           const exists = s.helpRequests.some((x) => x.id === h.id);
           if (!exists) {
@@ -672,7 +837,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // Resolvido em outro aparelho: o overlay não tem mais o que pedir — e
           // o próximo pedido aberto, se houver, assume a tela.
           return { helpRequests, ...trocarAlerta(s, h.resolved_at ? derivePendingAlert(helpRequests) : h) };
-        }),
+        });
+      },
       onSession: (sess) => {
         // A sessão ao vivo encerrou: recarrega a atual pelo servidor.
         if (sessaoRef.current?.id === sess.id && sess.status === 'ended') void recarregarSessao();
@@ -691,11 +857,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ajustesDoServidor.current = maisNova;
         patch({ settings: maisNova });
       },
-      // Inscrição (re)confirmada: recarrega o que pode ter chegado com o canal fora.
-      onSubscribed: () => void loadPatient(),
+      onStatus: (status) => {
+        estadoDoCanal.current = status;
+      },
+      // Inscrição (re)confirmada: recarrega o que pode ter chegado com o canal
+      // fora. A primeira, logo depois da carga de abertura, só recupera o
+      // intervalo (mensagens e pedidos); as reinscrições recarregam tudo.
+      onSubscribed: () => {
+        // A carga de abertura começou há pouco (pode ainda estar voltando).
+        const recente = ultimaCarga.current.paciente === patientId && Date.now() - ultimaCarga.current.inicio < 15_000;
+        if (primeira && recente) void recuperarIntervalo();
+        else void loadPatient();
+        primeira = false;
+      },
     });
     return off;
-  }, [data, patientId, patch, loadPatient, recarregarSessao]);
+  }, [data, patientId, patch, loadPatient, recarregarSessao, recuperarIntervalo, geracaoDoCanal, anotarChegada]);
+
+  // De volta para a frente: o sistema pode ter derrubado o WebSocket em
+  // segundo plano. Reabre já (sem esperar o heartbeat) e, se o canal não está
+  // inscrito, refaz a inscrição — o `onSubscribed` recarrega o que chegou.
+  // A recarga dos dados ao voltar fica com `comNovasTentativas` (acima).
+  useEffect(() => {
+    if (!patientId || !logado) return;
+    const sub = EstadoDoApp.addEventListener('change', (estado) => {
+      if (estado !== 'active') return;
+      data.reconectarTempoReal?.();
+      if (estadoDoCanal.current && estadoDoCanal.current !== 'SUBSCRIBED') setGeracaoDoCanal((g) => g + 1);
+    });
+    return () => sub.remove();
+  }, [data, patientId, logado]);
 
   // ----- alarme local -----
   // Revisão de UX de 19/10/2026 (achados 6 e 11): o som que o celular faz
@@ -780,6 +971,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [data, patch],
   );
 
+  /** As mensagens da tela agora (leitura fora do render, para o reenvio). */
+  const mensagensAtuais = useRef<Message[]>(state.messages);
+  mensagensAtuais.current = state.messages;
+
+  /** Grava uma provisória; na volta, ela vira a linha do banco ou fica com `falhou`. */
+  const enviarProvisoria = useCallback(
+    async (id: string, provisoria: Message) => {
+      try {
+        const gravada = await data.sendMessage(id, provisoria.text, provisoria.kind);
+        if (pacienteAtual.current !== id) return;
+        patch((s) => ({ messages: confirmarMensagem(s.messages, gravada, provisoria.id) }));
+      } catch (e) {
+        if (pacienteAtual.current === id) {
+          patch((s) => ({ messages: s.messages.map((m) => (m.id === provisoria.id ? { ...m, envio: 'falhou' as const } : m)) }));
+        }
+        haptics.erro();
+        throw e;
+      }
+    },
+    [data, patch],
+  );
+
   // ----- ações -----
   const actions = useMemo<AppActions>(
     () => ({
@@ -824,9 +1037,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
       async sendMessage(text, kind = 'texto') {
         if (!patientId) throw new Error(SEM_CONTA);
-        const m = await data.sendMessage(patientId, text, kind);
+        const provisoria: Message = {
+          id: idProvisorio(),
+          beneficiary_id: patientId,
+          sender: 'cuidador',
+          kind,
+          text,
+          created_at: new Date().toISOString(),
+          read_at: null,
+          spoken: false,
+          envio: 'enviando',
+        };
+        provisoria.clientId = provisoria.id;
+        patch((s) => ({ messages: inserirMensagem(s.messages, provisoria) }));
         haptics.toque();
-        patch((s) => ({ messages: inserirMensagem(s.messages, m) }));
+        await enviarProvisoria(patientId, provisoria);
+      },
+      async reenviarMensagem(clientId) {
+        if (!patientId) throw new Error(SEM_CONTA);
+        const alvo = mensagensAtuais.current.find((m) => m.id === clientId && m.envio === 'falhou');
+        if (!alvo) return;
+        patch((s) => ({ messages: s.messages.map((m) => (m.id === clientId ? { ...m, envio: 'enviando' as const } : m)) }));
+        haptics.toque();
+        await enviarProvisoria(patientId, alvo);
+      },
+      async cadastrar(nova) {
+        patch({ error: null });
+        return data.signUp(nova);
+      },
+      async reenviarCodigo(email) {
+        await data.reenviarCodigo(email);
+      },
+      async confirmarCodigo(email, codigo, senha) {
+        const u = await data.confirmarCodigo(email, codigo, senha);
+        haptics.sucesso();
+        definirUsuario(u);
+      },
+      async completarCadastro(dados) {
+        await data.completarCadastro(dados);
+        haptics.sucesso();
+        // A pessoa existe agora: a conta recarrega e as abas aparecem com ela.
+        await loadAccount();
+      },
+      async atualizarPerfil(mudanca) {
+        const profile = await data.atualizarPerfil(mudanca);
+        haptics.sucesso();
+        patch({ profile });
+      },
+      async atualizarPaciente(mudanca) {
+        if (!patientId) throw new Error(SEM_CONTA);
+        const b = await data.atualizarPaciente(patientId, mudanca);
+        haptics.sucesso();
+        patch((s) => ({
+          beneficiaries: s.beneficiaries.map((x) => (x.id === b.id ? b : x)),
+          patient: s.patient?.id === b.id ? b : s.patient,
+        }));
       },
       async markRead() {
         if (!patientId) throw new Error(SEM_CONTA);
@@ -912,7 +1177,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return planoPermite(state.plan?.id ?? null, feature);
       },
     }),
-    [data, patch, definirUsuario, patientId, loadAccount, loadPatient, gravarAjustes, state.license, state.plan?.id],
+    [data, patch, definirUsuario, patientId, loadAccount, loadPatient, gravarAjustes, enviarProvisoria, state.license, state.plan?.id],
   );
 
   const pendingAlertMinimized = Boolean(state.pendingAlert && state.minimizedAlertKey === chaveDoAlerta(state.pendingAlert));

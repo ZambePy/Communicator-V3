@@ -1,0 +1,70 @@
+/* As faixas da home (redesenho de 31/10/2026, na identidade escura da
+   IrisFlow): degraus de marinho em vez de um marinho chapado só, e o azul da
+   marca inteiro na faixa do preço. Mesmo respiro e mesma escala de títulos em
+   todas. Os tokens de texto vêm de .on-dark e .on-raised (tokens.css).
+
+   - marinho (#0b1b3a): abertura e condições
+   - noite (#081530), um degrau abaixo: a demonstração, quem cuida e o fecho
+   - marinho claro (#0e2145), um degrau acima: as telas e a beta com as perguntas
+   - azul da marca (#1b54a8): o preço */
+
+.home {
+  position: relative;
+  background: var(--v3-noite-2);
+}
+
+.home-faixa {
+  position: relative;
+  padding-block: clamp(80px, 9.7vw, 140px);
+}
+
+/* A troca de tom já separa as faixas: sem o fio de cima de .on-raised. */
+.home-faixa.on-raised {
+  box-shadow: none;
+}
+
+.home-faixa--marinho {
+  background: var(--v3-noite-2);
+}
+
+.home-faixa--elevada {
+  --bg: #0e2145;
+  background: #0e2145;
+}
+
+.home-faixa--azul {
+  --bg: var(--blue);
+  --text: #ffffff;
+  --text-soft: #e4ecf9;
+  --text-dim: #dce6f7;
+  --line: rgba(255, 255, 255, 0.28);
+  --accent: #ffffff;
+  background: var(--blue);
+  color: #ffffff;
+}
+
+.home-titulo {
+  max-width: 16ch;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.375rem, 1.5rem + 3.2vw, 4rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  color: var(--text);
+  text-wrap: balance;
+}
+
+.home-sub {
+  max-width: 46ch;
+  margin: 24px 0 0;
+  font-size: clamp(1.0625rem, 0.98rem + 0.3vw, 1.25rem);
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+@media (max-width: 600px) {
+  .home-sub {
+    margin-top: 16px;
+  }
+}

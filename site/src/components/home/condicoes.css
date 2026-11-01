@@ -1,0 +1,94 @@
+/* As condições na home (CondicoesHome.tsx): uma lista tipográfica de duas
+   colunas, com um fio fino em cima de cada uma. O nome em Sora, a linha em
+   Inter. Cada item é um link inteiro (alvo grande); no passar do mouse, o
+   nome ganha o sublinhado e a seta anda um pouco (só transform). */
+
+.condicoes .condicoes__titulo {
+  max-width: 20ch;
+}
+
+.condicoes__lista {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0 clamp(32px, 4.5vw, 64px);
+  margin: clamp(36px, 4.5vw, 64px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.condicoes__item {
+  margin: 0;
+  border-top: 1px solid var(--v3-fio-forte);
+}
+
+.condicoes__link {
+  display: block;
+  padding: 26px 40px 26px 0;
+  position: relative;
+  color: var(--v3-papel);
+  transition: transform 200ms var(--ease-forte);
+}
+
+.condicoes__link:active {
+  transform: scale(0.99);
+}
+
+/* A seta: decoração do link, desenhada no CSS. */
+.condicoes__link::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  top: 36px;
+  width: 10px;
+  height: 10px;
+  border-top: 2px solid var(--v3-iris);
+  border-right: 2px solid var(--v3-iris);
+  transform: rotate(45deg);
+  transition: transform 200ms var(--ease-forte);
+}
+
+.condicoes__nome {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(1.375rem, 1.1rem + 1vw, 1.875rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+  text-decoration-color: transparent;
+}
+
+.condicoes__linha {
+  display: block;
+  margin-top: 8px;
+  max-width: 44ch;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+  color: var(--v3-texto-2);
+}
+
+@media (hover: hover) {
+  .condicoes__link:hover .condicoes__nome {
+    text-decoration-color: var(--v3-iris);
+  }
+  .condicoes__link:hover::after {
+    transform: translateX(4px) rotate(45deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .condicoes__lista {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .condicoes__link {
+    padding-block: 18px;
+  }
+  .condicoes__link::after {
+    top: 26px;
+  }
+  .condicoes__linha {
+    font-size: 0.9375rem;
+  }
+}

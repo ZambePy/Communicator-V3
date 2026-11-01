@@ -158,10 +158,13 @@ hr {
 }
 
 /* Título de capítulo: poucas palavras, bastante espaço. */
+/* Desde 31/10/2026 na escala dos títulos da home (faixas.css): um degrau
+   maior e em 700, para as páginas de dentro lerem como o mesmo site. */
 .titulo-capitulo {
-  font-size: var(--fs-h2);
-  line-height: 1.06;
-  letter-spacing: -0.032em;
+  font-size: clamp(2.25rem, 1.4rem + 2.8vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
   max-width: var(--title-w, 18ch);
   margin-bottom: var(--sp-5);
 }

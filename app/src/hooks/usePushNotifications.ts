@@ -3,6 +3,7 @@ import { AppState, Linking, Platform } from 'react-native';
 import * as Device from 'expo-device';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useData } from '@/data/DataContext';
+import { vibrarPorMensagem } from '@/lib/haptics';
 import { brand } from '@/theme';
 
 /**
@@ -19,22 +20,86 @@ export function isExpoGo(): boolean {
   return Constants.appOwnership === 'expo' || Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 }
 
+// ---------------------------------------------------------------------------
+// Mensagem do paciente com a Conversa aberta (31/10/2026)
+// ---------------------------------------------------------------------------
+
+/** A pessoa cuja Conversa está na tela, com o app na frente; `null` fora dela. */
+let conversaEmFoco: string | null = null;
+
+/** A tela da Conversa avisa quando está (ou deixa de estar) na frente, e de quem. */
+export function definirConversaEmFoco(beneficiaryId: string | null): void {
+  conversaEmFoco = beneficiaryId;
+}
+
+export function lerConversaEmFoco(): string | null {
+  return conversaEmFoco;
+}
+
+export interface Apresentacao {
+  shouldShowBanner: boolean;
+  shouldShowList: boolean;
+  shouldPlaySound: boolean;
+  shouldSetBadge: boolean;
+}
+
+const MOSTRAR: Apresentacao = { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true };
+const ESCONDER: Apresentacao = { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+
+/**
+ * Como mostrar uma notificação que chegou com o app ABERTO. A mensagem da
+ * pessoa cuja Conversa está na tela não vira faixa nem som — o balão já está
+ * entrando ali —, mas o celular vibra (uma vez por mensagem). Todo o resto,
+ * socorro inclusive, aparece como sempre.
+ */
+export function decidirApresentacao(data: unknown, emFoco: string | null = conversaEmFoco, estadoDoApp: string = lerEstadoDoApp()): Apresentacao {
+  const d = (data ?? {}) as PushPayload;
+  if (d.type === 'mensagem' && emFoco && estadoDoApp === 'active' && (d.beneficiaryId ?? d.beneficiary_id) === emFoco) {
+    vibrarPorMensagem(d.messageId ?? null);
+    return ESCONDER;
+  }
+  return MOSTRAR;
+}
+
+/** Para onde o toque numa notificação leva: a Conversa da pessoa, ou os Alertas. */
+export function destinoDoToque(payload: PushPayload): { pacienteId: string | null; rota: '/(tabs)/conversa' | '/(tabs)/alertas' } {
+  if (payload.type === 'mensagem') return { pacienteId: payload.beneficiaryId ?? payload.beneficiary_id ?? null, rota: '/(tabs)/conversa' };
+  return { pacienteId: payload.beneficiary_id ?? null, rota: '/(tabs)/alertas' };
+}
+
 function getNotificationsModule() {
   if (isExpoGo()) return null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const Notifications = require('expo-notifications');
     Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-      }),
+      handleNotification: async (n: { request?: { content?: { data?: unknown } } } | null) => decidirApresentacao(n?.request?.content?.data),
     });
     return Notifications;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Tira da bandeja as notificações de mensagem desta pessoa: quem abriu a
+ * Conversa já está lendo. Nunca lança.
+ */
+export async function limparAvisosDaConversa(beneficiaryId: string): Promise<void> {
+  // Sem push neste ambiente (Expo Go, emulador, build sem projeto): não há o que limpar.
+  if (pushIndisponivel()) return;
+  try {
+    const N = getNotificationsModule();
+    if (!N?.getPresentedNotificationsAsync) return;
+    type Aviso = { request?: { identifier?: string; content?: { data?: PushPayload } } };
+    const presentes: Aviso[] = (await N.getPresentedNotificationsAsync()) ?? [];
+    const daConversa = presentes.filter((n) => {
+      const d = n?.request?.content?.data;
+      return d?.type === 'mensagem' && (d.beneficiaryId ?? d.beneficiary_id) === beneficiaryId;
+    });
+    await Promise.all(daConversa.map((n) => Promise.resolve(N.dismissNotificationAsync?.(n.request?.identifier)).catch(() => undefined)));
+  } catch {
+    // Sem acesso à bandeja: as notificações ficam lá, nada mais.
   }
 }
 
@@ -67,6 +132,10 @@ export type FalhaPush = 'permissao' | 'registro';
 
 /** Carga útil que a Edge Function e o cron mandam em `data` do push. */
 export interface PushPayload {
+  /** `mensagem`: frase do paciente (desktop-sync `message.send`, 31/10/2026). Ausente nos alertas. */
+  type?: 'mensagem';
+  beneficiaryId?: string;
+  messageId?: string;
   kind?: string;
   beneficiary_id?: string;
   escalated?: boolean;
@@ -88,6 +157,9 @@ export interface PushHandlers {
 /** Canal dos socorros e pedidos de ajuda no Android (o push do servidor manda `channelId: 'emergencia'`). */
 export const CANAL_EMERGENCIA = 'emergencia';
 
+/** Canal das mensagens do paciente (o push do servidor manda `channelId: 'mensagens'`). */
+export const CANAL_MENSAGENS = 'mensagens';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ModuloDeNotificacoes = any;
 
@@ -105,6 +177,16 @@ async function garantirCanais(Notifications: ModuloDeNotificacoes) {
     // configurações do canal — a tela de Alertas avisa e leva até lá
     // (`useCanalDeEmergencia`).
     bypassDnd: true,
+  });
+  // Mensagens do paciente: importância alta (faixa no topo), com som e
+  // vibração, sem furar o "Não perturbe" — é conversa, não socorro.
+  await Notifications.setNotificationChannelAsync(CANAL_MENSAGENS, {
+    name: 'Mensagens',
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 150, 250],
+    lightColor: brand.blue,
+    sound: 'default',
+    bypassDnd: false,
   });
   await Notifications.setNotificationChannelAsync('default', {
     name: 'Avisos da sessão',

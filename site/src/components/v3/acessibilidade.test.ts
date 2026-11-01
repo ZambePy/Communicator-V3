@@ -37,12 +37,25 @@ function contraste(a: string, b: string): number {
   return (l1 + 0.05) / (l2 + 0.05)
 }
 
-/** Os CSS do v3: os componentes novos e a abertura da home. */
+/** As faixas da home do redesenho de 31/10/2026 (components/home). */
+const CSS_DA_HOME = [
+  'abertura.css',
+  'palco-do-teclado.css',
+  'faixas.css',
+  'capitulos.css',
+  'contraste-faixa.css',
+  'condicoes.css',
+  'cuidador-destaque.css',
+  'planos-e-perguntas.css',
+  'mensagem-que-chega.css',
+]
+
+/** Os CSS do v3: os componentes v3 e as faixas da home. */
 function cssDoV3(): { arquivo: string; css: string }[] {
   const arquivos = readdirSync(AQUI)
     .filter((n) => n.endsWith('.css'))
     .map((n) => join(AQUI, n))
-  arquivos.push(resolve(SRC, 'components/home/hero-produto.css'), resolve(SRC, 'components/home/capitulos.css'))
+  arquivos.push(...CSS_DA_HOME.map((n) => resolve(SRC, 'components/home', n)))
   return arquivos.map((arquivo) => ({ arquivo, css: readFileSync(arquivo, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '') }))
 }
 
@@ -142,6 +155,54 @@ describe('foco, cursor e movimento no CSS do v3', () => {
       }
     }
     expect(blocos).toBeGreaterThan(2)
+  })
+
+  it('as transições também: nada de `transition: all`, e só transform ou opacity mudam com tempo', () => {
+    let transicoes = 0
+    for (const { arquivo, css } of cssDoV3()) {
+      expect(css, arquivo).not.toMatch(/transition(-property)?\s*:[^;]*\ball\b/)
+      for (const m of css.matchAll(/transition\s*:\s*([^;]+);/g)) {
+        transicoes++
+        const props = m[1].split(',').map((t) => t.trim().split(/\s+/)[0])
+        const outras = props.filter((p) => !['transform', 'opacity', 'none'].includes(p))
+        expect(outras, `${arquivo}: ${m[0]}`).toEqual([])
+      }
+    }
+    expect(transicoes).toBeGreaterThan(0)
+  })
+})
+
+/* Redesenho de 31/10/2026, na identidade escura: as faixas da home trocam de
+   tom (noite, marinho, marinho claro e o azul da marca). O texto de cada uma
+   continua AA. */
+describe('contraste nas faixas da home', () => {
+  const c = coresV3()
+  const faixas = readFileSync(resolve(SRC, 'components/home/faixas.css'), 'utf8')
+  const elevada = faixas.match(/\.home-faixa--elevada\s*\{[^}]*background:\s*(#[0-9a-fA-F]{6})/)![1].toLowerCase()
+  const azul = tokens.match(/--blue:\s*(#[0-9a-fA-F]{6})/)![1].toLowerCase()
+
+  it('o marinho claro (as telas e a beta) segura os quatro tons de texto do v3', () => {
+    expect(elevada).toBe('#0e2145')
+    for (const texto of ['v3-papel', 'v3-texto-2', 'v3-texto-3', 'v3-iris']) {
+      expect(contraste(c[texto], elevada), `${texto} sobre o marinho claro`).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it('no azul da marca: o branco, o texto de apoio e o número apagado do aparelho', () => {
+    const css = readFileSync(resolve(SRC, 'components/home/contraste-faixa.css'), 'utf8')
+    const usadas = Array.from(new Set(Array.from(css.matchAll(/color:\s*(#[0-9a-fA-F]{6})/g)).map((m) => m[1].toLowerCase())))
+    expect(usadas.length).toBeGreaterThanOrEqual(3)
+    for (const cor of usadas) expect(contraste(cor, azul), `${cor} sobre o azul`).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('o teclado da abertura: legenda sobre a noite, o Falar (marinho sobre o teal) e o cartão claro que chega', () => {
+    expect(contraste('#a9b8d0', c['v3-noite'])).toBeGreaterThanOrEqual(4.5)
+    expect(contraste('#dce6f7', c['v3-superficie'])).toBeGreaterThanOrEqual(4.5)
+    expect(contraste(c['v3-noite'], '#00a693')).toBeGreaterThanOrEqual(4.5)
+    expect(contraste('#43536e', c['v3-papel'])).toBeGreaterThanOrEqual(4.5)
+    expect(contraste('#0b1b3a', c['v3-papel'])).toBeGreaterThanOrEqual(4.5)
+    // o anel quase fechado (teal claro) sobre a tecla acesa: componente gráfico, 3:1
+    expect(contraste(c['v3-fixacao'], '#1b3a6e')).toBeGreaterThanOrEqual(3)
   })
 })
 

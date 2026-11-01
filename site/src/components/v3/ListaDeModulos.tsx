@@ -1,6 +1,7 @@
 import { useId, useState, type SyntheticEvent } from 'react'
 import { Link } from 'react-router-dom'
 import type { ModuloEmTela } from '@/data/produto'
+import { Reveal } from '@/components/effects/Reveal'
 import { useMidia } from './useMidia'
 import './modulos.css'
 
@@ -25,8 +26,9 @@ function marcarSeJaCarregada(img: HTMLImageElement | null) {
 }
 
 /**
- * Os módulos na home (rodada 3, 21/10/2026, a lista de "casos" do vídeo de
- * referência): uma lista numerada e, ao lado, a tela real do módulo da linha
+ * Os módulos na home. Desde 31/10/2026 sem os números
+ * 01 a 09 (os módulos não são uma sequência). Rodada 3 (21/10/2026), a lista
+ * de "casos" do vídeo de referência: uma lista e, ao lado, a tela real do módulo da linha
  * sob o ponteiro, num monitor de contorno fino (sem brilho: o dono
  * recusou o efeito em 21/10/2026). Nada só no passar do mouse: o foco
  * do teclado e o toque escolhem a prévia do mesmo jeito; no celular, a tela
@@ -60,18 +62,18 @@ export function ListaDeModulos({ modulos, titulo, texto, link = 'Conhecer todos 
   const m = modulos[ativo]
 
   return (
-    <section className="v3-modulos" aria-labelledby={idDoTitulo}>
+    <section className="v3-modulos home-faixa home-faixa--elevada on-raised" aria-labelledby={idDoTitulo}>
       <div className="container">
-        <header className="v3-modulos__cabeca">
-          <h2 id={idDoTitulo} className="v3-modulos__titulo">
+        <Reveal as="header" className="v3-modulos__cabeca">
+          <h2 id={idDoTitulo} className="home-titulo v3-modulos__titulo">
             {titulo}
           </h2>
-          <p className="v3-modulos__texto">{texto}</p>
-        </header>
+          <p className="home-sub v3-modulos__texto">{texto}</p>
+        </Reveal>
 
         <div className="v3-modulos__grade">
           <div>
-            <ol className="v3-modulos__lista">
+            <ul className="v3-modulos__lista">
               {modulos.map((mod, i) => (
                 <li key={mod.id} className="v3-modulos__item">
                   <button
@@ -94,7 +96,6 @@ export function ListaDeModulos({ modulos, titulo, texto, link = 'Conhecer todos 
                     }}
                     onClick={() => escolher(i)}
                   >
-                    <span className="v3-modulos__numero">{String(i + 1).padStart(2, '0')}</span>
                     <span className="v3-modulos__nome">{mod.nome}</span>
                     <span className="v3-modulos__etiquetas">
                       {mod.estado === 'Experimental' && (
@@ -123,13 +124,13 @@ export function ListaDeModulos({ modulos, titulo, texto, link = 'Conhecer todos 
                   )}
                 </li>
               ))}
-            </ol>
+            </ul>
             <Link to="/solucao" className="link-seta v3-modulos__link">
               {link}
             </Link>
           </div>
 
-          <figure className="v3-modulos__previa" id={idDaPrevia}>
+          <Reveal as="figure" delay={120} className="v3-modulos__previa" id={idDaPrevia}>
             <div className="v3-modulos__tela">
               {vistas.map((i) => {
                 const t = modulos[i].tela
@@ -154,7 +155,7 @@ export function ListaDeModulos({ modulos, titulo, texto, link = 'Conhecer todos 
             <figcaption className="v3-modulos__legenda">
               <strong>{m.nome}.</strong> {m.resumo}
             </figcaption>
-          </figure>
+          </Reveal>
         </div>
       </div>
     </section>

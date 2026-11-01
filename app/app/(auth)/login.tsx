@@ -1,9 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Linking, StyleSheet, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, IconButton, IrisLogo, Notice, PressableScale, Screen, Text, TextField } from '@/components';
-import { CONTA_DE_TESTE, legalLinks, siteRoute } from '@/lib/config';
+import { CONTA_DE_TESTE, legalLinks } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
 import { useApp } from '@/store/AppProvider';
 import { sizes, spacing, useTheme } from '@/theme';
@@ -15,10 +15,13 @@ export default function Login() {
   const { colors } = useTheme();
   const router = useRouter();
   const { signIn, requestPasswordReset, error: appError } = useApp();
+  // Vindo do cadastro com um e-mail que já tem conta, ele já vem preenchido.
+  const params = useLocalSearchParams<{ email?: string }>();
+  const emailDoCadastro = typeof params?.email === 'string' ? params.email : '';
   // Em desenvolvimento (Expo Go / dev client) os campos já vêm com a conta de
   // teste real da beta; em build de produção, vazios. Sem aviso nem botão extra.
-  const [email, setEmail] = useState<string>(__DEV__ ? CONTA_DE_TESTE.email : '');
-  const [password, setPassword] = useState<string>(__DEV__ ? CONTA_DE_TESTE.senha : '');
+  const [email, setEmail] = useState<string>(emailDoCadastro || (__DEV__ ? CONTA_DE_TESTE.email : ''));
+  const [password, setPassword] = useState<string>(!emailDoCadastro && __DEV__ ? CONTA_DE_TESTE.senha : '');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,9 +82,11 @@ export default function Login() {
   return (
     <KeyboardAvoidingView style={styles.flex} behavior="padding">
       <Screen>
-        <View style={styles.nav}>
-          <IconButton icon="arrow-back" accessibilityLabel="Voltar" onPress={() => router.back()} variant="tinted" />
-        </View>
+        {router.canGoBack?.() ? (
+          <View style={styles.nav}>
+            <IconButton icon="chevron-back" accessibilityLabel="Voltar" onPress={() => router.back()} variant="tinted" />
+          </View>
+        ) : null}
 
         <View style={styles.hero}>
           <IrisLogo size={sizes.logo.md} spinning={false} />
@@ -89,10 +94,7 @@ export default function Login() {
             Que bom ter você aqui
           </Text>
           <Text variant="body" tone="muted">
-            Entre com a sua conta IrisFlow.
-          </Text>
-          <Text variant="bodySmall" tone="muted">
-            Também dá para entrar sem senha: no computador do paciente, abra Configurações, clique em Mostrar o código e aponte a câmera do celular para ele.
+            Use a mesma conta do computador da pessoa.
           </Text>
         </View>
 
@@ -142,18 +144,18 @@ export default function Login() {
         </View>
 
         <View style={styles.footer}>
-          <PressableScale onPress={() => void Linking.openURL(siteRoute('/beta')).catch(() => undefined)} accessibilityRole="link" style={styles.link}>
+          <PressableScale onPress={() => router.push('/(auth)/criar-conta')} accessibilityRole="button" style={styles.link}>
             <Text variant="bodySmall" tone="muted" center>
               Ainda não tem conta?{' '}
               <Text variant="bodySmall" tone="primary" weight="semibold">
-                Inscreva-se na beta
+                Criar conta
               </Text>
             </Text>
           </PressableScale>
           <View style={styles.privacy}>
-            <Ionicons name="shield-checkmark-outline" size={sizes.icon.sm} color={colors.accentText} />
+            <Ionicons name="qr-code-outline" size={sizes.icon.sm} color={colors.textMuted} />
             <Text variant="caption" tone="muted" style={styles.flexShrink}>
-              Imagens da câmera nunca saem do computador do paciente.
+              Sem senha: no computador, abra Configurações e Mostrar o código. Aponte a câmera do celular.
             </Text>
           </View>
           {/* Política acessível ANTES do login também (as lojas conferem). */}
