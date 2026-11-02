@@ -9,9 +9,6 @@
   width: 100%;
   border-radius: var(--r-xl);
   background: #05080f;
-  box-shadow:
-    0 0 0 1px rgba(169, 198, 247, 0.22),
-    0 40px 80px -40px rgba(0, 0, 0, 0.9);
 }
 
 .video-moldura__tela {
@@ -48,9 +45,6 @@
   padding: clamp(6px, 0.9vw, 12px);
   border-radius: clamp(10px, 1.2vw, 18px);
   background: #10151e;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 40px 80px -40px rgba(0, 0, 0, 0.85);
 }
 
 .monitor__tela {
@@ -106,9 +100,6 @@
   padding: 10px;
   border-radius: 46px;
   background: #10151e;
-  box-shadow:
-    inset 0 0 0 1.5px rgba(255, 255, 255, 0.1),
-    0 40px 80px -40px rgba(0, 0, 0, 0.85);
 }
 
 .celular__tela {

@@ -28,12 +28,12 @@ describe('alvos de toque de 44 px', () => {
     expect(css).toMatch(/min-height\s*:\s*44px/)
   })
 
-  it('cada condição da home é um link inteiro, com 18 px ou mais de respiro em cima e embaixo', () => {
+  it('cada aba das condições da home é um alvo grande: 64 px de altura, 52 px no celular', () => {
     const css = ler('components/home/condicoes.css')
-    expect(corpo(css, '.condicoes__link')).toMatch(/display\s*:\s*block/)
-    expect(corpo(css, '.condicoes__link')).toMatch(/padding\s*:\s*26px/)
+    // Desde 01/11/2026 (segunda volta) as condições são abas cheias.
+    expect(corpo(css, '.para-quem__aba')).toMatch(/min-height\s*:\s*64px/)
     const celular = css.slice(css.indexOf('@media (max-width: 760px)'))
-    expect(celular).toMatch(/\.condicoes__link\s*\{\s*padding-block\s*:\s*18px/)
+    expect(celular).toMatch(/\.para-quem__aba\s*\{[^}]*min-height\s*:\s*52px/)
   })
 
   it('existe o utilitário .link-alvo (44 px) para links sozinhos numa linha', () => {

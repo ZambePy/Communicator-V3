@@ -82,7 +82,8 @@
 }
 
 .escolha:has(.escolha__input:focus-visible) {
-  outline: 3px solid var(--blue-500);
+  /* o foco do site (global.css): papel, 3 px, a 3 px */
+  outline: 3px solid var(--papel);
   outline-offset: 3px;
 }
 

@@ -1,24 +1,34 @@
-/* A abertura da home (AberturaHome.tsx), sobre o marinho da marca. Computador: texto em 5
-   partes, o palco em 6. Celular: uma coluna. Só transform e opacity animam
-   (a entrada, uma vez). */
+/* A abertura da home (AberturaHome.tsx), redesenho de 01/11/2026. Sobre o
+   marinho fundo, o campo do olhar ocupa a abertura inteira, atrás
+   (campo-do-olhar.css), e o texto fica por cima, à esquerda. Na primeira
+   tela inteira, para o campo ter onde correr. Só transform e opacity animam
+   no texto (a entrada, uma vez). */
 
 .abertura {
-  background: var(--v3-noite-2);
-  padding-block: calc(var(--header-h) + clamp(24px, 5vh, 56px)) clamp(64px, 10vh, 112px);
+  position: relative;
+  /* clip, e não hidden: hidden vira uma área de rolagem e trava as animações presas à rolagem lá dentro. */
+  overflow: clip;
+  min-height: 100svh;
+  /* Só a abertura é preta (pedido do dono, 01/11/2026): o fundo vivo pede o
+     escuro; o resto do site fica no marinho da identidade. */
+  background: #05070c;
+  padding-block: calc(var(--header-h) + clamp(32px, 6vh, 72px)) 120px;
 }
 
 .abertura__grade {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 40px;
-  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.abertura__texto {
+  max-width: 34rem;
 }
 
 .abertura__titulo {
   margin: 0;
   max-width: 5.2em;
   font-family: var(--font-display);
-  font-size: clamp(3.5rem, 16.4vw, 6.5rem);
+  font-size: clamp(3.5rem, 15.6vw, 6.5rem);
   font-weight: 700;
   line-height: 0.92;
   letter-spacing: -0.045em;
@@ -27,45 +37,105 @@
 }
 
 .abertura__lead {
-  max-width: 30ch;
-  margin: 24px 0 0;
+  max-width: 31ch;
+  margin: 32px 0 0;
   font-size: clamp(1.125rem, 1rem + 0.45vw, 1.3125rem);
   line-height: 1.5;
-  color: var(--v3-texto-2);
+  color: var(--v3-papel);
 }
 
 .abertura__acoes {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 32px;
+  margin-top: 36px;
 }
 
 .abertura__fatos {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 24px 0 0;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 28px 0 0;
   padding: 0;
   list-style: none;
   font-size: var(--fs-sm);
   line-height: 1.45;
-  color: var(--v3-texto-3);
+  color: var(--v3-texto-2);
 }
 
+/* Cada fato leva o aro como marcador: o motivo da página em tamanho de texto. */
 .abertura__fatos li {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
+}
+
+.abertura__fatos li::before {
+  content: '';
+  flex: none;
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  border: 2px solid var(--v3-iris);
+}
+
+/* ---------- o título: cada linha sobe de trás da própria linha de base ---------- */
+.abertura__linha {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.1em;
+  margin-bottom: -0.1em;
+}
+
+.abertura__linha > span {
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .abertura__linha > span {
+    animation: abertura-linha 980ms var(--ease-forte) calc(80ms + var(--i, 0) * 120ms) both;
+  }
+}
+
+@keyframes abertura-linha {
+  from {
+    transform: translateY(108%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* ---------- o símbolo em volume: à direita no computador, embaixo no celular ---------- */
+.abertura__simbolo {
+  position: relative;
+  z-index: 1;
+  width: min(64vw, 320px);
+  margin: 48px 10vw 0 auto;
+  pointer-events: none;
+}
+
+@media (min-width: 961px) {
+  .abertura__simbolo {
+    position: absolute;
+    top: 50%;
+    left: 70%;
+    width: min(38vw, 60vh, 540px);
+    margin: 0;
+    translate: -50% -44%;
+  }
 }
 
 /* ---------- a entrada: uma vez, em cascata ---------- */
 .abertura__entra {
-  animation: abertura-entra 640ms var(--ease-forte) calc(60ms + var(--entra, 0) * 70ms) both;
+  animation: abertura-entra 720ms var(--ease-forte) calc(60ms + var(--entra, 0) * 70ms) both;
 }
 
 @keyframes abertura-entra {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(22px);
   }
   to {
     opacity: 1;
@@ -79,33 +149,26 @@
   }
 }
 
-/* ---------- computador: duas colunas ---------- */
+/* ---------- computador: o texto no meio da altura da tela ---------- */
 @media (min-width: 961px) {
+  .abertura {
+    display: flex;
+    align-items: center;
+    min-height: min(100svh, 1000px);
+    padding-block: calc(var(--header-h) + 40px) 72px;
+  }
   .abertura__grade {
-    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-    gap: clamp(40px, 4vw, 56px);
+    width: 100%;
   }
   .abertura__titulo {
-    font-size: clamp(4.5rem, 7.6vw, 7.375rem);
-  }
-  .abertura__lead {
-    margin-top: 32px;
-  }
-  .abertura__acoes {
-    margin-top: 36px;
-  }
-  .abertura__fatos {
-    margin-top: 28px;
+    font-size: clamp(4.5rem, 7.8vw, 7.5rem);
   }
 }
 
 /* ---------- celular: chamadas na largura toda ---------- */
 @media (max-width: 600px) {
   .abertura {
-    padding-block: calc(var(--header-h) + 20px) 64px;
-  }
-  .abertura__grade {
-    gap: 36px;
+    padding-block: calc(var(--header-h) + 28px) 120px;
   }
   .abertura__lead {
     margin-top: 20px;
@@ -116,5 +179,8 @@
   }
   .abertura__acoes .btn {
     width: 100%;
+  }
+  .abertura__fatos {
+    flex-direction: column;
   }
 }

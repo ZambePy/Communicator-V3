@@ -1,0 +1,154 @@
+/* "Medido, com as ressalvas" (MedidoHome.tsx). Um quadro de ladrilhos
+   chapados, um degrau acima do marinho, sem borda e sem sombra. O primeiro,
+   no azul da marca e com o dobro da largura, leva o título. Os ladrilhos
+   não se mexem ao passar o mouse: não são clicáveis. */
+
+.medido {
+  background: var(--v3-noite-2);
+}
+
+.medido__quadro {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.medido__ladrilho {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 200px;
+  margin: 0;
+  padding: clamp(20px, 2.2vw, 32px);
+  border-radius: var(--r-lg);
+  background: var(--v3-superficie);
+}
+
+.medido__ladrilho--titulo {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  background: var(--blue);
+}
+
+.medido__titulo {
+  max-width: 9em;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 1.2rem + 3.4vw, 4rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  color: var(--branco);
+  text-wrap: balance;
+}
+
+.medido__valor {
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 1.6rem + 3vw, 4.25rem);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  color: var(--v3-papel);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.medido__texto {
+  max-width: 30ch;
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  color: var(--v3-papel);
+}
+
+/* A ressalva: no mesmo corpo do texto dos números, num degrau mais fundo. */
+.medido__ladrilho--ressalva {
+  grid-column: 1 / -1;
+  justify-content: center;
+  background: var(--v3-noite);
+}
+
+.medido__ressalva {
+  max-width: 62ch;
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  color: var(--v3-papel);
+}
+
+@media (min-width: 961px) {
+  .medido__quadro {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .medido__ladrilho {
+    min-height: 260px;
+  }
+  .medido__ladrilho--titulo {
+    grid-column: span 2;
+  }
+  .medido__ladrilho--ressalva {
+    grid-column: span 3;
+  }
+}
+
+@media (max-width: 600px) {
+  .medido__quadro {
+    gap: 6px;
+  }
+  .medido__valor {
+    font-size: 2.25rem;
+  }
+  /* Sete números em duas colunas: o último ocupa a linha inteira. */
+  .medido__ladrilho:nth-child(8) {
+    grid-column: 1 / -1;
+  }
+  .medido__texto {
+    font-size: 1rem;
+  }
+  .medido__ladrilho {
+    min-height: 0;
+    gap: 12px;
+  }
+  .medido__ladrilho--titulo {
+    min-height: 160px;
+  }
+}
+
+/* ---------- os algarismos que rolam (NumeroQueRola.tsx) ---------- */
+.rola__digitos {
+  display: inline-flex;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+
+.rola__coluna {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  line-height: 1;
+  vertical-align: baseline;
+}
+
+.rola__fita {
+  display: flex;
+  flex-direction: column;
+  transform: translateY(calc(var(--d) * -1em));
+}
+
+.rola__fita::before {
+  content: '0\A 1\A 2\A 3\A 4\A 5\A 6\A 7\A 8\A 9';
+  white-space: pre;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rola:not(.is-chegou) .rola__fita {
+    transform: none;
+  }
+  .rola.is-chegou .rola__fita {
+    transition: transform 1150ms var(--ease-forte) calc(var(--i) * 90ms + 120ms);
+  }
+}

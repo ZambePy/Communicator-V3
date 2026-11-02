@@ -131,3 +131,16 @@
 .preparo.is-parado {
   transition: none !important;
 }
+
+/* Movimento reduzido: a lista já vem pronta (PreparoDoOlhar.tsx põe
+   .is-parado), sem a cascata de 450 ms e sem desenhar os vistos. Aqui não há
+   tempo de fixação a mostrar, então nada volta a se mexer (ao contrário do aro
+   de experimente.css e de dwell.css, que conta o tempo do olhar parado). */
+@media (prefers-reduced-motion: reduce) {
+  .preparo__item,
+  .preparo__check,
+  .preparo__check path,
+  .preparo__resultado {
+    transition: none !important;
+  }
+}

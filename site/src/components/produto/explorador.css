@@ -144,7 +144,7 @@
   border-radius: var(--r-pill);
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 0.8rem;
+  font-size: var(--fs-min);
   font-weight: 700;
 }
 
@@ -184,7 +184,7 @@
   .explorador__aba {
     width: 100%;
     border-color: transparent;
-    border-radius: 14px;
+    border-radius: var(--r-botao-lg);
     padding: 12px 14px;
   }
 

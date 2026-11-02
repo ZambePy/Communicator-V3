@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import Home from './Home'
 import { esquecerBetaProgram } from '@/hooks/useBetaProgram'
 import { BETA, BETA_PLAN, HERO, PLANS } from '@/data/content'
-import { CONDICOES_NA_HOME, CONTRASTE, DEMO_COMMUNICATOR, TECLADO_DO_PALCO, TESTE_AO_VIVO } from '@/data/home'
+import { CONDICOES_NA_HOME, CONTRASTE, CUIDADOR_DESTAQUE, DEMO_COMMUNICATOR, DO_OLHAR_AO_CLIQUE, EQUIPE_NA_HOME, EXPERIMENTE, MEDIDO, PRIVACIDADE_EM_CAMADAS, PRANCHA, TESTE_AO_VIVO } from '@/data/home'
 import { RESSALVA_DOS_ALERTAS } from '@/data/cuidador'
 import { MODULOS_EM_TELA } from '@/data/produto'
 import { BETA_PROGRAM_RESERVA, type BetaProgram } from '@/services/api'
@@ -56,23 +56,77 @@ afterAll(() => {
 
 const secoes = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>('.home > section, .home > div > div > section'))
 
-describe('<Home /> (redesenho de 31/10/2026)', () => {
+describe('<Home /> (redesenho de 01/11/2026)', () => {
+  // A home inteira monta aqui (são onze faixas): com a suíte toda rodando junto, passa dos 8 s padrão.
   it('as seções na ordem do desenho aprovado', () => {
     const { container } = montar()
     const titulos = Array.from(container.querySelectorAll('h1, h2')).map((h) => h.textContent?.trim())
     expect(titulos).toEqual([
       HERO.title,
+      EXPERIMENTE.titulo,
       'Feito para ser usado só com os olhos.',
+      DO_OLHAR_AO_CLIQUE.titulo,
       'As telas do aplicativo.',
       CONTRASTE.titulo,
+      MEDIDO.titulo,
+      PRIVACIDADE_EM_CAMADAS.titulo,
       'Quando o corpo para, o olhar continua.',
-      'Quem cuida acompanha de qualquer lugar.',
+      'O recado chega no celular.',
+      EQUIPE_NA_HOME.titulo,
       'Na beta, tudo é grátis.',
       'O que as famílias mais perguntam.',
       'A pessoa continua lá. Só falta a voz.',
     ])
     expect(container.querySelectorAll('h1')).toHaveLength(1)
     expect(secoes(container).length).toBeGreaterThanOrEqual(7)
+  }, 20000)
+
+  it('do olhar ao clique: os cinco passos, cada um com título e texto, e o desenho fora do leitor de tela', () => {
+    const { container } = montar()
+    const secao = screen.getByRole('heading', { name: DO_OLHAR_AO_CLIQUE.titulo }).closest('section')!
+    expect(within(secao).getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(DO_OLHAR_AO_CLIQUE.passos.map((p) => p.titulo))
+    expect(container.querySelector('.olhar-clique__visor')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('a privacidade: as três camadas sempre à vista, e escolher uma acende só ela', () => {
+    montar()
+    const secao = screen.getByRole('heading', { name: PRIVACIDADE_EM_CAMADAS.titulo }).closest('section')!
+    const botoes = within(secao).getAllByRole('button')
+    expect(botoes).toHaveLength(3)
+    for (const c of PRIVACIDADE_EM_CAMADAS.camadas) expect(within(secao).getByText(c.texto)).toBeInTheDocument()
+    botoes[1].click()
+    return Promise.resolve().then(() => {
+      expect(botoes[1]).toHaveAttribute('aria-current', 'true')
+      expect(botoes[0]).not.toHaveAttribute('aria-current')
+    })
+  })
+
+  it('a frase da prancha é só texto, num parágrafo, sem imagens no meio das palavras', () => {
+    const { container } = montar()
+    const frase = container.querySelector<HTMLElement>('.prancha__frase')!
+    expect(frase.tagName).toBe('P')
+    expect(frase.querySelectorAll('img')).toHaveLength(0)
+    expect(frase).toHaveTextContent(PRANCHA.antes)
+    expect(frase).toHaveTextContent(PRANCHA.depois)
+  })
+
+  it('o que foi medido sai sempre com a ressalva, no mesmo quadro', () => {
+    montar()
+    const secao = screen.getByRole('heading', { name: MEDIDO.titulo }).closest('section')!
+    expect(within(secao).getByText(MEDIDO.ressalva)).toBeInTheDocument()
+    expect(MEDIDO.ressalva).toMatch(/uma pessoa só/)
+    expect(secao.querySelectorAll('.medido__valor')).toHaveLength(MEDIDO.marcas.length)
+  })
+
+  it('"Segure o olhar": quatro frases que se escolhem na hora com clique ou Enter, e o tempo do olhar parado se ajusta', async () => {
+    const { container } = montar()
+    const secao = screen.getByRole('heading', { name: EXPERIMENTE.titulo }).closest('section')!
+    const alvos = within(secao).getAllByRole('button', { name: /^Estou/ })
+    expect(alvos).toHaveLength(EXPERIMENTE.quantas)
+    expect(within(secao).getByRole('radio', { name: '1,5 s' })).toBeChecked()
+    alvos[0].click()
+    expect(await within(secao).findByText(alvos[0].getAttribute('aria-label')!, { selector: 'strong' })).toBeInTheDocument()
+    expect(container.querySelector('.experimente__prancha')).toHaveAttribute('data-ui')
   })
 
   it('a abertura: o h1 inteiro, o texto com para quem é, as duas chamadas e os fatos', async () => {
@@ -102,16 +156,14 @@ describe('<Home /> (redesenho de 31/10/2026)', () => {
     expect(within(abertura).queryByRole('link', { name: /Baixar grátis/ })).toBeNull()
   })
 
-  it('o teclado da abertura é só demonstração: uma imagem com nome, sem nada que receba foco', () => {
+  it('a abertura não tem o teclado desenhado nem a íris grande: o fundo vivo e o símbolo em volume, fora do leitor de tela, com botão de pausa', () => {
     const { container } = montar()
-    const palco = container.querySelector<HTMLElement>('.palco')!
-    expect(palco).toHaveAttribute('role', 'img')
-    expect(palco).toHaveAttribute('aria-label', TECLADO_DO_PALCO.descricao)
-    expect(palco.querySelector('a, button, input, [tabindex]')).toBeNull()
-    expect(palco.querySelectorAll('.palco__tecla')).toHaveLength(6)
-    expect(palco.querySelectorAll('.palco__tecla.is-alvo')).toHaveLength(1)
-    expect(palco.querySelector('.palco__tecla.is-alvo')).toHaveTextContent('STUVWX')
-    expect(palco.querySelector('.palco__frase')).toHaveTextContent(TECLADO_DO_PALCO.frase)
+    const abertura = screen.getByRole('heading', { level: 1 }).closest('section')!
+    expect(container.querySelector('.palco')).toBeNull()
+    expect(abertura.querySelector('.iris-marca, .iris-viva, .campo')).toBeNull()
+    expect(abertura.querySelector('.simbolo3d')).toHaveAttribute('aria-hidden', 'true')
+    expect(abertura.querySelector('canvas')).toHaveAttribute('aria-hidden', 'true')
+    expect(within(abertura).getByRole('button', { name: 'Pausar o fundo' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('a gravação real com os três passos e o teste com o próprio olhar', () => {
@@ -133,14 +185,22 @@ describe('<Home /> (redesenho de 31/10/2026)', () => {
     const { container } = montar()
     expect(container.querySelectorAll('.v3-modulos__linha')).toHaveLength(MODULOS_EM_TELA.length)
     expect(container.querySelector('.v3-modulos__numero')).toBeNull()
-    const condicoes = Array.from(container.querySelectorAll<HTMLAnchorElement>('.condicoes__link'))
-    expect(condicoes).toHaveLength(CONDICOES_NA_HOME.length)
-    condicoes.forEach((a, i) => {
-      expect(a).toHaveTextContent(CONDICOES_NA_HOME[i].nome)
-      expect(a).toHaveTextContent(CONDICOES_NA_HOME[i].linha)
-      expect(a.getAttribute('href')).toBe(CONDICOES_NA_HOME[i].to)
+    // Desde 01/11/2026 (segunda volta): uma aba por condição e um painel por aba, com a linha,
+    // a tela do app e o link para a parte certa de /como-funciona. Só o painel da aba ativa à vista.
+    const abas = within(container.querySelector<HTMLElement>('.para-quem')!).getAllByRole('tab')
+    expect(abas).toHaveLength(CONDICOES_NA_HOME.length)
+    expect(abas.filter((a) => a.getAttribute('aria-selected') === 'true')).toHaveLength(1)
+    const paineis = Array.from(container.querySelectorAll<HTMLElement>('.para-quem__painel'))
+    expect(paineis).toHaveLength(CONDICOES_NA_HOME.length)
+    expect(paineis.filter((p) => !p.hidden)).toHaveLength(1)
+    paineis.forEach((p, i) => {
+      expect(abas[i]).toHaveTextContent(CONDICOES_NA_HOME[i].nome)
+      expect(p).toHaveTextContent(CONDICOES_NA_HOME[i].linha)
+      expect(p.querySelector('a')!.getAttribute('href')).toBe(CONDICOES_NA_HOME[i].to)
       expect(CONDICOES_NA_HOME[i].to).toMatch(/^\/como-funciona#para-/)
     })
+    // Sem as classes da página Como funciona, que vazavam para cá.
+    expect(container.querySelector('.condicoes, .condicoes__item')).toBeNull()
   })
 
   it('o preço no azul da marca, com o menor plano vindo dos dados', () => {
@@ -154,14 +214,19 @@ describe('<Home /> (redesenho de 31/10/2026)', () => {
 
   it('quem cuida: a captura real da conversa, o cartão que chega (decoração) e as chamadas', () => {
     const { container } = montar()
-    const faixa = screen.getByRole('heading', { name: 'Quem cuida acompanha de qualquer lugar.' }).closest('section')!
+    const faixa = screen.getByRole('heading', { name: 'O recado chega no celular.' }).closest('section')!
     const img = within(faixa).getByRole('img', { name: /Conversa no app IrisFlow Cuidador/ })
     expect(img).toHaveAttribute('src', '/media/cuidador/conversa.webp')
     expect(img).toHaveAttribute('width', '784')
     expect(img).toHaveAttribute('height', '1544')
-    const chega = container.querySelector('.v3-chega--fora')!
-    expect(chega).toHaveAttribute('aria-hidden', 'true')
-    expect(chega).toHaveTextContent('Quero água.')
+    // As quatro funções: uma tela real e um controle ampliado (decoração) por função, uma ativa de cada vez.
+    const controles = container.querySelector('.cuidador-destaque__controles')!
+    expect(controles).toHaveAttribute('aria-hidden', 'true')
+    expect(controles.querySelectorAll('.cuidador-destaque__controle')).toHaveLength(CUIDADOR_DESTAQUE.funcoes.length)
+    expect(container.querySelectorAll('.cuidador-destaque__tela')).toHaveLength(CUIDADOR_DESTAQUE.funcoes.length)
+    const funcoes = within(faixa).getAllByRole('button')
+    expect(funcoes).toHaveLength(CUIDADOR_DESTAQUE.funcoes.length)
+    expect(funcoes.filter((b) => b.getAttribute('aria-current') === 'true')).toHaveLength(1)
     expect(within(faixa).getByRole('link', { name: 'Conhecer o app' })).toHaveAttribute('href', '/cuidador')
     // Sem endereço de loja nem APK configurados nos testes: a reserva de antes (a disponibilidade em /cuidador).
     expect(within(faixa).getByRole('link', { name: 'Baixar o app para Android' })).toHaveAttribute('href', '/cuidador#disponibilidade')
@@ -206,7 +271,7 @@ describe('<Home /> (redesenho de 31/10/2026)', () => {
     expect(within(faq).getByRole('link', { name: 'Ver todas as perguntas' })).toHaveAttribute('href', '/planos#perguntas')
   })
 
-  it('o fecho: a frase grande e as duas chamadas, sem fundo vivo', async () => {
+  it('o fecho: a frase grande e as duas chamadas', async () => {
     const { container } = montar()
     const fecho = container.querySelector<HTMLElement>('section.cta')!
     expect(within(fecho).getByRole('heading', { level: 2 })).toHaveTextContent('A pessoa continua lá. Só falta a voz.')
@@ -215,16 +280,26 @@ describe('<Home /> (redesenho de 31/10/2026)', () => {
     expect(fecho.querySelector('.cta__lead')).toBeNull()
   })
 
-  it('sem fundo vivo, sem canvas e nada que siga o mouse', () => {
+  /* 01/11/2026: o dono pediu um fundo vivo de volta. Ele existe só na abertura e
+     no fecho (o fundo pontilhado), sempre fora do leitor de tela e com botão de
+     pausa; o fundo antigo (manchas, aurora, os 13 pontos) continua fora. */
+  it('o fundo vivo (partículas e raios) só na abertura e no fecho, cada um com pausa', () => {
     const { container } = montar()
-    for (const seletor of ['.atmosfera', 'canvas', '.v3-campo', '.v3-cursor', '.v3-luz', '.calib', '.v3-cartao', '.v3-arco__item']) {
+    for (const seletor of ['.atmosfera', '.v3-campo', '.v3-cursor', '.v3-luz', '.calib', '.v3-cartao', '.v3-arco__item']) {
       expect(container.querySelector(seletor), seletor).toBeNull()
+    }
+    const campos = Array.from(container.querySelectorAll('.fundo-vivo'))
+    expect(campos.map((c) => c.closest('section')?.className.split(' ')[0])).toEqual(['abertura', 'cta'])
+    for (const campo of campos) {
+      expect(campo.querySelector('canvas')).toHaveAttribute('aria-hidden', 'true')
+      // O botão de pausa: no canto, na abertura; junto das chamadas, no fecho.
+      expect(campo.closest('section')!.querySelector('button[aria-pressed]')).not.toBeNull()
     }
   })
 
   it('o que é só desenho fica fora do leitor de tela e do foco', () => {
     const { container } = montar()
-    for (const seletor of ['.v3-chega', 'svg.capitulos__fixa', '.monitor__pescoco']) {
+    for (const seletor of ['.cuidador-destaque__controles', 'svg.capitulos__fixa', '.monitor__pescoco']) {
       const achados = Array.from(container.querySelectorAll<HTMLElement>(seletor))
       expect(achados.length, seletor).toBeGreaterThan(0)
       for (const el of achados) {

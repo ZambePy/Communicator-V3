@@ -100,15 +100,16 @@ describe('esperar a página nova', () => {
 })
 
 describe('as pálpebras', () => {
-  it('duas, de borda curva, numa capa decorativa: fecham no tempo da piscada, abrem e saem', async () => {
+  it('a cortina de bordas curvas com a marca no meio, numa capa decorativa: fecha no tempo, abre e sai', async () => {
     vi.useFakeTimers()
     const { fechadas, abrir } = piscar(document)
     const capa = document.querySelector('.palpebras')!
     expect(capa).toHaveAttribute('aria-hidden', 'true')
-    const lados = capa.querySelectorAll('svg')
-    expect(Array.from(lados).map((s) => s.getAttribute('class'))).toEqual(['palpebras__cima', 'palpebras__baixo'])
-    // A borda é uma curva (Q), não uma reta.
-    for (const s of lados) expect(s.querySelector('path')!.getAttribute('d')).toMatch(/Q/)
+    const partes = capa.querySelectorAll(':scope > svg')
+    expect(Array.from(partes).map((s) => s.getAttribute('class'))).toEqual(['palpebras__cortina', 'palpebras__marca'])
+    // A borda da cortina é uma curva (Q), não uma reta; a marca tem as quatro lâminas e a pupila.
+    expect(partes[0].querySelector('path')!.getAttribute('d')).toMatch(/Q/)
+    expect(partes[1].querySelectorAll('path')).toHaveLength(5)
     let fechou = false
     void fechadas.then(() => (fechou = true))
     await vi.advanceTimersByTimeAsync(PISCADA.fecharMs - 10)
@@ -162,19 +163,18 @@ describe('as pálpebras', () => {
     expect(document.querySelector('.palpebras')).toBeNull()
   })
 
-  it('o CSS da piscada só anima transform, nos tempos de PISCADA, e some com movimento reduzido', () => {
+  it('o CSS da transição só anima transform e opacity, nos tempos de PISCADA, e some com movimento reduzido', () => {
     const css = readFileSync(resolve(AQUI, '../../styles/animations.css'), 'utf8')
-    const nomes = ['palpebra-desce', 'palpebra-sobe', 'palpebra-abre-cima', 'palpebra-abre-baixo']
+    const nomes = ['cortina-sobe', 'cortina-sai', 'cortina-marca-entra', 'cortina-marca-sai']
     for (const nome of nomes) {
       const bloco = css.match(new RegExp(`@keyframes ${nome}\\s*\\{(?:[^{}]*\\{[^{}]*\\})*[^{}]*\\}`))
       expect(bloco, nome).not.toBeNull()
       const props = Array.from(bloco![0].matchAll(/([a-z-]+)\s*:/g)).map((m) => m[1])
-      expect(props.every((p) => p === 'transform'), nome).toBe(true)
+      expect(props.every((p) => p === 'transform' || p === 'opacity'), nome).toBe(true)
     }
-    expect(css).toMatch(new RegExp(`palpebra-desce ${PISCADA.fecharMs}ms`))
-    expect(css).toMatch(new RegExp(`palpebra-sobe ${PISCADA.fecharMs}ms`))
-    expect(css).toMatch(new RegExp(`palpebra-abre-cima ${PISCADA.abrirMs}ms`))
-    expect(css).toMatch(new RegExp(`palpebra-abre-baixo ${PISCADA.abrirMs}ms`))
+    // A cortina sobe e sai nos tempos de PISCADA (a marca, por dentro deles).
+    expect(css).toMatch(new RegExp(`cortina-sobe ${PISCADA.fecharMs}ms`))
+    expect(css).toMatch(new RegExp(`cortina-sai ${PISCADA.abrirMs}ms`))
     // Sem a View Transitions API: nada de captura da página.
     expect(css).not.toMatch(/view-transition/)
     const reduzido = css.slice(css.lastIndexOf('@media (prefers-reduced-motion: reduce)'))

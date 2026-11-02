@@ -1,0 +1,299 @@
+/* "Do olhar ao clique" (DoOlharAoClique.tsx). No computador, uma história
+   presa à rolagem: à esquerda, o título e o visor (um palco no azul da marca)
+   ficam parados enquanto os cinco passos rolam à direita; o passo no meio da
+   tela acende e troca o desenho do visor. No celular, cada passo leva o seu
+   desenho. Os desenhos só se mexem no passo ativo, por menos de 5 s. Só
+   transform, opacity e o traço do aro. */
+
+.olhar-clique {
+  background: var(--v3-noite-2);
+}
+
+.olhar-clique__grade {
+  display: grid;
+  gap: 40px;
+}
+
+/* ---------- o visor ---------- */
+.olhar-clique__visor {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  margin-top: 40px;
+  overflow: hidden;
+  border-radius: var(--r-xl);
+  /* O palco escuro, onde a nuvem de partículas aparece (ParticulasQueFormam). */
+  background: var(--v3-noite);
+}
+
+.particulas-formam {
+  position: absolute;
+  inset: 0 0 36px;
+  display: block;
+  width: 100%;
+  height: calc(100% - 36px);
+}
+
+.olhar-clique__quadro {
+  position: absolute;
+  inset: 0 0 36px;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transform: scale(0.94);
+  transition:
+    opacity 360ms var(--ease-forte),
+    transform 480ms var(--ease-forte);
+}
+
+.olhar-clique__quadro.is-ativo {
+  opacity: 1;
+  transform: none;
+}
+
+.olhar-clique__marcas {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  display: flex;
+  gap: 8px;
+  translate: -50% 0;
+}
+
+/* As cinco marcas: o aro da página em tamanho de texto, cheio no passo feito. */
+.olhar-clique__marcas span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  transition: transform 240ms var(--ease-forte);
+}
+
+.olhar-clique__marcas span.is-feito {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.olhar-clique__marcas span.is-ativo {
+  border-color: var(--branco);
+  background: var(--branco);
+  transform: scale(1.25);
+}
+
+/* ---------- os passos ---------- */
+.olhar-clique__passos {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.olhar-clique__passo {
+  margin: 0 0 48px;
+  opacity: 0.55;
+  transition: opacity 320ms var(--ease-forte);
+}
+
+.olhar-clique__passo.is-ativo {
+  opacity: 1;
+}
+
+.olhar-clique__passo h3 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: clamp(1.625rem, 1.2rem + 1.4vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  color: var(--v3-papel);
+}
+
+.olhar-clique__passo p {
+  max-width: 38ch;
+  margin: 0;
+  font-size: var(--fs-lead);
+  line-height: 1.5;
+  color: var(--v3-papel);
+}
+
+.olhar-clique__miniatura {
+  display: none;
+}
+
+/* ---------- os desenhos ---------- */
+.oc-ilustra {
+  width: 86%;
+  height: auto;
+  overflow: visible;
+}
+
+.oc-cheio-1 { fill: var(--navy); }
+.oc-cheio-2 { fill: #102d5e; }
+.oc-cheio-3 { fill: var(--blue-700); }
+.oc-azul { fill: var(--blue-500); }
+.oc-papel { fill: var(--papel); }
+.oc-luz { fill: var(--v3-iris); }
+.oc-ponto { fill: var(--papel); }
+.oc-alvo { fill: var(--v3-iris); }
+.oc-ilustra--iris .oc-azul { fill: var(--blue); }
+
+.oc-traco-iris {
+  fill: none;
+  stroke: var(--v3-fixacao);
+  stroke-width: 4;
+  stroke-dasharray: 10 12;
+}
+
+.oc-cursor,
+.oc-cursor-parado {
+  fill: rgba(67, 214, 195, 0.22);
+  stroke: var(--v3-fixacao);
+  stroke-width: 4;
+}
+
+.oc-cursor {
+  transform: translate(200px, 150px);
+}
+
+.oc-botao { fill: var(--papel); }
+
+.oc-botao-texto {
+  fill: var(--navy);
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 700;
+}
+
+.oc-aro-trilho,
+.oc-aro {
+  fill: none;
+  stroke-width: 6;
+}
+
+.oc-aro-trilho { stroke: rgba(255, 255, 255, 0.22); }
+
+.oc-aro {
+  stroke: var(--v3-fixacao);
+  stroke-linecap: round;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 0;
+}
+
+.oc-lente,
+.oc-olho,
+.oc-mira,
+.oc-botao {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A lente: o diafragma gira um terço de volta, duas vezes. */
+  .is-ativo .oc-ilustra--webcam .oc-lente {
+    animation: oc-lente 2200ms var(--ease-in-out) 2;
+  }
+  .is-ativo .oc-ilustra--webcam .oc-luz {
+    animation: oc-pisca 1100ms ease-in-out 4;
+  }
+  /* O rosto: os pontos acendem um a um, de cima para baixo. */
+  .is-ativo .oc-ilustra--rosto .oc-ponto {
+    animation: oc-acende 500ms var(--ease-forte) calc(var(--i) * 35ms) both;
+  }
+  /* A íris olha para os lados e a mira vai junto. */
+  .is-ativo .oc-ilustra--iris .oc-olho,
+  .is-ativo .oc-ilustra--iris .oc-mira {
+    animation: oc-olha 2400ms var(--ease-in-out) 2;
+  }
+  /* A tela: os 13 pontos aparecem e o cursor passa por eles. */
+  .is-ativo .oc-ilustra--tela .oc-alvo {
+    animation: oc-acende 420ms var(--ease-forte) calc(var(--i) * 110ms) both;
+  }
+  .is-ativo .oc-ilustra--tela .oc-cursor {
+    animation: oc-percorre 4200ms var(--ease-in-out) 1 both;
+  }
+  /* O clique: o aro fecha em 1,5 s e o botão afunda um instante. */
+  .is-ativo .oc-ilustra--clique .oc-aro {
+    animation: oc-aro 2400ms linear 2 both;
+  }
+  .is-ativo .oc-ilustra--clique .oc-botao {
+    animation: oc-afunda 2400ms var(--ease-forte) 2 both;
+  }
+}
+
+@keyframes oc-lente {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(120deg); }
+}
+
+@keyframes oc-pisca {
+  50% { opacity: 0.25; }
+}
+
+@keyframes oc-acende {
+  from { opacity: 0.2; transform: scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes oc-olha {
+  0%, 100% { transform: none; }
+  30% { transform: translateX(-44px); }
+  65% { transform: translate(36px, -8px); }
+}
+
+@keyframes oc-percorre {
+  0% { transform: translate(200px, 150px); }
+  20% { transform: translate(110px, 80px); }
+  40% { transform: translate(290px, 80px); }
+  60% { transform: translate(290px, 220px); }
+  80% { transform: translate(110px, 220px); }
+  100% { transform: translate(200px, 150px); }
+}
+
+@keyframes oc-aro {
+  0% { stroke-dashoffset: 1; }
+  62%, 100% { stroke-dashoffset: 0; }
+}
+
+@keyframes oc-afunda {
+  0%, 62% { transform: none; }
+  70% { transform: scale(0.94); }
+  82%, 100% { transform: none; }
+}
+
+/* ---------- computador: o visor fica, os passos passam ---------- */
+@media (min-width: 961px) {
+  .olhar-clique__grade {
+    grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+    gap: clamp(48px, 6vw, 96px);
+    align-items: start;
+  }
+  .olhar-clique__fixo {
+    position: sticky;
+    top: calc(var(--header-h) + 24px);
+  }
+  .olhar-clique__passos {
+    padding-top: 10vh;
+  }
+  .olhar-clique__passo {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 46vh;
+    margin: 0;
+  }
+}
+
+/* ---------- celular e tablet: cada passo com o seu desenho ---------- */
+@media (max-width: 960px) {
+  .olhar-clique__visor {
+    display: none;
+  }
+  .olhar-clique__passo {
+    opacity: 1;
+  }
+  .olhar-clique__miniatura {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 4 / 3;
+    margin-bottom: 20px;
+    border-radius: var(--r-xl);
+    background: var(--blue);
+  }
+}

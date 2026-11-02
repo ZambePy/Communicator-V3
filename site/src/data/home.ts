@@ -145,13 +145,8 @@ export function notaDoIrisflowNaFaixa(menorPreco: number, betaAtiva: boolean): s
 }
 
 export const CUIDADOR_DESTAQUE = {
-  titulo: 'Quem cuida acompanha de qualquer lugar.',
+  titulo: 'O recado chega no celular.',
   texto: 'O que a pessoa escreve chega no celular de quem cuida. A resposta é falada na tela do computador.',
-  pontos: [
-    'Pedido de socorro na tela inteira, reenviado se ninguém confirmar',
-    'Respostas rápidas: sim, não, já estou indo',
-    'Ajustes do computador feitos de longe',
-  ],
   /** A conversa de verdade no app (a mesma captura de /cuidador), no celular da faixa. */
   tela: {
     src: '/media/cuidador/conversa.webp',
@@ -159,8 +154,40 @@ export const CUIDADOR_DESTAQUE = {
     largura: 784,
     altura: 1544,
   },
-  /** O cartão que chega ao celular quando a faixa entra na tela. */
-  chega: { nome: 'Carlos', iniciais: 'CS', frase: 'Quero água.' },
+  /**
+   * As quatro funções do app (redesenho de 01/11/2026, segunda volta): cada uma
+   * com a tela real dele e a cor do campo que ela pinta na faixa. O socorro é
+   * vermelho como o alerta do próprio app.
+   */
+  funcoes: [
+    {
+      id: 'conversa',
+      nome: 'Conversa',
+      texto: 'O que a pessoa escreve chega na hora. Responda com um toque: sim, não, já estou indo. A resposta é falada na tela dela.',
+      tela: '/media/cuidador/conversa.webp',
+    },
+    {
+      id: 'socorro',
+      nome: 'Socorro',
+      texto: 'O pedido de ajuda toma a tela inteira do celular. Se ninguém confirmar, ele é reenviado a todos os celulares.',
+      tela: '/media/cuidador/alertas.webp',
+      alt: 'Alerta de emergência em tela cheia no app IrisFlow Cuidador, com o botão "Estou indo!".',
+    },
+    {
+      id: 'ajustes',
+      nome: 'Ajustes',
+      texto: 'O tempo do olhar e a suavização mudam de longe, sem mexer no computador da pessoa.',
+      tela: '/media/cuidador/ajustes.webp',
+      alt: 'Ajustes do computador da pessoa feitos pelo app IrisFlow Cuidador: tempo de fixação e suavização do olhar.',
+    },
+    {
+      id: 'relatorios',
+      nome: 'Relatórios',
+      texto: 'Frases faladas e tempo de uso de cada dia, para acompanhar a evolução.',
+      tela: '/media/cuidador/relatorios.webp',
+      alt: 'Relatórios no app IrisFlow Cuidador: frases faladas por dia e tempo de uso.',
+    },
+  ] as { id: 'conversa' | 'socorro' | 'ajustes' | 'relatorios'; nome: string; texto: string; tela: string; alt?: string }[],
   botaoAndroid: 'Baixar o app para Android',
   botaoConhecer: 'Conhecer o app',
   // A ressalva dos alertas (RESSALVA_DOS_ALERTAS) aparece uma vez só na home, aqui, logo depois
@@ -322,23 +349,81 @@ export const PARA_QUEM_O_OLHAR = {
   texto: 'Em muitas condições, o olhar é o último movimento que sobra. Cada caso é diferente, por isso a beta é gratuita: dá para testar antes de depender dela.',
 }
 
-/** As condições da home, cada uma com uma linha do que o IrisFlow muda nela. */
-export const CONDICOES_NA_HOME: { nome: string; linha: string; to: string }[] = [
-  { nome: 'ELA', linha: 'Quando a fala e as mãos já não respondem.', to: '/como-funciona#para-ela' },
-  { nome: 'AVC de tronco', linha: 'Para voltar a responder, pedir e conversar.', to: '/como-funciona#para-avc' },
+/**
+ * As condições da home (redesenho de 01/11/2026): cada uma é uma aba, com a
+ * linha do que muda, por que o olhar funciona nela, o cuidado antes de começar
+ * e a tela do app que mais serve a ela. Os textos de ELA, AVC, lesão medular e
+ * paralisia cerebral vêm de SEGMENTS (content.ts, a página Como funciona); os
+ * de encarceramento e distrofias seguem a mesma linha e estão em "Outra
+ * condição?" de lá.
+ */
+export type CondicaoNaHome = {
+  id: string
+  nome: string
+  linha: string
+  to: string
+  porque: string
+  cuidado: string
+  tela: { src: string; alt: string; legenda: string }
+}
+
+const TELAS = '/media/telas'
+
+export const CONDICOES_NA_HOME: CondicaoNaHome[] = [
   {
+    id: 'ela',
+    nome: 'ELA',
+    linha: 'Quando a fala e as mãos já não respondem.',
+    to: '/como-funciona#para-ela',
+    porque: 'O olhar costuma ser o último movimento que a pessoa controla. O IrisFlow foi pensado primeiro para a ELA: teclado por fixação, frases prontas e pedido de ajuda sempre no mesmo lugar.',
+    cuidado: 'Vale começar cedo, enquanto a pessoa ainda fala. Assim, quando a fala for embora, a calibração e as frases já estão prontas.',
+    tela: { src: `${TELAS}/teclado.webp`, alt: 'Teclado do IrisFlow Communicator: seis grupos grandes de letras e uma tecla de frases.', legenda: 'O teclado em seis grupos grandes, escolhidos com o olhar parado.' },
+  },
+  {
+    id: 'avc',
+    nome: 'AVC de tronco',
+    linha: 'Para voltar a responder, pedir e conversar.',
+    to: '/como-funciona#para-avc',
+    porque: 'Quando a sequela atinge a fala e o movimento, mas a pessoa entende o que ouve, ela consegue apontar com os olhos o que quer dizer.',
+    cuidado: 'Se a afasia atrapalha a compreensão ou a leitura, as figuras ajudam mais que o teclado. Cada caso é avaliado à parte.',
+    tela: { src: `${TELAS}/teclado-sugestoes.webp`, alt: 'Teclado do IrisFlow Communicator com frases prontas na tecla ao lado das letras.', legenda: 'Frases prontas ao lado das letras: uma fixação e a frase sai falada.' },
+  },
+  {
+    id: 'lesao-medular',
     nome: 'Lesão medular alta',
     linha: 'O computador inteiro pelo olhar: navegar, assistir, escrever.',
     to: '/como-funciona#para-lesao-medular',
+    porque: 'Tetraplegia por lesão na região do pescoço, com visão e raciocínio preservados e quadro estável. Além de falar, a pessoa volta a usar o computador: navegar, escrever, trabalhar.',
+    cuidado: 'No Windows, a lupa do Modo Computador alcança os botões pequenos. Arrastar com precisão e usar menus muito cheios continua trabalhoso.',
+    tela: { src: `${TELAS}/computador.webp`, alt: 'Tela do Modo Computador, que explica e liga o controle do Windows pelo olhar.', legenda: 'O Modo Computador: o Windows inteiro pelo olhar.' },
   },
-  { nome: 'Paralisia cerebral', linha: 'Pranchas e frases no ritmo de quem usa.', to: '/como-funciona#para-paralisia-cerebral' },
-  // As duas últimas estão em "Outra condição?" da página Como funciona.
   {
+    id: 'paralisia-cerebral',
+    nome: 'Paralisia cerebral',
+    linha: 'Pranchas e frases no ritmo de quem usa.',
+    to: '/como-funciona#para-paralisia-cerebral',
+    porque: 'Para crianças e adultos sem fala funcional e sem controle das mãos, com o olhar preservado: prancha grande de figuras, jogos pelo olhar e teclado quando fizer sentido.',
+    cuidado: 'A equipe ainda não avaliou movimentos involuntários acentuados. Vale testar na beta antes de contar com o sistema.',
+    tela: { src: `${TELAS}/lazer.webp`, alt: 'Tela de lazer e bem-estar, com câmera, galeria de fotos e os jogos feitos para o olhar.', legenda: 'Jogos feitos para o olhar, que também treinam a fixação.' },
+  },
+  {
+    id: 'encarceramento',
     nome: 'Síndrome do encarceramento',
     linha: 'Quando só os olhos se movem, eles bastam para falar.',
     to: '/como-funciona#para-quem',
+    porque: 'A pessoa está consciente e entende tudo, mas quase só os olhos se movem. Esse movimento basta para escolher letras e frases e para pedir ajuda.',
+    cuidado: 'Quando sobra só o movimento vertical dos olhos, alvos grandes ajudam mais. Vale testar na beta e contar o caso à equipe.',
+    tela: { src: `${TELAS}/emergencia.webp`, alt: 'Tela de emergência com quatro botões grandes: dor forte, falta de ar, frio ou febre e outra emergência.', legenda: 'O pedido de ajuda em quatro botões grandes, sempre ao alcance.' },
   },
-  { nome: 'Distrofias', linha: 'Os ajustes acompanham a força que muda com o tempo.', to: '/como-funciona#para-quem' },
+  {
+    id: 'distrofias',
+    nome: 'Distrofias',
+    linha: 'Os ajustes acompanham a força que muda com o tempo.',
+    to: '/como-funciona#para-quem',
+    porque: 'Conforme a força das mãos vai embora, o olhar assume o que elas faziam. O tempo de olhar parado se ajusta de 0,4 a 4 s, e a calibração pode ser refeita quando precisar.',
+    cuidado: 'Cada distrofia evolui de um jeito. Vale testar na beta antes de depender do sistema.',
+    tela: { src: `${TELAS}/calibracao.webp`, alt: 'Calibração: um ponto na tela para a pessoa acompanhar com o olhar.', legenda: 'A calibração guiada, refeita em cerca de um minuto.' },
+  },
 ]
 
 /** A faixa dos planos na home: o cartão da beta (ou os preços, sem a beta). */
@@ -353,30 +438,6 @@ export const PLANOS_NA_HOME = {
   link: 'Comparar os planos',
 }
 
-/**
- * O teclado da abertura (PalcoDoTeclado.tsx): uma ilustração parada do
- * teclado em dois passos do app, como no desenho aprovado. Não é interativo.
- */
-export const TECLADO_DO_PALCO = {
-  descricao:
-    'Teclado do IrisFlow em uso: a frase "Estou com se" está sendo escrita, e o olhar está parado no grupo de letras S, T, U, V, W e X, com o anel de fixação quase fechado. Ao lado, as sugestões sede, sono e saudade.',
-  frase: 'Estou com se',
-  grupos: [
-    ['ABC', 'DEF'],
-    ['GHI', 'JKL'],
-    ['MNO', 'PQR'],
-    ['STU', 'VWX'],
-    ['YZ'],
-  ],
-  /** O grupo sob o olhar, com o anel quase fechado. */
-  grupoNoOlhar: 3,
-  sugestoes: ['sede', 'sono', 'saudade'],
-  falar: 'Falar',
-  legendaForte: 'Segure o olhar',
-  legenda: 'num grupo até o anel fechar.',
-  legendaDepois: 'Depois, escolha a letra.',
-}
-
 /** Perguntas que ficam na home; a lista completa segue no FAQ do content.ts. */
 export const PERGUNTAS_DA_HOME = [
   'Preciso comprar algum equipamento?',
@@ -385,3 +446,119 @@ export const PERGUNTAS_DA_HOME = [
   'Quanto tempo leva a calibração?',
   'Já existe validação clínica do produto?',
 ]
+
+/**
+ * A frase logo abaixo da abertura (redesenho de 01/11/2026): o que muda entre a
+ * prancha de letras, o jeito como a maioria das famílias ainda conversa (plano de
+ * negócios, tópico 1.1), e o IrisFlow. Desde a revisão do dono, só texto: as
+ * miniaturas no meio das palavras saíram.
+ */
+export const PRANCHA = {
+  antes: 'Na prancha de letras, alguém aponta o alfabeto até a pessoa piscar.',
+  depois: 'No IrisFlow, o olhar escreve, o computador fala e o celular avisa.',
+}
+
+/**
+ * "Medido, com as ressalvas" (redesenho de 01/11/2026). Os números vêm de
+ * docs/MEDICOES.md e da tabela 1 do plano de negócios; a ressalva anda junto
+ * de todos, sempre (PRODUCT.md, "Evidence on Hand"). Nada aqui é estatística
+ * de uso ou de negócio: é o que foi medido na bancada e o que o app aplica.
+ */
+export const MEDIDO = {
+  titulo: 'Medido, com as ressalvas.',
+  marcas: [
+    { valor: '1,40°', texto: 'de erro médio na melhor sessão de bancada (56 px na tela).' },
+    { valor: '76%', texto: 'das estimativas caíram a menos de 100 px do alvo, na mesma sessão.' },
+    { valor: '215 px', texto: 'é o menor botão das telas da pessoa: cabe o erro e o tremor do olhar.' },
+    { valor: '1,5 s', texto: 'de olhar parado vira clique. Quem cuida ajusta de 0,4 a 4 s.' },
+    { valor: '13', texto: 'pontos na calibração guiada, em cerca de um minuto.' },
+    { valor: '0', texto: 'imagens da câmera gravadas ou enviadas. O rastreamento roda no computador.' },
+    { valor: '2° a 4°', texto: 'é o erro que a literatura mede em rastreamento só com webcam.' },
+  ],
+  ressalva:
+    'Os dois primeiros números são de uma pessoa só, num posto de uso conhecido, calibrada para ela mesma, em 20/09/2026 e com a versão anterior do modelo. O modelo de hoje ainda não foi medido ao vivo. Rastreadores infravermelhos de laboratório erram de 0,5° a 1°.',
+}
+
+/** A equipe na home: a foto dos três e dois blocos curtos, tirados de ORIGIN (content.ts). */
+export const EQUIPE_NA_HOME = {
+  titulo: 'Feito por três, em São Paulo.',
+  blocos: [
+    {
+      titulo: 'Começou com uma pergunta',
+      texto: 'Dá para saber para onde a pessoa olha só com a webcam comum, com precisão para escolher uma tecla? Uma pesquisa com famílias e profissionais de saúde mostrou que o preço era a barreira.',
+    },
+    {
+      titulo: 'Aberto para conferir',
+      texto: 'O código é público, sob a GPL-3.0, e as medições saem com as condições em que foram feitas. A beta está no ar desde 29/09/2026, para Windows 10 e 11.',
+    },
+  ],
+  botao: 'Conhecer a equipe',
+}
+
+/**
+ * "Segure o olhar" (redesenho de 01/11/2026): a peça viva da home. Quem visita
+ * para o ponteiro (ou o foco) numa frase, o aro fecha no tempo escolhido e a
+ * frase sai em voz alta, como no app, e chega no celular de quem cuida. Os
+ * tempos são três pontos da faixa que o app aceita (0,4 a 4 s; padrão 1,5 s).
+ */
+export const EXPERIMENTE = {
+  titulo: 'Segure o olhar. A frase fala.',
+  texto: 'Pare o ponteiro numa frase até o aro fechar: é o mesmo gesto que a pessoa faz com os olhos no IrisFlow. Desviar antes desiste. Clicar, tocar ou apertar Enter também escolhe.',
+  textoToque: 'Toque e segure numa frase até o aro fechar: é o mesmo gesto que a pessoa faz com os olhos no IrisFlow. Soltar antes desiste.',
+  tempos: [0.8, 1.5, 3],
+  tempoPadrao: 1.5,
+  rotuloTempo: 'Tempo do olhar parado',
+  notaTempo: 'Quem cuida ajusta de 0,4 a 4 segundos.',
+  som: 'Voz',
+  aguardando: 'Escolha uma frase.',
+  falou: 'Saiu em voz alta:',
+  semVoz: 'Este navegador não tem voz em português; no app, a frase sai em voz alta.',
+  chegou: { nome: 'Carlos', iniciais: 'CS' },
+  /** As frases da prancha (os quatro primeiros pictogramas de DwellDemo). */
+  quantas: 4,
+}
+
+/**
+ * "Do olhar ao clique" (redesenho de 01/11/2026): o caminho do vídeo da
+ * webcam até o clique, a figura 1 do plano de negócios em cinco passos. Os
+ * números são os da tabela 1 do plano (webcam mínima 1280 × 720 a 30 quadros
+ * por segundo, calibração de 13 pontos, fixação padrão de 1,5 s).
+ */
+export const DO_OLHAR_AO_CLIQUE = {
+  titulo: 'Do olhar ao clique.',
+  texto: 'Tudo acontece no próprio computador, trinta vezes por segundo. Nenhuma imagem é gravada nem enviada.',
+  passos: [
+    { id: 'webcam', titulo: 'A webcam de casa', texto: 'Uma webcam comum basta, a partir de 1280 × 720 a 30 quadros por segundo. Sem sensor especial e sem infravermelho.' },
+    { id: 'rosto', titulo: 'O rosto, quadro a quadro', texto: 'Em cada quadro, o computador encontra o rosto e os olhos. A cabeça pode se mexer um pouco: o rastreamento acompanha.' },
+    { id: 'iris', titulo: 'Para onde a íris aponta', texto: 'A posição das íris, junto da inclinação da cabeça, diz para onde a pessoa está olhando.' },
+    { id: 'tela', titulo: 'Um ponto na tela', texto: 'A calibração de 13 pontos ensina o IrisFlow a ler aquele olhar. A suavização tira o tremor, e o cursor vai junto.' },
+    { id: 'clique', titulo: 'Olhar parado vira clique', texto: 'Parado num botão por 1,5 s, o aro fecha e o clique acontece. Desviar antes desiste. Quem cuida ajusta o tempo.' },
+  ],
+}
+
+/**
+ * "A câmera vê. Ninguém mais." (redesenho de 01/11/2026): a privacidade nas
+ * três camadas, na ordem em que é explicada à família (PRODUCT.md,
+ * "Operating Context").
+ */
+export const PRIVACIDADE_EM_CAMADAS = {
+  titulo: 'A câmera vê. Ninguém mais.',
+  texto: 'A privacidade não é uma promessa de texto: é a forma como o IrisFlow foi construído. Três camadas, de dentro para fora.',
+  camadas: [
+    {
+      id: 'computador',
+      nome: 'Fica no computador, sempre',
+      texto: 'A imagem da câmera, os pontos do rosto e a calibração nunca saem dele. O app funciona inteiro sem internet.',
+    },
+    {
+      id: 'conta',
+      nome: 'Sai só com conta vinculada',
+      texto: 'O que a pessoa escolheu dizer, os pedidos de socorro e os números de uso vão para o celular de quem cuida. Sem conta, nada disso existe.',
+    },
+    {
+      id: 'autorizacao',
+      nome: 'Só com autorização, e dá para voltar atrás',
+      texto: 'A voz personalizada usa uma gravação da pessoa e só é feita com autorização expressa, que pode ser retirada.',
+    },
+  ],
+}

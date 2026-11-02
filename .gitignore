@@ -82,6 +82,7 @@ voice-engine/.pytest_cache/
 *.md
 !/README.md
 !/docs/MEDICOES.md
+!/CLAUDE.md
 
 # Duas exceções técnicas ao "*.txt" acima. Se quiser mesmo tirar as duas do
 # repositório, apague estas linhas — mas saiba o que cada uma quebra:
@@ -184,6 +185,9 @@ __pycache__/
 *.pyc
 playwright-report/
 test-results/
+.playwright-mcp/
+.taste-skill/
+.impeccable/config.local.json
 
 # Cópia local do APK anterior do app do cuidador (scripts/publicar-apk-cuidador.ps1)
 _apk_anterior/

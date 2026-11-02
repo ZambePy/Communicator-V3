@@ -88,7 +88,7 @@
   padding: 6px 12px;
   border-radius: var(--r-sm);
   background: rgba(8, 21, 48, 0.85);
-  color: #fff;
+  color: var(--branco);
   font-size: var(--fs-sm);
   font-weight: 600;
 }

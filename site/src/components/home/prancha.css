@@ -1,0 +1,52 @@
+/* A frase da prancha (PranchaHome.tsx): uma afirmação em corpo de 36 px no
+   máximo, em duas metades. A de antes (a prancha de letras) fica no tom de
+   apoio; a de depois (o IrisFlow) na tinta cheia. Ao rolar, cada palavra
+   acende (só opacity). */
+
+.prancha {
+  background: var(--v3-noite-2);
+  padding-block: clamp(112px, 15vw, 220px);
+}
+
+.prancha__frase {
+  max-width: 1040px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.375rem, 0.9rem + 1.9vw, 2.25rem);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: var(--v3-papel);
+  text-wrap: pretty;
+}
+
+.prancha__antes {
+  color: var(--v3-texto-3);
+}
+
+/* A tinta: cada palavra vai de 30% a 100% de opacidade enquanto sobe de três
+   quartos da tela até um pouco acima do meio. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .prancha__palavra {
+      animation: prancha-tinta linear both;
+      animation-timeline: view();
+      animation-range: cover 16% cover 44%;
+    }
+  }
+}
+
+@keyframes prancha-tinta {
+  from {
+    opacity: 0.3;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .prancha {
+    padding-block: 96px;
+  }
+}

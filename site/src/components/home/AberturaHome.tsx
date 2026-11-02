@@ -2,25 +2,33 @@ import type { CSSProperties } from 'react'
 import { Button } from '@/components/ui/Button'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
 import { BETA, BETA_CTA, HERO } from '@/data/content'
-import { PalcoDoTeclado } from './PalcoDoTeclado'
+import { FundoVivo } from './FundoVivo'
+import { SimboloEmVolume } from './SimboloEmVolume'
 import './abertura.css'
+
+/** "Seu olhar tem voz." em duas linhas: as duas primeiras palavras e o resto. */
+function linhasDoTitulo(titulo: string): string[] {
+  const palavras = titulo.split(' ')
+  return [palavras.slice(0, 2).join(' '), palavras.slice(2).join(' ')].filter(Boolean)
+}
 
 /** A ordem de cada peça na entrada da abertura (70 ms entre uma e outra). */
 const ordem = (n: number) => ({ '--entra': n }) as CSSProperties
 
 /**
- * A abertura da home no desenho aprovado em 31/10/2026, sobre o marinho da
- * marca: o título grande, o que é e para quem, as duas chamadas e dois fatos;
- * à direita, um degrau mais fundo, o teclado do IrisFlow em demonstração
- * (PalcoDoTeclado, uma ilustração parada). No celular, uma coluna, com o
- * palco logo depois dos fatos.
+ * A abertura da home (redesenho de 01/11/2026). O teclado desenhado saiu
+ * (parecia um teclado falso). Atrás de tudo, sobre o preto, o fundo vivo
+ * (FundoVivo): partículas em profundidade, raios de luz que cruzam a tela e
+ * um brilho azul atrás do símbolo. À direita, o símbolo da IrisFlow em volume
+ * (SimboloEmVolume), que se monta peça por peça e depois flutua.
  *
- * A chamada principal segue a beta: antes do lançamento leva à inscrição
- * (/beta); depois, ao download (/baixar); sem beta, aos planos.
+ * Por cima, à esquerda: o título, o que é e para quem, as duas chamadas e os
+ * fatos. A chamada principal segue a beta: antes do lançamento leva à
+ * inscrição (/beta); depois, ao download (/baixar); sem beta, aos planos.
  *
- * Entrada (uma vez, ao carregar): título, texto, chamadas, fatos e o palco
- * sobem e aparecem em cascata de 70 ms (abertura.css). Com movimento reduzido,
- * tudo já está no lugar.
+ * Entrada (uma vez, ao carregar): as linhas do título sobem de trás da linha
+ * de base, depois texto, chamadas e fatos em cascata de 70 ms (abertura.css).
+ * Com movimento reduzido, tudo já está no lugar e o campo fica parado.
  */
 export function AberturaHome() {
   const program = useBetaProgram()
@@ -31,8 +39,13 @@ export function AberturaHome() {
     <section className="abertura" aria-labelledby="abertura-titulo">
       <div className="container abertura__grade">
         <div className="abertura__texto">
-          <h1 id="abertura-titulo" className="abertura__titulo abertura__entra" style={ordem(0)}>
-            {HERO.title}
+          {/* As duas linhas sobem de trás da própria linha de base, uma depois da outra. */}
+          <h1 id="abertura-titulo" className="abertura__titulo">
+            {linhasDoTitulo(HERO.title).map((linha, i) => (
+              <span key={linha} className="abertura__linha">
+                <span style={{ '--i': i } as CSSProperties}>{linha}</span>{' '}
+              </span>
+            ))}
           </h1>
           <p className="abertura__lead abertura__entra" style={ordem(1)}>
             {HERO.lead}
@@ -61,9 +74,11 @@ export function AberturaHome() {
           </ul>
         </div>
 
-        <div className="abertura__palco abertura__entra" style={ordem(4)}>
-          <PalcoDoTeclado />
-        </div>
+      </div>
+
+      <FundoVivo />
+      <div className="abertura__simbolo">
+        <SimboloEmVolume />
       </div>
     </section>
   )

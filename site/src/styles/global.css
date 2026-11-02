@@ -66,8 +66,10 @@ h2 {
   line-height: 1.08;
   letter-spacing: -0.03em;
 }
+/* h3 = título de cartão: um tamanho só (--fs-h3) e 700, como os títulos maiores. */
 h3 {
   font-size: var(--fs-h3);
+  font-weight: 700;
 }
 
 p {
@@ -132,7 +134,7 @@ hr {
 
 ::selection {
   background: var(--blue);
-  color: #fff;
+  color: var(--branco);
 }
 
 /* Âncoras não podem parar debaixo do cabeçalho fixo. */
@@ -157,9 +159,11 @@ hr {
   position: relative;
 }
 
-/* Título de capítulo: poucas palavras, bastante espaço. */
-/* Desde 31/10/2026 na escala dos títulos da home (faixas.css): um degrau
-   maior e em 700, para as páginas de dentro lerem como o mesmo site. */
+/* Título de capítulo das páginas de dentro: poucas palavras, bastante espaço.
+   Desde 31/10/2026 em 700, como os títulos da home, mas um degrau ABAIXO do H1
+   destas páginas (.page-head__titulo, 72 px): 36 px no celular, 56 px no
+   computador. A home usa a escala maior (--fs-titulo-secao, 73,6 px), porque
+   lá o H1 da abertura é bem maior (112 px). */
 .titulo-capitulo {
   font-size: clamp(2.25rem, 1.4rem + 2.8vw, 3.5rem);
   font-weight: 700;
@@ -398,18 +402,21 @@ hr {
 .skip-link {
   position: absolute;
   left: var(--sp-4);
-  top: -100px;
+  top: var(--sp-4);
+  /* Fora da tela por transform (e não por top): a entrada anima só o
+     transform, sem recalcular o layout a cada quadro. */
+  transform: translateY(calc(-100% - var(--sp-4) - 8px));
   z-index: 999;
   background: var(--papel);
   color: var(--navy);
   font-weight: 600;
   padding: var(--sp-3) var(--sp-5);
   border-radius: var(--r-md);
-  transition: top var(--dur) var(--ease-out);
+  transition: transform var(--dur) var(--ease-out);
 }
 
 .skip-link:focus {
-  top: var(--sp-4);
+  transform: none;
 }
 
 .rule {
@@ -454,7 +461,7 @@ hr {
     --text: #000;
     --text-soft: #1a1a1a;
     --text-dim: #444;
-    --accent: #1b54a8;
+    --accent: var(--blue);
     --line: #ccc;
     color-scheme: light;
   }

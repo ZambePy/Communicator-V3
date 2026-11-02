@@ -64,7 +64,7 @@
 }
 
 .condicoes__titulo {
-  font-size: 1.3125rem;
+  font-size: var(--fs-h3);
   margin-bottom: var(--sp-2);
 }
 

@@ -1,0 +1,151 @@
+/* "A câmera vê. Ninguém mais." (PrivacidadeEmCamadas.tsx). À esquerda o
+   título e as três camadas, como botões grandes de texto; à direita os três
+   aros concêntricos. A camada ativa acende o seu aro, que ganha o traço de
+   fixação fechando. Só transform, opacity e o traço do aro. */
+
+.camadas {
+  background: var(--v3-noite);
+}
+
+.camadas__grade {
+  display: grid;
+  gap: 48px;
+  align-items: center;
+}
+
+.camadas__lista {
+  display: grid;
+  gap: 8px;
+  margin: 36px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.camadas__lista li {
+  margin: 0;
+}
+
+.camadas__item {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-height: 48px;
+  padding: 20px 22px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--v3-superficie);
+  color: var(--v3-papel);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-forte);
+}
+
+.camadas__item:active {
+  transform: scale(0.985);
+}
+
+.camadas__item:focus-visible {
+  outline: 3px solid var(--papel);
+  outline-offset: 3px;
+}
+
+.camadas__item.is-ativa {
+  background: var(--blue);
+}
+
+.camadas__nome {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.camadas__desc {
+  max-width: 52ch;
+  font-size: var(--fs-body);
+  line-height: 1.5;
+}
+
+/* ---------- os aros ---------- */
+.camadas__desenho {
+  width: min(100%, 520px);
+  margin-inline: auto;
+}
+
+.camadas__aros {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.camadas__aro {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    opacity 300ms var(--ease-forte),
+    transform 420ms var(--ease-forte);
+}
+
+.camadas__aro--2 { fill: var(--v3-superficie); }
+.camadas__aro--1 { fill: var(--v3-superficie-2); }
+.camadas__aro--0 { fill: var(--blue); }
+
+/* A camada ativa cresce um pouco; as de fora dela ficam um degrau atrás. */
+.camadas__aro.is-ativa {
+  transform: scale(1.03);
+}
+
+.camadas__aros--0 .camadas__aro--1,
+.camadas__aros--0 .camadas__aro--2,
+.camadas__aros--1 .camadas__aro--2 {
+  opacity: 0.55;
+}
+
+.camadas__computador {
+  fill: var(--papel);
+}
+
+.camadas__tela {
+  fill: var(--navy);
+}
+
+.camadas__camera {
+  fill: var(--accent);
+}
+
+.camadas__fixa {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 0;
+  transform: rotate(-90deg);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .camadas__fixa {
+    animation: camadas-fixa 900ms var(--ease-forte) both;
+  }
+}
+
+@keyframes camadas-fixa {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (min-width: 961px) {
+  .camadas__grade {
+    grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+    gap: clamp(48px, 6vw, 96px);
+  }
+}

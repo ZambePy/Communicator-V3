@@ -28,7 +28,8 @@
 }
 
 .cmp__wrap:focus-visible {
-  outline: 3px solid var(--teal-300);
+  /* o foco do site (global.css): papel, 3 px, a 3 px */
+  outline: 3px solid var(--papel);
   outline-offset: 3px;
 }
 
@@ -58,7 +59,7 @@
 }
 
 .cmp thead th.is-ours {
-  color: var(--ok);
+  color: var(--accent);
 }
 
 .cmp tbody th {
@@ -75,10 +76,11 @@
   background: var(--surface-2);
 }
 
+/* A coluna da IrisFlow em azul claro; o teal fica só no "sim" (confirmação). */
 .cmp td.is-ours {
-  background: var(--ok-soft);
-  border-left: 1px solid var(--ok-soft);
-  border-right: 1px solid var(--ok-soft);
+  background: var(--accent-soft);
+  border-left: 1px solid var(--accent-soft);
+  border-right: 1px solid var(--accent-soft);
 }
 
 .cmp__mark {

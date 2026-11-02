@@ -22,10 +22,10 @@ import { routeKey } from '@/routes'
  */
 
 export const PISCADA = {
-  /** A pálpebra fechando sobre a página antiga. */
-  fecharMs: 160,
-  /** E abrindo sobre a nova. */
-  abrirMs: 220,
+  /** A cortina subindo sobre a página antiga. */
+  fecharMs: 380,
+  /** E saindo por cima, revelando a nova. */
+  abrirMs: 560,
   /** O máximo que a troca espera a página nova aparecer antes de abrir mesmo assim. */
   esperaMaximaMs: 700,
   /** Folga sobre o tempo de cada animação, quando a página está ocupada. */
@@ -172,25 +172,56 @@ const SVG = 'http://www.w3.org/2000/svg'
  * `transform` (animations.css): fechar já ao entrar, abrir com `.is-abrindo`;
  * cada fase acaba quando a animação acaba (`quandoTerminarem`).
  */
+/* As quatro lâminas e a pupila do símbolo (o desenho oficial, em
+   /brand/irisflow-simbolo-negativo.svg), para a marca no meio da cortina. */
+const LAMINAS_DA_MARCA = [
+  'M 68.496 101.066 L 74.339 103.175 C 82.496 104.511 90.597 104.320 98.199 100.882 C 116.265 92.707 127.636 76.867 128.632 57.425 C 139.214 80.062 132.238 105.023 113.410 120.300 C 95.996 123.722 77.937 116.941 68.496 101.066',
+  'M 102.25 91.375 L 104.328 85.519 C 105.613 77.355 105.382 69.253 101.902 61.671 C 93.625 43.652 77.718 32.371 58.273 31.484 C 80.847 20.773 105.847 27.609 121.230 46.351 C 124.753 63.75 118.070 81.843 102.25 91.375',
+  'M 59.730 67.773 L 57.535 73.582 C 56.082 81.722 56.148 89.824 59.476 97.476 C 67.386 115.660 83.058 127.261 102.480 128.539 C 79.695 138.792 54.839 131.449 39.839 112.398 C 36.671 94.937 43.718 76.980 59.730 67.773',
+  'M 92.550 57.187 L 86.699 55.105 C 78.535 53.800 70.433 54.019 62.847 57.488 C 44.812 65.738 33.507 81.625 32.589 101.066 C 21.914 78.472 28.792 53.488 47.562 38.132 C 64.960 34.640 83.046 41.351 92.550 57.187',
+]
+const PUPILA_DA_MARCA =
+  'M 97.664 72.660 C 102.003 83.851 94.531 96.496 82.675 98.003 C 76.667 98.765 71.347 96.339 67.5 92.742 C 63.277 88.785 61.917 83.308 62.402 77.316 C 63.277 66.402 73.515 58.5 84.246 61.507 C 80.976 65.957 80.710 71.339 84.328 74.328 C 88.226 77.542 93.109 77.660 97.664 72.660'
+
+/**
+ * A transição entre páginas (desde 01/11/2026, pedido do dono: uma transição
+ * mais profissional que as pálpebras de antes). Uma cortina escura, de bordas
+ * curvas, sobe sobre a página antiga; no meio dela o símbolo da IrisFlow se
+ * forma; com a cortina fechada a rota troca; então ela continua subindo e sai
+ * por cima, revelando a página nova (animations.css, `.palpebras`). O nome da
+ * capa ficou `palpebras`, para quem já a conhece no código.
+ */
 export function piscar(doc: Document = document): Palpebras {
   const capa = doc.createElement('div')
   capa.className = 'palpebras'
   capa.setAttribute('aria-hidden', 'true')
-  const lados: Array<[string, string]> = [
-    ['palpebras__cima', 'M0 0H100V66Q50 52 0 66Z'],
-    ['palpebras__baixo', 'M0 100H100V50Q50 64 0 50Z'],
-  ]
-  for (const [classe, d] of lados) {
-    const svg = doc.createElementNS(SVG, 'svg')
-    svg.setAttribute('class', classe)
-    svg.setAttribute('viewBox', '0 0 100 100')
-    svg.setAttribute('preserveAspectRatio', 'none')
-    svg.setAttribute('focusable', 'false')
-    const caminho = doc.createElementNS(SVG, 'path')
-    caminho.setAttribute('d', d)
-    svg.appendChild(caminho)
-    capa.appendChild(svg)
+
+  const cortina = doc.createElementNS(SVG, 'svg')
+  cortina.setAttribute('class', 'palpebras__cortina')
+  cortina.setAttribute('viewBox', '0 0 100 100')
+  cortina.setAttribute('preserveAspectRatio', 'none')
+  cortina.setAttribute('focusable', 'false')
+  const pano = doc.createElementNS(SVG, 'path')
+  // Curva em cima (aparece subindo) e embaixo (aparece saindo).
+  pano.setAttribute('d', 'M0 7Q50 0 100 7V93Q50 100 0 93Z')
+  cortina.appendChild(pano)
+  capa.appendChild(cortina)
+
+  const marca = doc.createElementNS(SVG, 'svg')
+  marca.setAttribute('class', 'palpebras__marca')
+  marca.setAttribute('viewBox', '24 22 113 116')
+  marca.setAttribute('focusable', 'false')
+  for (const d of LAMINAS_DA_MARCA) {
+    const lamina = doc.createElementNS(SVG, 'path')
+    lamina.setAttribute('d', d)
+    lamina.setAttribute('class', 'palpebras__lamina')
+    marca.appendChild(lamina)
   }
+  const pupila = doc.createElementNS(SVG, 'path')
+  pupila.setAttribute('d', PUPILA_DA_MARCA)
+  pupila.setAttribute('class', 'palpebras__pupila')
+  marca.appendChild(pupila)
+  capa.appendChild(marca)
   doc.body.appendChild(capa)
 
   let fora = false

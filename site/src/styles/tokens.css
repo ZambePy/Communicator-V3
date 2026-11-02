@@ -189,6 +189,19 @@
   /* o cartão ativo: o azul da marca, chapado */
   --v3-cartao-ativo: #1b54a8;
   --v3-cartao-ativo-texto: #dbe6f8;
+  /* marinho claro, um degrau acima do chão: o mesmo #0e2145 de --bg-soft, mas
+     fixo (--bg-soft muda dentro de .on-dark) */
+  --v3-marinho-claro: #0e2145;
+
+  /* --- brancos e textos claros sobre o azul da marca (01/11/2026) ---
+     O papel (#f3f6fb) segue sendo o branco do texto sobre o marinho. Sobre o
+     azul chapado (--blue) o branco é puro e o texto de apoio vem em três tons,
+     do mais forte ao mais leve (contraste sobre --blue): branco 7,3:1;
+     azul-texto 6,1:1; azul-texto-2 5,8:1; azul-texto-3 4,6:1 (só rótulos). */
+  --branco: #ffffff;
+  --azul-texto: #e4ecf9;
+  --azul-texto-2: #dce6f7;
+  --azul-texto-3: #b9cff3;
 
 
   color-scheme: dark;
@@ -253,7 +266,18 @@
   --fs-display: clamp(3.25rem, 10.4vw, 8rem);
   --fs-h1: clamp(2.5rem, 1.6rem + 3.6vw, 4.5rem);
   --fs-h2: clamp(2rem, 1.35rem + 2.2vw, 3rem);
-  --fs-h3: clamp(1.3125rem, 1.2rem + 0.4vw, 1.5rem);
+  /* títulos de cartão (h3): 18 a 22 px, em 700; e os nomes grandes (planos,
+     equipe), 24 a 30 px */
+  --fs-h3: clamp(1.125rem, 1rem + 0.4vw, 1.375rem);
+  --fs-h3-lg: clamp(1.5rem, 1.1rem + 1.4vw, 1.875rem);
+  /* títulos de seção da home: a escala de "O recado chega no celular."
+     (cuidador-destaque.css), 36 px no celular e 73,6 px em 1440 */
+  --fs-titulo-secao: clamp(2.25rem, 1rem + 4vw, 4.75rem);
+  --lh-titulo-secao: 0.98;
+  --ls-titulo-secao: -0.04em;
+  /* a frase do fecho nas páginas de dentro: abaixo do H1 (72 px) no
+     computador e nunca menor que os H2 de seção (36 px) no celular */
+  --fs-titulo-fecho: clamp(2.25rem, 1.25rem + 3.4vw, 4rem);
   --fs-lead: clamp(1.125rem, 1.05rem + 0.3vw, 1.3125rem);
   --fs-body: 1.0625rem;
   --fs-sm: 0.9375rem;
@@ -270,22 +294,27 @@
   --sp-7: 3rem;
   --sp-8: 4.5rem;
   --sp-9: 7rem;
-  /* respiro entre as faixas da página */
-  --faixa: clamp(80px, 12vh, 152px);
+  /* respiro entre as faixas da página: o mesmo ritmo da home (.home-faixa,
+     faixas.css), pela largura e não pela altura da janela; 72 px no celular */
+  --faixa: clamp(80px, 9.7vw, 140px);
 
   /* --- forma: o raio diz o que é a coisa ---
-     controle (campo, botão) 12 px; cartão 14 px; painel 18 px; mídia 22 px;
-     pílula só nas etiquetas. */
+     detalhe 8 px (--r-sm); controle (campo, botão) 12 px (--r-md); botão
+     grande e controles do mesmo porte 14 px (--r-botao-lg); cartão 16 px
+     (--r-lg); mídia 22 px (--r-xl); pílula só nas etiquetas. */
   --r-sm: 8px;
   --r-md: 12px;
   --r-lg: 16px;
   --r-xl: 22px;
   --r-pill: 999px;
+  /* o raio do .btn--lg (button.css), para quem precisa ficar ao lado dele */
+  --r-botao-lg: 14px;
 
   /* --- movimento --- */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  /* nome antigo: é a mesma curva de --ease-out */
+  --ease-spring: var(--ease-out);
   /* o retorno do toque (pressionar, passar por cima): ease-out forte, 150 a 250 ms */
   --ease-forte: cubic-bezier(0.23, 1, 0.32, 1);
   --dur-fast: 160ms;
@@ -339,5 +368,12 @@
 @media (max-width: 720px) {
   :root {
     --header-h: 64px;
+  }
+}
+
+/* O respiro das faixas no celular, como .home-faixa (faixas.css). */
+@media (max-width: 600px) {
+  :root {
+    --faixa: 72px;
   }
 }

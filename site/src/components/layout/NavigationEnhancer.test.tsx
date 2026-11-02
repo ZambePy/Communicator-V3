@@ -111,7 +111,8 @@ describe('<NavigationEnhancer /> e a piscada', () => {
     fireEvent.click(screen.getByText('Planos'))
     await avancar(PISCADA.abrirMs + 120)
     fireEvent.click(screen.getByText('Planos'))
-    await avancar(340)
+    // A troca acontece quando a cortina fecha E o pedaço chega (ou o teto de 350 ms), o que vier por último.
+    await avancar(Math.max(PISCADA.fecharMs, 350) - 10)
     expect(screen.getByTestId('onde')).toHaveTextContent('/cuidador')
     await avancar(20)
     expect(screen.getByTestId('onde')).toHaveTextContent('/planos')

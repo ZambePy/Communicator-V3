@@ -1,0 +1,437 @@
+/* "Segure o olhar" (ExperimenteOlhar.tsx), a peça viva da home. À esquerda o
+   título, o texto e os ajustes (o tempo do olhar parado e a voz); à direita a
+   prancha, um pedaço da interface do app (data-ui: os alvos grandes do app,
+   com o aro que fecha), e embaixo dela o que saiu em voz alta e o recado que
+   chega no celular de quem cuida.
+
+   O aro conta o tempo com stroke-dashoffset, em CSS, linear: é o tempo de
+   fixação correndo. Com movimento reduzido ele continua contando (é
+   informação), e o resto fica parado. */
+
+.experimente {
+  background: var(--v3-noite);
+}
+
+/* Seletor composto: .home-faixa (faixas.css) entra depois e, com a mesma
+   especificidade, vencia este respiro menor embaixo. */
+.experimente.home-faixa {
+  padding-bottom: clamp(56px, 6vw, 88px);
+}
+
+.experimente__grade {
+  display: grid;
+  gap: 48px;
+  align-items: start;
+}
+
+.experimente__titulo {
+  max-width: 12em;
+}
+
+/* ---------- os ajustes ---------- */
+.experimente__ajustes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px 24px;
+  margin-top: 36px;
+}
+
+.experimente__tempos {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.experimente__tempos legend {
+  margin-bottom: 10px;
+  padding: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--v3-papel);
+}
+
+.experimente__segmentos {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--r-botao-lg);
+  background: var(--v3-superficie);
+}
+
+.experimente__segmento {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--v3-texto-2);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-forte);
+}
+
+.experimente__segmento input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.experimente__segmento:active {
+  transform: scale(0.96);
+}
+
+.experimente__segmento.is-ativo {
+  background: var(--papel);
+  color: var(--navy);
+}
+
+.experimente__segmento:has(input:focus-visible) {
+  outline: 3px solid var(--papel);
+  outline-offset: 3px;
+}
+
+.experimente__nota {
+  margin: 10px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--v3-texto-2);
+}
+
+.experimente__voz {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin-top: 31px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--v3-superficie);
+  color: var(--v3-texto-2);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-forte);
+}
+
+.experimente__voz svg {
+  width: 20px;
+  height: 20px;
+}
+
+.experimente__voz.is-ligada {
+  background: var(--v3-superficie-3);
+  color: var(--v3-papel);
+}
+
+.experimente__voz:active {
+  transform: scale(0.96);
+}
+
+.experimente__voz:focus-visible {
+  outline: 3px solid var(--papel);
+  outline-offset: 3px;
+}
+
+/* ---------- a prancha: alvos grandes, como no app ---------- */
+.experimente__prancha {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--r-xl);
+  background: var(--blue);
+  touch-action: manipulation;
+}
+
+.experimente__alvo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: clamp(150px, 15vw, 200px);
+  padding: 20px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--v3-noite);
+  color: var(--v3-papel);
+  font: inherit;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  transition: transform var(--dur-fast) var(--ease-forte);
+}
+
+.experimente__alvo:active {
+  transform: scale(0.97);
+}
+
+.experimente__alvo:focus-visible {
+  outline: 3px solid var(--papel);
+  outline-offset: 3px;
+}
+
+/* O alvo sob o olhar se acende, como o cartão do app. */
+.experimente__alvo.is-fixando {
+  background: var(--v3-superficie-3);
+}
+
+.experimente__alvo.is-escolhido {
+  background: var(--v3-superficie-2);
+}
+
+.experimente__glifo {
+  width: clamp(40px, 4vw, 56px);
+  height: clamp(40px, 4vw, 56px);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 240ms var(--ease-forte);
+}
+
+.experimente__alvo.is-fixando .experimente__glifo {
+  transform: scale(1.08);
+}
+
+.experimente__glifo,
+.experimente__palavra {
+  position: relative;
+  z-index: 1;
+}
+
+.experimente__palavra {
+  font-family: var(--font-display);
+  font-size: clamp(1.375rem, 1rem + 1vw, 1.875rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* O aro: um traço menta em volta do alvo que fecha no tempo escolhido. */
+.experimente__aro {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* O tamanho do retângulo vem nos atributos (AroDoAlvo, medido do botão). */
+.experimente__aro-traco {
+  fill: none;
+  stroke: var(--v3-fixacao);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+}
+
+.experimente__alvo.is-fixando .experimente__aro-traco {
+  animation: experimente-aro var(--tempo, 1.5s) linear forwards;
+}
+
+/* Fechado: o aro fica aceso um instante e solta. */
+.experimente__alvo.is-escolhido:not(.is-fixando) .experimente__aro-traco {
+  animation: experimente-solta 700ms var(--ease-forte) forwards;
+}
+
+@keyframes experimente-aro {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes experimente-solta {
+  from {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+/* O cursor do olhar: o aro do app, que segue o ponteiro com suavização. A
+   seta do sistema continua lá (nunca se esconde o ponteiro de ninguém). */
+.experimente__cursor {
+  position: absolute;
+  top: -22px;
+  left: -22px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid var(--v3-fixacao);
+  background: rgba(67, 214, 195, 0.18);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  will-change: transform;
+}
+
+.experimente__prancha.tem-cursor .experimente__cursor {
+  opacity: 1;
+}
+
+/* ---------- o que saiu, e o recado que chega ---------- */
+.experimente__saida {
+  display: grid;
+  gap: 16px;
+  min-height: 96px;
+  margin-top: 24px;
+}
+
+.experimente__falou {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--v3-texto-2);
+}
+
+.experimente__falou strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 1.1rem + 1.2vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--v3-papel);
+}
+
+/* As ondas da voz: cinco barras que pulsam enquanto a frase é dita. */
+.experimente__ondas {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 4px;
+  height: 24px;
+}
+
+.experimente__ondas i {
+  display: block;
+  width: 4px;
+  height: 24px;
+  border-radius: 2px;
+  background: var(--v3-iris);
+  transform: scaleY(0.25);
+}
+
+.experimente__ondas.is-falando i {
+  animation: experimente-onda 720ms var(--ease-in-out) infinite alternate;
+}
+
+.experimente__ondas.is-falando i:nth-child(2) {
+  animation-delay: -180ms;
+}
+
+.experimente__ondas.is-falando i:nth-child(3) {
+  animation-delay: -420ms;
+}
+
+.experimente__ondas.is-falando i:nth-child(4) {
+  animation-delay: -90ms;
+}
+
+.experimente__ondas.is-falando i:nth-child(5) {
+  animation-delay: -300ms;
+}
+
+@keyframes experimente-onda {
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.experimente__recado {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  justify-self: start;
+  padding: 14px 20px 14px 14px;
+  border-radius: 18px;
+  background: var(--papel);
+  color: var(--navy);
+  animation: experimente-recado 560ms var(--ease-forte) both;
+}
+
+.experimente__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: var(--branco);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.experimente__recado-rotulo {
+  display: block;
+  font-size: var(--fs-sm);
+  color: #3b4d6b;
+}
+
+.experimente__recado-frase {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+@keyframes experimente-recado {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* O aro conta o tempo mesmo assim: sem ele, o olhar parado não diria nada. */
+  .experimente__alvo.is-fixando .experimente__aro-traco {
+    animation-duration: var(--tempo, 1.5s) !important;
+  }
+  .experimente__cursor {
+    display: none;
+  }
+}
+
+/* 6fr / 5fr, a grade de "O recado chega no celular.": a coluna do texto
+   comporta o título na escala de seção (--fs-titulo-secao) em duas linhas. */
+@media (min-width: 961px) {
+  .experimente__grade {
+    grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+    gap: clamp(48px, 6vw, 96px);
+  }
+}
+
+@media (max-width: 600px) {
+  .experimente__alvo {
+    min-height: 136px;
+  }
+}

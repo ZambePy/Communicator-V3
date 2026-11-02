@@ -80,8 +80,22 @@
 .dwell__hint {
   position: absolute;
   bottom: 10px;
-  font-size: 0.78rem;
+  font-size: var(--fs-min);
   font-weight: 500;
   color: var(--text-dim);
   letter-spacing: 0.04em;
+}
+
+/* Movimento reduzido (o mesmo tratamento de experimente.css): o aro continua
+   contando o tempo do olhar parado, porque é informação e não enfeite; sem
+   ele, segurar o olhar não diria nada. O corte global (global.css) zeraria a
+   transição que o DwellTarget.tsx põe no traço. O visto de confirmação aparece
+   parado. */
+@media (prefers-reduced-motion: reduce) {
+  .dwell--active .dwell__progress {
+    transition-duration: var(--tempo-do-aro, 1500ms) !important;
+  }
+  .dwell__check {
+    animation: none;
+  }
 }

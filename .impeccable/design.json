@@ -1,0 +1,467 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-01T23:01:24.936Z",
+  "title": "Design System: IrisFlow",
+  "extensions": {
+    "colorMeta": {
+      "navy": {
+        "role": "neutral",
+        "displayName": "Marinho",
+        "canonical": "#0b1b3a",
+        "tonalRamp": [
+          "#040b19",
+          "#081530",
+          "#0b1b3a",
+          "#0e2145",
+          "#12284a",
+          "#17305a",
+          "#1d3966",
+          "#2a4a7d"
+        ]
+      },
+      "navy-deep": {
+        "role": "neutral",
+        "displayName": "Marinho fundo",
+        "canonical": "#081530",
+        "tonalRamp": [
+          "#02070f",
+          "#040b19",
+          "#081530",
+          "#0b1b3a",
+          "#0e2145",
+          "#12284a",
+          "#17305a",
+          "#1d3966"
+        ]
+      },
+      "superficie": {
+        "role": "neutral",
+        "displayName": "Superfície",
+        "canonical": "#12284a",
+        "tonalRamp": [
+          "#081530",
+          "#0b1b3a",
+          "#0e2145",
+          "#12284a",
+          "#17305a",
+          "#1d3966",
+          "#24447a",
+          "#2d548f"
+        ]
+      },
+      "blue": {
+        "role": "primary",
+        "displayName": "Azul da marca",
+        "canonical": "#1b54a8",
+        "tonalRamp": [
+          "#0a2047",
+          "#0f3068",
+          "#17458a",
+          "#1b54a8",
+          "#2f66c2",
+          "#4d86e0",
+          "#7ca8ec",
+          "#a9c6f7"
+        ]
+      },
+      "iris": {
+        "role": "primary",
+        "displayName": "Íris",
+        "canonical": "#a9c6f7",
+        "tonalRamp": [
+          "#17458a",
+          "#1b54a8",
+          "#2f66c2",
+          "#4d86e0",
+          "#7ca8ec",
+          "#a9c6f7",
+          "#cadcfb",
+          "#e6eefd"
+        ]
+      },
+      "teal": {
+        "role": "secondary",
+        "displayName": "Teal",
+        "canonical": "#00a693",
+        "tonalRamp": [
+          "#00342e",
+          "#014f46",
+          "#016f63",
+          "#018476",
+          "#00a693",
+          "#1fc4b0",
+          "#43d6c3",
+          "#8ce7dc"
+        ]
+      },
+      "fixacao": {
+        "role": "secondary",
+        "displayName": "Menta (confirmação)",
+        "canonical": "#43d6c3",
+        "tonalRamp": [
+          "#014f46",
+          "#016f63",
+          "#018476",
+          "#00a693",
+          "#1fc4b0",
+          "#43d6c3",
+          "#8ce7dc",
+          "#c6f4ee"
+        ]
+      },
+      "papel": {
+        "role": "neutral",
+        "displayName": "Papel",
+        "canonical": "#f3f6fb",
+        "tonalRamp": [
+          "#98abc8",
+          "#b0bfd7",
+          "#c3d1e6",
+          "#d8e1ef",
+          "#e6ecf6",
+          "#f3f6fb",
+          "#f9fbfd",
+          "#ffffff"
+        ]
+      },
+      "texto-2": {
+        "role": "neutral",
+        "displayName": "Texto secundário",
+        "canonical": "#c3d1e6",
+        "tonalRamp": [
+          "#4a5f80",
+          "#5e739a",
+          "#7a8fb0",
+          "#98abc8",
+          "#a3b5d1",
+          "#c3d1e6",
+          "#dbe6f8",
+          "#f3f6fb"
+        ]
+      },
+      "texto-3": {
+        "role": "neutral",
+        "displayName": "Texto de apoio",
+        "canonical": "#98abc8",
+        "tonalRamp": [
+          "#2a3b57",
+          "#3c4f6e",
+          "#4a5f80",
+          "#7a8fb0",
+          "#98abc8",
+          "#a3b5d1",
+          "#c3d1e6",
+          "#e6ecf6"
+        ]
+      },
+      "warn": {
+        "role": "tertiary",
+        "displayName": "Atenção",
+        "canonical": "#f0c46b",
+        "tonalRamp": [
+          "#4a3611",
+          "#6d4f19",
+          "#956d22",
+          "#c2902e",
+          "#e0ad4d",
+          "#f0c46b",
+          "#f9e3b4",
+          "#fdf3dd"
+        ]
+      },
+      "danger": {
+        "role": "tertiary",
+        "displayName": "Perigo",
+        "canonical": "#ff9a9d",
+        "tonalRamp": [
+          "#4d1416",
+          "#731e21",
+          "#99282c",
+          "#c63238",
+          "#ff9a9d",
+          "#ffb8ba",
+          "#ffd2d4",
+          "#ffecec"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Só a primeira tela. O tamanho em que a chamada vira objeto."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "O h1 das páginas internas e a abertura de capítulo."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "h2 — o título de cada faixa."
+      },
+      "subtitle": {
+        "displayName": "Subtitle",
+        "purpose": "h3 — o título dentro do cartão."
+      },
+      "lead": {
+        "displayName": "Lead",
+        "purpose": "A frase de apoio sob a chamada. Uma só, logo abaixo do título."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Texto corrido, no papel cheio. Nunca abaixo de 17px."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Piso de 13px, só em etiqueta de uma ou duas palavras."
+      }
+    },
+    "shadows": [
+      {
+        "name": "shadow-sm",
+        "value": "0 1px 0 rgba(2, 7, 16, 0.35)",
+        "purpose": "Assentamento mínimo de barra."
+      },
+      {
+        "name": "shadow-md",
+        "value": "0 18px 40px -24px rgba(2, 7, 16, 0.8)",
+        "purpose": "Elemento sobreposto."
+      },
+      {
+        "name": "shadow-lg",
+        "value": "0 40px 80px -40px rgba(2, 7, 16, 0.9)",
+        "purpose": "Diálogo e menu — o que realmente flutua."
+      },
+      {
+        "name": "sombra-flutua",
+        "value": "0 28px 50px -30px rgba(2, 7, 16, 0.9)",
+        "purpose": "O hover que sobe, em cartão e botão clicável."
+      },
+      {
+        "name": "brilho-borda",
+        "value": "inset 0 1px 0 rgba(255, 255, 255, 0.06)",
+        "purpose": "O fio de luz no topo da superfície. É este o separador padrão, não sombra."
+      },
+      {
+        "name": "glow",
+        "value": "0 14px 30px -12px rgba(169, 198, 247, 0.55)",
+        "purpose": "Uso restrito. Não é brilho decorativo e não segue o ponteiro."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Entrada padrão."
+      },
+      {
+        "name": "ease-in-out",
+        "value": "cubic-bezier(0.65, 0, 0.35, 1)",
+        "purpose": "Transição simétrica."
+      },
+      {
+        "name": "ease-forte",
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "O retorno do toque: pressionar e passar por cima, 150–250ms."
+      },
+      {
+        "name": "dur-fast",
+        "value": "160ms",
+        "purpose": "Troca de cor e o scale(0.97) do pressionar."
+      },
+      {
+        "name": "dur",
+        "value": "280ms",
+        "purpose": "Duração padrão."
+      },
+      {
+        "name": "dur-slow",
+        "value": "600ms",
+        "purpose": "O aro de fixação fechando."
+      },
+      {
+        "name": "dur-revelar",
+        "value": "760ms",
+        "purpose": "Entrada dos blocos ao rolar."
+      },
+      {
+        "name": "dur-fixacao",
+        "value": "1500ms",
+        "purpose": "O tempo de fixação padrão do app: o aro dos botões do app fecha nele."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "mobile",
+        "value": "390px"
+      },
+      {
+        "name": "header",
+        "value": "720px"
+      },
+      {
+        "name": "tablet",
+        "value": "768px"
+      },
+      {
+        "name": "container",
+        "value": "1200px"
+      },
+      {
+        "name": "desktop",
+        "value": "1440px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "A ação principal: papel sobre o marinho (15,7:1). O hover clareia, o clique escurece e encolhe.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Baixar para Windows</button>",
+      "css": ".ds-btn { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1.4rem; border: 2px solid transparent; border-radius: 12px; font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 1rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.005em; cursor: pointer; text-align: center; transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1); } .ds-btn-primary { background: #f3f6fb; color: #0b1b3a; } .ds-btn-primary:hover { background: #ffffff; } .ds-btn-primary:active { background: #d8e1ef; transform: scale(0.97); } .ds-btn-primary:focus-visible { outline: 3px solid #f3f6fb; outline-offset: 4px; }"
+    },
+    {
+      "name": "Call Button with Fixation Ring",
+      "kind": "custom",
+      "refersTo": "button-lg",
+      "description": "O componente-assinatura. Um anel menta de 2px fecha em volta do botão em 600ms, girando do topo, sob o ponteiro parado ou o foco do teclado — o gesto do clique pelo olhar. No toque, nada.",
+      "html": "<button class=\"ds-btn ds-btn-primary ds-btn-lg ds-btn-chamada\">Começar agora</button>",
+      "css": ".ds-btn { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1.4rem; border: 2px solid transparent; border-radius: 12px; font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 1rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.005em; cursor: pointer; text-align: center; transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1); } .ds-btn-primary { background: #f3f6fb; color: #0b1b3a; } .ds-btn-primary:hover { background: #ffffff; } .ds-btn-primary:active { background: #d8e1ef; transform: scale(0.97); } .ds-btn-primary:focus-visible { outline: 3px solid #f3f6fb; outline-offset: 4px; } .ds-btn-lg { min-height: 56px; padding: 0.95rem 1.75rem; font-size: 1.0625rem; border-radius: 14px; } .ds-btn-chamada { position: relative; } .ds-btn-chamada::after { content: ''; position: absolute; inset: -6px; border: 2px solid #43d6c3; border-radius: 20px; opacity: 0; pointer-events: none; } @media (hover: hover) and (pointer: fine) { .ds-btn-chamada:hover::after { opacity: 1; animation: ds-fixacao 600ms linear both; } } .ds-btn-chamada:focus-visible { outline: 3px solid rgba(67, 214, 195, 0.7); outline-offset: 4px; } .ds-btn-chamada:focus-visible::after { opacity: 1; animation: ds-fixacao 600ms linear both; } .ds-btn-chamada:active::after { opacity: 1; animation: none; clip-path: none; } @keyframes ds-fixacao { 0% { clip-path: polygon(50% 50%, 50% 0%, 50% 0%); } 25% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 50%); } 50% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 50% 100%); } 75% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 50%); } 100% { clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%); } } @media (prefers-reduced-motion: reduce) { .ds-btn-chamada:hover::after, .ds-btn-chamada:focus-visible::after { animation-duration: 1ms; clip-path: none; } }"
+    },
+    {
+      "name": "Disabled Button",
+      "kind": "button",
+      "refersTo": "button-disabled",
+      "description": "Desabilitado continua legível de propósito: superfície neutra, borda tracejada e texto claro (≈8:1). Apagar o controle não explica por que ele não serve.",
+      "html": "<button class=\"ds-btn ds-btn-disabled\" disabled>Indisponível no macOS</button>",
+      "css": ".ds-btn { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1.4rem; border: 2px solid transparent; border-radius: 12px; font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 1rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.005em; cursor: pointer; text-align: center; transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1); } .ds-btn-primary { background: #f3f6fb; color: #0b1b3a; } .ds-btn-primary:hover { background: #ffffff; } .ds-btn-primary:active { background: #d8e1ef; transform: scale(0.97); } .ds-btn-primary:focus-visible { outline: 3px solid #f3f6fb; outline-offset: 4px; } .ds-btn-disabled:disabled { cursor: not-allowed; transform: none; opacity: 1; background: #17305a; border-color: rgba(169, 198, 247, 0.3); border-style: dashed; color: #c3d1e6; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Superfície chapada sobre o marinho, sem sombra em repouso e sem borda. Ícone solto, sem ladrilho colorido.",
+      "html": "<article class=\"ds-card\"><svg class=\"ds-card-icon\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/></svg><h3>Calibração em 13 pontos</h3><p>O olhar é medido em treze alvos e o erro de cada um fica no relatório da sessão.</p></article>",
+      "css": ".ds-card { padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; background: #12284a; border-radius: 16px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); color: #f3f6fb; font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif; } .ds-card-icon { display: block; flex: none; color: #a9c6f7; } .ds-card h3 { margin: 0; font-family: Sora, 'Segoe UI', system-ui, sans-serif; font-size: 1.25rem; font-weight: 600; letter-spacing: -0.015em; } .ds-card p { margin: 0; font-size: 1rem; line-height: 1.6; color: #c3d1e6; }"
+    },
+    {
+      "name": "Active Card",
+      "kind": "card",
+      "refersTo": "card-ativo",
+      "description": "O cartão selecionado: o azul da marca chapado. É aqui que o azul institucional trabalha — não no fundo de um botão.",
+      "html": "<article class=\"ds-card ds-card-ativo\"><h3>Plano Completo</h3><p>Todos os módulos, três computadores vinculados.</p></article>",
+      "css": ".ds-card { padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; background: #12284a; border-radius: 16px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06); color: #f3f6fb; font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif; } .ds-card-icon { display: block; flex: none; color: #a9c6f7; } .ds-card h3 { margin: 0; font-family: Sora, 'Segoe UI', system-ui, sans-serif; font-size: 1.25rem; font-weight: 600; letter-spacing: -0.015em; } .ds-card p { margin: 0; font-size: 1rem; line-height: 1.6; color: #c3d1e6; } .ds-card-ativo { background: #1b54a8; color: #dbe6f8; box-shadow: none; } .ds-card-ativo p { color: #dbe6f8; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "field-input",
+      "description": "Borda opaca por exigência de contraste (WCAG 1.4.11). O foco é contorno de verdade em papel — não sombra, que desaparece no alto contraste do Windows.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">E-mail</span><input class=\"ds-field-input\" type=\"email\" placeholder=\"voce@exemplo.com\"></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 0.5rem; font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif; } .ds-field-label { font-size: 0.9375rem; font-weight: 600; color: #f3f6fb; } .ds-field-input { min-height: 48px; padding: 0.75rem 1rem; background: #081530; color: #f3f6fb; border: 1px solid #7a8fb0; border-radius: 12px; font-family: inherit; font-size: 1.0625rem; transition: border-color 160ms ease; } .ds-field-input::placeholder { color: #98abc8; } .ds-field-input:hover { border-color: #a3b5d1; } .ds-field-input:focus { outline: 3px solid #f3f6fb; outline-offset: 2px; }"
+    },
+    {
+      "name": "State Tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "Etiqueta de estado: um ponto da cor do estado e a palavra. Sem caixa alta, sem pílula colorida, sem fundo.",
+      "html": "<span class=\"ds-tag\"><span class=\"ds-tag-dot\"></span>Implementado</span>",
+      "css": ".ds-tag { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 0.9375rem; font-weight: 600; color: #f3f6fb; } .ds-tag-dot { width: 8px; height: 8px; border-radius: 999px; background: #43d6c3; flex: none; }"
+    },
+    {
+      "name": "Navigation Bar",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Barra simples: marca, poucos links, uma ação. Ganha o marinho fundo ao rolar. Sem pílula flutuante e sem backdrop-filter.",
+      "html": "<nav class=\"ds-nav\"><span class=\"ds-nav-mark\">IrisFlow</span><a class=\"ds-nav-link\" href=\"#\">Solução</a><a class=\"ds-nav-link\" href=\"#\">Planos</a><button class=\"ds-btn ds-btn-primary\">Baixar</button></nav>",
+      "css": ".ds-nav { height: 72px; display: flex; align-items: center; gap: 2rem; padding: 0 clamp(16px, 4vw, 32px); background: #081530; box-shadow: inset 0 -1px 0 rgba(169, 198, 247, 0.14); font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif; } .ds-nav-mark { font-family: Sora, 'Segoe UI', system-ui, sans-serif; font-weight: 700; font-size: 1.125rem; letter-spacing: -0.02em; color: #f3f6fb; margin-right: auto; } .ds-nav-link { color: #c3d1e6; text-decoration: none; font-size: 1rem; font-weight: 500; transition: color 160ms ease; } .ds-nav-link:hover { color: #f3f6fb; } .ds-nav-link:focus-visible { outline: 3px solid #f3f6fb; outline-offset: 4px; border-radius: 4px; } @media (max-width: 720px) { .ds-nav { height: 64px; } } .ds-btn { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1.4rem; border: 2px solid transparent; border-radius: 12px; font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 1rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.005em; cursor: pointer; text-align: center; transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1); } .ds-btn-primary { background: #f3f6fb; color: #0b1b3a; } .ds-btn-primary:hover { background: #ffffff; } .ds-btn-primary:active { background: #d8e1ef; transform: scale(0.97); } .ds-btn-primary:focus-visible { outline: 3px solid #f3f6fb; outline-offset: 4px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "O Aro que Fecha",
+    "overview": "O gesto que define o produto é a fixação: o paciente olha, um anel se fecha, e o clique acontece. O site e a interface repetem esse gesto em vez de descrevê-lo. A chamada principal fecha um aro menta em 600 ms sob o ponteiro parado ou o foco do teclado, e fecha de vez no clique — a mesma gramática do app, na página que o apresenta. É daí que sai a doutrina do sistema inteiro: a interface confirma completando, nunca piscando, brilhando ou seguindo o ponteiro.\n\nA matéria é o marinho (#0b1b3a) como chão contínuo, o papel (#f3f6fb) como voz do texto e da ação, e duas cores que só falam quando têm o que dizer: o íris (#a9c6f7) marca o que está ativo, e o menta (#43d6c3) é exclusivo da confirmação. A densidade é alta e calma: superfícies chapadas separadas por um degrau de tom e um fio de luz de 1 px, nunca por caixa contornada. Contraste não é estimado — está medido e travado em teste.\n\nA contenção aqui é funcional, não estilística. O público inclui pessoas que operam só pelo olhar e cuidadores lendo no celular, à noite, com uma mão. Nada pode depender de hover, de precisão de ponteiro ou de cor sozinha; alvo de 48 px é piso, como no app; e o estado desabilitado continua legível, porque apagar um controle não explica por que ele não serve.",
+    "keyCharacteristics": [
+      "Marinho contínuo; nenhuma página branca, color-scheme: dark.",
+      "O aro de fixação como única celebração do sistema.",
+      "Menta reservado à confirmação; íris reservado ao ativo.",
+      "Degrau tonal no lugar de régua, caixa e sombra em repouso.",
+      "Sora só em título, Inter em tudo o mais. Duas fontes, servidas pelo próprio site, zero requisição a terceiros.",
+      "Contraste conferido em teste, não no olho."
+    ],
+    "rules": [
+      {
+        "name": "A Regra da Confirmação Única",
+        "body": "O menta (#43d6c3) significa uma coisa só: isto deu certo, ou está dando certo agora. Ele não é cor de destaque, de link, de borda decorativa nem de gráfico. Quando tudo pode ser menta, o aro que fecha deixa de significar.",
+        "section": "colors"
+      },
+      {
+        "name": "A Regra do Papel na Ação",
+        "body": "A ação principal é papel sobre o marinho, não azul sobre o marinho. Hierarquia aqui vem de contraste (15,7:1), e o azul da marca perde essa disputa — ele identifica, o papel convoca.",
+        "section": "colors"
+      },
+      {
+        "name": "A Regra da Cor que Não Anda Só",
+        "body": "Nenhuma informação é transmitida apenas por cor (WCAG 1.4.1). Erro leva ícone de aviso; etiqueta de estado leva ponto e palavra; alerta leva manchete escrita.",
+        "section": "colors"
+      },
+      {
+        "name": "A Regra das Duas Linhas",
+        "body": "Todo título cabe em duas linhas em 1440, 768 e 390. Corte palavras primeiro; alargue a medida depois; reduza o corpo por último. Frase longa posta grande é parágrafo, e vai no corpo de afirmação, não em h1.",
+        "section": "typography"
+      },
+      {
+        "name": "A Regra dos 13 Pixels",
+        "body": "13px é o piso absoluto, e só em etiqueta de uma ou duas palavras. Texto corrido não desce de 17px, e vai no papel cheio — o texto-3 é para nota de apoio, nunca para um parágrafo.",
+        "section": "typography"
+      },
+      {
+        "name": "A Regra da Caixa Baixa",
+        "body": "Não há caixa alta com tracking no sistema. Etiqueta é sentença em corpo legível, com um ponto da cor do estado.",
+        "section": "typography"
+      },
+      {
+        "name": "A Regra do Alvo de 48",
+        "body": "Todo controle tem 48px de altura mínima (56px no tamanho grande). Não é recomendação de toque — é a medida que o olhar alcança.",
+        "section": "layout"
+      },
+      {
+        "name": "A Regra do Degrau",
+        "body": "Separe superfícies por tom e pelo fio de luz. Sombra em coisa parada é dívida, não estilo — há quatro no site hoje (.palco, .celular__moldura, .v3-chega) e elas são para corrigir, não para imitar.",
+        "section": "elevation"
+      },
+      {
+        "name": "A Regra de Nada Segue o Ponteiro",
+        "body": "Sem brilho que acompanha o mouse, sem reflexo, sem sombra colorida, sem glass ou backdrop-filter. O retorno do toque é mudança de fundo mais scale(0.97) no pressionar.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do usar o marinho (#0b1b3a) como chão e trocar de faixa com .on-dark / .on-raised, deixando os componentes alheios ao fundo em que caem.",
+      "Do reservar o menta (#43d6c3) para confirmação e o íris (#a9c6f7) para o que está ativo.",
+      "Do dar 48px de altura mínima a todo controle (56px no grande).",
+      "Do manter o contraste travado em teste — qualquer token novo passa por components/v3/acessibilidade.test.ts.",
+      "Do separar superfície por degrau tonal e pelo fio de luz (inset 0 1px 0 rgba(255,255,255,0.06)).",
+      "Do usar contorno real no foco (outline), nunca só sombra.",
+      "Do acompanhar toda cor de estado de texto ou ícone.",
+      "Do manter o desabilitado legível: superfície-2, borda tracejada, texto-2.",
+      "Do servir fonte do próprio site. Nenhuma requisição a terceiros.",
+      "Do dar fallback de prefers-reduced-motion a toda animação, preservando o conteúdo e tirando o deslocamento."
+    ],
+    "donts": [
+      "Don't pôr sombra em coisa parada. As quatro que existem (.palco, .celular__moldura, .v3-chega) são dívida registrada, não referência.",
+      "Don't usar gradiente como fundo, em botão ou em texto.",
+      "Don't usar backdrop-filter, glass ou navegação em pílula flutuante.",
+      "Don't usar monoespaçada fora de bloco de código real — não há uma no sistema.",
+      "Don't pôr etiqueta em caixa alta com tracking, nem pílula colorida de estado.",
+      "Don't pôr eyebrow/kicker acima de um título. Há dois no site hoje e os dois são para remover.",
+      "Don't usar régua fina, caixa contornada de 1px, grade visível ou marca de corte para agrupar. Há 22 fios finos no site hoje; são dívida.",
+      "Don't pôr ícone em quadradinho colorido no topo de cartão, nem fileira de cartões idênticos.",
+      "Don't fazer nada seguir o ponteiro: sem brilho, sem reflexo, sem sombra colorida.",
+      "Don't usar azul da marca como fundo de ação principal — esse lugar é do papel.",
+      "Don't descer texto corrido de 17px, nem pôr parágrafo no texto-3.",
+      "Don't depender de hover para informação: o aro de fixação tem par no foco de teclado, e no toque não existe.",
+      "Don't emoji, forma decorativa, mancha de gradiente nem painel falso de barras cinzas."
+    ]
+  }
+}

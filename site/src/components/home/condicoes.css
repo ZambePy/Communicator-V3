@@ -1,94 +1,282 @@
-/* As condições na home (CondicoesHome.tsx): uma lista tipográfica de duas
-   colunas, com um fio fino em cima de cada uma. O nome em Sora, a linha em
-   Inter. Cada item é um link inteiro (alvo grande); no passar do mouse, o
-   nome ganha o sublinhado e a seta anda um pouco (só transform). */
+/* "Para quem" na home (CondicoesHome.tsx, terceira volta de 01/11/2026). No
+   marinho da marca, um tom acima da faixa da privacidade. Abas cheias à
+   esquerda (a ativa no azul da marca), o painel à direita: o nome no alto, a
+   tela do app grande numa moldura escura e, ao lado, duas faixas de tom.
+   Sem fio e sem sombra: os tons separam. Só transform e opacity animam.
 
-.condicoes .condicoes__titulo {
-  max-width: 20ch;
+   As classes são `para-quem__*` de propósito: `.condicoes` é da página Como
+   funciona, e o CSS dela vazava para cá depois de visitá-la. */
+
+.para-quem {
+  --pq-tinta: var(--v3-papel);
+  --pq-tinta-2: var(--v3-texto-2);
+  --pq-tom-1: var(--v3-superficie);
+  --pq-tom-2: var(--v3-superficie-2);
+  --text: var(--pq-tinta);
+  --text-soft: var(--pq-tinta-2);
+  --accent: var(--v3-iris);
+  background: var(--v3-noite-2);
+  color: var(--pq-tinta);
 }
 
-.condicoes__lista {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0 clamp(32px, 4.5vw, 64px);
-  margin: clamp(36px, 4.5vw, 64px) 0 0;
-  padding: 0;
-  list-style: none;
+/* ---------- o alto ---------- */
+
+.para-quem__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px 48px;
 }
 
-.condicoes__item {
+.para-quem__titulo {
   margin: 0;
-  border-top: 1px solid var(--v3-fio-forte);
-}
-
-.condicoes__link {
-  display: block;
-  padding: 26px 40px 26px 0;
-  position: relative;
-  color: var(--v3-papel);
-  transition: transform 200ms var(--ease-forte);
-}
-
-.condicoes__link:active {
-  transform: scale(0.99);
-}
-
-/* A seta: decoração do link, desenhada no CSS. */
-.condicoes__link::after {
-  content: '';
-  position: absolute;
-  right: 6px;
-  top: 36px;
-  width: 10px;
-  height: 10px;
-  border-top: 2px solid var(--v3-iris);
-  border-right: 2px solid var(--v3-iris);
-  transform: rotate(45deg);
-  transition: transform 200ms var(--ease-forte);
-}
-
-.condicoes__nome {
-  display: block;
   font-family: var(--font-display);
-  font-size: clamp(1.375rem, 1.1rem + 1vw, 1.875rem);
-  font-weight: 600;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 6px;
-  text-decoration-color: transparent;
+  font-size: var(--fs-titulo-secao);
+  font-weight: 700;
+  line-height: var(--lh-titulo-secao);
+  letter-spacing: var(--ls-titulo-secao);
+  color: var(--pq-tinta);
 }
 
-.condicoes__linha {
+.para-quem__titulo > span {
   display: block;
-  margin-top: 8px;
-  max-width: 44ch;
-  font-size: 1.0625rem;
-  line-height: 1.5;
-  color: var(--v3-texto-2);
 }
 
-@media (hover: hover) {
-  .condicoes__link:hover .condicoes__nome {
-    text-decoration-color: var(--v3-iris);
+/* A primeira linha no azul claro da marca, a segunda no papel: a virada da frase. */
+.para-quem__titulo-1 {
+  color: var(--v3-iris);
+}
+
+.para-quem__sub {
+  max-width: 52ch;
+  margin: 24px 0 0;
+  font-size: clamp(1.0625rem, 0.98rem + 0.3vw, 1.25rem);
+  line-height: 1.55;
+  color: var(--pq-tinta-2);
+}
+
+/* ---------- as abas e o painel ---------- */
+
+.para-quem__corpo {
+  display: grid;
+  grid-template-columns: minmax(200px, 250px) minmax(0, 1fr);
+  gap: clamp(28px, 3.5vw, 56px);
+  align-items: start;
+  margin-top: clamp(40px, 5vw, 72px);
+}
+
+.para-quem__abas {
+  position: sticky;
+  top: 96px;
+  display: grid;
+  gap: 6px;
+}
+
+.para-quem__aba {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--pq-tom-1);
+  color: var(--pq-tinta);
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-forte);
+}
+
+.para-quem__aba:hover {
+  background: var(--pq-tom-2);
+}
+
+.para-quem__aba:active {
+  transform: scale(0.98);
+}
+
+.para-quem__aba[aria-selected='true'] {
+  background: var(--blue);
+  color: var(--branco);
+}
+
+.para-quem__painel {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  grid-template-areas:
+    'topo topo'
+    'tela texto';
+  gap: 28px clamp(24px, 2.6vw, 40px);
+  align-items: start;
+}
+
+.para-quem__topo {
+  grid-area: topo;
+}
+
+.para-quem__tela {
+  grid-area: tela;
+}
+
+.para-quem__texto {
+  grid-area: texto;
+}
+
+.para-quem__painel[hidden] {
+  display: none;
+}
+
+.para-quem__nome {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 1.2rem + 2.4vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  color: var(--pq-tinta);
+  text-wrap: balance;
+}
+
+.para-quem__linha {
+  margin: 14px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.125rem, 1rem + 0.4vw, 1.375rem);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--v3-iris);
+}
+
+.para-quem__faixas {
+  display: grid;
+  gap: 4px;
+}
+
+.para-quem__faixa {
+  padding: 18px 22px;
+  border-radius: 16px;
+  background: var(--pq-tom-1);
+}
+
+.para-quem__faixa + .para-quem__faixa {
+  background: var(--pq-tom-2);
+}
+
+.para-quem__faixa h4 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--pq-tinta);
+}
+
+.para-quem__faixa p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--pq-tinta);
+}
+
+.para-quem__mais {
+  margin-top: 16px;
+}
+
+/* A tela do app numa moldura escura: o computador da pessoa. */
+.para-quem__tela {
+  margin: 0;
+}
+
+.para-quem__monitor {
+  padding: clamp(8px, 0.9vw, 14px);
+  border-radius: 22px;
+  background: #050b18;
+}
+
+.para-quem__monitor img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
+.para-quem__tela figcaption {
+  margin-top: 14px;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--pq-tinta-2);
+}
+
+/* A troca de aba: a tela sobe um pouco e o texto aparece, uma vez por troca. */
+@media (prefers-reduced-motion: no-preference) {
+  .para-quem__painel:not([hidden]) .para-quem__monitor {
+    animation: pq-tela 560ms var(--ease-forte) both;
   }
-  .condicoes__link:hover::after {
-    transform: translateX(4px) rotate(45deg);
+  .para-quem__painel:not([hidden]) .para-quem__topo,
+  .para-quem__painel:not([hidden]) .para-quem__texto {
+    animation: pq-texto 420ms var(--ease-forte) both;
+  }
+}
+
+@keyframes pq-tela {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pq-texto {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- tablet e celular ---------- */
+
+@media (max-width: 1100px) {
+  .para-quem__painel {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'topo'
+      'tela'
+      'texto';
   }
 }
 
 @media (max-width: 760px) {
-  .condicoes__lista {
+  .para-quem__corpo {
     grid-template-columns: minmax(0, 1fr);
   }
-  .condicoes__link {
-    padding-block: 18px;
+  /* As abas viram uma fileira que rola de lado, colada às margens. */
+  .para-quem__abas {
+    position: static;
+    display: flex;
+    gap: 6px;
+    margin-inline: calc(-1 * var(--gutter));
+    padding: 0 var(--gutter) 4px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
   }
-  .condicoes__link::after {
-    top: 26px;
+  .para-quem__aba {
+    flex: none;
+    min-height: 52px;
+    scroll-snap-align: start;
   }
-  .condicoes__linha {
-    font-size: 0.9375rem;
+  .para-quem__acao {
+    width: 100%;
   }
 }

@@ -19,10 +19,7 @@
   /* A superfície dos cartões do app (--v3-superficie), opaca: com 96% a logo da
      gravação aparecia como um fantasma atrás da frase (conferido nas capturas
      de 21/10/2026). */
-  background: #12284a;
-  box-shadow:
-    inset 0 0 0 1px rgba(169, 198, 247, 0.24),
-    0 14px 28px -14px rgba(0, 0, 0, 0.75);
+  background: var(--v3-superficie);
   pointer-events: none;
 }
 
@@ -91,7 +88,6 @@
   padding: 14px 18px 16px;
   border-radius: 18px;
   background: var(--papel);
-  box-shadow: 0 24px 48px -20px rgba(0, 0, 0, 0.6);
 }
 
 .v3-chega--fora .v3-chega__avatar {

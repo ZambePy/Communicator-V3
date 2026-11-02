@@ -1,7 +1,9 @@
 /* O preço na home (ContrastePreco variante="faixa"): o azul da marca inteiro,
    o título e os dois números grandes lado a lado. O número do aparelho
-   importado fica num azul mais claro e apagado; o do IrisFlow, em branco. O
-   fio entre os dois lados é o único traço. */
+   importado fica num azul mais claro; o do IrisFlow, em branco. Desde
+   01/11/2026 o número vem primeiro e o nome de cada lado logo embaixo (sem
+   rótulo pequeno em cima do número), e os lados se separam pelo espaço, sem
+   fio. */
 
 .contraste-faixa__conta {
   display: grid;
@@ -9,44 +11,51 @@
   margin: clamp(40px, 5vw, 72px) 0 0;
 }
 
+.contraste-faixa__conta {
+  gap: clamp(32px, 5vw, 80px);
+}
+
 .contraste-faixa__lado {
+  display: flex;
+  flex-direction: column;
   margin: 0;
 }
 
-.contraste-faixa__lado--irisflow {
-  padding-left: clamp(32px, 4vw, 56px);
-  border-left: 1px solid rgba(255, 255, 255, 0.35);
+.contraste-faixa__rotulo {
+  order: 1;
+  margin-top: 20px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--branco);
 }
 
-.contraste-faixa__rotulo {
-  font-size: 1.125rem;
-  font-weight: 500;
-  line-height: 1.4;
-  color: #dce6f7;
+.contraste-faixa__nota {
+  order: 2;
 }
 
 .contraste-faixa__numero {
-  margin: 18px 0 0;
+  margin: 0;
   font-family: var(--font-display);
   font-size: clamp(2.75rem, 1.2rem + 4.6vw, 5.25rem);
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.04em;
   text-wrap: balance;
-  color: #ffffff;
+  color: var(--branco);
 }
 
 /* O preço do aparelho: o azul claro da marca, um passo atrás (4,6:1 sobre o azul). */
 .contraste-faixa__lado--dedicado .contraste-faixa__numero {
-  color: #b9cff3;
+  color: var(--azul-texto-3);
 }
 
 .contraste-faixa__nota {
   max-width: 30ch;
-  margin: 18px 0 0;
+  margin: 6px 0 0;
   font-size: 1.0625rem;
   line-height: 1.5;
-  color: #dce6f7;
+  color: var(--azul-texto-2);
 }
 
 @media (max-width: 760px) {
@@ -54,9 +63,40 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 48px;
   }
-  .contraste-faixa__lado--irisflow {
-    padding: 48px 0 0;
-    border-left: 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+/* ---------- o preço do aparelho se risca ao rolar (01/11/2026) ----------
+   Uma barra cheia, da cor do número, que cresce da esquerda para a direita
+   por cima de "R$ 15 a 120 mil" enquanto a faixa passa pelo meio da tela. A
+   frase continua legível embaixo dela. Só transform. Sem linha do tempo de
+   rolagem, ou com movimento reduzido, a barra não aparece: o número fica
+   inteiro, sem ambiguidade. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .contraste-faixa__lado--dedicado .contraste-faixa__numero {
+      position: relative;
+      align-self: flex-start;
+    }
+    .contraste-faixa__lado--dedicado .contraste-faixa__numero::after {
+      content: '';
+      position: absolute;
+      left: -0.04em;
+      right: -0.04em;
+      top: 52%;
+      height: 0.075em;
+      border-radius: 0.04em;
+      background: var(--azul-texto-3);
+      transform: scaleX(0);
+      transform-origin: left center;
+      animation: contraste-risca linear both;
+      animation-timeline: view();
+      animation-range: cover 35% cover 60%;
+    }
+  }
+}
+
+@keyframes contraste-risca {
+  to {
+    transform: scaleX(1);
   }
 }

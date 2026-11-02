@@ -95,7 +95,7 @@
 }
 
 .recurso__titulo {
-  font-size: 1.2rem;
+  font-size: var(--fs-h3);
   margin-bottom: var(--sp-2);
 }
 

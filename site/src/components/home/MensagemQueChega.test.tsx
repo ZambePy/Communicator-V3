@@ -102,20 +102,19 @@ describe('<MensagemQueChega />', () => {
   })
 })
 
-describe('no destaque de quem cuida (home, desde 31/10/2026)', () => {
-  it('o cartão sai da borda do celular com a captura real da conversa, e a seção tem um só', () => {
+describe('no destaque de quem cuida (home, desde 01/11/2026: as quatro funções)', () => {
+  it('os controles saem da borda do celular com a captura real da conversa, um ativo de cada vez', () => {
     const { container } = render(
       <MemoryRouter future={FUTURO_DO_ROTEADOR}>
         <CuidadorDestaque />
       </MemoryRouter>,
     )
-    const el = container.querySelector('.v3-chega')!
-    expect(el).toHaveClass('v3-chega--fora')
-    // Observa o celular inteiro: mora dentro de .celular, fora da tela dele.
+    const el = container.querySelector('.cuidador-destaque__controles')!
+    // Mora dentro de .celular, fora da tela dele.
     expect(el.closest('.celular')).not.toBeNull()
     expect(el.closest('.celular__tela')).toBeNull()
-    expect(container.querySelectorAll('.v3-chega')).toHaveLength(1)
-    expect(container.querySelector('.celular__tela img')).toHaveAttribute('src', '/media/cuidador/conversa.webp')
+    expect(el.querySelectorAll('.cuidador-destaque__controle.is-ativo')).toHaveLength(1)
+    expect(container.querySelector('.celular__tela img.is-ativo')).toHaveAttribute('src', '/media/cuidador/conversa.webp')
     expect(container.querySelector('h2')).not.toBeNull()
   })
 })

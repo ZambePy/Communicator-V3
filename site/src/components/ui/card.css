@@ -8,7 +8,7 @@
 
 .card h3 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: var(--fs-h3);
   letter-spacing: -0.015em;
 }
 

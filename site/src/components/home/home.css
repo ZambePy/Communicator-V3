@@ -38,7 +38,7 @@
 }
 
 .passo__titulo {
-  font-size: 1.3125rem;
+  font-size: var(--fs-h3);
   margin-bottom: var(--sp-2);
 }
 
@@ -110,11 +110,11 @@
 
 .contraste__linha--irisflow .contraste__rotulo,
 .contraste__linha--irisflow .contraste__nota {
-  color: #dbe6f8;
+  color: var(--v3-cartao-ativo-texto);
 }
 
 .contraste__linha--irisflow .contraste__valor {
-  color: #fff;
+  color: var(--branco);
 }
 
 @media (min-width: 900px) {

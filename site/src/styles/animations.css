@@ -100,33 +100,47 @@
   }
 }
 
+/* No celular (01/11/2026), os blocos já estão lá: numa coluna estreita, rolada
+   rápido com o polegar, a entrada ao rolar deixava a tela vazia por um instante
+   e não acrescentava nada. Quem lê de noite, com uma mão, vê o texto na hora.
+   Os movimentos com sentido (a íris, o aro, o cartão que chega) continuam. */
+@media (max-width: 600px) {
+  .js-reveal .reveal:not(.is-visto),
+  .js-reveal .reveal.is-visto {
+    opacity: 1;
+    animation: none;
+  }
+}
+
 /* ---------- abertura das páginas de dentro ----------
    O <main> é remontado a cada rota: o rótulo, o título, a frase e as ações
-   sobem em cascata, logo depois que a piscada abre. */
+   sobem em cascata, logo depois que a piscada abre. A mesma receita da
+   abertura da home (abertura.css, .abertura__entra): 720 ms em --ease-forte,
+   22 px, um degrau de 70 ms entre as peças. */
 .page-head__inner > * {
-  animation: abertura-sobe 700ms var(--ease-out) both;
+  animation: abertura-sobe 720ms var(--ease-forte) 60ms both;
 }
 
 .page-head__inner > :nth-child(2) {
-  animation-delay: 80ms;
+  animation-delay: 130ms;
 }
 
 .page-head__inner > :nth-child(3) {
-  animation-delay: 160ms;
+  animation-delay: 200ms;
 }
 
 .page-head__inner > :nth-child(4) {
-  animation-delay: 240ms;
+  animation-delay: 270ms;
 }
 
 .page-head__visual {
-  animation: abertura-sobe 900ms var(--ease-out) 260ms both;
+  animation: abertura-sobe 720ms var(--ease-forte) 340ms both;
 }
 
 @keyframes abertura-sobe {
   from {
     opacity: 0;
-    translate: 0 18px;
+    translate: 0 22px;
   }
   to {
     opacity: 1;
@@ -289,72 +303,85 @@
   pointer-events: none;
 }
 
-/* As pálpebras são da cor do fundo da página (a noite do v3, desde a rodada 3). */
-.palpebras svg {
+/* A cortina (desde 01/11/2026): um pano escuro com as bordas curvas, mais
+   alto que a tela (as curvas ficam de fora quando ela cobre tudo). Sobe de
+   baixo, para no meio enquanto a rota troca e sai por cima. A marca no meio
+   aparece quando a cortina está quase fechada e some antes dela sair. Só
+   transform e opacity. */
+.palpebras__cortina {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: -8%;
   width: 100%;
-  height: 100%;
-  fill: var(--v3-noite);
+  height: 116%;
+  fill: #05070c;
+  animation: cortina-sobe 380ms cubic-bezier(0.76, 0, 0.24, 1) both;
 }
 
-/* Cada uma parte de logo fora da tela (a de cima, com a borda logo abaixo
-   do cabeçalho, a 8 % da altura), para o movimento aparecer desde o
-   primeiro quadro. */
-.palpebras__cima {
-  animation: palpebra-desce 160ms cubic-bezier(0.35, 0, 0.65, 1) both;
+.palpebras__marca {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  height: 72px;
+  margin: -36px 0 0 -36px;
+  overflow: visible;
+  animation: cortina-marca-entra 300ms var(--ease-forte) 160ms both;
 }
 
-.palpebras__baixo {
-  animation: palpebra-sobe 160ms cubic-bezier(0.35, 0, 0.65, 1) both;
+.palpebras__lamina {
+  fill: var(--blue);
 }
 
-/* Abrir é mais lento que fechar: já se mexe no primeiro quadro e
-   desacelera no fim, mas sem a cauda longa de um ease-out forte, que
-   escondia a segunda metade do movimento (a borda some sobre o marinho da
-   faixa de cima). A de cima termina escondida sob o cabeçalho; a de baixo,
-   fora da tela. */
-.palpebras.is-abrindo .palpebras__cima {
-  animation: palpebra-abre-cima 220ms cubic-bezier(0.3, 0.3, 0.5, 1) both;
+.palpebras__pupila {
+  fill: var(--papel);
 }
 
-.palpebras.is-abrindo .palpebras__baixo {
-  animation: palpebra-abre-baixo 220ms cubic-bezier(0.3, 0.3, 0.5, 1) both;
+.palpebras.is-abrindo .palpebras__cortina {
+  animation: cortina-sai 560ms cubic-bezier(0.76, 0, 0.24, 1) both;
 }
 
-@keyframes palpebra-desce {
+.palpebras.is-abrindo .palpebras__marca {
+  animation: cortina-marca-sai 240ms var(--ease-forte) both;
+}
+
+@keyframes cortina-sobe {
   from {
-    transform: translateY(-58%);
+    transform: translateY(100%);
   }
   to {
     transform: none;
   }
 }
 
-@keyframes palpebra-sobe {
+@keyframes cortina-sai {
   from {
-    transform: translateY(50%);
+    transform: none;
   }
   to {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes cortina-marca-entra {
+  from {
+    opacity: 0;
+    transform: scale(0.7) rotate(-60deg);
+  }
+  to {
+    opacity: 1;
     transform: none;
   }
 }
 
-@keyframes palpebra-abre-cima {
+@keyframes cortina-marca-sai {
   from {
+    opacity: 1;
     transform: none;
   }
   to {
-    transform: translateY(-67%);
-  }
-}
-
-@keyframes palpebra-abre-baixo {
-  from {
-    transform: none;
-  }
-  to {
-    transform: translateY(51%);
+    opacity: 0;
+    transform: scale(1.15) rotate(30deg);
   }
 }
 

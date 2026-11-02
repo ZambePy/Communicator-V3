@@ -21,7 +21,7 @@
 
 .olhar__tela {
   --olhar-tela: var(--navy);
-  --olhar-tecla: #12284a;
+  --olhar-tecla: var(--v3-superficie);
   --olhar-fio: rgba(169, 198, 247, 0.16);
 
   position: relative;
@@ -80,7 +80,7 @@
 }
 
 .tecla--nav:not(.is-inativa) .tecla__conteudo {
-  animation: olhar-aparece 160ms ease-out both;
+  animation: olhar-aparece var(--dur-fast) ease-out both;
 }
 
 .tecla--falar {

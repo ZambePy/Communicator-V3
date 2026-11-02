@@ -24,6 +24,16 @@ function coresV3(): Record<string, string> {
   return cores
 }
 
+/** Uma cor escrita no CSS em hexadecimal ou como `var(--token)` do tokens.css
+    (token com hexadecimal), em hexadecimal; null se o token não for um hexadecimal. */
+function hexDaCor(valor: string): string | null {
+  const v = valor.trim().toLowerCase()
+  const token = v.match(/^var\(--([\w-]+)\)$/)
+  if (!token) return v
+  const m = tokens.match(new RegExp(`--${token[1]}\\s*:\\s*(#[0-9a-fA-F]{6})\\s*;`))
+  return m ? m[1].toLowerCase() : null
+}
+
 function luminancia(hex: string): number {
   const canal = (i: number) => {
     const c = parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16) / 255
@@ -40,7 +50,14 @@ function contraste(a: string, b: string): number {
 /** As faixas da home do redesenho de 31/10/2026 (components/home). */
 const CSS_DA_HOME = [
   'abertura.css',
-  'palco-do-teclado.css',
+  'fundo-vivo.css',
+  'simbolo-em-volume.css',
+  'do-olhar-ao-clique.css',
+  'privacidade-camadas.css',
+  'experimente.css',
+  'prancha.css',
+  'medido.css',
+  'equipe-home.css',
   'faixas.css',
   'capitulos.css',
   'contraste-faixa.css',
@@ -178,7 +195,7 @@ describe('foco, cursor e movimento no CSS do v3', () => {
 describe('contraste nas faixas da home', () => {
   const c = coresV3()
   const faixas = readFileSync(resolve(SRC, 'components/home/faixas.css'), 'utf8')
-  const elevada = faixas.match(/\.home-faixa--elevada\s*\{[^}]*background:\s*(#[0-9a-fA-F]{6})/)![1].toLowerCase()
+  const elevada = hexDaCor(faixas.match(/\.home-faixa--elevada\s*\{[^}]*background:\s*(#[0-9a-fA-F]{6}|var\(--[\w-]+\))/)![1])!
   const azul = tokens.match(/--blue:\s*(#[0-9a-fA-F]{6})/)![1].toLowerCase()
 
   it('o marinho claro (as telas e a beta) segura os quatro tons de texto do v3', () => {
@@ -190,7 +207,7 @@ describe('contraste nas faixas da home', () => {
 
   it('no azul da marca: o branco, o texto de apoio e o número apagado do aparelho', () => {
     const css = readFileSync(resolve(SRC, 'components/home/contraste-faixa.css'), 'utf8')
-    const usadas = Array.from(new Set(Array.from(css.matchAll(/color:\s*(#[0-9a-fA-F]{6})/g)).map((m) => m[1].toLowerCase())))
+    const usadas = Array.from(new Set(Array.from(css.matchAll(/color:\s*(#[0-9a-fA-F]{6}|var\(--[\w-]+\))/g)).map((m) => hexDaCor(m[1])).filter((c): c is string => c !== null)))
     expect(usadas.length).toBeGreaterThanOrEqual(3)
     for (const cor of usadas) expect(contraste(cor, azul), `${cor} sobre o azul`).toBeGreaterThanOrEqual(4.5)
   })

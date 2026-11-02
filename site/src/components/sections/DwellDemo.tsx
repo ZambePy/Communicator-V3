@@ -12,7 +12,7 @@ import './dwell-demo.css'
    segue o mesmo padrão do Icon (viewBox 24, contorno de 1.6).
    ------------------------------------------------------------------ */
 
-type Pictogram = {
+export type Pictogram = {
   /** Palavra que aparece embaixo do desenho, como na prancha real. */
   word: string
   /** Frase completa vocalizada — uma fixação produz a frase inteira. */
@@ -20,7 +20,7 @@ type Pictogram = {
   glyph: ReactNode
 }
 
-const PICTOGRAMS: Pictogram[] = [
+export const PICTOGRAMS: Pictogram[] = [
   {
     word: 'sede',
     phrase: 'Estou com sede.',

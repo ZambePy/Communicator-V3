@@ -13,7 +13,8 @@
 .cta__title {
   max-width: 13ch;
   margin: 0;
-  font-size: clamp(2.75rem, 1.4rem + 5.2vw, 6rem);
+  font-size: var(--fs-titulo-fecho);
+  text-wrap: balance;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.04em;
@@ -51,5 +52,79 @@
   }
   .cta__actions .btn {
     width: 100%;
+  }
+}
+
+/* ---------- o fecho da home (01/11/2026) ----------
+   O fundo vivo e o símbolo da abertura voltam: a frase à esquerda, o
+   símbolo à direita, que se monta peça por peça enquanto a faixa entra na
+   tela (simbolo-em-volume.css). O botão de pausa do fundo fica junto das
+   chamadas, e não solto no canto. */
+.cta--iris {
+  /* clip, e não hidden: hidden vira uma área de rolagem e trava as animações presas à rolagem lá dentro. */
+  overflow: clip;
+  display: flex;
+  align-items: center;
+  min-height: min(84svh, 760px);
+  padding-block: clamp(96px, 10vw, 140px);
+}
+
+.cta--iris .cta__inner {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.cta__simbolo {
+  position: relative;
+  z-index: 1;
+  width: min(62vw, 300px);
+  margin: 0 auto;
+  pointer-events: none;
+}
+
+.cta--iris .cta__actions .cta__pausa {
+  align-self: center;
+  /* Ao lado de dois .btn--lg: a mesma altura (56 px) e o mesmo raio (14 px).
+     O desenho base é de fundo-vivo.css (abertura), que não muda. */
+  min-height: 56px;
+  padding-inline: 1.25rem;
+  border-radius: var(--r-botao-lg);
+}
+
+/* Na home, o fecho fala na escala dos títulos de seção (tokens.css). */
+.cta--iris .cta__title {
+  font-size: var(--fs-titulo-secao);
+  line-height: var(--lh-titulo-secao);
+  letter-spacing: var(--ls-titulo-secao);
+}
+
+@media (min-width: 961px) {
+  .cta__simbolo {
+    position: absolute;
+    top: 50%;
+    left: 74%;
+    width: min(34vw, 58vh, 500px);
+    margin: 0;
+    translate: -50% -50%;
+  }
+  /* Uma frase por bloco, e sem chegar no símbolo da direita: na escala dos
+     títulos de seção a primeira frase não cabe numa linha antes do símbolo,
+     então ela se quebra em duas (8,6em fica à esquerda do símbolo de 961 a
+     1920 px). */
+  .cta--iris .cta__title {
+    max-width: 8.6em;
+  }
+  .cta--iris .cta__title span {
+    display: block;
+  }
+}
+
+@media (max-width: 960px) {
+  .cta--iris {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 40px;
+    min-height: 0;
   }
 }

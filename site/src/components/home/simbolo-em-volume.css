@@ -1,0 +1,168 @@
+/* O símbolo em volume (SimboloEmVolume.tsx). Cada lâmina é uma peça: um
+   empilhamento de camadas do desenho oficial que forma a espessura. Três
+   movimentos, cada um no seu invólucro: a montagem (as peças chegam e se
+   encaixam), a mira (o ponteiro, por JS) e o corpo (a flutuação lenta). Só
+   transform, opacity e o traço do aro. */
+
+.simbolo3d {
+  position: relative;
+  aspect-ratio: 1;
+  perspective: 1400px;
+}
+
+.simbolo3d__mira,
+.simbolo3d__corpo,
+.simbolo3d__peca {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.simbolo3d__mira {
+  will-change: transform;
+}
+
+.simbolo3d__camada,
+.simbolo3d__pupila,
+.simbolo3d__brilho,
+.simbolo3d__aro {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* Cada camada, um passo para trás: 16 × 2,6 px de espessura. */
+.simbolo3d__camada {
+  transform: translateZ(calc(var(--k) * -2.6px));
+}
+
+.simbolo3d__pupila {
+  transform: translateZ(calc(8px - var(--k) * 2.6px));
+}
+
+.simbolo3d__brilho {
+  transform: translateZ(0.6px);
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.32);
+  stroke-width: 0.45;
+}
+
+.simbolo3d__aro {
+  transform: translateZ(-70px);
+}
+
+.simbolo3d__aro-trilho,
+.simbolo3d__aro-traco {
+  fill: none;
+  stroke-width: 1;
+}
+
+.simbolo3d__aro-trilho {
+  stroke: rgba(169, 198, 247, 0.16);
+}
+
+.simbolo3d__aro-traco {
+  stroke: var(--v3-fixacao);
+  stroke-linecap: round;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 0;
+  transform: rotate(-90deg);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Com movimento reduzido: montado e parado, num ângulo que mostra o volume. */
+.simbolo3d__corpo {
+  transform: rotateY(-24deg) rotateX(8deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .simbolo3d__corpo {
+    animation: simbolo-flutua 7s var(--ease-in-out) infinite alternate;
+  }
+  [data-fundo-pausado='sim'] .simbolo3d__corpo {
+    animation-play-state: paused;
+  }
+
+  /* ---------- a montagem, na abertura: uma vez, ao abrir ----------
+     `backwards`, e não `both`: uma animação de opacidade que fica presa no
+     fim faz o navegador achatar o 3D da peça. Terminada, ela sai de cena. */
+  .simbolo3d--carga .simbolo3d__peca {
+    animation: simbolo-encaixa 1300ms var(--ease-forte) calc(260ms + var(--b, 0) * 120ms) backwards;
+  }
+  .simbolo3d--carga .simbolo3d__peca--pupila {
+    animation: simbolo-pupila-cai 900ms var(--ease-forte) 900ms backwards;
+  }
+  /* Linear de propósito: é o tempo de fixação correndo, como no app. */
+  .simbolo3d--carga .simbolo3d__aro-traco {
+    animation: simbolo-aro var(--dur-fixacao) linear 1500ms both;
+  }
+
+  /* ---------- a montagem, no fecho: presa à rolagem ----------
+     Montado quando a faixa chega ao meio da tela (lá a linha do tempo está
+     perto de 39%): as lâminas até 29%, a pupila até 31%, o aro até 36%. */
+  @supports (animation-timeline: view()) {
+    .simbolo3d--rolagem .simbolo3d__peca {
+      animation: simbolo-encaixa linear backwards;
+      animation-timeline: view();
+      animation-range: entry calc(var(--b, 0) * 5%) cover calc(20% + var(--b, 0) * 3%);
+    }
+    .simbolo3d--rolagem .simbolo3d__peca--pupila {
+      animation: simbolo-pupila-cai linear backwards;
+      animation-timeline: view();
+      animation-range: cover 17% cover 31%;
+    }
+    .simbolo3d--rolagem .simbolo3d__aro-traco {
+      animation: simbolo-aro linear both;
+      animation-timeline: view();
+      animation-range: cover 27% cover 36%;
+    }
+  }
+}
+
+/* Cada lâmina chega do seu lado, girando e vindo de perto, e se encaixa. */
+@keyframes simbolo-encaixa {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--de-x, 0), var(--de-y, 0), 220px) rotateZ(var(--giro, 0)) rotateY(40deg);
+  }
+  35% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes simbolo-pupila-cai {
+  from {
+    opacity: 0;
+    transform: translateZ(320px) scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Sempre um pouco de lado, para a espessura nunca sumir de frente. */
+@keyframes simbolo-flutua {
+  from {
+    transform: rotateY(-32deg) rotateX(11deg) translateY(-12px);
+  }
+  to {
+    transform: rotateY(-8deg) rotateX(4deg) translateY(12px);
+  }
+}
+
+@keyframes simbolo-aro {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}

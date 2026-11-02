@@ -46,12 +46,16 @@
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.03em;
-  color: var(--ok);
+  /* o azul claro, como .recursos__numero e .passo__numero: o teal é só do que se confirma */
+  color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 
+/* h2 pela ordem dos títulos (vem logo abaixo do h1), mas é título de
+   cartão: o desenho dos h3 (--fs-h3, 700). */
 .passos-tela__titulo {
-  font-size: 1.25rem;
+  font-size: var(--fs-h3);
+  font-weight: 700;
   margin-bottom: var(--sp-2);
 }
 
@@ -133,7 +137,7 @@
 }
 
 .estagios__titulo {
-  font-size: 1.1rem;
+  font-size: var(--fs-h3);
   margin: 2px 0 4px;
 }
 

@@ -83,6 +83,8 @@ export function DwellTarget({ label, dwellMs = 1500, onSelect, hint }: Props) {
           style={
             {
               '--dash': C,
+              // o tempo do aro, para o bloco de movimento reduzido (dwell.css)
+              '--tempo-do-aro': `${dwellMs}ms`,
               strokeDasharray: C,
               strokeDashoffset: stage === 'active' || stage === 'done' ? 0 : C,
               transition:

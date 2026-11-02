@@ -18,6 +18,20 @@
   transform-style: preserve-3d;
 }
 
+/* O brilho do estado (processando, sucesso, erro) é uma camada atrás do
+   cartão que só muda de opacidade: animar o box-shadow repintava a cada
+   quadro. A cor vem de --cartao-brilho, definida em cada estado (abaixo). */
+.cartao3d__corpo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-lg);
+  box-shadow: var(--cartao-brilho, none);
+  opacity: 0;
+  transition: opacity 400ms var(--ease-out);
+  pointer-events: none;
+}
+
 .cartao3d__giro {
   position: relative;
   width: 100%;
@@ -39,12 +53,11 @@
   padding: var(--sp-5);
   border-radius: var(--r-lg);
   border: 1px solid var(--line-strong);
-  background: linear-gradient(140deg, #16305c, #0b1b3a 60%, #061020);
+  background: linear-gradient(140deg, #16305c, var(--navy) 60%, #061020);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-  transition: box-shadow 400ms var(--ease-out);
 }
 
 /* --- frente --- */
@@ -90,7 +103,7 @@
   margin: 0;
   font-size: clamp(1.05rem, 2.6vw, 1.42rem);
   letter-spacing: 0.13em;
-  color: #fff;
+  color: var(--branco);
   font-variant-numeric: tabular-nums;
 }
 
@@ -105,7 +118,7 @@
 .cartao3d__dados strong {
   display: block;
   font-size: 0.94rem;
-  color: #fff;
+  color: var(--branco);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -140,7 +153,7 @@
   min-width: 3.4em;
   padding: 3px 10px;
   border-radius: 4px;
-  background: #fff;
+  background: var(--branco);
   color: var(--navy);
   font-weight: 700;
   letter-spacing: 0.2em;
@@ -156,16 +169,26 @@
 }
 
 /* --- brilho durante a confirmação --- */
-.cartao3d--processando .cartao3d__face {
+.cartao3d--processando {
+  --cartao-brilho: 0 0 0 2px rgba(77, 134, 224, 0.95), 0 0 48px 10px rgba(77, 134, 224, 0.5);
+}
+
+.cartao3d--sucesso {
+  --cartao-brilho: 0 0 0 2px rgba(63, 214, 194, 0.9), 0 0 44px 8px rgba(63, 214, 194, 0.42);
+}
+
+.cartao3d--erro {
+  --cartao-brilho: 0 0 0 2px rgba(255, 154, 157, 0.9), 0 0 44px 8px rgba(255, 154, 157, 0.38);
+}
+
+.cartao3d--processando .cartao3d__corpo::before,
+.cartao3d--sucesso .cartao3d__corpo::before,
+.cartao3d--erro .cartao3d__corpo::before {
+  opacity: 1;
+}
+
+.cartao3d--processando .cartao3d__corpo::before {
   animation: cartao3d-pulso 1.4s var(--ease-in-out) infinite;
-}
-
-.cartao3d--sucesso .cartao3d__face {
-  box-shadow: 0 0 0 2px rgba(63, 214, 194, 0.9), 0 0 44px 8px rgba(63, 214, 194, 0.42);
-}
-
-.cartao3d--erro .cartao3d__face {
-  box-shadow: 0 0 0 2px rgba(255, 154, 157, 0.9), 0 0 44px 8px rgba(255, 154, 157, 0.38);
 }
 
 .cartao3d--erro {
@@ -175,10 +198,10 @@
 @keyframes cartao3d-pulso {
   0%,
   100% {
-    box-shadow: 0 0 0 1px rgba(77, 134, 224, 0.55), 0 0 18px 2px rgba(77, 134, 224, 0.28);
+    opacity: 0.5;
   }
   50% {
-    box-shadow: 0 0 0 2px rgba(77, 134, 224, 0.95), 0 0 48px 10px rgba(77, 134, 224, 0.5);
+    opacity: 1;
   }
 }
 
@@ -198,9 +221,11 @@
 /* Movimento reduzido: o giro já fica instantâneo pela regra
    global; aqui o pulso vira um brilho parado, que ainda indica o estado. */
 @media (prefers-reduced-motion: reduce) {
-  .cartao3d--processando .cartao3d__face {
+  .cartao3d--processando {
+    --cartao-brilho: 0 0 0 2px rgba(77, 134, 224, 0.9), 0 0 36px 6px rgba(77, 134, 224, 0.45);
+  }
+  .cartao3d--processando .cartao3d__corpo::before {
     animation: none;
-    box-shadow: 0 0 0 2px rgba(77, 134, 224, 0.9), 0 0 36px 6px rgba(77, 134, 224, 0.45);
   }
   .cartao3d__frente::after {
     animation: none;

@@ -1,8 +1,10 @@
-/* Os módulos na home (ListaDeModulos.tsx), no degrau mais claro do marinho
-   (redesenho de 31/10/2026). A lista à esquerda, em fios finos, sem números
-   (não é uma sequência); à direita, presa enquanto a lista rola, a tela real
-   do módulo num painel da noite, com a legenda embaixo. Sem brilho. Só
-   opacity e transform animam. */
+/* Os módulos na home (ListaDeModulos.tsx). Redesenho de 01/11/2026: o índice
+   com prévia, o movimento-assinatura da página. A lista à esquerda, separada
+   por espaço e não por fio, sem números (não é uma sequência); a linha ativa
+   ganha o aro, o motivo da página, em tamanho de texto. À direita, presa
+   enquanto a lista rola, a tela real do módulo sobre um palco chapado no azul
+   da marca, com a legenda embaixo. Sem brilho e sem sombra. Só opacity e
+   transform animam. */
 
 .v3-modulos {
   overflow-x: clip;
@@ -28,7 +30,6 @@
 
 .v3-modulos__item {
   margin: 0;
-  border-bottom: 1px solid var(--v3-fio);
 }
 
 .v3-modulos__linha {
@@ -39,14 +40,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px 12px;
-  padding: 12px 0;
+  padding: 10px 0;
   border: 0;
   background: transparent;
   color: var(--v3-texto-2);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: transform 160ms var(--ease-forte);
+  transition: transform var(--dur-fast) var(--ease-forte);
 }
 
 .v3-modulos__linha:active {
@@ -66,13 +67,45 @@
 }
 
 .v3-modulos__nome {
-  font-size: 1.25rem;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 0.95rem + 0.9vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  transition: transform 240ms var(--ease-forte);
+}
+
+/* O aro da linha ativa: some nas outras, cresce e fecha na escolhida, e o
+   nome anda para a direita para dar lugar a ele (nada sai da margem). */
+.v3-modulos__linha {
+  position: relative;
+}
+
+.v3-modulos__linha::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 50%;
+  border: 3px solid var(--v3-iris);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 200ms var(--ease-forte),
+    transform 240ms var(--ease-forte);
 }
 
 .v3-modulos__linha.is-ativa .v3-modulos__nome {
-  font-weight: 600;
+  transform: translateX(30px);
+}
+
+.v3-modulos__linha.is-ativa::before {
+  opacity: 1;
+  transform: none;
 }
 
 .v3-modulos__etiquetas {
@@ -109,17 +142,17 @@
   position: sticky;
   top: calc(var(--header-h) + 32px);
   margin: 0;
-  border-radius: 18px;
+  padding: clamp(14px, 1.6vw, 24px) clamp(14px, 1.6vw, 24px) 0;
+  border-radius: var(--r-xl);
   overflow: hidden;
-  background: var(--v3-noite);
-  box-shadow:
-    inset 0 0 0 1px var(--v3-fio),
-    0 40px 80px -48px rgba(2, 7, 16, 0.9);
+  background: var(--blue);
 }
 
 .v3-modulos__tela {
   position: relative;
   aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--r-md);
   background: var(--v3-noite);
 }
 
@@ -147,14 +180,14 @@
 
 .v3-modulos__legenda {
   margin: 0;
-  padding: 18px 22px 20px;
-  font-size: 1rem;
+  padding: 18px 6px 22px;
+  font-size: var(--fs-body);
   line-height: 1.55;
-  color: var(--v3-texto-2);
+  color: var(--branco);
 }
 
 .v3-modulos__legenda strong {
-  color: var(--v3-papel);
+  color: var(--branco);
 }
 
 .v3-modulos__miniatura {
@@ -170,7 +203,7 @@
     display: none;
   }
   .v3-modulos__nome {
-    font-size: 1.0625rem;
+    font-size: 1.25rem;
   }
   .v3-modulos__etiquetas {
     justify-content: flex-start;
@@ -185,7 +218,6 @@
     margin: 4px 0 16px;
     border-radius: 12px;
     background: var(--v3-noite);
-    box-shadow: 0 0 0 1px var(--v3-fio);
     /* A tela da linha escolhida surge (só opacity; a altura já está reservada). */
     animation: modulos-miniatura-surge 260ms var(--ease-forte) both;
   }
@@ -203,5 +235,21 @@
 @media (prefers-reduced-motion: reduce) {
   .v3-modulos__miniatura {
     animation: none;
+  }
+}
+
+/* A tela que chega na prévia se assenta: entra um pouco maior e volta ao tamanho. */
+@media (prefers-reduced-motion: no-preference) {
+  .v3-modulos__imagem.is-ativa[data-carregada] {
+    animation: modulos-previa-assenta 520ms var(--ease-forte) both;
+  }
+}
+
+@keyframes modulos-previa-assenta {
+  from {
+    transform: scale(1.05);
+  }
+  to {
+    transform: none;
   }
 }

@@ -1,57 +1,215 @@
-/* O app de quem cuida na home (CuidadorDestaque.tsx), na faixa da noite. O
-   celular à esquerda, com o cartão que chega saindo da borda dele; o texto à
-   direita. Só transform e opacity animam (o cartão, uma vez, e as entradas). */
+/* O app de quem cuida na home (CuidadorDestaque.tsx, segunda volta de
+   01/11/2026). Um capítulo de cor inteira: cada função pinta o campo com a cor
+   dela (camadas sobrepostas que trocam por opacidade), o celular grande à
+   direita troca para a tela real da função e o controle dela aparece em
+   tamanho de pôster, saindo da borda do celular. Só transform, opacity e o
+   traço do aro (stroke-dashoffset) animam. */
+
+.cuidador-destaque {
+  isolation: isolate;
+  overflow: clip;
+  min-height: 92svh;
+  color: #ffffff;
+}
+
+/* ---------- os campos de cor ---------- */
+
+.cuidador-destaque__campos {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+}
+
+.cuidador-destaque__campo {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 700ms ease;
+}
+
+.cuidador-destaque__campo.is-ativo {
+  opacity: 1;
+}
+
+.cuidador-destaque__campo--conversa {
+  background: var(--blue);
+}
+
+/* O vermelho do alerta do próprio app (alertas.webp). */
+.cuidador-destaque__campo--socorro {
+  background: #a3241c;
+}
+
+.cuidador-destaque__campo--ajustes {
+  background: var(--teal-700);
+}
+
+.cuidador-destaque__campo--relatorios {
+  background: #0e2145;
+}
+
+/* ---------- o texto ---------- */
 
 .cuidador-destaque__grade {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-  gap: clamp(48px, 5.5vw, 80px);
+  grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
+  gap: clamp(48px, 6vw, 96px);
   align-items: center;
 }
 
-.cuidador-destaque__celular {
-  position: relative;
-  width: min(100%, 340px);
-  margin: 0 40px 0 auto;
+.cuidador-destaque__app {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 1rem;
+  line-height: 1.4;
+  color: #e4ecf9;
 }
 
-.cuidador-destaque__marca {
-  width: auto;
-  height: 44px;
+.cuidador-destaque__app img {
+  flex: none;
+  width: clamp(72px, 6vw, 92px);
+  height: auto;
+  border-radius: 24%;
 }
 
-.cuidador-destaque .cuidador-destaque__titulo {
-  margin-top: 28px;
-  max-width: 13ch;
+.cuidador-destaque__app strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 1.1rem + 0.5vw, 1.625rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff;
 }
 
-.cuidador-destaque__pontos {
+.cuidador-destaque__titulo {
+  margin: clamp(28px, 3vw, 40px) 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 1rem + 4vw, 4.75rem);
+  font-weight: 700;
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  color: #ffffff;
+  text-wrap: balance;
+}
+
+.cuidador-destaque__sub {
+  max-width: 46ch;
+  margin: 24px 0 0;
+  font-size: clamp(1.0625rem, 0.98rem + 0.3vw, 1.25rem);
+  line-height: 1.55;
+  color: #e4ecf9;
+}
+
+.cuidador-destaque__funcoes {
   display: grid;
-  gap: 16px;
-  margin: 36px 0 0;
+  gap: 6px;
+  margin: clamp(28px, 3vw, 40px) 0 0;
   padding: 0;
   list-style: none;
-  font-size: 1.125rem;
-  line-height: 1.5;
-  color: #e6ecf5;
 }
 
-.cuidador-destaque__pontos li {
-  position: relative;
+.cuidador-destaque__funcoes li {
   margin: 0;
-  padding-left: 26px;
 }
 
-/* O ponto da confirmação: teal claro, como o retorno do app. */
-.cuidador-destaque__pontos li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.55em;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--teal-300);
+.cuidador-destaque__funcao {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 16px;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 20px 12px 12px;
+  border: 0;
+  border-radius: 20px;
+  background: transparent;
+  color: #ffffff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms var(--ease-forte);
+}
+
+.cuidador-destaque__funcao:active {
+  transform: scale(0.98);
+}
+
+/* A função ativa: um tom abaixo do campo, seja qual for a cor dele. */
+.cuidador-destaque__funcao.is-ativo {
+  background: rgba(5, 12, 30, 0.28);
+}
+
+.cuidador-destaque__aro {
+  grid-row: 1 / span 2;
+  width: 40px;
+  height: 40px;
+  transform: rotate(-90deg);
+}
+
+.cuidador-destaque__funcao:not(.is-ativo) .cuidador-destaque__aro {
+  grid-row: 1;
+}
+
+.cuidador-destaque__aro circle {
+  fill: none;
+  stroke-width: 4;
+}
+
+.cuidador-destaque__aro-trilho {
+  stroke: rgba(255, 255, 255, 0.35);
+}
+
+.cuidador-destaque__aro-traco {
+  stroke: #ffffff;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.cuidador-destaque__funcao.is-ativo .cuidador-destaque__aro-traco {
+  stroke-dashoffset: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .cuidador-destaque__funcao.is-ativo .cuidador-destaque__aro-traco {
+    animation: cuidador-aro var(--tempo-da-funcao, 6s) linear both;
+    animation-play-state: paused;
+  }
+  .cuidador-destaque[data-revezando='sim'] .cuidador-destaque__funcao.is-ativo .cuidador-destaque__aro-traco {
+    animation-play-state: running;
+  }
+}
+
+@keyframes cuidador-aro {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.cuidador-destaque__funcao-nome {
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 1.1rem + 0.5vw, 1.5rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+/* O texto da função só aparece na ativa: a lista fica curta, a explicação fica perto do nome. */
+.cuidador-destaque__funcao-texto {
+  grid-column: 2;
+  display: none;
+  max-width: 48ch;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #e4ecf9;
+}
+
+.cuidador-destaque__funcao.is-ativo .cuidador-destaque__funcao-texto {
+  display: block;
 }
 
 .cuidador-destaque__ressalva {
@@ -59,32 +217,342 @@
   margin: 20px 0 0;
   font-size: var(--fs-sm);
   line-height: 1.5;
-  color: var(--v3-texto-3);
+  color: #dce6f7;
 }
 
 .cuidador-destaque__acoes {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 36px;
+  margin-top: 32px;
 }
 
-@media (max-width: 900px) {
+/* ---------- o celular e o controle ---------- */
+
+.cuidador-destaque__palco {
+  display: flex;
+  justify-content: center;
+}
+
+.cuidador-destaque__celular {
+  position: relative;
+  width: clamp(280px, 25vw, 380px);
+  margin: 0;
+}
+
+.cuidador-destaque__celular > .celular__moldura {
+  z-index: 1;
+}
+
+.cuidador-destaque__tela {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+
+.cuidador-destaque__tela.is-ativo {
+  opacity: 1;
+}
+
+.cuidador-destaque__controles {
+  position: absolute;
+  z-index: 2;
+  bottom: 9%;
+  left: -38%;
+  width: 118%;
+  height: 0;
+}
+
+.cuidador-destaque__controle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  transform: translateY(24px) scale(0.94);
+  transform-origin: left bottom;
+  transition:
+    opacity 260ms ease,
+    transform 560ms var(--ease-forte);
+  pointer-events: none;
+}
+
+.cuidador-destaque__controle.is-ativo {
+  opacity: 1;
+  transform: none;
+}
+
+/* As respostas rápidas, como no app, em tamanho de pôster. */
+.cd-respostas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 26rem;
+  max-width: 120vw;
+}
+
+.cd-resposta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 26px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cd-resposta svg {
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cd-resposta--sim {
+  background: #0d4d3f;
+  color: var(--v3-fixacao);
+}
+
+.cd-resposta--nao {
+  background: #5c1a1f;
+  color: #ff9a9d;
+}
+
+.cd-resposta--indo {
+  background: #0a1d42;
+  color: #a9c6f7;
+}
+
+/* O botão do alerta: o branco que confirma, com o visto na menta da confirmação. */
+.cd-socorro {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 40px;
+  border-radius: 22px;
+  background: #ffffff;
+  color: #a3241c;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.cd-socorro svg {
+  width: 1.1em;
+  height: 1.1em;
+  fill: none;
+  stroke: #d92d20;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cd-socorro svg circle {
+  fill: #d92d20;
+}
+
+.cd-socorro svg path {
+  stroke: #ffffff;
+}
+
+/* O tempo de fixação: o controle segmentado da tela de ajustes. */
+.cd-ajuste {
+  display: grid;
+  gap: 14px;
+  width: 26rem;
+  padding: 22px;
+  border-radius: 24px;
+  background: #0f2142;
+}
+
+.cd-ajuste__titulo,
+.cd-barras__titulo {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.cd-ajuste__opcoes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 5px;
+  border-radius: 16px;
+  background: #0a1730;
+}
+
+.cd-ajuste__opcoes > span {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 12px 6px;
+  border-radius: 12px;
+  font-size: 0.9375rem;
+  color: #98abc8;
+}
+
+.cd-ajuste__opcoes b {
+  font-size: 1.25rem;
+  color: #c3d1e6;
+}
+
+.cd-ajuste__opcoes .is-escolhida {
+  background: #1d3966;
+  color: #dbe6f8;
+}
+
+.cd-ajuste__opcoes .is-escolhida b {
+  color: #a9c6f7;
+}
+
+/* As frases por dia: as barras da tela de relatórios. */
+.cd-barras {
+  display: grid;
+  gap: 16px;
+  width: 24rem;
+  padding: 22px;
+  border-radius: 24px;
+  background: #12284a;
+}
+
+.cd-barras__grade {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  height: 9rem;
+}
+
+.cd-barras__grade > span {
+  display: grid;
+  justify-items: center;
+  align-content: end;
+  gap: 8px;
+  height: 100%;
+  font-size: 0.875rem;
+  color: #98abc8;
+}
+
+.cd-barras__grade i {
+  width: 100%;
+  height: calc(var(--v) * 6.5rem);
+  border-radius: 8px 8px 4px 4px;
+  background: #5b8fe0;
+}
+
+.cd-barras__grade .is-hoje i {
+  background: var(--v3-fixacao);
+}
+
+.cd-barras__grade .is-hoje {
+  color: var(--v3-fixacao);
+  font-weight: 700;
+}
+
+/* As barras sobem quando os relatórios entram. */
+@media (prefers-reduced-motion: no-preference) {
+  .cuidador-destaque__controle.is-ativo .cd-barras__grade i {
+    transform-origin: bottom;
+    animation: cd-barra 700ms var(--ease-forte) both;
+    animation-delay: calc(var(--v) * 160ms);
+  }
+}
+
+@keyframes cd-barra {
+  from {
+    transform: scaleY(0.2);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* ---------- o celular gira em 3D enquanto entra na tela ----------
+   Chega de lado, inclinado, e se assenta de frente quando a faixa está no
+   meio da tela. Preso à rolagem, não ao relógio. Só transform. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .cuidador-destaque__palco {
+      perspective: 1400px;
+    }
+    .cuidador-destaque__celular > .celular__moldura {
+      animation: cuidador-gira linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 45%;
+    }
+  }
+}
+
+@keyframes cuidador-gira {
+  from {
+    transform: rotateY(24deg) rotateX(8deg) translateY(48px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cuidador-destaque__campo,
+  .cuidador-destaque__tela,
+  .cuidador-destaque__controle {
+    transition: none;
+  }
+}
+
+/* ---------- tablet e celular ---------- */
+
+@media (max-width: 960px) {
+  .cuidador-destaque {
+    min-height: 0;
+  }
   .cuidador-destaque__grade {
     grid-template-columns: minmax(0, 1fr);
   }
+  .cuidador-destaque__palco {
+    order: 2;
+    padding-left: 20%;
+  }
   .cuidador-destaque__celular {
-    width: min(100%, 280px);
-    margin: 0 auto;
+    width: min(100%, 300px);
   }
 }
 
 @media (max-width: 600px) {
-  .cuidador-destaque__celular {
-    width: 250px;
+  .cuidador-destaque__palco {
+    padding-left: 26%;
   }
-  .cuidador-destaque__pontos {
-    font-size: 1rem;
+  .cuidador-destaque__celular {
+    width: 220px;
+  }
+  .cuidador-destaque__controles {
+    left: -50%;
+  }
+  .cd-respostas,
+  .cd-ajuste {
+    width: 19rem;
+  }
+  .cd-resposta {
+    padding: 12px 18px;
+    font-size: 1.125rem;
+  }
+  .cd-socorro {
+    padding: 18px 26px;
+    font-size: 1.375rem;
+  }
+  .cd-barras {
+    width: 18rem;
   }
   .cuidador-destaque__acoes {
     flex-direction: column;

@@ -1,22 +1,62 @@
-/* Rodapé (Footer.tsx): a frase da marca grande, as colunas de links em caixa
-   normal e, embaixo, a ressalva sobre as medições. */
+/* Rodapé (Footer.tsx), redesenho de 01/11/2026: em cima, um painel com a
+   marca e as duas portas de entrada; no meio, quatro colunas de links e o
+   contato; embaixo, a hora, a beta e a ressalva das medições. Sem fios e sem
+   o nome gigante: as faixas se separam pelo espaço e pelo tom. */
 .footer {
   position: relative;
   z-index: 1;
-  padding-top: clamp(64px, 10vh, 112px);
-  box-shadow: inset 0 1px 0 var(--line);
+  padding-top: clamp(48px, 7vh, 88px);
+}
+
+/* O painel de cima: um degrau acima do fundo, com a marca à esquerda e as
+   portas à direita. */
+.footer__painel {
+  display: grid;
+  gap: 32px;
+  align-items: end;
+  padding: clamp(28px, 4vw, 56px);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+}
+
+.footer__portas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .footer__inner {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--sp-7) var(--sp-6);
-  padding-bottom: var(--sp-8);
+  padding-block: clamp(48px, 6vw, 80px) var(--sp-7);
+}
+
+.footer__email {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.footer__lugar {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+@media (min-width: 961px) {
+  .footer__painel {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
 }
 
 .footer__tagline {
   font-family: var(--font-display);
-  font-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem);
+  font-size: clamp(2rem, 1.3rem + 2.4vw, 3.25rem);
   font-weight: 600;
   line-height: 1.08;
   letter-spacing: -0.03em;
@@ -25,9 +65,10 @@
 }
 
 .footer__note {
-  font-size: var(--fs-sm);
-  max-width: 44ch;
-  color: var(--text-dim);
+  font-size: var(--fs-body);
+  max-width: 52ch;
+  margin: 0;
+  color: var(--text-soft);
 }
 
 .footer__social {
@@ -117,16 +158,6 @@
 /* O fio de cima das duas faixas do pé (relógio e ressalva) vai de uma borda do
    texto à outra, não da borda do contêiner: com `border-top` ele passava
    da coluna do texto por uma margem de cada lado (conferido em captura, 21/10/2026). */
-.footer__ao-vivo::before,
-.footer__bottom::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: var(--gutter);
-  right: var(--gutter);
-  height: 1px;
-  background: var(--line);
-}
 
 .footer__beta {
   display: inline-flex;
@@ -166,41 +197,28 @@
   line-height: 1.6;
 }
 
-/* ---------- o nome na largura toda ----------
-   O tamanho vem da largura do contêiner (cqw), para "IrisFlow" ocupar a
-   coluna de texto de ponta a ponta em qualquer tela, sem passar dela. A
-   entrelinha curta deixa a base das letras rente ao fim da página. */
-.footer__marca {
-  container-type: inline-size;
-  overflow: hidden;
-}
-
-.footer__nome {
-  margin: 0;
-  padding-top: var(--sp-4);
-  font-family: var(--font-display);
-  font-size: 26.2cqw;
-  font-weight: 700;
-  line-height: 0.8;
-  letter-spacing: -0.04em;
-  white-space: nowrap;
-  color: var(--v3-superficie);
-  user-select: none;
-}
-
 @media (max-width: 900px) {
   .footer__inner {
     grid-template-columns: 1fr 1fr;
   }
-  .footer__brand {
+  .footer__contato {
     grid-column: 1 / -1;
   }
 }
 
 @media (max-width: 560px) {
+  /* As duas portas cabem numa linha (56 px, como os outros .btn--lg):
+     botões na largura toda, com um pouco menos de recheio dos lados. */
+  .footer__painel {
+    padding-inline: 24px;
+  }
+  .footer__portas .btn {
+    width: 100%;
+    padding-inline: 16px;
+  }
   .footer__inner {
-    grid-template-columns: 1fr;
-    gap: var(--sp-6);
+    gap: var(--sp-5) var(--sp-4);
+    padding-bottom: var(--sp-6);
   }
 }
 
@@ -208,3 +226,4 @@
 .footer__col .underline-grow::after {
   bottom: 10px;
 }
+

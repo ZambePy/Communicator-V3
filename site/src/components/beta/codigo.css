@@ -47,8 +47,8 @@
   font-variant-numeric: tabular-nums;
   line-height: 1;
   transition:
-    border-color 160ms ease,
-    background 160ms ease,
+    border-color var(--dur-fast) ease,
+    background var(--dur-fast) ease,
     box-shadow 200ms ease;
 }
 
@@ -199,7 +199,7 @@
 .codigo__situacao {
   min-height: 1.6em;
   margin: 0 0 var(--sp-2);
-  font-weight: 650;
+  font-weight: 600;
   color: var(--text-soft);
 }
 
@@ -236,7 +236,7 @@
   background: transparent;
   color: var(--accent);
   font: inherit;
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
 }
 

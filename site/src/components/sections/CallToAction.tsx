@@ -1,4 +1,6 @@
 import { Fragment } from 'react'
+import { BotaoPausarFundo, FundoVivo } from '@/components/home/FundoVivo'
+import { SimboloEmVolume } from '@/components/home/SimboloEmVolume'
 import { Reveal } from '@/components/effects/Reveal'
 import { Button } from '@/components/ui/Button'
 import { useBetaProgram, useJaLancou } from '@/hooks/useBetaProgram'
@@ -25,6 +27,8 @@ type Props = {
   principal?: Acao
   /** O botão de apoio; sem ele, "Falar com a equipe". `false` tira o botão. */
   secundario?: Acao | false
+  /** O fecho da home: o fundo vivo e o símbolo voltam; o símbolo se monta enquanto a faixa entra. */
+  iris?: boolean
 }
 
 const TITULO_DA_HOME = ['A pessoa continua lá.', 'Só falta a voz.'] as const
@@ -33,7 +37,7 @@ const TITULO_DA_HOME = ['A pessoa continua lá.', 'Só falta a voz.'] as const
  *  antes do lançamento, o dia em que o download abre. Desde 31/10/2026 (o
  *  fecho do desenho aprovado da home) é uma faixa da noite que corre direto
  *  para o rodapé, sem fundo vivo nem painel ao lado: a frase é o desenho. */
-export function CallToAction({ titulo = TITULO_DA_HOME, texto, principal, secundario }: Props = {}) {
+export function CallToAction({ titulo = TITULO_DA_HOME, texto, principal, secundario, iris = false }: Props = {}) {
   const program = useBetaProgram()
   const lancou = useJaLancou(program.launchAt)
   const linhas = typeof titulo === 'string' ? [titulo] : titulo
@@ -47,7 +51,13 @@ export function CallToAction({ titulo = TITULO_DA_HOME, texto, principal, secund
   const doDownload = !principal
 
   return (
-    <section className="cta" aria-labelledby="cta-titulo">
+    <section className={`cta${iris ? ' cta--iris' : ''}`} aria-labelledby="cta-titulo">
+      {iris && <FundoVivo centro={[0.74, 0.5]} comBotao={false} />}
+      {iris && (
+        <div className="cta__simbolo">
+          <SimboloEmVolume montagem="rolagem" />
+        </div>
+      )}
       <div className="container cta__inner">
         <Reveal>
           <h2 id="cta-titulo" className="cta__title">
@@ -80,6 +90,7 @@ export function CallToAction({ titulo = TITULO_DA_HOME, texto, principal, secund
               {secundario?.label ?? 'Falar com a equipe'}
             </Button>
           )}
+          {iris && <BotaoPausarFundo className="cta__pausa" />}
         </Reveal>
 
         {doDownload && BETA.ativo && !lancou && (

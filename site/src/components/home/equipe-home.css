@@ -1,0 +1,194 @@
+/* A equipe na home (EquipeHome.tsx, redesenho de 01/11/2026). O título
+   grande, a foto dos três na largura inteira, que se abre de um aro até o
+   retângulo enquanto sobe na tela (clip-path preso à rolagem), os três com o
+   rosto e os dois blocos da origem. Sem sombra e sem fio: o tom separa. */
+
+.equipe-home__cabeca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px 48px;
+}
+
+.equipe-home__titulo {
+  max-width: 11em;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-titulo-secao);
+  font-weight: 700;
+  line-height: var(--lh-titulo-secao);
+  letter-spacing: var(--ls-titulo-secao);
+  color: var(--v3-papel);
+  text-wrap: balance;
+}
+
+/* ---------- a foto que se abre ---------- */
+
+.equipe-home__foto {
+  margin: clamp(36px, 4.5vw, 64px) 0 0;
+}
+
+.equipe-home__janela {
+  aspect-ratio: 21 / 10;
+  /* clip, e não hidden: hidden vira uma área de rolagem e trava as animações presas à rolagem lá dentro. */
+  overflow: clip;
+  border-radius: 32px;
+  background: #e6e7ea;
+}
+
+.equipe-home__janela img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 32%;
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .equipe-home__janela {
+      animation: equipe-abre linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 50%;
+    }
+    .equipe-home__janela img {
+      animation: equipe-aproxima linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 55%;
+    }
+  }
+}
+
+/* O aro que abre: de um círculo no meio até cobrir os cantos (72% do raio de referência). */
+@keyframes equipe-abre {
+  from {
+    clip-path: circle(20% at 50% 50%);
+  }
+  to {
+    clip-path: circle(72% at 50% 50%);
+  }
+}
+
+@keyframes equipe-aproxima {
+  from {
+    transform: scale(1.18);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* ---------- os três ---------- */
+
+.equipe-home__pessoas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(24px, 3vw, 48px);
+  margin: clamp(40px, 4.5vw, 64px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.equipe-home__pessoa {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  margin: 0;
+}
+
+.equipe-home__rosto {
+  display: block;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #e6e7ea;
+}
+
+.equipe-home__nome {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3-lg);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: var(--v3-papel);
+}
+
+.equipe-home__papel {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--v3-iris);
+}
+
+.equipe-home__frase {
+  margin: 10px 0 0;
+  max-width: 34ch;
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  color: var(--v3-texto-2);
+}
+
+/* ---------- a origem ---------- */
+
+.equipe-home__blocos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: clamp(40px, 4.5vw, 64px);
+}
+
+.equipe-home__bloco {
+  padding: clamp(24px, 2.6vw, 36px);
+  border-radius: 24px;
+  background: var(--v3-noite);
+}
+
+.equipe-home__bloco h3 {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--v3-papel);
+}
+
+.equipe-home__bloco p {
+  max-width: 52ch;
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  color: var(--v3-texto-2);
+}
+
+@media (max-width: 960px) {
+  .equipe-home__pessoas {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .equipe-home__blocos {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .equipe-home__janela {
+    aspect-ratio: 4 / 3.4;
+    border-radius: 24px;
+  }
+  .equipe-home__pessoa {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 16px;
+  }
+  .equipe-home__rosto {
+    width: 64px;
+    height: 64px;
+  }
+  .equipe-home__cabeca .btn {
+    width: 100%;
+  }
+}

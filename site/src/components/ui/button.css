@@ -70,7 +70,10 @@
   color: var(--text-soft);
 }
 
-/* --- variantes --- */
+/* --- variantes ---
+   .btn--teal é um nome antigo e desenha IGUAL a .btn--primary (papel com
+   texto marinho): o teal ficou só para o que se confirma. A classe continua
+   porque o fecho, os planos e algumas páginas usam variant="teal". */
 .btn--primary,
 .btn--teal {
   background: var(--papel);

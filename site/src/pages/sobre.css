@@ -25,7 +25,7 @@
   padding: 6px 12px;
   border-radius: var(--r-sm);
   background: rgba(8, 21, 48, 0.86);
-  color: #f3f6fb;
+  color: var(--papel);
   font-size: var(--fs-sm);
 }
 
@@ -57,10 +57,12 @@
   color: var(--text-soft);
 }
 
+/* O relato num painel levemente tingido de azul, sem a borda lateral colorida. */
 .sobre-relato {
   margin: 0;
-  padding: clamp(24px, 3vw, 40px) 0 0 clamp(24px, 3vw, 40px);
-  border-left: 3px solid var(--teal-300);
+  padding: clamp(24px, 3vw, 40px);
+  border-radius: var(--r-lg);
+  background: var(--accent-soft);
 }
 
 .sobre-relato p {
@@ -131,7 +133,7 @@
 }
 
 .sobre-equipe__nome {
-  font-size: 1.12rem;
+  font-size: var(--fs-h3);
   margin-bottom: 4px;
 }
 
@@ -242,7 +244,7 @@
 }
 
 .roteiro__titulo {
-  font-size: 1.12rem;
+  font-size: var(--fs-h3);
   margin-bottom: var(--sp-2);
 }
 

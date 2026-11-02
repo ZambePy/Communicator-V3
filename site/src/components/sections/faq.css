@@ -1,6 +1,7 @@
-/* Perguntas frequentes (Faq.tsx): uma lista separada por fios, sem caixa em
-   volta de cada pergunta. A pergunta em Sora; o sinal de mais vira menos ao
-   abrir. */
+/* Perguntas frequentes (Faq.tsx). Desde 01/11/2026, ladrilhos chapados um
+   degrau acima do fundo, 8 px entre eles, sem fio e sem contorno. O ladrilho
+   aberto vira o azul da marca. A pergunta em Sora; o sinal de mais vira menos
+   ao abrir. */
 .faq__title {
   margin-bottom: var(--sp-6);
 }
@@ -9,7 +10,8 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--line-strong);
+  display: grid;
+  gap: 8px;
 }
 
 .faq__list > li {
@@ -17,25 +19,35 @@
 }
 
 .faq__item {
-  border-bottom: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.faq__item.is-open {
+  background: var(--blue);
+  --text: var(--branco);
+}
+
+.faq__item.is-open .faq__a p {
+  color: var(--branco);
 }
 
 .faq__q {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem);
-  font-weight: 600;
+  font-size: var(--fs-h3);
+  font-weight: 700;
   letter-spacing: -0.015em;
 }
 
 .faq__q button {
   width: 100%;
-  min-height: 64px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-4);
-  padding: var(--sp-4) 0;
+  padding: var(--sp-4) var(--sp-5);
   background: none;
   border: 0;
   color: var(--text);
@@ -59,7 +71,13 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1.5px solid var(--line-strong);
+  background: var(--surface-3);
+  transition: transform var(--dur) var(--ease-out);
+}
+
+.faq__item.is-open .faq__icon {
+  background: rgba(255, 255, 255, 0.16);
+  transform: rotate(180deg);
 }
 
 .faq__icon span {
@@ -76,10 +94,6 @@
 
 .faq__icon span:nth-child(2) {
   transform: rotate(90deg);
-}
-
-.faq__item.is-open .faq__icon {
-  border-color: var(--ok-line);
 }
 
 .faq__item.is-open .faq__icon span:nth-child(2) {
@@ -117,7 +131,7 @@
 
 .faq__a p {
   margin: 0;
-  padding: 0 var(--sp-7) var(--sp-5) 0;
+  padding: 0 var(--sp-7) var(--sp-5) var(--sp-5);
   font-size: 1.0625rem;
   max-width: 68ch;
 }
@@ -162,16 +176,10 @@
 /* ---------- coluna (home, ao lado do cartão da beta) ---------- */
 .faq__title--coluna {
   margin: 0 0 var(--sp-5);
-  font-size: clamp(1.875rem, 1.4rem + 1.4vw, 2.5rem);
+  font-size: var(--fs-titulo-secao);
   font-weight: 700;
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  line-height: var(--lh-titulo-secao);
+  letter-spacing: var(--ls-titulo-secao);
 }
 
-.faq--coluna .faq__list {
-  border-top-color: var(--line);
-}
 
-.faq--coluna .faq__item {
-  border-bottom-color: var(--line);
-}

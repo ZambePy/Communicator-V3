@@ -3,8 +3,11 @@
    marca inteiro na faixa do preço. Mesmo respiro e mesma escala de títulos em
    todas. Os tokens de texto vêm de .on-dark e .on-raised (tokens.css).
 
-   - marinho (#0b1b3a): abertura e condições
-   - noite (#081530), um degrau abaixo: a demonstração, quem cuida e o fecho
+   - preto da noite (#05070c): só a abertura, com o fundo vivo (abertura.css)
+   - marinho (#0b1b3a): a prancha, do olhar ao clique, o medido, as condições
+     e a equipe
+   - noite (#081530), um degrau abaixo: a peça viva "Segure o olhar", a
+     demonstração, a privacidade, quem cuida e o fecho
    - marinho claro (#0e2145), um degrau acima: as telas e a beta com as perguntas
    - azul da marca (#1b54a8): o preço */
 
@@ -28,29 +31,29 @@
 }
 
 .home-faixa--elevada {
-  --bg: #0e2145;
-  background: #0e2145;
+  --bg: var(--v3-marinho-claro);
+  background: var(--v3-marinho-claro);
 }
 
 .home-faixa--azul {
   --bg: var(--blue);
-  --text: #ffffff;
-  --text-soft: #e4ecf9;
-  --text-dim: #dce6f7;
+  --text: var(--branco);
+  --text-soft: var(--azul-texto);
+  --text-dim: var(--azul-texto-2);
   --line: rgba(255, 255, 255, 0.28);
-  --accent: #ffffff;
+  --accent: var(--branco);
   background: var(--blue);
-  color: #ffffff;
+  color: var(--branco);
 }
 
 .home-titulo {
   max-width: 16ch;
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(2.375rem, 1.5rem + 3.2vw, 4rem);
+  font-size: var(--fs-titulo-secao);
   font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.035em;
+  line-height: var(--lh-titulo-secao);
+  letter-spacing: var(--ls-titulo-secao);
   color: var(--text);
   text-wrap: balance;
 }
@@ -64,6 +67,9 @@
 }
 
 @media (max-width: 600px) {
+  .home-faixa {
+    padding-block: 72px;
+  }
   .home-sub {
     margin-top: 16px;
   }

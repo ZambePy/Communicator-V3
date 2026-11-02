@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom'
 import { Spinner } from './Skeleton'
 import './button.css'
 
+/**
+ * `teal` é um nome antigo: desenha igual a `primary` (papel com texto marinho,
+ * button.css). O teal da marca ficou só para o que se confirma; o nome continua
+ * porque o fecho, os planos e algumas páginas usam `variant="teal"`.
+ */
 type Variant = 'primary' | 'secondary' | 'ghost' | 'teal'
 type Size = 'md' | 'lg'
 

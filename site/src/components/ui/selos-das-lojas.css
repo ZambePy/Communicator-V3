@@ -20,8 +20,11 @@
     box-shadow var(--dur-fast) ease;
 }
 
-.selo:hover {
-  transform: translateY(-2px);
+/* Sobe só com mouse de verdade: no toque, o :hover gruda depois do toque. */
+@media (hover: hover) and (pointer: fine) {
+  .selo:hover {
+    transform: translateY(-2px);
+  }
 }
 
 /* ---------- imagens oficiais ---------- */
@@ -58,7 +61,7 @@
   min-height: 48px;
   padding: 7px 18px 7px 14px;
   background: #0b1220;
-  color: #fff;
+  color: var(--branco);
   border: 1px solid rgba(255, 255, 255, 0.16);
   box-shadow: 0 6px 18px -8px rgba(2, 7, 16, 0.5);
 }
@@ -81,7 +84,7 @@
 }
 
 .selo__linha {
-  font-size: 0.72rem;
+  font-size: var(--fs-min);
   opacity: 0.8;
   letter-spacing: 0.02em;
 }
@@ -102,10 +105,11 @@
   border-radius: var(--r-pill);
   /* Neutro: "em breve" diz que o botão ainda não funciona, o contrário de uma
      confirmação, então não leva o teal (auditoria de 21/10/2026, P2-12). Papel
-     sobre #1d3966: 10,3:1. Doze pixels: é informação, não enfeite (P3-4). */
+     sobre #1d3966: 10,3:1. No corpo mínimo do site (--fs-min, 13 px): é
+     informação, não enfeite (P3-4). */
   background: var(--v3-superficie-3);
   color: var(--text);
-  font-size: 0.75rem;
+  font-size: var(--fs-min);
   font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;

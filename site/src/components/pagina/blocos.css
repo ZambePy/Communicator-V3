@@ -33,12 +33,16 @@
   font-weight: 600;
   line-height: 1;
   letter-spacing: -0.03em;
-  color: var(--ok);
+  /* o azul claro, como .passo__numero (faixas.css): o teal é só do que se confirma */
+  color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
 
+/* Título de cartão, seja qual for o nível (h2, h3 ou h4, ver Blocos.tsx):
+   sempre o desenho dos h3 (--fs-h3, 700). */
 .recursos__titulo {
-  font-size: 1.25rem;
+  font-size: var(--fs-h3);
+  font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.015em;
   margin-bottom: var(--sp-2);
