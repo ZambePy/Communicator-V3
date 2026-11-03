@@ -51,7 +51,7 @@ Claude outputs/
 .idea
 .DS_Store
 *.suo
-*.ntv's*
+*.ntvs*
 *.njsproj
 *.sln
 *.sw?
@@ -191,3 +191,20 @@ test-results/
 
 # Cópia local do APK anterior do app do cuidador (scripts/publicar-apk-cuidador.ps1)
 _apk_anterior/
+
+# Credenciais e artefatos de build de loja, em QUALQUER pasta (o app/.gitignore
+# já os cobre lá dentro; aqui vale para o resto do monorepo). Nenhum deles é
+# versionado hoje.
+**/credentials.json
+**/credentials/
+**/google-services.json
+**/GoogleService-Info.plist
+**/*service-account*.json
+*.keystore
+*.jks
+*.p8
+*.apk
+*.aab
+.sentryclirc
+sentry.properties
+.npmrc

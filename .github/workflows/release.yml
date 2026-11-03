@@ -187,6 +187,14 @@ jobs:
       publicar: ${{ steps.v.outputs.publicar }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # O mesmo Node dos outros jobs: sem isto, `node` era o da imagem do
+      # runner, e o `engines.node` pede >= 22.12.0.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
       # Sem a nuvem, o instalador cai na licença simulada sem avisar ninguém
       # (ver "Nuvem" no cabeçalho). Numa tag isso é erro, sempre; num teste
@@ -275,6 +283,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -291,31 +301,6 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           (cd frontend && npm ci --no-audit --no-fund)
-
-      # Só o que existe e só o que serve a esta plataforma vai para os passos
-      # seguintes. Ver o cabeçalho e scripts/ci-segredos-opcionais.mjs.
-      - name: Segredos opcionais
-        env:
-          SEGREDO_WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          SEGREDO_WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-          SEGREDO_AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          SEGREDO_AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          SEGREDO_AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          SEGREDO_AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
-          SEGREDO_AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
-          SEGREDO_AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
-          SEGREDO_AZURE_TRUSTED_SIGNING_PUBLISHER: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER }}
-          SEGREDO_CSC_LINK: ${{ secrets.CSC_LINK }}
-          SEGREDO_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          SEGREDO_APPLE_ID: ${{ secrets.APPLE_ID }}
-          SEGREDO_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          SEGREDO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          SEGREDO_VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SEGREDO_VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          SEGREDO_VITE_SITE_URL: ${{ secrets.VITE_SITE_URL }}
-          SEGREDO_VITE_DESKTOP_SYNC_URL: ${{ secrets.VITE_DESKTOP_SYNC_URL }}
-          SEGREDO_IRISFLOW_CRASH_URL: ${{ secrets.IRISFLOW_CRASH_URL }}
-        run: node scripts/ci-segredos-opcionais.mjs --plataforma "${{ matrix.plataforma }}"
 
       - name: Versão da tag no package.json
         run: |
@@ -410,6 +395,33 @@ jobs:
           $r = '{"id":1,"cmd":"status"}' | .\dist\irisflow-voz\irisflow-voz.exe
           Write-Host $r
           if (-not $r) { throw 'o motor não respondeu ao status' }
+
+      # Só o que existe e só o que serve a esta plataforma vai para os passos
+      # seguintes. Ver o cabeçalho e scripts/ci-segredos-opcionais.mjs.
+      # Vem DEPOIS do motor de voz: o `pip install` dele baixa pacotes do PyPI
+      # com versão aberta, e nenhum deles precisa dos segredos de assinatura.
+      - name: Segredos opcionais
+        env:
+          SEGREDO_WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          SEGREDO_WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          SEGREDO_AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          SEGREDO_AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          SEGREDO_AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          SEGREDO_AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          SEGREDO_AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          SEGREDO_AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+          SEGREDO_AZURE_TRUSTED_SIGNING_PUBLISHER: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER }}
+          SEGREDO_CSC_LINK: ${{ secrets.CSC_LINK }}
+          SEGREDO_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          SEGREDO_APPLE_ID: ${{ secrets.APPLE_ID }}
+          SEGREDO_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          SEGREDO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          SEGREDO_VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SEGREDO_VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          SEGREDO_VITE_SITE_URL: ${{ secrets.VITE_SITE_URL }}
+          SEGREDO_VITE_DESKTOP_SYNC_URL: ${{ secrets.VITE_DESKTOP_SYNC_URL }}
+          SEGREDO_IRISFLOW_CRASH_URL: ${{ secrets.IRISFLOW_CRASH_URL }}
+        run: node scripts/ci-segredos-opcionais.mjs --plataforma "${{ matrix.plataforma }}"
 
       # `package-app.mjs` é o MESMO que o desenvolvedor roda à mão
       # (`npm run electron:build:<sistema>`); aqui só a pasta de saída muda.

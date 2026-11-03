@@ -128,6 +128,28 @@ if (args.includes('--conferir-nuvem')) {
   if (!chave) problemas.push('VITE_SUPABASE_ANON_KEY ausente');
   else if (chave.length <= 20) problemas.push('VITE_SUPABASE_ANON_KEY curta demais para ser a chave anon');
 
+  // A chave vai DENTRO de todo instalador: uma service_role cadastrada por
+  // engano no segredo passaria por todo o resto. Mesma regra do
+  // conferir-config-publica.mjs (que só lê os arquivos .env.production).
+  // Isto não é "sem nuvem": falha sempre, com ou sem --permitir-sem-nuvem.
+  if (chave.startsWith('sb_secret_')) {
+    console.log('::error::VITE_SUPABASE_ANON_KEY é uma chave SECRETA do Supabase (sb_secret_…). Só a chave pública pode ir no instalador: troque o segredo e gere outra chave no painel.');
+    process.exit(1);
+  }
+  const partes = chave.split('.');
+  if (partes.length === 3 && chave.startsWith('eyJ')) {
+    let papel = null;
+    try {
+      papel = JSON.parse(Buffer.from(partes[1], 'base64url').toString('utf8')).role ?? null;
+    } catch {
+      papel = null;
+    }
+    if (papel !== 'anon') {
+      console.log(`::error::VITE_SUPABASE_ANON_KEY é um JWT com role "${papel}": só a chave anon é pública. Se for a service_role, troque-a já no painel do Supabase (Settings → API Keys).`);
+      process.exit(1);
+    }
+  }
+
   if (problemas.length === 0) {
     console.log(`[segredos] nuvem: VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY presentes (${origem}; o instalador sai com login real)`);
     process.exit(0);

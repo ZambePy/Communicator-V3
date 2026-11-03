@@ -1567,3 +1567,41 @@ begin
 end $$;
 
 select 'rodada 3 (21/10): endurecimento e limite atômico dos avisos — tudo certo' as resultado;
+
+-- S1 (03/11): `ativa` vence e reativar fora do período pago não libera.
+insert into auth.users (id, email, raw_user_meta_data)
+values ('55555555-5555-5555-5555-555555555555', 'licenca@exemplo.com', '{"buyer_name":"Teste Licença"}');
+set request.jwt.claim.sub = '55555555-5555-5555-5555-555555555555';
+
+do $$
+declare
+  u uuid := '55555555-5555-5555-5555-555555555555';
+  l jsonb; st text;
+begin
+  insert into public.subscriptions (profile_id, plan_id, price_brl, status, trial_ends_at, next_charge_at)
+  values (u, 'completo', 49, 'ativa', now() - interval '60 days', now() - interval '30 days');
+  l := public.license_for_profile(u);
+  if (l->>'allowed')::boolean then raise exception 'S1: ativa vencida não deveria liberar: %', l; end if;
+
+  update public.subscriptions set next_charge_at = now() + interval '10 days' where profile_id = u;
+  l := public.license_for_profile(u);
+  if not (l->>'allowed')::boolean then raise exception 'S1: ativa em dia deveria liberar: %', l; end if;
+
+  -- o caminho do furo: cancelar, anexar pix, reativar com o período vencido
+  update public.subscriptions set status = 'cancelada', canceled_at = now(),
+         next_charge_at = now() - interval '30 days' where profile_id = u;
+  perform public.attach_payment_method('pix');
+  st := public.reactivate_subscription();
+  l := public.license_for_profile(u);
+  if st <> 'inadimplente' or (l->>'allowed')::boolean then
+    raise exception 'S1: cancelar, anexar pix e reativar não pode dar allowed (% / %)', st, l;
+  end if;
+
+  update public.subscriptions set status = 'cancelada', canceled_at = now(),
+         next_charge_at = now() + interval '5 days' where profile_id = u;
+  st := public.reactivate_subscription();
+  if st <> 'ativa' then raise exception 'S1: reativar dentro do período pago deveria voltar a ativa: %', st; end if;
+end $$;
+
+reset request.jwt.claim.sub;
+select 'S1 (03/11): licença ativa vence — tudo certo' as resultado;

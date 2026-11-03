@@ -37,6 +37,11 @@ try {
   $build = $json | ConvertFrom-Json -ErrorAction Stop
   Write-Host ("status: {0} | perfil: {1} | plataforma: {2}" -f $build.status, $build.buildProfile, $build.platform)
   if ($build.status -ne 'FINISHED') { Parar "build nao terminou (status $($build.status))" }
+  # So APK de teste: o perfil production gera .aab, que tambem e zip e passaria
+  # no teste do "PK" la embaixo, mas nao instala no celular.
+  if ($build.buildProfile -ne 'preview') { Parar "o build nao e do perfil preview (perfil $($build.buildProfile))" }
+  if ($build.platform -ne 'ANDROID') { Parar "o build nao e Android (plataforma $($build.platform))" }
+  Write-Host ("versao: {0} | commit: {1}" -f $build.appVersion, $build.gitCommitHash)
   $url = $build.artifacts.buildUrl
   if (-not $url) { $url = $build.artifacts.applicationArchiveUrl }
   if (-not $url) { Parar 'build sem link de APK' }

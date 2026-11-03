@@ -29,7 +29,7 @@ const EXTENSOES_DE_PESOS = ['.onnx', '.pt', '.pth', '.ckpt', '.safetensors', '.h
 const ENV_PERMITIDOS = ['.env.production', '.env.example'];
 
 /** Chaves e certificados: guardam segredo (revisão de 21/10/2026). Comparadas em minúsculas. */
-const EXTENSOES_DE_CHAVES = ['.p12', '.pfx', '.pem', '.key'];
+const EXTENSOES_DE_CHAVES = ['.p12', '.pfx', '.pem', '.key', '.jks', '.keystore', '.p8'];
 /** Chaves SSH privadas (e as públicas, que não têm por que estar aqui): id_rsa, id_ed25519… */
 const RE_CHAVE_SSH = /^id_(rsa|dsa|ecdsa|ed25519)/;
 /** Nome de arquivo de credenciais: credenciais.json, google-service-account.json, AWS_CREDENTIALS… */

@@ -26,11 +26,14 @@ if (!alvo) {
 
 console.log(`[limpo] IRISFLOW_DEV_FRESH=1 → "npm run ${alvo}" comecara como instalacao nova.`);
 
-const filho = spawn(
-  process.platform === 'win32' ? 'npm.cmd' : 'npm',
-  ['run', alvo, ...process.argv.slice(3)],
-  { stdio: 'inherit', env: { ...process.env, IRISFLOW_DEV_FRESH: '1' }, shell: process.platform === 'win32' },
-);
+// No Windows o npm é .cmd e precisa de shell: comando numa string só, com
+// aspas em cada argumento que tem espaço (lista + `shell: true` é o DEP0190).
+const NO_WINDOWS = process.platform === 'win32';
+const argumentos = ['run', alvo, ...process.argv.slice(3)];
+const aspas = (a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
+const filho = NO_WINDOWS
+  ? spawn(['npm.cmd', ...argumentos.map(aspas)].join(' '), { stdio: 'inherit', env: { ...process.env, IRISFLOW_DEV_FRESH: '1' }, shell: true })
+  : spawn('npm', argumentos, { stdio: 'inherit', env: { ...process.env, IRISFLOW_DEV_FRESH: '1' } });
 
 filho.on('exit', (code, signal) => {
   if (signal) process.kill(process.pid, signal);

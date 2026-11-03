@@ -2103,8 +2103,11 @@ supabase functions deploy parear-celular --no-verify-jwt   # 19/10/2026: o códi
 
 Sem o CLI: cole cada arquivo de `supabase/migrations/`, na ordem do nome, no
 SQL Editor (todos são idempotentes; os que já estão aplicados não mudam nada)
-e publique a função pelo painel (*Edge Functions → desktop-sync*, com os três
-arquivos `index.ts`, `horario.ts` e `respostas.ts`, "Verify JWT" desligado). O `seed.sql`
+e publique a função pelo painel (*Edge Functions → desktop-sync*, com **todos**
+os `.ts` da pasta que não terminam em `.test.ts`, hoje oito: `index.ts`,
+`horario.ts`, `limites.ts`, `push.ts`, `respostas.ts`, `pareamento.ts`,
+`codigoDoCelular.ts` e `mensagemPush.ts`; "Verify JWT" desligado). O CLI acima
+é o caminho seguro: ele leva a pasta inteira. O `seed.sql`
 roda à parte, no SQL Editor. No Auth do painel: Site URL = a origem do site
 (`https://irisflow.ia.br`) e Redirect URLs `<site>/entrar` e
 `<site>/nova-senha` — o "Esqueci a senha" do site e o do app mandam
@@ -2322,7 +2325,9 @@ O app de celular de quem cuida chama-se **IrisFlow Cuidador** — o par do
 sempre no Supabase real: não há modo demonstração, e um build sem
 `EXPO_PUBLIC_SUPABASE_*` mostra "Não conseguimos conectar agora". Não há
 cadastro no app (a conta nasce no site); em `__DEV__` o login já vem com a
-conta de teste (`CONTA_DE_TESTE`, [`config.ts`](app/src/lib/config.ts)).
+conta de teste (`CONTA_DE_TESTE`, [`config.ts`](app/src/lib/config.ts)), lida de
+`EXPO_PUBLIC_CONTA_DE_TESTE_EMAIL` e `EXPO_PUBLIC_CONTA_DE_TESTE_SENHA` no `app/.env`
+(sem elas, os campos vêm vazios; o valor não entra no bundle de produção).
 
 **Marca.** O símbolo da IrisFlow com "cuidador" embaixo, na Boldonse do
 logotipo, convertida em contorno: [`irisflow-cuidador.svg`](site/public/brand/irisflow-cuidador.svg)
@@ -2433,7 +2438,8 @@ deliberada pela equipe está no cabeçalho dela. Nunca guarde dado real nela nem
 vincule a ela o computador de um
 paciente — quem entrasse leria o que ele fala, mandaria mensagens faladas na
 tela dele e receberia os alertas. Antes do lançamento comercial, apague a
-conta (e o gatilho) e tire `LOGIN_PADRAO` e `CONTA_DE_TESTE` do código.
+conta (e o gatilho) e tire `LOGIN_PADRAO` do código (o `CONTA_DE_TESTE` do app já
+não traz valor: vem do `app/.env`).
 
 ---
 
@@ -3063,8 +3069,10 @@ Estado em 27/09/2026.
    um release comercial sai com `IRISFLOW_BUILD_L2CS=off`.
 2. **Conta de teste pública.** `admin@irisflow.com` / `irisflow2026` existe no projeto de
    produção (`supabase/seed.sql`) e a senha está no repositório público (`seed.sql`,
-   `app/src/lib/config.ts`, `frontend/src/services/license/mockLicenseService.ts`) — de
-   propósito, para qualquer testador entrar. Qualquer um entra no site, no desktop e no
+   `frontend/src/services/license/mockLicenseService.ts`) — de
+   propósito, para qualquer testador entrar. No app do cuidador ela saiu do código em
+   02/11/2026: o login de desenvolvimento lê `EXPO_PUBLIC_CONTA_DE_TESTE_EMAIL` e
+   `EXPO_PUBLIC_CONTA_DE_TESTE_SENHA` do `app/.env` (ver `app/.env.example`). Qualquer um entra no site, no desktop e no
    app do cuidador, altera os dados dessa conta, pareia computadores e dispara push aos
    aparelhos registrados nela. A migração `20260924022108` (em produção desde 24/09/2026)
    impede trocar a senha e o e-mail dela. Antes do lançamento comercial, apague a

@@ -47,6 +47,11 @@ const ARQUIVOS = [
 /** Nomes que sugerem segredo. O beacon do Web Analytics é público (vai no HTML). */
 const NOME_SUSPEITO = /SECRET|PASSWORD|SENHA|PRIVATE|SERVICE|TOKEN/i;
 const NOMES_PUBLICOS_APESAR_DO_NOME = new Set(['VITE_CF_ANALYTICS_TOKEN']);
+/**
+ * Prefixos de chaves secretas conhecidas que não são JWT (e por isso passam
+ * pela checagem do `role`): Stripe, GitHub, AWS.
+ */
+const VALOR_SECRETO = /^(sk_live_|sk_test_|rk_live_|ghp_|gho_|github_pat_|AKIA[0-9A-Z]{12})/;
 
 /** Lê KEY=VALOR, ignorando comentários e linhas vazias (formato dotenv simples). */
 function lerDotenv(texto) {
@@ -100,6 +105,14 @@ for (const { arquivo, prefixo, url, chave } of ARQUIVOS) {
     }
     if (NOME_SUSPEITO.test(nome) && !NOMES_PUBLICOS_APESAR_DO_NOME.has(nome)) {
       problemas.push(`${arquivo}: o nome ${nome} sugere segredo — segredo não entra na configuração pública`);
+    }
+    // `KEY` fora do nome esperado da chave anon: `VITE_ALGUMA_API_KEY` com uma
+    // chave secreta que não é JWT passaria por todo o resto.
+    if (/KEY/i.test(nome) && nome !== chave && !NOMES_PUBLICOS_APESAR_DO_NOME.has(nome)) {
+      problemas.push(`${arquivo}: ${nome} é uma chave que não é a anon do Supabase — confira se é mesmo pública e, se for, ponha o nome em NOMES_PUBLICOS_APESAR_DO_NOME`);
+    }
+    if (VALOR_SECRETO.test(valor)) {
+      problemas.push(`${arquivo}: ${nome} tem o formato de uma chave SECRETA (Stripe, GitHub ou AWS) — remova e gire a chave`);
     }
     if (valor.startsWith('sb_secret_')) {
       problemas.push(`${arquivo}: ${nome} tem uma chave SECRETA do Supabase (sb_secret_…) — remova e gere outra no painel`);

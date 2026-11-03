@@ -9,7 +9,7 @@
  *   node scripts/verificar-tudo.mjs --so desktop,pacote  # + empacotamento e conferência
  *
  * Grupos: desktop (tsc núcleo + Electron, vitest núcleo, vitest frontend,
- * build frontend, compile Electron), site (tsc, vitest, build) e app (tsc,
+ * lint frontend, build frontend, compile Electron), site (tsc, vitest, build) e app (tsc,
  * jest). Sem dependência nova: só `npm`/`npx` dos próprios projetos.
  * Sai com código 1 se algum passo falhar. É o mesmo portão do ci.yml —
  * verde aqui, verde lá.
@@ -53,6 +53,7 @@ const PASSOS = [
   { grupo: 'desktop', nome: 'tsc Electron',         dir: '.',        cmd: ['npx', 'tsc', '--noEmit', '-p', 'electron/tsconfig.json'] },
   { grupo: 'desktop', nome: 'vitest núcleo',        dir: '.',        cmd: ['npm', 'test', '--silent'] },
   { grupo: 'desktop', nome: 'vitest interface',     dir: 'frontend', cmd: ['npm', 'test', '--silent'] },
+  { grupo: 'desktop', nome: 'lint interface',       dir: 'frontend', cmd: ['npm', 'run', 'lint', '--silent'] },
   { grupo: 'desktop', nome: 'build frontend',       dir: 'frontend', cmd: ['npm', 'run', 'build', '--silent'], build: true },
   { grupo: 'desktop', nome: 'compile Electron',     dir: '.',        cmd: ['npm', 'run', 'electron:compile', '--silent'], build: true },
   // ---- site: espelho do job `site` ----
@@ -90,7 +91,11 @@ for (const passo of selecionados) {
   const rotulo = `[${passo.grupo}] ${passo.nome}`;
   console.log(`\n${negrito('▶ ' + rotulo)}  ${cor(2, `(${passo.dir}: ${passo.cmd.join(' ')})`)}`);
   const inicio = Date.now();
-  const r = spawnSync(passo.cmd[0], passo.cmd.slice(1), {
+  // Com `shell`, o comando vai numa string só e cada argumento com espaço vai
+  // entre aspas (o %TEMP% de `conferir-pacote` pode ter espaço). Lista de
+  // argumentos + `shell: true` é o DEP0190 do Node 24 e não põe aspas.
+  const linha = passo.cmd.map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ');
+  const r = spawnSync(SHELL ? linha : passo.cmd[0], SHELL ? [] : passo.cmd.slice(1), {
     cwd: path.join(RAIZ, passo.dir),
     stdio: 'inherit',
     shell: SHELL,

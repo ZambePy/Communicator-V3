@@ -50,6 +50,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # Node 24 para bater com o ambiente que gerou o lockfile (npm 11) e com
       # `engines.node` do package.json — `node-abi`, via electron-builder, exige
@@ -94,6 +96,12 @@ jobs:
         working-directory: frontend
         run: npm test
 
+      # oxlint: sai com 0 desde 02/11/2026. Avisos não derrubam (`no-console`
+      # dos diagnósticos em `src/`, por exemplo); erro derruba.
+      - name: Lint da interface
+        working-directory: frontend
+        run: npm run lint
+
       # `tsc -b` é mais estrito que o `--noEmit` acima (pega imports não usados,
       # por exemplo), então o build também serve de verificação de tipos.
       - name: Build de produção
@@ -102,12 +110,6 @@ jobs:
 
       - name: Compilar processo Electron
         run: npm run electron:compile
-
-      # NOTA: `npm run lint` (oxlint) fica FORA deste workflow de propósito.
-      # Ele sai com código 1 por warnings pré-existentes em
-      # `frontend/scripts/*.mjs` (console e imports não usados em ferramentas de
-      # desenvolvimento). Adicionar um portão que já nasce vermelho tornaria o
-      # badge inútil — o certo é limpar os warnings e então incluir a etapa.
 
   # -------------------------------------------------------------------------
   # Empacotamento Linux, só a pasta desempacotada (`--dir`, ~1 min: sem
@@ -134,6 +136,8 @@ jobs:
       IRISFLOW_RELEASE_DIR: release
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24.11.1
@@ -173,6 +177,8 @@ jobs:
         working-directory: site
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24.11.1
@@ -214,6 +220,8 @@ jobs:
         working-directory: app
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24.11.1
