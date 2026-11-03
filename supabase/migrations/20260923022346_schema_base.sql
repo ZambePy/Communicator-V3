@@ -2,8 +2,11 @@
 -- =====================================================================
 -- IrisFlow — esquema do banco (Supabase / PostgreSQL)
 --
--- Cole este arquivo inteiro no SQL Editor do Supabase e execute uma vez.
--- Ele é idempotente: rodar de novo não quebra nada nem duplica dados.
+-- HISTÓRICO: não cole nem reexecute este arquivo sozinho. As migrações
+-- seguintes redefinem funções e dados que ele cria (complete_registration,
+-- handle_new_user, preços e `active` dos planos); rodá-lo de novo hoje
+-- desfaria essas correções. Aplique sempre pelo `supabase db push` ou
+-- `supabase db reset`, que seguem a ordem.
 --
 -- O desenho segue o que o frontend já usa:
 --   Profile   (src/context/AccountContext.tsx) -> profiles + beneficiaries

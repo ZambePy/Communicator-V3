@@ -607,10 +607,14 @@ Deno.serve(async (req) => {
     }
 
     case 'settings.get': {
-      const [{ data: settings }, { data: phrases }] = await Promise.all([
+      const [{ data: settings, error: erroDosAjustes }, { data: phrases, error: erroDasFrases }] = await Promise.all([
         supabase.from('patient_settings').select('*').eq('beneficiary_id', b).maybeSingle(),
         supabase.from('quick_phrases').select('*').eq('beneficiary_id', b).order('position'),
       ]);
+      // Falha do banco não pode virar `phrases: []` com 200: o desktop aplica a
+      // lista vazia e as frases do cuidador somem da tela do paciente.
+      const erro = erroDosAjustes ?? erroDasFrases;
+      if (erro) return erroDoBanco(erro);
       return json({ settings, phrases: phrases ?? [] });
     }
 

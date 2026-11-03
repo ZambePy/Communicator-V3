@@ -28,6 +28,14 @@ verify_jwt = false
 [functions.parear-celular]
 verify_jwt = false
 
+# `payment-webhook` também NÃO exige o JWT: quem chama é o gateway de
+# pagamento, autenticado pela assinatura do próprio gateway (conferida na
+# função). Sem esta linha, um `supabase functions deploy` sem
+# `--no-verify-jwt` publicaria o webhook com o JWT ligado e todo aviso do
+# gateway levaria 401.
+[functions.payment-webhook]
+verify_jwt = false
+
 # Modelos de e-mail do Supabase Auth, em português e com a marca (os mesmos
 # aplicados no projeto em produção, em Authentication → Emails → Templates).
 # A confirmação do cadastro mostra um código de 4 dígitos — os 4 primeiros do

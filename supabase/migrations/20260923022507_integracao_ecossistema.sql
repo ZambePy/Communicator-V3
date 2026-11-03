@@ -7,7 +7,9 @@
 --   2. supabase/migrations/20260923022425_caregiver_app.sql
 --   3. este arquivo
 --
--- É idempotente: rodar de novo não quebra nem duplica.
+-- HISTÓRICO: idempotente sozinho, mas não o reexecute isolado: migrações
+-- posteriores redefinem o que ele cria. Aplique pelo `supabase db push` ou
+-- `supabase db reset`.
 --
 -- O que ele acrescenta:
 --   • Colunas de precisão/relatório em `sessions` (o desktop grava o resultado

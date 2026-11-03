@@ -9,7 +9,9 @@
 --   4. supabase/migrations/20260923022524_escalonamento_de_emergencia.sql
 --   5. este arquivo
 --
--- É idempotente: rodar de novo não quebra nem duplica.
+-- HISTÓRICO: idempotente sozinho, mas não o reexecute isolado (fecharia a
+-- venda de novo, desfazendo migrações posteriores). Aplique pelo
+-- `supabase db push` ou `supabase db reset`.
 --
 -- O que muda com a beta:
 --   • A COMPRA de planos fica indisponível. `plans.purchasable` é a chave:
