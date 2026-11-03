@@ -176,7 +176,14 @@ export default function Conversa() {
           )
         }
         // Rola para o fim quando a lista cresce (sem a espera de 120 ms de antes).
-        onContentSizeChange={() => list.current?.scrollToEnd({ animated: Boolean(vistas.current) })}
+        // Pelo ScrollView de baixo, não pelo `scrollToEnd` do FlatList: aquele
+        // calcula pela última célula, que ainda não foi medida quando o
+        // conteúdo cresce (na web a estimativa ignora o `gap` entre as linhas)
+        // e não soma o padding de baixo. O do ScrollView usa a altura real.
+        onContentSizeChange={() => {
+          const rolagem = list.current?.getNativeScrollRef() as unknown as ScrollView | null | undefined;
+          rolagem?.scrollToEnd({ animated: Boolean(vistas.current) });
+        }}
         keyboardShouldPersistTaps="handled"
       />
 
@@ -385,7 +392,7 @@ const styles = StyleSheet.create({
   composer: { paddingTop: spacing.sm, paddingBottom: spacing.md, gap: spacing.sm },
   aviso: { paddingHorizontal: layout.gutter },
   chips: { paddingHorizontal: layout.gutter, gap: spacing.sm },
-  chip: { minHeight: sizes.touch - spacing.xs, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, borderRadius: radius.pill },
+  chip: { minHeight: sizes.touch, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, borderRadius: radius.pill },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm + 2, paddingHorizontal: layout.gutter },
   input: {
     flex: 1,

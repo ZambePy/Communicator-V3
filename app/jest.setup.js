@@ -6,6 +6,11 @@
  * teste, ao lado do que eles distorcem — assim quem lê o teste vê o que é falso.
  */
 
+// Conta de teste do login em desenvolvimento (`src/lib/config.ts`): no app ela
+// vem do `app/.env`; aqui, valores falsos, para nenhum teste depender da real.
+process.env.EXPO_PUBLIC_CONTA_DE_TESTE_EMAIL = 'conta.de.teste@exemplo.com';
+process.env.EXPO_PUBLIC_CONTA_DE_TESTE_SENHA = 'senha-falsa-de-teste';
+
 // Reanimated 4: substitui os worklets por versões síncronas em JS. Sem isto,
 // qualquer componente com `useAnimatedStyle` (PressableScale, StatusPill,
 // anéis do EmergencyOverlay) quebra ao montar no jsdom/node.

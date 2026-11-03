@@ -16,10 +16,15 @@ export const SITE_URL = (process.env.EXPO_PUBLIC_SITE_URL || DEFAULT_SITE_URL).t
  * Supabase como qualquer outro e a conta nasce sem dados fabricados.
  *
  * Só serve para agilizar o teste em desenvolvimento: com `__DEV__` (Expo Go /
- * dev client) a tela de login já vem preenchida com ela. Em build de produção
- * os campos ficam vazios. Trocou a senha no painel? Troque aqui também.
+ * dev client) a tela de login já vem preenchida com ela. O e-mail e a senha vêm
+ * de `EXPO_PUBLIC_CONTA_DE_TESTE_EMAIL` e `EXPO_PUBLIC_CONTA_DE_TESTE_SENHA` no
+ * `app/.env` (ver `.env.example`), nunca do código. A guarda `__DEV__` fica
+ * AQUI, não só na tela: o Metro não faz tree-shaking, e sem ela o valor
+ * entraria no bundle de produção. Sem as variáveis, os campos vêm vazios.
  */
-export const CONTA_DE_TESTE = { email: 'admin@irisflow.com', senha: 'irisflow2026' } as const;
+export const CONTA_DE_TESTE: { readonly email: string; readonly senha: string } = __DEV__
+  ? { email: process.env.EXPO_PUBLIC_CONTA_DE_TESTE_EMAIL ?? '', senha: process.env.EXPO_PUBLIC_CONTA_DE_TESTE_SENHA ?? '' }
+  : { email: '', senha: '' };
 
 /**
  * Rotas do site usadas pelo app (existem em `site/src/routes.ts`): abertas no

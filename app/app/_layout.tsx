@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold } from '@expo-google-fonts/inter';
@@ -75,10 +75,21 @@ function Navigation() {
   // abre a Conversa — a recarga ao voltar para a frente traz a mensagem.
   // Alerta: seleciona o paciente, recarrega (o AppProvider deriva
   // `pendingAlert` do pedido aberto → overlay) e abre a aba de Alertas.
+  // Com o app fechado, o toque chega antes da lista de pessoas: o id fica
+  // guardado e a pessoa é escolhida quando a lista carregar (antes, com mais
+  // de uma pessoa na conta, abria a primeira da lista).
+  const pacienteDoToque = useRef<string | null>(null);
+  useEffect(() => {
+    const id = pacienteDoToque.current;
+    if (!id || !beneficiaries.some((b) => b.id === id)) return;
+    pacienteDoToque.current = null;
+    selectPatient(id);
+  }, [beneficiaries, selectPatient]);
   const abrirPeloPush = useCallback(
     (payload: PushPayload) => {
       const { pacienteId, rota } = destinoDoToque(payload);
       if (pacienteId && beneficiaries.some((b) => b.id === pacienteId)) selectPatient(pacienteId);
+      else if (pacienteId) pacienteDoToque.current = pacienteId;
       if (rota === '/(tabs)/alertas') void refresh();
       router.push(rota);
     },

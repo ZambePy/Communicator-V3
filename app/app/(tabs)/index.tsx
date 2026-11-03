@@ -298,7 +298,16 @@ function UltimaFrase({ nome, m, semVerificar }: { nome: string; m: Message | nul
                 accessibilityLabel={`Responder “${r.texto}” para ${nome}`}
                 style={[styles.resposta, r.principal && styles.respostaPrincipal, { backgroundColor: r.principal ? colors.accentTint : colors.surfaceRaised }]}
               >
-                {esta && envio?.estado === 'ok' ? <Ionicons name="checkmark" size={sizes.icon.sm} color={r.principal ? colors.accentText : colors.text} /> : null}
+                {/* O ✓ ocupa o lugar mesmo invisível: entrar depois do toque tirava
+                    espaço do texto e o chip virava "Já estou in…". */}
+                {r.principal || (esta && envio?.estado === 'ok') ? (
+                  <Ionicons
+                    name="checkmark"
+                    size={sizes.icon.sm}
+                    color={r.principal ? colors.accentText : colors.text}
+                    style={{ opacity: esta && envio?.estado === 'ok' ? 1 : 0 }}
+                  />
+                ) : null}
                 <Text variant="body" weight="semibold" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85} style={{ color: r.principal ? colors.accentText : colors.text }}>
                   {r.texto}
                 </Text>
@@ -347,9 +356,10 @@ const styles = StyleSheet.create({
   frase: { marginTop: spacing.sm },
   vazioTitulo: { marginTop: spacing.sm },
   escrever: { minHeight: sizes.touch, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg },
-  respostas: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg + 2 },
+  respostas: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.lg + 2 },
   resposta: { flex: 1, minHeight: sizes.touch, borderRadius: radius.pill, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
-  respostaPrincipal: { flex: 2 },
+  // A largura do principal vem do texto (com o lugar do ✓); Sim e Não dividem o resto.
+  respostaPrincipal: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', paddingHorizontal: spacing.md },
   envio: { marginTop: spacing.md },
   hoje: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.md },
   numero: { flex: 1, borderRadius: radius.lg + 2, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg + 2 },

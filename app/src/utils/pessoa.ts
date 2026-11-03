@@ -40,10 +40,6 @@ const CONDICAO_CURTA: Record<Condition, string | null> = {
   'prefiro-nao': null,
 };
 
-export function rotuloDaRelacao(r: Relation): string {
-  return RELACAO_CURTA[r] ?? 'Outro';
-}
-
 /** "Cônjuge, ELA" — sem a condição quando ela não foi informada. */
 export function resumoDaPessoa(b: Pick<Beneficiary, 'relation' | 'condition'>): string {
   return [RELACAO_CURTA[b.relation], CONDICAO_CURTA[b.condition]].filter(Boolean).join(', ');

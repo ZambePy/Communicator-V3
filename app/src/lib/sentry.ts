@@ -80,6 +80,9 @@ export function scrubEvent(e: SentryEvent): SentryEvent {
   // `extra` e `contexts.state` podem ter vindo de um captureException com
   // objeto do app (mensagem, alerta). Não mandamos: o tipo e a pilha bastam.
   delete out.extra;
+  if (out.contexts && 'state' in out.contexts) {
+    out.contexts = Object.fromEntries(Object.entries(out.contexts).filter(([nome]) => nome !== 'state'));
+  }
   return out;
 }
 

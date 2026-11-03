@@ -44,7 +44,8 @@ describe('Login', () => {
     await render(<Login />);
     expect(screen.getByDisplayValue(CONTA_DE_TESTE.email)).toBeTruthy();
     expect(screen.getByDisplayValue(CONTA_DE_TESTE.senha)).toBeTruthy();
-    expect(CONTA_DE_TESTE).toEqual({ email: 'admin@irisflow.com', senha: 'irisflow2026' });
+    // Vem do ambiente (em `jest.setup.js`, valores falsos), nunca do código.
+    expect(CONTA_DE_TESTE).toEqual({ email: 'conta.de.teste@exemplo.com', senha: 'senha-falsa-de-teste' });
   });
 
   it('em produção os campos ficam vazios', async () => {

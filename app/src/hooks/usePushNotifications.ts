@@ -32,10 +32,6 @@ export function definirConversaEmFoco(beneficiaryId: string | null): void {
   conversaEmFoco = beneficiaryId;
 }
 
-export function lerConversaEmFoco(): string | null {
-  return conversaEmFoco;
-}
-
 export interface Apresentacao {
   shouldShowBanner: boolean;
   shouldShowList: boolean;
@@ -242,6 +238,14 @@ export const REVALIDAR_REGISTRO_MS = 60 * 60_000;
  * de ativar as notificações, o caminho que a tela de Alertas indica —, depois
  * de uma falha com espera crescente, e quando o sistema troca o token.
  */
+/**
+ * Toques já tratados neste processo, pelo `identifier` da notificação. Sem
+ * isto, sair e entrar na conta de novo relia a mesma resposta antiga de
+ * `getLastNotificationResponseAsync` e navegava outra vez; na partida a frio,
+ * o ouvinte e a leitura podem também entregar o mesmo toque.
+ */
+const toquesTratados = new Set<string>();
+
 export function usePushNotifications(enabled: boolean, handlers: PushHandlers = {}) {
   const data = useData();
   const handlersRef = useRef(handlers);
@@ -253,7 +257,12 @@ export function usePushNotifications(enabled: boolean, handlers: PushHandlers = 
     if (!enabled) return;
     const Notifications = getNotificationsModule();
     if (!Notifications) return;
-    const abrir = (response: { notification?: { request?: { content?: { data?: unknown } } } } | null) => {
+    const abrir = (response: { notification?: { request?: { identifier?: string; content?: { data?: unknown } } } } | null) => {
+      const id = response?.notification?.request?.identifier;
+      if (id) {
+        if (toquesTratados.has(id)) return;
+        toquesTratados.add(id);
+      }
       const payload = (response?.notification?.request?.content?.data ?? {}) as PushPayload;
       handlersRef.current.onOpen?.(payload);
     };

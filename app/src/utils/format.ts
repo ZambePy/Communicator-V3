@@ -1,4 +1,4 @@
-import { Condition, DriftKind, FatigueLevel, FilterPreset, HelpKind, Relation, Session } from '@/data/types';
+import { DriftKind, FatigueLevel, FilterPreset, HelpKind, Session } from '@/data/types';
 
 export function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -51,26 +51,6 @@ export function brl(v: number) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 }
 
-export const relationLabel: Record<Relation, string> = {
-  conjuge: 'Cônjuge',
-  filho: 'Filho(a)',
-  'pai-mae': 'Pai/Mãe',
-  irmao: 'Irmão(ã)',
-  cuidador: 'Cuidador(a)',
-  proprio: 'Próprio usuário',
-  outro: 'Outro',
-};
-
-export const conditionLabel: Record<Condition, string> = {
-  ela: 'ELA',
-  tetraplegia: 'Tetraplegia',
-  pc: 'Paralisia cerebral',
-  avc: 'Sequela de AVC',
-  distrofia: 'Distrofia muscular',
-  outra: 'Outra condição',
-  'prefiro-nao': 'Não informado',
-};
-
 export const helpKindLabel: Record<HelpKind, string> = {
   ajuda: 'Pedido de ajuda',
   emergencia: 'Pedido de socorro',
@@ -91,13 +71,6 @@ export function firstName(name: string) {
 export function initials(name: string) {
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase();
-}
-
-export function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Bom dia';
-  if (h < 18) return 'Boa tarde';
-  return 'Boa noite';
 }
 
 /**
