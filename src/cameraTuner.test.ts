@@ -6,7 +6,6 @@ import {
   DEFAULT_TARGET,
   TARGET_IOD_FRACTION,
   type CameraCapabilities,
-  type CameraState,
   type TuningMeasurement,
 } from './cameraTuner';
 

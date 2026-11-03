@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractCompactFeatures, projectFeatureSet, activeFeatureDims } from './extractor';
-import { RidgeRegressor, trainRidgeModel, withinTargetPenalty } from './ridge';
+import { RidgeRegressor, withinTargetPenalty } from './ridge';
 import { buildL2CSBlock, isGazePlausible } from './l2cs/block';
 import { deslocamentoPorPose, compensarPredicao } from './poseCompensation';
 

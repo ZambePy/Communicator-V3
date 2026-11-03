@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterAll, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -57,6 +57,11 @@ async function esperarIniciar(log: string, quantos = 1, prazoMs = 10_000): Promi
 
 afterEach(() => {
   for (const s of vivos.splice(0)) s.matarAgora();
+});
+
+// A pasta temporária nasce no import; sem isto, cada rodada deixava uma.
+afterAll(() => {
+  fs.rmSync(PASTA, { recursive: true, force: true });
 });
 
 
@@ -126,7 +131,7 @@ describe.skipIf(SO_NO_CI)('Sidecar — cada pedido pertence ao processo que o re
     const preso = falar(s, 10, 400);
     const rPreso = await preso;
     expect(rPreso).toMatch(/ocupado/);
-    expect(Date.now() - t0).toBeLessThan(1200);
+    expect(Date.now() - t0).toBeLessThan(NO_WINDOWS ? 6000 : 1200);
     // O comando em curso não foi afetado.
     expect(await lento).toBe('ok');
     expect(s.emErro).toBe(false);

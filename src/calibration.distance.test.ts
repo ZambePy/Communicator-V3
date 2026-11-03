@@ -15,7 +15,6 @@ const q = () => ({
   irisVisibilityPercentage: 1, detectorConfidence: 1,
   brightnessEstimate: 0.5, contrastEstimate: 0.3, blurEstimate: 0,
 });
-const v = (n = 8) => Array.from({ length: n }, (_, i) => Math.sin(i));
 
 /** Coleta um ponto inteiro com um IOD fixo — IOD maior = rosto mais perto. */
 function coletarPonto(x: number, y: number, iodPx: number, n = 40) {

@@ -167,7 +167,6 @@ describe('Ridge precision — edges vs center', () => {
     // Edge errors should be bounded — with synthetic data and sin/cos noise
     // patterns, some edges may have higher error than center but should not
     // be catastrophically worse. Using 10× as generous bound.
-    const centerErr = Math.max(errors['center'], 1e-6);
     for (const edge of ['left_edge', 'right_edge', 'top_edge', 'bottom_edge']) {
       expect(errors[edge]).toBeLessThan(0.10);
     }

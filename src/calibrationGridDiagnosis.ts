@@ -33,6 +33,10 @@
  * de "tente de novo" para "afaste-se da tela".
  */
 
+// Mediana e não média: um único alvo catastrófico (615 px na sessão ruim)
+// arrastaria a média e mascararia o padrão.
+import { mediana } from './estatistica';
+
 export interface AlvoLOO {
   x: number;
   y: number;
@@ -90,15 +94,6 @@ export const CENTRO_RUIM_PX = 150;
  * três pontos, não de teoria — revisar quando houver mais sessões.
  */
 export const PIOR_ALVO_PX = 300;
-
-/** Mediana simples. Mediana e não média porque um único alvo catastrófico
- *  (615 px na sessão ruim) arrastaria a média e mascararia o padrão. */
-function mediana(v: number[]): number {
-  if (v.length === 0) return NaN;
-  const s = [...v].sort((a, b) => a - b);
-  const m = s.length >> 1;
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
 
 /**
  * Classifica os alvos em centro e periferia pela distância ao centro da tela,

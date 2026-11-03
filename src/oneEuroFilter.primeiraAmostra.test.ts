@@ -168,7 +168,7 @@ describe('BlinkDetector', () => {
     // 5 frames de olho aberto: estabelece threshold
     for (let i = 0; i < 5; i++) bd.update(0.30);
 
-    const thresholdAfterGood = 0.30 * 0.8; // = 0.24 → clampado a 0.22
+    // Limiar depois de uma amostra boa: 0.30 * 0.8 = 0.24 → clampado a 0.22.
     // 20 frames de piscada — NÃO devem entrar no histórico
     for (let i = 0; i < 20; i++) bd.update(0.05);
 

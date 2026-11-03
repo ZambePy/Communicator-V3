@@ -2933,6 +2933,9 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
       medidorDeContraluz.dispose();
       calibration.dispose();
       definirStatusDoL2cs('disabled', null);
+      // Solta o <video>: depois do dispose o loop não roda mais (guarda
+      // `!running`), e segurar o nó desmontado só o prenderia na memória.
+      videoEl = null;
     },
 
     subscribe(cb: (sample: GazeSample) => void): () => void {

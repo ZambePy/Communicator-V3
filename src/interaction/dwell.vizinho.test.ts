@@ -104,7 +104,6 @@ describe('a tolerância vale também ao passar por um vizinho', () => {
   it('o progresso do vizinho é acumulado normalmente', () => {
     // Passar por B não pode congelar B: se o paciente decidir olhar para B, o
     // dwell de B tem que contar.
-    const passo = 1000 / 30;
     const a = acumular('A', 500);
     const emB = acumular('B', 600, a.t, a.state);
     expect(emB.state.targetKey).toBe('B');

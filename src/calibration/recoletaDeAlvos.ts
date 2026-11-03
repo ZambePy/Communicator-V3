@@ -77,6 +77,8 @@
  * paciente, nunca o modelo.
  */
 
+import { mediana } from '../estatistica';
+
 /** O que o diagnóstico do ajuste sabe de cada alvo. */
 export interface MedidaDoAlvo {
   /** Chave do alvo nominal (`targetGroupKey`): a mesma das amostras no perfil. */
@@ -133,13 +135,6 @@ export const MAXIMO_DE_ALVOS_POR_RODADA = 4;
  * deixa de significar alguma coisa.
  */
 export const MINIMO_DE_ALVOS_PARA_AVALIAR = 9;
-
-function mediana(v: readonly number[]): number {
-  if (v.length === 0) return Number.NaN;
-  const s = [...v].sort((a, b) => a - b);
-  const m = s.length >> 1;
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
 
 /**
  * Mediana da REGIÃO do alvo `i` (miolo ou borda), com medida finita, contando

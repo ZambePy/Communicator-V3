@@ -131,10 +131,13 @@ function gerar(): Arquivo {
 
 describe('fixtures do recorte compartilhado com o treino', () => {
   it('existe e a implementação bate com o arquivo, coeficiente a coeficiente', () => {
-    if (process.env.GERAR_FIXTURES === '1' || !existsSync(CAMINHO)) {
+    // Só gera com GERAR_FIXTURES=1. Sem o arquivo, falha: regravá-lo aqui a
+    // partir da própria implementação faria o teste passar sem provar nada.
+    if (process.env.GERAR_FIXTURES === '1') {
       mkdirSync(dirname(CAMINHO), { recursive: true });
       writeFileSync(CAMINHO, JSON.stringify(gerar(), null, 2) + '\n');
     }
+    if (!existsSync(CAMINHO)) throw new Error(`fixture ausente: ${CAMINHO} (versionado em fixtures/; para gerar de novo, GERAR_FIXTURES=1)`);
     const arquivo = JSON.parse(readFileSync(CAMINHO, 'utf8')) as Arquivo;
     expect(arquivo.versao).toBe(1);
     expect(arquivo.casos.length).toBeGreaterThanOrEqual(24);

@@ -41,7 +41,6 @@ const REPOUSO_MEDIO = 0.0551;    // → EAR ≈ 0,31  (o repouso medido na grava
 const TESTE         = 0.0462;    // → EAR ≈ 0,26  — entre os dois limiares
 
 describe('BlinkDetector — o limiar adaptativo', () => {
-  const EAR = (altura: number) => altura / 0.10;
 
   it('o mesmo EAR muda de veredito conforme a história anterior', () => {
     // É esta dependência de história que torna `extractFeatures` impura quando

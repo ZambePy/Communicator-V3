@@ -44,6 +44,7 @@
 //     caso volta a constante genérica, que é ruim mas é conhecida.
 
 import { CANTHAL_DISTANCE_CM } from './anthropometry';
+import { mediana } from './estatistica';
 
 /** Diâmetro horizontal visível da íris, em cm. Constante antropométrica. */
 export const DIAMETRO_DA_IRIS_CM = 1.17;
@@ -157,12 +158,6 @@ export function cantalDoQuadroCm(a: AmostraDeEscala | null | undefined): number 
   if (!Number.isFinite(cantalCm)) return null;
   if (cantalCm < CANTAL_MIN_CM || cantalCm > CANTAL_MAX_CM) return null;
   return cantalCm;
-}
-
-function mediana(vs: number[]): number {
-  const s = [...vs].sort((a, b) => a - b);
-  const m = s.length >> 1;
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
 /**

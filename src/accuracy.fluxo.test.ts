@@ -21,15 +21,6 @@ let relogio = 0;
 /** Quadros de vídeo pendentes: o rAF do módulo é servido manualmente. */
 let rafQueue: FrameRequestCallback[] = [];
 
-function avancar(ms: number, passo = 16) {
-  for (let t = 0; t < ms; t += passo) {
-    relogio += passo;
-    vi.advanceTimersByTime(passo);
-    const fila = rafQueue;
-    rafQueue = [];
-    for (const cb of fila) cb(relogio);
-  }
-}
 
 /** Vetor de features com bloco angular válido (posições 4 e 5). */
 function vetor(x: number, y: number, ruido: () => number, fase = 0) {

@@ -69,6 +69,8 @@ describe('treino com alvos compensados por pose', () => {
     for (const n of fit!.samplesPerTarget) expect(n).toBeGreaterThan(10);
 
     // Teto generoso: o certo roda em ~1 s; o defeito levava ~50 s POR OLHO.
-    expect(duracao).toBeLessThan(5_000);
+    // 15 s e não 5: com a suíte inteira em paralelo no Windows o tempo de
+    // parede passa de 5 s sem defeito nenhum, e 15 s ainda pega o de 50 s.
+    expect(duracao).toBeLessThan(15_000);
   }, 120_000);
 });
