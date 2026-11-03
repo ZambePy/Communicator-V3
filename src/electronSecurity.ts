@@ -69,6 +69,9 @@ export function permitirNavegacao(url: string | null | undefined, raizDoApp?: st
     return false;
   }
   if (alvo.protocol !== 'file:' || raiz.protocol !== 'file:' || alvo.host !== raiz.host) return false;
+  // Barra codificada viraria `../` depois de decodificar e passaria no
+  // `startsWith` abaixo; uma página do app nunca tem `%2F`/`%5C` no caminho.
+  if (/%(2f|5c)/i.test(alvo.pathname)) return false;
   // Comparação sem diferenciar maiúsculas (Windows: `C:` e `c:` são a mesma
   // unidade) e com os `%20`/acentos decodificados dos dois lados.
   const normalizar = (p: string): string | null => {

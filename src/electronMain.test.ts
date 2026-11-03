@@ -36,7 +36,8 @@ describe('geometria do monitor da JANELA, não do primário (CORE-10)', () => {
     expect(corpo).toMatch(/monitorDaJanela\(\)/);
     expect(corpo).not.toMatch(/getPrimaryDisplay/);
     expect(main).toMatch(/screen\.getDisplayMatching\(w\.getBounds\(\)\)/);
-    expect(main).toMatch(/ipcMain\.handle\('irisflow:monitor-sizes', \(\) => lerTamanhosDosMonitores\(monitorDaJanela\(\)\)\)/);
+    // Monitor da janela E só para a janela do app (a consulta abre reg.exe/PowerShell).
+    expect(main).toMatch(/ipcMain\.handle\('irisflow:monitor-sizes', \(e\) => \(daJanelaPrincipal\(e\) \? lerTamanhosDosMonitores\(monitorDaJanela\(\)\) : \[\]\)\)/);
     // E avisa o renderer quando o monitor da janela muda.
     expect(main).toMatch(/webContents\.send\('irisflow:tela-mudou'/);
     expect(fonte('electron/preload.ts')).toMatch(/onTelaMudou:/);

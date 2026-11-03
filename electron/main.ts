@@ -1,5 +1,6 @@
 import {
   app, BrowserWindow, Menu, Notification, session, ipcMain, screen, safeStorage, shell, powerSaveBlocker,
+  dialog as dialogoDoSistema,
   type Display, type WebContents,
 } from 'electron';
 import fs from 'node:fs';
@@ -17,7 +18,6 @@ import { registrarVoz } from './voz';
 import { registrarVozGuardada } from './voz/guardadas';
 import { registrarPranchaEmPdf } from './prancha';
 import { registrarCopiaDeSeguranca } from './copiaDeSeguranca';
-import { dialog as dialogoDoSistema } from 'electron';
 import { segurarSaidaAteOMotorSair } from './voz/sidecar';
 import { registrarAtualizacao } from './atualizacao';
 import { iniciarDiagnostico, pastaDosLogs, registrarNoLog } from './diagnostico';
@@ -236,7 +236,8 @@ ipcMain.handle('irisflow:app-info', () => ({
 // diagonal entra no erro angular dos relatórios; depender do cuidador digitar
 // o valor funciona até ele trocar de monitor. Na dúvida a lista volta vazia e
 // o app segue com o valor configurado à mão (passo opcional na UI).
-ipcMain.handle('irisflow:monitor-sizes', () => lerTamanhosDosMonitores(monitorDaJanela()));
+// Só a janela do app pede: a consulta abre processos (`reg.exe`, PowerShell).
+ipcMain.handle('irisflow:monitor-sizes', (e) => (daJanelaPrincipal(e) ? lerTamanhosDosMonitores(monitorDaJanela()) : []));
 
 // Pasta dos registros (log do processo principal), para o cuidador anexar
 // num pedido de suporte. Só a janela do app pede; abre no gerenciador de
@@ -358,6 +359,16 @@ function hostsExtrasDoSite(): string[] {
 }
 
 /**
+ * Pasta das páginas do app empacotado, como URL `file://` — só dentro dela a
+ * janela pode navegar (`permitirNavegacao`). No desenvolvimento, `null`: o
+ * app vem do servidor do Vite (localhost).
+ */
+function raizDoApp(): string | null {
+  if (!app.isPackaged) return null;
+  return pathToFileURL(path.join(__dirname, '..', 'frontend', 'dist') + path.sep).href;
+}
+
+/**
  * Endurecimento de TODO webContents que nascer — a janela principal, a
  * sobreposição do Modo Computador e qualquer janela que alguém acrescente no
  * futuro sem lembrar destas regras:
@@ -371,16 +382,6 @@ function hostsExtrasDoSite(): string[] {
  *     assim que "Gerenciar assinatura" e os links do login funcionam;
  *   - `<webview>` proibido (além de `webviewTag: false`).
  */
-/**
- * Pasta das páginas do app empacotado, como URL `file://` — só dentro dela a
- * janela pode navegar (`permitirNavegacao`). No desenvolvimento, `null`: o
- * app vem do servidor do Vite (localhost).
- */
-function raizDoApp(): string | null {
-  if (!app.isPackaged) return null;
-  return pathToFileURL(path.join(__dirname, '..', 'frontend', 'dist') + path.sep).href;
-}
-
 function endurecerWebContents(contents: WebContents): void {
   const abrirFora = (url: string): boolean => {
     if (!permitirAberturaExterna(url, hostsExtrasDoSite())) return false;

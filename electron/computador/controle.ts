@@ -7,7 +7,7 @@
  *   Windows  → `windows.ts`: user32 via FFI (`koffi`), sem compilar nada.
  *   Linux    → `linux.ts`: `xdotool` (X11). Em Wayland o SO não deixa um
  *              programa mover o cursor de outro; o adaptador diz isso.
- *   macOS    → `macos.ts`: ainda sem adaptador. Exige helper assinado com
+ *   macOS    → sem adaptador (ver `controleIndisponivel`). Exige helper assinado com
  *              permissão de Acessibilidade — fica registrado o motivo.
  *
  * Coordenadas: pixels FÍSICOS da tela virtual. Quem converte é a sessão.
@@ -78,9 +78,4 @@ export function controleDoSistema(): ControleDoSistema {
       instancia = controleIndisponivel(process.platform, 'Sistema operacional não suportado pelo Modo Computador.');
   }
   return instancia;
-}
-
-/** Só para testes: descarta o adaptador em cache. */
-export function _redefinirControle(): void {
-  instancia = null;
 }

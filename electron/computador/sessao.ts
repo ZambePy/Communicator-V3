@@ -63,8 +63,6 @@ interface Sessao {
   idDoMonitor: number;
   controle: ControleDoSistema;
   config: ConfiguracaoDoModo;
-  /** Última amostra válida — a lupa e o cursor precisam dela. */
-  ultimaAmostra: AmostraDeOlhar | null;
   /** Ponto do último `pressionar`, para interpolar o arrasto até o `soltar`. */
   pressionadoEm: Ponto | null;
   /** Relógio do vigia: quando chegou a última amostra e desde quando vem sem calibração. */
@@ -390,7 +388,7 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
 
     const s: Sessao = {
       sobreposicao, principal, quadro, idDoMonitor: display.id, controle, config,
-      ultimaAmostra: null, pressionadoEm: null,
+      pressionadoEm: null,
       ultimaAmostraEm: Date.now(), semCalibracaoDesde: null, semCameraDesde: null, vigia: null, desligar: [], encerrando: false,
     };
     sessao = s;
@@ -460,7 +458,6 @@ export function registrarModoComputador(opcoes: OpcoesDoModo): { parar: (motivo:
     if (!amostraValida(amostra)) return;
     const p = janelaParaSobreposicao(amostra, s.quadro);
     const convertida: AmostraDeOlhar = { ...amostra, x: p.x, y: p.y };
-    s.ultimaAmostra = convertida;
     s.ultimaAmostraEm = Date.now();
     if (amostra.uncalibrated) s.semCalibracaoDesde ??= Date.now();
     else s.semCalibracaoDesde = null;

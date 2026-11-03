@@ -117,6 +117,11 @@ describe('navegação para fora é bloqueada', () => {
       expect(permitirNavegacao(`${RAIZ}../../app.asar.unpacked/x.html`, RAIZ)).toBe(false);
     });
 
+    it('barra codificada (%2F, %5C) não vira ../ depois de decodificar', () => {
+      expect(permitirNavegacao(`${RAIZ}..%2F..%2Fapp.asar.unpacked%2Fx.html`, RAIZ)).toBe(false);
+      expect(permitirNavegacao(`${RAIZ}..%2f..%5cx.html`, RAIZ)).toBe(false);
+    });
+
     it('prefixo parecido não é a pasta (dist-velho não é dist)', () => {
       expect(permitirNavegacao(RAIZ.replace(/dist\/$/, 'dist-velho/index.html'), RAIZ)).toBe(false);
     });

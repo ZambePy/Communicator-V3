@@ -248,6 +248,10 @@ export class Sidecar {
       if (this.pendentes.size === 0) {
         console.log('[voz] motor ocioso: encerrando para liberar memória');
         this.encerrar();
+      } else {
+        // Um pedido longo (baixar o modelo leva até 60 min) passou do prazo de
+        // ociosidade: conta de novo, senão o motor fica vivo até o app fechar.
+        this.rearmarOcioso();
       }
     }, Sidecar.OCIOSO_MS);
     this.ocioso.unref();

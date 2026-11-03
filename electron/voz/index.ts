@@ -23,7 +23,7 @@
  * do sistema, de propósito).
  */
 
-import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, type OpenDialogOptions } from 'electron';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -189,10 +189,11 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
   };
   recarregarDoDisco();
 
+  // Só a janela do app recebe o estado: ele traz o nome do arquivo da voz e
+  // mensagens de erro com caminhos, que a sobreposição não tem por que ver.
   const avisar = () => {
-    for (const w of BrowserWindow.getAllWindows()) {
-      if (!w.isDestroyed()) w.webContents.send(CANAIS_VOZ.estadoMudou, estado);
-    }
+    const w = opcoes.janelaPrincipal();
+    if (w && !w.isDestroyed()) w.webContents.send(CANAIS_VOZ.estadoMudou, estado);
   };
   const patch = (p: Partial<EstadoDoMotorDeVoz>) => {
     estado = { ...estado, ...p };
@@ -210,7 +211,7 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
   };
 
   const sidecar = onde
-    ? new Sidecar(onde, { HF_HOME: caminhos.modelos, IRISFLOW_VOZ_DIR: pasta }, aoEvento, () => {
+    ? new Sidecar(onde, { HF_HOME: caminhos.modelos }, aoEvento, () => {
         patch({ motor: sidecar!.emErro ? 'erro' : sidecar!.vivo ? (estado.motor === 'pronto' ? 'pronto' : 'iniciando') : 'parado', erro: sidecar!.ultimoErro ?? undefined });
       })
     : null;
@@ -352,15 +353,16 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     if (!c || typeof c.texto !== 'string' || c.texto.length < 40 || typeof c.aceitoEm !== 'string') {
       return { ok: false, erro: 'A importação exige o termo de consentimento aceito.' };
     }
-    const janela = BrowserWindow.fromWebContents(evento.sender) ?? undefined;
-    const escolha = await dialog.showOpenDialog(janela!, {
+    const janela = BrowserWindow.fromWebContents(evento.sender);
+    const opcoesDoDialogo: OpenDialogOptions = {
       title: 'Escolher o áudio com a voz do paciente',
       properties: ['openFile'],
       filters: [
         { name: 'Áudio e vídeo', extensions: ['wav', 'mp3', 'ogg', 'opus', 'm4a', 'aac', 'flac', 'mp4', 'webm', 'mkv', 'mov', '3gp', 'amr', 'wma'] },
         { name: 'Todos os arquivos', extensions: ['*'] },
       ],
-    });
+    };
+    const escolha = await (janela ? dialog.showOpenDialog(janela, opcoesDoDialogo) : dialog.showOpenDialog(opcoesDoDialogo));
     if (escolha.canceled || escolha.filePaths.length === 0) return { ok: false, erro: 'Nenhum arquivo escolhido.', cancelado: true };
     const origem = escolha.filePaths[0];
     return prepararReferencia(origem, { texto: c.texto, aceitoEm: c.aceitoEm, perfilId: c.perfilId });
@@ -547,6 +549,8 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
     return estado;
   }, Promise.resolve(estado)));
   ipcMain.handle(CANAIS_VOZ.importar, protegido(importar, Promise.resolve({ ok: false, erro: 'Origem não autorizada.' } as ResultadoDaImportacao)));
+  // `remover` REJEITA de propósito quando o disco falha: a tela de Voz mostra
+  // "ela continua guardada" (a voz é dado biométrico; 22/10/2026). Não embrulhar.
   ipcMain.handle(CANAIS_VOZ.remover, protegido(() => remover(), undefined));
   ipcMain.handle(
     CANAIS_VOZ.removerDoPerfil,
@@ -556,7 +560,11 @@ export function registrarVoz(opcoes: { raizDoProjeto: string; janelaPrincipal: (
   ipcMain.handle(CANAIS_VOZ.sintetizar, protegido((_e, texto: unknown, o: unknown) => sintetizar(texto, o), Promise.resolve({ ok: false, motivo: 'indisponivel' } as ResultadoDaSintese)));
   ipcMain.handle(CANAIS_VOZ.ativar, protegido((_e, ligado: unknown) => {
     if (!meta()) return;
-    gravarJson(caminhos.estado, { ativa: ligado === true });
+    try {
+      gravarJson(caminhos.estado, { ativa: ligado === true });
+    } catch (e) {
+      console.warn('[voz] não consegui gravar se a voz clonada está ativa:', e instanceof Error ? e.message : String(e));
+    }
     recarregarDoDisco();
     avisar();
   }, undefined));

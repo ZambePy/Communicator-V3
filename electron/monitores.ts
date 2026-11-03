@@ -25,6 +25,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { screen, type Display } from 'electron';
+import { caminhoDoPowershell } from './alarme';
 import { buildMonitorSizeQuery } from '../src/displayGeometry';
 import {
   filtrarAtivos,
@@ -94,7 +95,9 @@ function paineisDosBytes(blobs: Iterable<Uint8Array>): TamanhoDoPainel[] {
 
 // ---------------------------------------------------------------- Windows
 async function lerWindows(tela: TelaEmUso | null): Promise<TamanhoDoPainel[]> {
-  const reg = process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32', 'reg.exe') : 'reg.exe';
+  // Caminho completo, nunca o nome solto: pelo nome o Windows procura primeiro
+  // na pasta do programa, que numa instalação por usuário é gravável por ele.
+  const reg = path.win32.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', 'reg.exe');
   const [saidaEdids, saidaAtivos] = await Promise.all([
     rodar(reg, ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Enum\\DISPLAY', '/s', '/v', 'EDID'], 5000, 8 * 1024 * 1024),
     rodar(reg, ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\monitor\\Enum'], 3000),
@@ -105,7 +108,7 @@ async function lerWindows(tela: TelaEmUso | null): Promise<TamanhoDoPainel[]> {
 
   // Fonte antiga. O PowerShell pode demorar vários segundos para abrir numa
   // máquina fraca — por isso ela é a segunda, e com teto próprio.
-  const saidaWmi = await rodar('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', buildMonitorSizeQuery()], 8000);
+  const saidaWmi = await rodar(caminhoDoPowershell(), ['-NoProfile', '-NonInteractive', '-Command', buildMonitorSizeQuery()], 8000);
   // O WMI só lista monitores presentes: presença confirmada.
   return selecionarPaineis(lerSaidaDoWmi(saidaWmi), tela, true);
 }
