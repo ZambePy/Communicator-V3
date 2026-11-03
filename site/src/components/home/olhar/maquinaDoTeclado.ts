@@ -286,29 +286,6 @@ export function teclaQueMostra(estado: EstadoDoTeclado, item: string): IdDaTecla
   return i < 0 ? null : TECLAS_DA_GRADE[i]
 }
 
-/** Um nome curto da tecla, para o texto alternativo e os testes. */
-export function nomeDaTecla(estado: EstadoDoTeclado, tecla: IdDaTecla): string {
-  if (tecla === 'voltar') return 'Voltar'
-  if (tecla === 'falar') return 'Falar'
-  const c = celulas(estado)[TECLAS_DA_GRADE.indexOf(tecla)]
-  switch (c.tipo) {
-    case 'grupo':
-      return `Grupo ${c.letras.join(' ')}`
-    case 'acoes':
-      return 'Grupo Y Z e ações'
-    case 'previa':
-      return 'Sugestões'
-    case 'letra':
-      return c.letra
-    case 'acao':
-      return c.acao
-    case 'palavra':
-    case 'frase':
-      return c.texto
-    default:
-      return ''
-  }
-}
 
 /** Uma chave do nível, para saber quando a grade mudou de verdade. */
 export function chaveDoNivel(e: EstadoDoTeclado): string {

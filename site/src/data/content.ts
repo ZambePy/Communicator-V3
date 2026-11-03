@@ -441,15 +441,6 @@ export function cheapestPlan(plans: Plan[] = PLANS): Plan {
   return plans.reduce((a, b) => (a.price < b.price ? a : b))
 }
 
-/** Plano exibido como padrão em CTAs onde o usuário ainda não escolheu. */
-export const DEFAULT_PLAN: Plan = getPlan('completo')
-
-/**
- * Menor preço da RESERVA. Para o valor do banco, use `usePlans().cheapest`;
- * esta constante só serve onde não há React (e como valor inicial do hook).
- */
-export const CHEAPEST_PLAN: Plan = cheapestPlan()
-
 /* ---------------- perguntas frequentes ---------------- */
 
 export const FAQ = [

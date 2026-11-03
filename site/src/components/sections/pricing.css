@@ -3,15 +3,6 @@
    Situação dita em texto com um ponto da cor ("Disponível agora", "Em
    breve"), sem pílula em caixa alta. */
 
-.pricing__title {
-  margin-bottom: var(--sp-4);
-}
-
-.pricing__lead {
-  max-width: 62ch;
-  margin-bottom: var(--sp-7);
-}
-
 /* --- grade de três planos --- */
 .plans {
   display: grid;
@@ -254,10 +245,6 @@
 
 .plan--beta .plan__list {
   margin: 0;
-}
-
-.plan__fine--left {
-  text-align: left;
 }
 
 /* Situação: texto com um ponto da cor. */

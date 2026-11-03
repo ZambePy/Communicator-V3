@@ -9,8 +9,6 @@
 
 import { isCPF, isEmail, isPhone } from './format'
 
-export type Rule<V = string> = (value: V) => string | undefined
-
 /** Mesmo mínimo exigido pelo Supabase Auth por padrão. */
 export const SENHA_MINIMA = 8
 

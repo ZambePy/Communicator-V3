@@ -24,6 +24,9 @@ import {
 } from '@/services/api'
 import { condicaoLabel, formatDate, isPhone, maskPhone, osLabel, relacaoLabel } from '@/utils/format'
 import { validar } from '@/utils/validation'
+// `.tag` (a etiqueta da inscrição) mora no card.css: sem este import, quem
+// abria /perfil direto via a etiqueta sem estilo.
+import '@/components/ui/card.css'
 import './checkout.css'
 import './sucesso.css'
 import './perfil.css'

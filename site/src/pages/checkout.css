@@ -246,19 +246,6 @@
   text-align: center;
 }
 
-.pix__code {
-  width: 100%;
-  max-width: 420px;
-  padding: var(--sp-4);
-  border-radius: var(--r-md);
-  border: 1px dashed var(--line-strong);
-  background: var(--surface-2);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.84rem;
-  color: var(--text-soft);
-  word-break: break-all;
-}
-
 /* --- alerta / nota --- */
 .notice {
   display: flex;

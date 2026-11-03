@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import * as api from '@/services/api'
 import { formatDate } from '@/utils/format'
+// `.field__error` (o aviso de falha ao desconectar) mora no field.css, que /conta
+// não carregava por nenhum outro caminho.
+import '@/components/ui/field.css'
 import './linked-devices.css'
 
 /* ============================================================

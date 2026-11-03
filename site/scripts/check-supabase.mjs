@@ -55,6 +55,22 @@ const env = lerEnv()
 const url = env.VITE_SUPABASE_URL
 const chave = env.VITE_SUPABASE_ANON_KEY
 
+/**
+ * Papel (`role`) de uma chave JWT do Supabase, ou `null` se não for JWT (as
+ * chaves novas `sb_publishable_…`). O texto "service_role" nunca aparece na
+ * chave crua, que é base64url: é preciso abrir o payload, como faz o
+ * `scripts/conferir-config-publica.mjs` da raiz.
+ */
+function papelDaChave(k) {
+  const partes = k.split('.')
+  if (partes.length !== 3) return null
+  try {
+    return JSON.parse(Buffer.from(partes[1], 'base64url').toString('utf8')).role ?? null
+  } catch {
+    return null
+  }
+}
+
 if (!existsSync(resolve(RAIZ, '.env.local')) && !existsSync(resolve(RAIZ, '.env'))) {
   falha('Nem .env.local nem .env existem. Rode: cp .env.example .env.local')
   process.exit(1)
@@ -76,7 +92,7 @@ if (!url) {
 
 if (!chave) {
   falha('VITE_SUPABASE_ANON_KEY vazia no .env.local / .env')
-} else if (chave.includes('service_role')) {
+} else if (chave.startsWith('sb_secret_') || (papelDaChave(chave) ?? 'anon') !== 'anon') {
   falha('VITE_SUPABASE_ANON_KEY parece ser a service_role. NUNCA use ela aqui: ela ignora a RLS e iria para o bundle público.')
 } else {
   ok(`VITE_SUPABASE_ANON_KEY = ${chave.slice(0, 12)}… (${chave.length} caracteres)`)

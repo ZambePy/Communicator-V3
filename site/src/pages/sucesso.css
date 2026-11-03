@@ -78,13 +78,6 @@
   background: var(--surface-2);
 }
 
-.download__buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-3);
-  justify-content: center;
-}
-
 /* --- verificação de compatibilidade ---
    O bloco é o mesmo teste da página /meu-computador
    (components/sections/teste-do-computador.css); aqui, só o respiro dele

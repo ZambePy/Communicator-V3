@@ -33,23 +33,6 @@
   height: calc(100% - 36px);
 }
 
-.olhar-clique__quadro {
-  position: absolute;
-  inset: 0 0 36px;
-  display: grid;
-  place-items: center;
-  opacity: 0;
-  transform: scale(0.94);
-  transition:
-    opacity 360ms var(--ease-forte),
-    transform 480ms var(--ease-forte);
-}
-
-.olhar-clique__quadro.is-ativo {
-  opacity: 1;
-  transform: none;
-}
-
 .olhar-clique__marcas {
   position: absolute;
   left: 50%;

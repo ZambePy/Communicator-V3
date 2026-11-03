@@ -36,10 +36,6 @@ export function maskCVV(value: string) {
   return onlyDigits(value).slice(0, 4)
 }
 
-export function maskCEP(value: string) {
-  return onlyDigits(value).slice(0, 8).replace(/(\d{5})(\d)/, '$1-$2')
-}
-
 /* ---------------- validações ---------------- */
 
 export function isEmail(value: string) {

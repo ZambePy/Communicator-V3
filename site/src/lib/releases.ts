@@ -420,7 +420,3 @@ export function platformsText(available: OS[]) {
   }
 }
 
-/** "macOS" ou "macOS (em preparação)", para listas de escolha. */
-export function osOptionLabel(os: OS, available: OS[] = RELEASES_AVAILABLE): string {
-  return available.includes(os) ? OS_NAMES[os] : `${OS_NAMES[os]} (em preparação)`
-}
