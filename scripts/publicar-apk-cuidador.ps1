@@ -10,7 +10,7 @@ $raiz = Split-Path -Parent $PSScriptRoot
 $log = Join-Path $raiz 'publicar-apk-cuidador.log'
 Start-Transcript -Path $log -Force | Out-Null
 
-$BUILD_ID = '159026c3-6467-40f0-a2b4-72c51eb38280'
+$BUILD_ID = '24506c1f-ba9e-459f-a1e5-503861c87f0c'
 $REPO = 'ZambePy/Communicator-V3'
 $NOME = 'IrisFlow-Cuidador.apk'
 $API = "https://api.github.com/repos/$REPO"
