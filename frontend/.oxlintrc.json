@@ -30,6 +30,12 @@
     "jsx-a11y/no-redundant-roles": "warn",
     "import/no-unassigned-import": "off"
   },
+  "overrides": [
+    {
+      "files": ["scripts/**"],
+      "rules": { "no-console": "off" }
+    }
+  ],
   "ignorePatterns": [
     "dist",
     "node_modules",

@@ -1385,6 +1385,7 @@ export const CalibrationCheck: React.FC = () => {
                     aria-hidden="true"
                     className={CLASSE_DO_ALVO}
                     style={{ transform: 'scale(1.6)', transition: 'none' }}
+                    // oxlint-disable-next-line react/no-danger -- marcação constante de alvoDeFixacao.ts, sem dado de fora
                     dangerouslySetInnerHTML={{ __html: MARCACAO_DO_ALVO_ABC }}
                   />
                 )}
@@ -1956,6 +1957,7 @@ export const CalibrationCheck: React.FC = () => {
                     }
                     // Marcação constante, a mesma do teste de precisão — sem
                     // dado de fora nenhum.
+                    // oxlint-disable-next-line react/no-danger -- marcação constante de alvoDeFixacao.ts
                     dangerouslySetInnerHTML={{ __html: MARCACAO_DO_ALVO_ABC }}
                   />
                 )}

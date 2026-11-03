@@ -1160,7 +1160,10 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       'background:rgba(239,68,68,0.6)',
       'box-shadow:0 0 16px rgba(255,0,0,0.9)',
       'pointer-events:none',
-      'z-index:9999',
+      // Acima de TODA camada que o paciente opera pelo olhar (lembrete 99980,
+      // diálogos 99985, contagem da emergência 999999, varredura 1000001):
+      // sem isso o ponteiro, o único que ele tem, sumia por baixo delas.
+      'z-index:1000003',
       'transform:translate3d(-9999px,-9999px,0)',
       'transform-origin:center center',
       // `transform` e `opacity` são as duas propriedades que o compositor
@@ -1194,7 +1197,7 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         `width:${g.lado}px`,
         `height:${g.lado}px`,
         'pointer-events:none',
-        'z-index:9998',
+        'z-index:1000002',
         'transform:translate3d(-9999px,-9999px,0)',
         'opacity:0',
       ].join(';');
@@ -2838,7 +2841,9 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // O laço de pintura se reagenda sozinho: sem este cancelamento ele
       // sobreviveria ao desmonte e continuaria escrevendo num nó removido.
       cancelAnimationFrame(rafPintura);
+      // oxlint-disable-next-line react-hooks/exhaustive-deps -- guarda uma instância de classe criada uma vez, não um nó do React
       seguidorRef.current.reiniciar();
+      // oxlint-disable-next-line react-hooks/exhaustive-deps -- guarda uma instância de classe criada uma vez, não um nó do React
       planejadorRef.current.reiniciar();
       cursorRef.current?.remove();
       cursorRef.current = null;

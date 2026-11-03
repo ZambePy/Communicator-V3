@@ -472,7 +472,9 @@ export const Overlay: React.FC = () => {
     return () => {
       off();
       cancelAnimationFrame(raf);
+      // oxlint-disable-next-line react-hooks/exhaustive-deps -- guarda uma instância de classe criada uma vez, não um nó do React
       seguidorRef.current.reiniciar();
+      // oxlint-disable-next-line react-hooks/exhaustive-deps -- guarda uma instância de classe criada uma vez, não um nó do React
       planejadorRef.current.reiniciar();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

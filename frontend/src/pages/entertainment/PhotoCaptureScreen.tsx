@@ -78,7 +78,7 @@ export const PhotoCaptureScreen: React.FC = () => {
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.warn('[PhotoCaptureScreen] Erro ao acessar webcam:', err);
         if (isMounted) {
           setCameraError(

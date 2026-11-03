@@ -470,7 +470,6 @@ const CampoTexto: React.FC<{
         background: 'var(--field-bg)',
         padding: '0.85rem 1rem',
         fontSize: '1rem',
-        outline: 'none',
         color: 'var(--color-text-base)',
         width: '100%',
       }}

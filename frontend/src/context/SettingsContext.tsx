@@ -531,7 +531,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // Aplica conforto visual no boot e a cada mudança relevante.
   useEffect(() => {
-    applyVisualComfort(settings);
+    applyVisualComfort({ theme: settings.theme, brightnessLevel: settings.brightnessLevel, amberFilter: settings.amberFilter });
   }, [settings.theme, settings.brightnessLevel, settings.amberFilter]);
 
   // Brilho real do monitor via IPC do Electron.

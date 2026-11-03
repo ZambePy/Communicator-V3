@@ -761,6 +761,7 @@ export const KeyboardScreen: React.FC = () => {
             className="kb-key kb-key-empty"
             disabled
             noWarn
+            aria-hidden="true"
             style={cell}
           >
             <span />

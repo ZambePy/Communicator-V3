@@ -82,7 +82,7 @@ export const GazeGrid: React.FC<GazeGridProps> = ({
         );
       }
     }
-  }, [columns, rows, gap, childCount]);
+  }, [columns, rows, gap, childCount, cellMinPx]);
 
   return (
     <div

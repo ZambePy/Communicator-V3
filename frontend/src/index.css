@@ -248,7 +248,8 @@ h3 {
   --color-bg-sunken: #eaeff7;
   --color-text-base: #0f172a;
   --color-text-muted: #475569;
-  --color-text-faint: #64748b;
+  /* #5f6b7d: 5,0:1 sobre o fundo base (o #64748b anterior dava 4,44:1). */
+  --color-text-faint: #5f6b7d;
   --color-card-bg: rgba(255, 255, 255, 0.86);
   --color-card-border: rgba(15, 23, 42, 0.1);
   --color-card-shadow: rgba(27, 84, 168, 0.1);
@@ -2571,6 +2572,11 @@ html[data-gaze='degradado'] .sessao-chip__texto--degradado {
   background: var(--color-danger);
   color: #ffffff;
   box-shadow: var(--shadow-1);
+}
+/* No escuro o --color-danger clareia (#f87171) e o branco por cima dava 2,77:1.
+   O mesmo vermelho do DialogoDeConfirmacao: 6,5:1. */
+html.dark .btn--danger {
+  background: #b91c1c;
 }
 .btn--ghost {
   background: transparent;

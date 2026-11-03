@@ -128,7 +128,6 @@ export const PortaoDoPin: React.FC<{
                 background: 'var(--field-bg)',
                 color: 'var(--color-text-base)',
                 border: `2px solid ${erro ? 'var(--color-danger)' : 'var(--field-border)'}`,
-                outline: 'none',
                 fontFamily: 'var(--font-family-display)',
               }}
             />

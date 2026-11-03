@@ -488,7 +488,7 @@ export const CloudProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         patch({ realtime: realtimeRef.current });
       });
     canalRef.current = canal;
-  }, [receberDoCuidador, aplicarAjustesRemotos, carregarAjustes, receberReconhecimento]);
+  }, [receberDoCuidador, aplicarAjustesRemotos, carregarAjustes, receberReconhecimento, patch]);
 
   const iniciarServicos = useCallback(async (v: VinculoLocal) => {
     vinculoRef.current = v;

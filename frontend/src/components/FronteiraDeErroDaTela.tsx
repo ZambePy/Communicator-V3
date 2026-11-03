@@ -80,6 +80,7 @@ class Fronteira extends React.Component<PropsDaFronteira, EstadoDaFronteira> {
   }
 
   componentDidUpdate(anterior: PropsDaFronteira) {
+    // oxlint-disable-next-line react/no-did-update-set-state -- reset da fronteira quando a tela muda (chave), com guarda
     if (anterior.chave !== this.props.chave && this.state.erro) this.setState({ erro: null });
   }
 
