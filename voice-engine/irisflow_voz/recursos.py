@@ -47,7 +47,10 @@ def maquina() -> Maquina:
 
         vm = psutil.virtual_memory()
         return Maquina(vm.total / 2**30, vm.available / 2**30, nucleos)
-    except Exception:  # noqa: BLE001 — sem psutil, sem medida (não bloqueia)
+    except Exception as e:  # noqa: BLE001 — sem psutil, sem medida (não bloqueia)
+        from .protocolo import log
+
+        log(f"sem medida de memória (psutil): {e}; a guarda de memória fica desligada")
         return Maquina(0.0, 0.0, nucleos)
 
 

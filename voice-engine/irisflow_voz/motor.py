@@ -41,7 +41,9 @@ PAUSA_ENTRE_TRECHOS_S = 0.25
 def modelo_baixado() -> bool:
     try:
         from huggingface_hub import try_to_load_from_cache
-    except Exception:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
+        # "Não baixado" faria a tela pedir o download de novo: o log diz o erro real.
+        log(f"huggingface_hub não importou: {e}")
         return False
     for nome in ARQUIVOS_MTL:
         r = try_to_load_from_cache(REPO_ID, nome)
@@ -146,8 +148,10 @@ class Motor:
                 from huggingface_hub import constants as hf_constants
 
                 hf_constants.HF_HUB_OFFLINE = True
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001
+                # Não derruba a carga, mas avisa: sem isto, cada carga do modelo
+                # voltaria a consultar o huggingface.co sem ninguém saber.
+                log(f"não consegui ligar o modo offline do huggingface_hub: {e}")
         import torch
 
         self.dispositivo = dispositivo_disponivel()

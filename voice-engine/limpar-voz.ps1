@@ -27,7 +27,12 @@ foreach ($app in @('irisflow', 'IrisFlow')) {
   $base = Join-Path $env:APPDATA "$app\voz"
   Remover (Join-Path $base 'referencia.wav')  'audio de referencia da voz'
   Remover (Join-Path $base 'referencia.json') 'metadados e consentimento'
+  # As cópias da gravação atômica (index.ts) também guardam o termo e o nome do arquivo.
+  Remover (Join-Path $base 'referencia.json.bak') 'copia dos metadados e do consentimento'
+  Remover (Join-Path $base 'referencia.json.tmp') 'temporario dos metadados'
   Remover (Join-Path $base 'estado.json')     'estado (voz ligada/desligada)'
+  Remover (Join-Path $base 'estado.json.bak') 'copia do estado'
+  Remover (Join-Path $base 'estado.json.tmp') 'temporario do estado'
   Remover (Join-Path $base 'cache')           'cache de frases geradas'
   Remover (Join-Path $base 'tmp')             'temporarios'
   Remover (Join-Path $base 'modelos')         'pesos do modelo (Hugging Face)'
@@ -44,3 +49,4 @@ if ($Ambiente) {
 
 Write-Host ''
 Write-Host '[limpar] pronto. Abra o app: a tela de Voz volta ao estado inicial (modelo nao baixado, nenhuma voz).'
+Write-Host '[limpar] ficaram, de proposito: as gravacoes da propria pessoa (voz\guardadas) e as copias de seguranca. Elas nao podem ser regravadas.'

@@ -22,12 +22,21 @@ if (-not (Test-Path .\.venv)) {
 }
 .\.venv\Scripts\Activate.ps1
 
+# No PowerShell 5.1 o `$ErrorActionPreference = 'Stop'` não vale para o código
+# de saída de programa externo: sem estas conferências, um Python errado ou um
+# `pip install` que falhou seguiam até o PyInstaller.
+function Conferir([string]$passo) { if ($LASTEXITCODE -ne 0) { Write-Host "[voz] falhou: $passo"; exit $LASTEXITCODE } }
+
 python -c "import sys; assert sys.version_info[:2] == (3, 11), 'Use Python 3.11 (64 bits)'"
+Conferir 'versão do Python'
 python -m pip install --upgrade pip
+Conferir 'atualizar o pip'
 pip install -r requirements.txt pyinstaller
+Conferir 'instalar as dependências'
 
 Write-Host '[voz] verificando importações...'
 python -c "import chatterbox, librosa, soundfile, noisereduce; print('ok')"
+Conferir 'importações'
 
 Write-Host '[voz] empacotando com PyInstaller (modo pasta)...'
 pyinstaller --noconfirm --clean `
@@ -42,6 +51,7 @@ pyinstaller --noconfirm --clean `
   --hidden-import irisflow_voz.motor `
   --paths . `
   entrada.py
+Conferir 'PyInstaller'
 
 Write-Host ''
 Write-Host "[voz] pronto: $PSScriptRoot\dist\irisflow-voz\irisflow-voz.exe"

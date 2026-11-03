@@ -95,7 +95,7 @@ def test_falar_texto_longo_vira_varios_trechos_com_pausa(tmp_path):
     assert abs(len(audio) - esperado) < 10
 
 
-def test_protocolo_ponta_a_ponta_status_e_erro():
+def test_protocolo_ponta_a_ponta_status_e_erro(tmp_path):
     """Sobe o processo de verdade: status responde, comando desconhecido devolve ok=false, `sair` encerra."""
     pedidos = "\n".join([
         json.dumps({"id": 1, "cmd": "status"}),
@@ -104,7 +104,11 @@ def test_protocolo_ponta_a_ponta_status_e_erro():
         json.dumps({"id": 3, "cmd": "sair"}),
     ]) + "\n"
     raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    p = subprocess.run([sys.executable, "-m", "irisflow_voz"], input=pedidos, capture_output=True, text=True, cwd=raiz, timeout=120)
+    # HF_HOME numa pasta vazia: quem já baixou o modelo pelo terminal teria
+    # `modelo_baixado` True e o teste falharia sem bug nenhum. E UTF-8 explícito:
+    # sem ele a saída é lida na página de código do Windows.
+    ambiente = {**os.environ, "HF_HOME": str(tmp_path)}
+    p = subprocess.run([sys.executable, "-m", "irisflow_voz"], input=pedidos, capture_output=True, text=True, encoding="utf-8", env=ambiente, cwd=raiz, timeout=120)
     linhas = [json.loads(l) for l in p.stdout.splitlines() if l.startswith("{")]
     por_id = {l["id"]: l for l in linhas if "id" in l}
     # `dispositivo` só é conhecido depois de carregar o modelo (e `status` não
