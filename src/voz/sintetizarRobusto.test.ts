@@ -32,7 +32,7 @@ vi.mock('../../electron/voz/sidecar', async (original) => ({
 import { registrarVoz, type ControleDaVoz } from '../../electron/voz/index';
 import { CANAIS_VOZ, normalizarTextoParaFala, type ResultadoDaSintese } from './protocolo';
 
-const SENDER = { id: 1 };
+const SENDER = { id: 1, send: () => {} };
 const chamar = <T,>(canal: string, ...args: unknown[]) => handlers.get(canal)!({ sender: SENDER }, ...args) as Promise<T>;
 const CONSENTIMENTO = {
   texto: 'Eu autorizo o uso da minha voz para a voz personalizada do IrisFlow.',

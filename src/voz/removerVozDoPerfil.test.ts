@@ -42,7 +42,8 @@ const PRAZO_DO_TESTE = process.platform === 'win32' ? 90_000 : 20_000;
 import { registrarVoz, type ControleDaVoz } from '../../electron/voz/index';
 import { CANAIS_VOZ } from './protocolo';
 
-const SENDER = { id: 1 };
+// send: a janela principal recebe o estado da voz (avisar, em electron/voz/index.ts).
+const SENDER = { id: 1, send: () => {} };
 const chamar = <T,>(canal: string, ...args: unknown[]) => handlers.get(canal)!({ sender: SENDER }, ...args) as Promise<T>;
 const termoDe = (perfilId: string | null) => ({
   texto: 'Eu autorizo o uso da minha voz para a voz personalizada do IrisFlow.',

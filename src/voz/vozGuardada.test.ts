@@ -248,7 +248,7 @@ describe('o termo é de cada paciente', () => {
 const SO_NO_CI = process.platform === 'win32' && !process.env.GITHUB_ACTIONS;
 
 describe.skipIf(SO_NO_CI)('canais e a voz clonada', () => {
-  const SENDER = { id: 1 };
+  const SENDER = { id: 1, send: () => {} };
   const chamar = <T,>(canal: string, ...args: unknown[]) => handlers.get(canal)!({ sender: SENDER }, ...args) as Promise<T>;
   let voz: ControleDaVoz | null = null;
   afterEach(() => { voz?.matarAgora(); voz = null; });
@@ -407,7 +407,7 @@ describe('apagarDoPerfil: remover o paciente apaga a voz dele', () => {
 });
 
 describe('apagarDoPerfil pelo canal IPC', () => {
-  const SENDER = { id: 1 };
+  const SENDER = { id: 1, send: () => {} };
   const janela = () => ({ isDestroyed: () => false, webContents: SENDER }) as never;
 
   it('só a janela do app apaga a voz de um perfil', async () => {

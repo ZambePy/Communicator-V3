@@ -35,7 +35,8 @@ const dialogo = { arquivo: '/qualquer/voz-do-paciente.ogg' };
 import { registrarVoz, type ControleDaVoz } from '../../electron/voz/index';
 import { CANAIS_VOZ } from './protocolo';
 
-const SENDER = { id: 1 };
+// send: a janela principal recebe o estado da voz (avisar, em electron/voz/index.ts).
+const SENDER = { id: 1, send: () => {} };
 const chamar = <T,>(canal: string, ...args: unknown[]) => handlers.get(canal)!({ sender: SENDER }, ...args) as Promise<T>;
 const CONSENTIMENTO = {
   texto: 'Eu autorizo o uso da minha voz para a voz personalizada do IrisFlow.',

@@ -1055,7 +1055,7 @@ describe('o que entra: NUNCA sobrescreve a voz que já está aqui (rodada de cor
 });
 
 describe('canais do backup da voz', () => {
-  const SENDER = { id: 1 };
+  const SENDER = { id: 1, send: () => {} };
   const janela = () => ({ isDestroyed: () => false, webContents: SENDER }) as never;
   const chamar = <T,>(canal: string, ...args: unknown[]) => handlers.get(canal)!({ sender: SENDER }, ...args) as Promise<T> | T;
 
