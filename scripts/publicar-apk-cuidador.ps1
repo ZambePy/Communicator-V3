@@ -24,6 +24,12 @@ function Enviar($arquivo, $releaseId, $h) {
 
 try {
   Write-Host '== 1. Login do GitHub guardado pelo Git'
+  # Sem BOM: com o Windows em UTF-8, o pipe do PowerShell 5.1 manda EF BB BF
+  # antes do texto e o Git recusa ("credential missing protocol field").
+  # O que vale para o pipe é o Console.InputEncoding; $OutputEncoding vai junto.
+  $semBom = New-Object System.Text.UTF8Encoding $false
+  $OutputEncoding = $semBom
+  [Console]::InputEncoding = $semBom
   $saida = "protocol=https`nhost=github.com`n`n" | git credential fill 2>$null
   $tok = ($saida | Where-Object { $_ -like 'password=*' }) -replace '^password=', ''
   if (-not $tok) { Parar 'o Git nao tem login do GitHub guardado' }
