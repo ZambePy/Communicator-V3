@@ -36,6 +36,18 @@ describe('com DSN', () => {
       expect.objectContaining({ dsn: DSN, sendDefaultPii: false, attachScreenshot: false, attachViewHierarchy: false, tracesSampleRate: 0 }),
     );
   });
+
+  it('não grava a sessão (session replay desligado)', () => {
+    jest.isolateModules(() => {
+      process.env.EXPO_PUBLIC_SENTRY_DSN = DSN;
+      (require('./sentry') as typeof import('./sentry')).initSentry();
+    });
+    const opts = (Sentry.init as jest.Mock).mock.calls.at(-1)[0];
+    expect(opts.replaysSessionSampleRate).toBe(0);
+    expect(opts.replaysOnErrorSampleRate).toBe(0);
+    const nomes = (opts.integrations ?? []).map((i: { name?: string }) => i?.name ?? '');
+    expect(nomes.some((n: string) => /replay/i.test(n))).toBe(false);
+  });
 });
 
 describe('limpeza dos eventos', () => {

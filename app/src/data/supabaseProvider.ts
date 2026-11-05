@@ -244,6 +244,7 @@ export class SupabaseProvider implements DataProvider {
           buyer_name: nova.nome.trim().replace(/\s+/g, ' '),
           newsletter: Boolean(nova.newsletter),
           terms_accepted_at: new Date().toISOString(),
+          ...(nova.maioridade ? { adult_declared_at: new Date().toISOString() } : {}),
         },
         // O botão do e-mail (alternativa ao código) abre a página de confirmação do site.
         emailRedirectTo: siteRoute('/confirmar-email'),

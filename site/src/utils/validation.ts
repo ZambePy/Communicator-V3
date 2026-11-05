@@ -99,6 +99,13 @@ export const validar = {
   aceite(v: boolean) {
     return v ? undefined : 'É preciso aceitar os termos de uso e a política de privacidade.'
   },
+  // Quem cria a conta contrata e consente pelos dados (LGPD art. 14): precisa ser maior de idade.
+  // Quem usa pode ser criança ou adolescente; aí a conta é do responsável legal.
+  maioridade(v: boolean) {
+    return v
+      ? undefined
+      : 'A conta precisa ser criada por um adulto. Se quem vai usar é menor de idade, peça ao responsável legal.'
+  },
 }
 
 /* ---------------- força da senha ---------------- */

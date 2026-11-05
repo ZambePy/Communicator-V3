@@ -289,6 +289,8 @@ export interface NovaConta {
   email: string;
   senha: string;
   newsletter?: boolean;
+  /** Declarou ter 18 anos ou mais (a tela não deixa seguir sem). */
+  maioridade?: boolean;
 }
 
 /** `sessao`: o projeto não exige confirmar o e-mail e a conta já entrou; `confirmar`: o código foi enviado. */

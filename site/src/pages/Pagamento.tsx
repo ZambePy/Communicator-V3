@@ -358,11 +358,29 @@ export default function Pagamento() {
                 </p>
               )}
 
+              {/* Os termos da renovação ficam colados no botão que os aceita, e o
+                  leitor de tela os lê junto com ele (aria-describedby). */}
+              <p className="flow__renovacao" id="termos-da-renovacao">
+                {termosDaRenovacao({
+                  method,
+                  anual: method === 'cartao' && card.installments === 12,
+                  price,
+                  primeira: formatDate(account.trialEndsAt),
+                })}{' '}
+                Cancele quando quiser em <strong>Minha conta</strong>, sem multa: o acesso continua
+                até o fim do período já pago.
+              </p>
+
               <div className="flow__actions">
                 <Button to="/cadastro" variant="ghost" icon={<Icon name="seta-esquerda" size={18} />}>
                   Voltar
                 </Button>
-                <Button type="submit" loading={processing} variant="teal">
+                <Button
+                  type="submit"
+                  loading={processing}
+                  variant="teal"
+                  aria-describedby="termos-da-renovacao"
+                >
                   {processing ? 'Confirmando…' : 'Confirmar e liberar o download'}
                 </Button>
               </div>
@@ -379,6 +397,42 @@ export default function Pagamento() {
         </Reveal>
       </div>
     </div>
+  )
+}
+
+/** O que acontece depois da avaliação, em uma frase, para cada forma de pagamento. */
+function termosDaRenovacao({
+  method,
+  anual,
+  price,
+  primeira,
+}: {
+  method: Method
+  anual: boolean
+  price: number
+  primeira: string
+}): ReactNode {
+  if (method === 'cartao') {
+    return anual ? (
+      <>
+        Ao confirmar, você autoriza a cobrança de <strong>{brl(price * 10)}</strong> no cartão em{' '}
+        <strong>{primeira}</strong> e, depois, o mesmo valor <strong>a cada 12 meses</strong>, até
+        cancelar.
+      </>
+    ) : (
+      <>
+        Ao confirmar, você autoriza a cobrança de <strong>{brl(price)}</strong> no cartão em{' '}
+        <strong>{primeira}</strong> e, depois, o mesmo valor <strong>todo mês</strong>, até cancelar.
+      </>
+    )
+  }
+  const meio = method === 'pix' ? 'um Pix' : 'um boleto'
+  return (
+    <>
+      Nada é cobrado sozinho: ao fim da avaliação, em <strong>{primeira}</strong>, você recebe{' '}
+      {meio} de <strong>{brl(price)}</strong> por e-mail e, depois, um novo{' '}
+      <strong>todo mês</strong>, até cancelar.
+    </>
   )
 }
 

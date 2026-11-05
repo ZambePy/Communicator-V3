@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Linking, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Linking, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { Button, CampoDeCodigo, IconButton, Notice, PassosDoCadastro, Screen, Text, TextField } from '@/components';
@@ -9,7 +9,7 @@ import { legalLinks } from '@/lib/config';
 import { haptics } from '@/lib/haptics';
 import { marcarTutorialVisto } from '@/lib/tutorial';
 import { useApp } from '@/store/AppProvider';
-import { spacing, useEntrada } from '@/theme';
+import { sizes, spacing, useEntrada, useTheme } from '@/theme';
 import { ESPERA_DO_REENVIO_S, relogio, SENHA_MINIMA } from '@/utils/cadastro';
 import { mensagemDeErro } from '@/utils/errors';
 
@@ -29,6 +29,7 @@ type Passo = 1 | 2 | 3;
 export default function CriarConta() {
   const router = useRouter();
   const entrada = useEntrada();
+  const { colors } = useTheme();
   const { cadastrar, confirmarCodigo, reenviarCodigo } = useApp();
   const [passo, setPasso] = useState<Passo>(1);
 
@@ -37,6 +38,8 @@ export default function CriarConta() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  // Quem cria a conta precisa ser adulto (LGPD art. 14); a pessoa acompanhada pode ser menor.
+  const [maioridade, setMaioridade] = useState(false);
   const [tentou, setTentou] = useState(false);
   const [criando, setCriando] = useState(false);
   const [falha, setFalha] = useState<string | null>(null);
@@ -63,11 +66,12 @@ export default function CriarConta() {
     nome: tentou && !nome.trim() ? 'Escreva seu nome.' : null,
     email: tentou && !EMAIL_VALIDO.test(email.trim()) ? 'Confira o e-mail.' : null,
     senha: tentou && senha.length < SENHA_MINIMA ? `Use pelo menos ${SENHA_MINIMA} caracteres.` : null,
+    maioridade: tentou && !maioridade ? 'A conta precisa ser criada por um adulto. Se você é menor de idade, peça ao responsável.' : null,
   };
 
   const criar = async () => {
     setTentou(true);
-    if (criando || !nome.trim() || !EMAIL_VALIDO.test(email.trim()) || senha.length < SENHA_MINIMA) {
+    if (criando || !nome.trim() || !EMAIL_VALIDO.test(email.trim()) || senha.length < SENHA_MINIMA || !maioridade) {
       haptics.aviso();
       return;
     }
@@ -75,7 +79,7 @@ export default function CriarConta() {
     setFalha(null);
     setJaTemConta(false);
     try {
-      const r = await cadastrar({ nome, email, senha });
+      const r = await cadastrar({ nome, email, senha, maioridade });
       void marcarTutorialVisto();
       if (r === 'sessao') {
         setPasso(3);
@@ -199,6 +203,31 @@ export default function CriarConta() {
             <Text variant="caption" tone="muted" style={styles.dica}>
               É a mesma conta que você vai usar no computador da pessoa.
             </Text>
+            {/* A linha inteira liga e desliga (alvo de 64 pt), e o leitor de tela a lê como um interruptor só. */}
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityState={{ checked: maioridade }}
+              accessibilityLabel="Tenho 18 anos ou mais"
+              onPress={() => setMaioridade((m) => !m)}
+              style={styles.maioridade}
+              testID="maioridade"
+            >
+              <Text variant="body" style={styles.flex}>
+                Tenho 18 anos ou mais
+              </Text>
+              <Switch
+                value={maioridade}
+                onValueChange={setMaioridade}
+                trackColor={{ true: colors.primary, false: colors.border }}
+                importantForAccessibility="no-hide-descendants"
+                accessibilityElementsHidden
+              />
+            </Pressable>
+            {erros.maioridade ? (
+              <Text variant="bodySmall" tone="danger" accessibilityLiveRegion="polite" testID="erro-da-maioridade">
+                {erros.maioridade}
+              </Text>
+            ) : null}
             {jaTemConta ? (
               <Button title="Entrar com este e-mail" variant="secondary" onPress={() => router.replace({ pathname: '/(auth)/login', params: { email: email.trim().toLowerCase() } })} style={styles.campo} />
             ) : null}
@@ -282,6 +311,7 @@ const styles = StyleSheet.create({
   campo: { marginTop: spacing.lg },
   subtitulo: { marginTop: spacing.md },
   dica: { marginTop: spacing.md },
+  maioridade: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: sizes.row, marginTop: spacing.md },
   codigo: { marginTop: spacing.xxxl },
   baixo: { marginTop: 'auto', paddingTop: spacing.xxxl, gap: spacing.md },
   termos: { paddingHorizontal: spacing.md },

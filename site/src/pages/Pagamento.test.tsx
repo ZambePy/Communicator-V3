@@ -92,6 +92,23 @@ describe('Pagamento', () => {
     expect(cartao).not.toHaveClass('is-virado')
   })
 
+  it('os termos da renovação ficam junto do botão de confirmar e mudam com a forma de pagamento', () => {
+    abrir()
+    const botao = screen.getByRole('button', { name: /Confirmar e liberar o download/ })
+    const termos = document.getElementById(botao.getAttribute('aria-describedby') ?? '')
+    expect(termos).not.toBeNull()
+    // o parágrafo vem logo antes do bloco do botão, sem nada no meio
+    expect(termos!.nextElementSibling).toContainElement(botao)
+    expect(termos).toHaveTextContent(/R\$\s?399,00 no cartão em .*todo mês, até cancelar/)
+    expect(termos).toHaveTextContent(/sem multa/)
+
+    fireEvent.change(screen.getByLabelText('Cobrança'), { target: { value: '12' } })
+    expect(termos).toHaveTextContent(/R\$\s?3\.990,00 .*a cada 12 meses/)
+
+    fireEvent.click(screen.getByLabelText(/Pix/))
+    expect(termos).toHaveTextContent(/Nada é cobrado sozinho: .*um Pix de R\$\s?399,00 .*todo mês/)
+  })
+
   it('confirma com a camada de status e segue para o sucesso', async () => {
     attachPayment.mockResolvedValue(undefined)
     abrir()

@@ -17,7 +17,7 @@ import { FundoDaPagina } from '@/components/layout/FundoDaPagina'
 
 const STEPS = ['Quem paga', 'Quem usa', 'Confirmação']
 
-type Form = Profile & { terms: boolean; password: string; passwordConfirm: string }
+type Form = Profile & { adult: boolean; terms: boolean; password: string; passwordConfirm: string }
 
 const EMPTY: Form = {
   buyerName: '',
@@ -30,7 +30,9 @@ const EMPTY: Form = {
   os: '',
   prescriberName: '',
   prescriberRole: '',
-  newsletter: true,
+  // Desmarcada: consentimento para novidades precisa ser um ato da pessoa (LGPD art. 8º).
+  newsletter: false,
+  adult: false,
   terms: false,
   password: '',
   passwordConfirm: '',
@@ -47,13 +49,14 @@ const RULES: Rules<Form> = {
   relation: (v) => validar.escolha(v, 'Selecione a relação com o usuário.'),
   condition: (v) => validar.escolha(v, 'Selecione a condição principal.'),
   os: (v) => validar.escolha(v, 'Selecione o sistema operacional do computador.'),
+  adult: validar.maioridade,
   terms: validar.aceite,
 }
 
 const STEP_FIELDS: (keyof Form)[][] = [
   ['buyerName', 'email', 'phone', 'document', 'password', 'passwordConfirm'],
   ['userName', 'relation', 'condition', 'os'],
-  ['terms'],
+  ['adult', 'terms'],
 ]
 
 export default function Cadastro() {
@@ -123,7 +126,8 @@ export default function Cadastro() {
 
     // A senha vai para o Supabase Auth, não para a tabela de perfis:
     // por isso ela sai daqui antes de o restante virar Profile.
-    const { terms: _terms, password, passwordConfirm: _confirm, ...profile } = form
+    const { adult: _adult, terms: _terms, password, passwordConfirm: _confirm, ...profile } = form
+    void _adult
     void _terms
     void _confirm
 
@@ -397,6 +401,13 @@ export default function Cadastro() {
                       </dd>
                     </div>
                   </dl>
+
+                  <CheckField
+                    label="Tenho 18 anos ou mais. Se quem vai usar é menor de idade, sou o responsável legal."
+                    checked={form.adult}
+                    onChange={toggle('adult')}
+                    error={errors.adult}
+                  />
 
                   <CheckField
                     label={

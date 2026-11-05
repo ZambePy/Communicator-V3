@@ -101,6 +101,10 @@ export function initSentry(): void {
     sendDefaultPii: false,
     attachScreenshot: false,
     attachViewHierarchy: false,
+    // Sem session replay: gravaria a tela do cuidador (mensagens, nome e saúde da pessoa).
+    // Zero aqui e nenhuma mobileReplayIntegration: se alguém ligar um, o teste acusa.
+    replaysSessionSampleRate: 0,
+    replaysOnErrorSampleRate: 0,
     // Sem rastreamento de desempenho: só falhas (cabe no plano gratuito).
     tracesSampleRate: 0,
     enableAutoSessionTracking: true,

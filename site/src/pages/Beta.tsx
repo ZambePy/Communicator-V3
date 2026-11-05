@@ -119,6 +119,7 @@ type FormConta = {
   email: string
   senha: string
   confirmacao: string
+  maioridade: boolean
   termos: boolean
   newsletter: boolean
 }
@@ -128,16 +129,18 @@ const RULES_CONTA: Rules<FormConta> = {
   email: validar.email,
   senha: validar.senha,
   confirmacao: (v, all) => validar.confirmacao(v, all.senha),
+  maioridade: validar.maioridade,
   termos: validar.aceite,
 }
 
-const CAMPOS_CONTA: (keyof FormConta)[] = ['nome', 'email', 'senha', 'confirmacao', 'termos']
+const CAMPOS_CONTA: (keyof FormConta)[] = ['nome', 'email', 'senha', 'confirmacao', 'maioridade', 'termos']
 
 const NOME_DO_CAMPO_CONTA: Record<keyof FormConta, string> = {
   nome: 'nome completo',
   email: 'e-mail',
   senha: 'senha',
   confirmacao: 'confirmação da senha',
+  maioridade: 'declaração de maioridade',
   termos: 'aceite dos termos e da política de privacidade',
   newsletter: 'novidades',
 }
@@ -156,8 +159,10 @@ function CriarConta({ program }: { program: BetaProgram }) {
     email: '',
     senha: '',
     confirmacao: '',
+    maioridade: false,
     termos: false,
-    newsletter: true,
+    // Desmarcada: consentimento para novidades precisa ser um ato da pessoa (LGPD art. 8º).
+    newsletter: false,
   })
   const v = useFormValidation(form, RULES_CONTA)
   const [tentou, setTentou] = useState(false)
@@ -175,7 +180,7 @@ function CriarConta({ program }: { program: BetaProgram }) {
 
   const set = (key: keyof FormConta) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [key]: e.target.value }))
-  const marcar = (key: 'termos' | 'newsletter') => (e: { target: { checked: boolean } }) => {
+  const marcar = (key: 'maioridade' | 'termos' | 'newsletter') => (e: { target: { checked: boolean } }) => {
     setForm((f) => ({ ...f, [key]: e.target.checked }))
     v.touch(key)
   }
@@ -198,6 +203,7 @@ function CriarConta({ program }: { program: BetaProgram }) {
         email: form.email,
         senha: form.senha,
         newsletter: form.newsletter,
+        maioridade: form.maioridade,
       })
       // 'sessao': o projeto não exige confirmar o e-mail; a página já passa
       // para a pesquisa, porque a sessão chegou ao contexto.
@@ -366,6 +372,15 @@ function CriarConta({ program }: { program: BetaProgram }) {
                   </div>
                 </div>
                 <PasswordStrength value={form.senha} id="beta-senha-forca" />
+
+                <div data-campo="maioridade">
+                  <CheckField
+                    label="Tenho 18 anos ou mais. Se quem vai usar é menor de idade, sou o responsável legal."
+                    checked={form.maioridade}
+                    onChange={marcar('maioridade')}
+                    error={v.errorOf('maioridade')}
+                  />
+                </div>
 
                 <div data-campo="termos">
                   <CheckField

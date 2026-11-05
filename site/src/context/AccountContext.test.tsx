@@ -190,6 +190,7 @@ const novaConta: NovaContaBeta = {
   nome: 'Maria Aparecida Souza',
   email: 'maria@exemplo.com.br',
   senha: 'segredo123',
+  maioridade: true,
   newsletter: true,
 }
 

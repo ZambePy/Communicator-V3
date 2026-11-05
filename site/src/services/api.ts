@@ -209,7 +209,12 @@ async function criarUsuarioSeNecessario(profile: Profile, password: string): Pro
     email,
     password,
     options: {
-      data: { buyer_name: profile.buyerName, newsletter: profile.newsletter },
+      // O cadastro só chega aqui com a declaração de maioridade marcada (validar.maioridade).
+      data: {
+        buyer_name: profile.buyerName,
+        newsletter: profile.newsletter,
+        adult_declared_at: new Date().toISOString(),
+      },
       // Só é usado com "Confirm email" ligado: o link do e-mail abre a página
       // de confirmação já autenticado, e de lá a pessoa segue.
       emailRedirectTo: AUTH_REDIRECT.confirmacao,
@@ -295,6 +300,8 @@ export type NovaContaBeta = {
   email: string
   senha: string
   newsletter: boolean
+  /** Declarou ter 18 anos ou mais (obrigatório no formulário). */
+  maioridade: boolean
 }
 
 /**
@@ -321,6 +328,8 @@ export async function criarContaBeta(nova: NovaContaBeta): Promise<ResultadoNova
         buyer_name: nova.nome.trim().replace(/\s+/g, ' '),
         newsletter: nova.newsletter,
         terms_accepted_at: new Date().toISOString(),
+        // Registro de quando a pessoa declarou a maioridade, ao lado do aceite dos termos.
+        ...(nova.maioridade ? { adult_declared_at: new Date().toISOString() } : {}),
       },
       emailRedirectTo: AUTH_REDIRECT.confirmacao,
     },

@@ -48,6 +48,11 @@ describe('regras de validação (pt-BR)', () => {
     expect(validar.aceite(false)).toMatch(/aceitar os termos/)
     expect(validar.aceite(true)).toBeUndefined()
   })
+
+  it('maioridade de quem cria a conta', () => {
+    expect(validar.maioridade(false)).toMatch(/adulto/)
+    expect(validar.maioridade(true)).toBeUndefined()
+  })
 })
 
 describe('telefone para o banco (profiles.phone: 10–11 dígitos ou NULL)', () => {

@@ -151,7 +151,10 @@ export function Pricing({ compact = false }: { compact?: boolean }) {
                     <Button to={`/cadastro?plano=${plan.id}`} size="lg" full>
                       {plan.recommended ? `Assinar ${plan.name}` : `Escolher ${plan.name}`}
                     </Button>
-                    <p className="plan__fine">{TRIAL_DAYS} dias grátis. Sem cartão para começar.</p>
+                    <p className="plan__fine">
+                      {TRIAL_DAYS} dias grátis, sem cartão para começar. Depois, R$ {plan.price}{' '}
+                      {plan.period}, renovado todo mês até você cancelar, sem multa.
+                    </p>
                   </>
                 )}
               </article>

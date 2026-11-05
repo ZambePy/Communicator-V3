@@ -28,10 +28,11 @@ beforeEach(() => {
   mockReplace.mockClear();
 });
 
-async function preencherPasso1(email = 'ana.souza@gmail.com', senha = 'segredo123') {
+async function preencherPasso1(email = 'ana.souza@gmail.com', senha = 'segredo123', maioridade = true) {
   await fireEvent.changeText(screen.getByLabelText('Seu nome'), 'Ana Souza');
   await fireEvent.changeText(screen.getByLabelText('E-mail'), email);
   await fireEvent.changeText(screen.getByLabelText('Senha'), senha);
+  if (maioridade) await fireEvent.press(screen.getByTestId('maioridade'));
   await fireEvent.press(screen.getByText('Continuar'));
 }
 
@@ -50,6 +51,18 @@ describe('Criar conta, passo 1', () => {
     expect(mockApp.cadastrar).not.toHaveBeenCalled();
     expect(screen.getByText('Confira o e-mail.')).toBeTruthy();
     expect(screen.getByText('Use pelo menos 8 caracteres.')).toBeTruthy();
+  });
+
+  it('sem declarar 18 anos ou mais, não cria a conta; com a declaração, ela vai junto', async () => {
+    await render(<CriarConta />);
+    await preencherPasso1(undefined, undefined, false);
+    expect(mockApp.cadastrar).not.toHaveBeenCalled();
+    expect(screen.getByTestId('erro-da-maioridade')).toBeTruthy();
+    expect(screen.getByTestId('maioridade').props.accessibilityState).toEqual({ checked: false });
+
+    await fireEvent.press(screen.getByTestId('maioridade'));
+    await fireEvent.press(screen.getByText('Continuar'));
+    await waitFor(() => expect(mockApp.cadastrar).toHaveBeenCalledWith(expect.objectContaining({ maioridade: true })));
   });
 
   it('e-mail que já tem conta: avisa e leva ao login com ele', async () => {

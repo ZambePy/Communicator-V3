@@ -316,6 +316,7 @@ describe('criarContaBeta (etapa 1: só a conta)', () => {
       email: '  Maria@Exemplo.com.br ',
       senha: 'segredo123',
       newsletter: false,
+      maioridade: true,
     })
 
     const chamada = auth.signUp.mock.calls[0][0]
@@ -325,8 +326,14 @@ describe('criarContaBeta (etapa 1: só a conta)', () => {
     expect(chamada.options.data.buyer_name).toBe('Maria Aparecida Souza')
     expect(chamada.options.data.newsletter).toBe(false)
     expect(Number.isNaN(Date.parse(chamada.options.data.terms_accepted_at))).toBe(false)
+    expect(Number.isNaN(Date.parse(chamada.options.data.adult_declared_at))).toBe(false)
     // nada de saúde nem de pesquisa no signUp: o que vai aqui viaja no JWT
-    expect(Object.keys(chamada.options.data).sort()).toEqual(['buyer_name', 'newsletter', 'terms_accepted_at'])
+    expect(Object.keys(chamada.options.data).sort()).toEqual([
+      'adult_declared_at',
+      'buyer_name',
+      'newsletter',
+      'terms_accepted_at',
+    ])
     // e nenhuma RPC: a pesquisa é outra etapa
     expect(fake.rpc).not.toHaveBeenCalled()
   })
@@ -334,12 +341,12 @@ describe('criarContaBeta (etapa 1: só a conta)', () => {
   it("devolve 'confirmar' sem sessão (Confirm email ligado) e 'sessao' quando o projeto já entrega a sessão", async () => {
     auth.signUp.mockResolvedValueOnce({ data: { user: { id: 'u1' }, session: null }, error: null })
     await expect(
-      api.criarContaBeta({ nome: 'Maria Souza', email: 'maria@exemplo.com.br', senha: 'segredo123', newsletter: true }),
+      api.criarContaBeta({ nome: 'Maria Souza', email: 'maria@exemplo.com.br', senha: 'segredo123', newsletter: true, maioridade: true }),
     ).resolves.toBe('confirmar')
 
     auth.signUp.mockResolvedValueOnce({ data: { user: { id: 'u1' }, session: { user: { id: 'u1' } } }, error: null })
     await expect(
-      api.criarContaBeta({ nome: 'Maria Souza', email: 'maria@exemplo.com.br', senha: 'segredo123', newsletter: true }),
+      api.criarContaBeta({ nome: 'Maria Souza', email: 'maria@exemplo.com.br', senha: 'segredo123', newsletter: true, maioridade: true }),
     ).resolves.toBe('sessao')
   })
 
@@ -350,7 +357,7 @@ describe('criarContaBeta (etapa 1: só a conta)', () => {
     })
 
     const erro = await api
-      .criarContaBeta({ nome: 'Maria Souza', email: 'maria@exemplo.com.br', senha: 'segredo123', newsletter: true })
+      .criarContaBeta({ nome: 'Maria Souza', email: 'maria@exemplo.com.br', senha: 'segredo123', newsletter: true, maioridade: true })
       .catch((e) => e)
     expect(erro).toBeInstanceOf(api.ApiError)
     expect(erro.message).toMatch(/Não conseguimos enviar o e-mail agora/)

@@ -128,6 +128,7 @@ function preencherConta(p: { confirmacao?: string } = {}) {
   fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: '  Maria@Exemplo.com.br ' } })
   fireEvent.change(screen.getByLabelText('Senha'), { target: { value: 'segredo123' } })
   fireEvent.change(screen.getByLabelText('Confirmar senha'), { target: { value: p.confirmacao ?? 'segredo123' } })
+  fireEvent.click(screen.getByLabelText(/Tenho 18 anos ou mais/))
   fireEvent.click(screen.getByLabelText(/Li e aceito/))
 }
 
@@ -171,12 +172,23 @@ describe('etapa 1 — criar conta (sem sessão)', () => {
 
     expect(
       await screen.findByText(
-        /falta preencher ou corrigir: nome completo, e-mail, senha, confirmação da senha e aceite dos termos/,
+        /falta preencher ou corrigir: nome completo, e-mail, senha, confirmação da senha, declaração de maioridade e aceite dos termos/,
       ),
     ).toBeInTheDocument()
     expect(screen.getByText('Informe seu nome.')).toBeInTheDocument()
     expect(document.activeElement).toBe(screen.getByLabelText('Nome completo'))
     expect(acoes.criarContaBeta).not.toHaveBeenCalled()
+  })
+
+  it('sem declarar 18 anos ou mais, a conta não é criada', async () => {
+    montar()
+    preencherConta()
+    fireEvent.click(screen.getByLabelText(/Tenho 18 anos ou mais/))
+    fireEvent.click(screen.getByRole('button', { name: 'Criar conta' }))
+    expect(await screen.findByText(/A conta precisa ser criada por um adulto/)).toBeInTheDocument()
+    expect(acoes.criarContaBeta).not.toHaveBeenCalled()
+    // e a caixa de novidades começa desmarcada
+    expect(screen.getByLabelText(/Quero receber novidades/)).not.toBeChecked()
   })
 
   it('senhas diferentes não passam', async () => {
@@ -199,7 +211,9 @@ describe('etapa 1 — criar conta (sem sessão)', () => {
       nome: 'Maria Aparecida Souza',
       email: 'Maria@Exemplo.com.br',
       senha: 'segredo123',
-      newsletter: true,
+      // novidades começam desmarcadas: só entra quem marcar (LGPD art. 8º)
+      newsletter: false,
+      maioridade: true,
     })
     expect(await screen.findByRole('heading', { name: 'Digite o código do e-mail' })).toBeInTheDocument()
     expect(screen.getByText('maria@exemplo.com.br')).toBeInTheDocument()

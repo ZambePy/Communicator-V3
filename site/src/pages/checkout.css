@@ -96,6 +96,24 @@
   border-top: 1px solid var(--line);
 }
 
+/* Os termos da renovação, logo acima do botão que os aceita: o separador das
+   ações sobe para cima deles, e texto e botão ficam no mesmo bloco. */
+.flow__renovacao {
+  max-width: 62ch;
+  margin: var(--sp-6) 0 0;
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--line);
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.flow__renovacao + .flow__actions {
+  margin-top: var(--sp-4);
+  padding-top: 0;
+  border-top: 0;
+}
+
 .flow__foot {
   margin-top: var(--sp-5);
   text-align: center;
