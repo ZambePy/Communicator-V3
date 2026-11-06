@@ -50,6 +50,7 @@ function selecionar(t: number, vies = { x: 60, y: 0 }, centro = { x: 1000, y: 50
 
 const kalmanAntes = EXPERIMENT.correcaoPorDwellKalman;
 const afimAntes = EXPERIMENT.correcaoPorDwellAfim;
+const m23Antes = EXPERIMENT.ruidoDoMapaNaCorrecaoDeliberada;
 
 beforeEach(() => {
   EXPERIMENT.correcaoPorDwellKalman = true;
@@ -61,6 +62,7 @@ beforeEach(() => {
 afterEach(() => {
   EXPERIMENT.correcaoPorDwellKalman = kalmanAntes;
   EXPERIMENT.correcaoPorDwellAfim = afimAntes;
+  EXPERIMENT.ruidoDoMapaNaCorrecaoDeliberada = m23Antes;
   definirSessaoDoComputador(false);
   reiniciarCorrecao();
 });
@@ -147,7 +149,10 @@ describe('Kalman da correção por dwell (M15)', () => {
     expect(d.nisMedio).not.toBeNull();
   });
 
-  it('reajuste pelo centro: quase a substituição, e zera a sequência de recusas', () => {
+  it('reajuste pelo centro sem M23 (pipeline base): quase a substituição, e zera a sequência de recusas', () => {
+    // Com M23 o resíduo do centro também carrega o erro de padrão do mapa e
+    // entra pela metade (`correcaoPorDwell.ruidoDoMapa.test.ts`).
+    EXPERIMENT.ruidoDoMapaNaCorrecaoDeliberada = false;
     expect(corrigirDerivaPeloCentro({ x: 0.03, y: -0.02 }, 5000, {
       amostras: 60, dispersao: { x: 20 / 1920, y: 20 / 1080 },
     })).toBe(true);
@@ -194,6 +199,9 @@ describe('recalibração rápida afim com cinco pontos (M20)', () => {
   });
 
   it('com o afim, aprende deslocamento e ganho de uma vez', () => {
+    // A mecânica do afim com o R amostral. Com M23 o ganho aprendido de cinco
+    // pontos sai encolhido para o prior (`correcaoPorDwell.ruidoDoMapa.test.ts`).
+    EXPERIMENT.ruidoDoMapaNaCorrecaoDeliberada = false;
     EXPERIMENT.correcaoPorDwellAfim = true;
     expect(corrigirPorPontos(pontos, 1000, viewport)).toBe(true);
     const d = diagnosticoDaCorrecao();

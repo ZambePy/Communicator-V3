@@ -1048,6 +1048,8 @@ Como os outros parâmetros de URL, esses ficam gravados no `localStorage` até
 | M20 | `recalibracaoRapidaAfim` | `true` | reajuste rápido com 5 pontos (10 s), sem retreinar o modelo |
 | M21 | `pausaNaPerdaCurta` | `true` | perda curta de rosto pausa o dwell em vez de zerar |
 | M22 | `recoletaDeAlvosRuins` | `true` ² | refaz na hora os alvos com LOTO ou dispersão ruins e troca as amostras deles; o modelo novo só fica se o LOTO médio não piorar |
+| M23 | `ruidoDoMapaNaCorrecaoDeliberada` | `true` | o erro de padrão do mapa (1,4°) entra no ruído do reajuste pelo centro e da recalibração rápida: um ponto só não separa esse erro do deslocamento |
+| M24 | `medidaDeliberadaAteODobroDoTeto` | `true` | reajuste e recalibração rápida aceitos até o dobro do teto da correção (o deslocamento continua no teto); antes, as sessões de erro maior eram recusadas |
 
 ¹ Fora do interruptor: `?pipeline=v3` não liga. M12 e M13 nasceram assim; M2,
 M7 e M10 foram desligadas depois de implementadas — M2 e M10 porque pioraram o

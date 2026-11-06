@@ -5,6 +5,7 @@ import {
   duracaoTotalDoPonto,
 } from './calibration';
 import { startAccuracyTest, feedAccuracyRaw, type AccuracyResult } from './accuracy';
+import { EXPERIMENT } from './config/experiment';
 
 // O fluxo do teste de precisão nunca era exercitado: as telas o mockam e o
 // módulo só era testado por partes. Este arquivo dirige o teste inteiro —
@@ -118,6 +119,77 @@ describe('teste de precisão — fluxo completo', () => {
     // O painel some com 300 ms de transição antes de devolver o resultado.
     vi.advanceTimersByTime(400);
     expect(resultado).not.toBeNull();
+  });
+
+  /**
+   * Calibra e roda o teste inteiro num viewport de 1920 × 1080 (jsdom não tem
+   * layout: sem isto todo alvo e toda predição saem em (0; 0)) e devolve o
+   * resultado depois do "Continuar".
+   */
+  function testeNumViewportDeVerdade(): AccuracyResult | null {
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, get: () => 1920 });
+    Object.defineProperty(document.documentElement, 'clientHeight', { configurable: true, get: () => 1080 });
+    let resultado: AccuracyResult | null = null;
+    try {
+      expect(calibrar()).toEqual({ ok: true });
+      startAccuracyTest((r) => { resultado = r; });
+      let semente = 99;
+      const rnd = () => { semente = (semente * 1103515245 + 12345) % 2147483648; return semente / 2147483648 - 0.5; };
+      for (let i = 0; i < 2400; i++) {
+        relogio += 16;
+        vi.advanceTimersByTime(16);
+        const fila = rafQueue;
+        rafQueue = [];
+        for (const cb of fila) cb(relogio);
+        feedAccuracyRaw(vetor(0.5, 0.5, rnd), vetor(0.5, 0.5, rnd, 0.2), undefined,
+          { yaw: 0.1, pitch: -0.05, roll: 0.01 });
+      }
+      document.querySelector<HTMLButtonElement>('.diagnostic-btn')!.click();
+      vi.advanceTimersByTime(400);
+    } finally {
+      delete (document.documentElement as unknown as Record<string, unknown>).clientWidth;
+      delete (document.documentElement as unknown as Record<string, unknown>).clientHeight;
+    }
+    return resultado;
+  }
+
+  it('o resultado traz a decomposição do erro sobre os mesmos pontos interiores', () => {
+    // A decomposição (deslocamento, parte linear, resto e o erro EM USO com a
+    // correção por dwell) sai junto com o teste, para todo relatório novo
+    // separar o erro do mapa do erro que a pessoa sente depois de algumas
+    // seleções (auditoria e pesquisa de 05/11/2026).
+    const r = testeNumViewportDeVerdade();
+    expect(r).not.toBeNull();
+    const d = r!.decomposicaoDoErro;
+    expect(d).toBeTruthy();
+    // Mesma população e mesma média do erro do teste.
+    expect(d!.erroPx).toBeCloseTo(r!.meanError!, 6);
+    expect(Number.isFinite(d!.emUsoPx)).toBe(true);
+    expect(Number.isFinite(d!.semCorrecaoNosMesmosPontosPx)).toBe(true);
+    // As três parcelas somam o erro inteiro.
+    const { deslocamento, linear, resto } = d!.parcelas;
+    expect(deslocamento + (linear ?? 0) + resto).toBeCloseTo(1, 6);
+    // O botão dos rótulos simulados é o alvo mínimo medido nesta sessão.
+    expect(d!.ladoDoRotuloPx).toBe(r!.alvoMinimoPx);
+  });
+
+  it('sem o Kalman da correção por dwell (pipeline base), não estima o erro em uso', () => {
+    // O replay do erro em uso é o do Kalman (M15). Numa sessão com o
+    // integrador antigo, ou com a correção desligada, ele mediria uma correção
+    // que a sessão não roda — e um A/B contra a base compararia coisas
+    // diferentes. A decomposição do erro do mapa continua.
+    const antes = EXPERIMENT.correcaoPorDwellKalman;
+    EXPERIMENT.correcaoPorDwellKalman = false;
+    let r: AccuracyResult | null = null;
+    try {
+      r = testeNumViewportDeVerdade();
+    } finally {
+      EXPERIMENT.correcaoPorDwellKalman = antes;
+    }
+    const d = r!.decomposicaoDoErro!;
+    expect(d.erroPx).toBeCloseTo(r!.meanError!, 6);
+    expect(d.emUsoPx).toBeNull();
+    expect(d.semCorrecaoNosMesmosPontosPx).toBeNull();
   });
 
   it('se a cadeia de quadros morrer, o teste encerra com o motivo em vez de congelar', () => {

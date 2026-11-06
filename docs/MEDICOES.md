@@ -759,6 +759,7 @@ da §4.1–4.3. Nenhuma foi medida com uma pessoa. As sessões, a ordem e a rég
 | sessão longa | 2 h, teste a cada 30 min | deriva, fadiga, M17–M21 |
 | roll do recorte | `?rollCrop=0&exp.nivelarRecorteCorrigido=0` · `?rollCrop=1&exp.nivelarRecorteCorrigido=0` · `?rollCrop=1&exp.nivelarRecorteCorrigido=1`, cabeça a ~15° e nivelada | o padrão de `normalizarRollNoCrop` e a M13 |
 | recoleta | `?exp.recoletaDeAlvosRuins=0` · `=1`, blocos alternados | se a M22 fica ligada |
+| medidas deliberadas | `?exp.ruidoDoMapaNaCorrecaoDeliberada=0` · `=1` e `?exp.medidaDeliberadaAteODobroDoTeto=0` · `=1`, reajuste pelo centro e recalibração rápida no uso, teste de precisão logo depois | se M23 e M24 ficam ligadas (o replay da §14.8 não é medição ao vivo) |
 | estímulo novo | o build de antes de 2026-10-19 contra o atual, na mesma pessoa | quanto a troca de alvo e fundo muda os números (§2) |
 | robustez de 2026-10-19 | contraluz real, WebGPU perdida, pouca luz, desempenho no PC | os avisos e os limiares novos |
 
@@ -1003,7 +1004,9 @@ citados na §14.
 
 Esquema `irisflow.accuracy-report/3`. O `/3` é o `/2` com campos a mais (as
 métricas de qualidade do sinal e a decomposição do viés, §8): quem lê `/2` lê
-`/3`, e um relatório `/2` antigo continua legível.
+`/3`, e um relatório `/2` antigo continua legível. Os campos de 05/11/2026
+(`decomposicaoDoErro`, `residuoMedioPx`) são opcionais e ficam no `/3`: quem
+não os conhece os ignora.
 
 
 | bloco | conteúdo |
@@ -1013,10 +1016,10 @@ métricas de qualidade do sinal e a decomposição do viés, §8): quem lê `/2`
 | `protocolo` | `pontos`, `coletaMs`, `acomodacaoMs`, `janelaUtilMs`, `fracaoMinimaDeAmostras`, `ordem`, `sementeDaOrdem`, `minutosDesdeCalibracao` |
 | `meta` | data, `blocoDeMedicao` (derivado), iluminação e movimento de cabeça (**medidos** da prontidão), óculos (do reflexo especular medido), minutos de sessão, distância, diagonal e procedência, escala do SO, `observacoes` |
 | `pipeline` | `variant`, features, dimensões do L2CS, regressor, **snapshot completo das flags** (`experiment`) e `runtime` (provider efetivo, fallback, latência e staleness do L2CS, recorte, filtro, fps, resolução do vídeo, e **`modelo`: a ficha de proveniência dos pesos** — bases de treino, licença, `usoComercial`, integridade do hash) |
-| `result` | as métricas da seção 8 |
+| `result` | as métricas da seção 8; desde 05/11/2026, também `decomposicaoDoErro` (deslocamento, parte linear, resto e o erro **em uso** com a correção por dwell — §14.8) |
 | `diagnostics` | um objeto por ponto: posição real, predição média, erro por eixo, viés, graus, tremor, `bceaPx2`, `nSamples`, `nEsperado`, `fracaoValida`, pose média; no `/3`, também `rho1`, `razaoS2sDp`, `nEfetivo`, `lado95Px`, `lado95FiltradoPx`, `lado95Filtrado1sPx`, `atrasoDoFiltro` e `termos` (o que cada estágio do `mapGaze` somou naquele ponto) |
 | `distanceRange` | distância de calibração e de teste, e se a compensação estava na faixa |
-| `calibrationFit` | diagnóstico do ajuste (seção 10) |
+| `calibrationFit` | diagnóstico do ajuste (seção 10); desde 05/11/2026, `looByTarget[].residuoMedioPx` traz o vetor (assinado) do erro fora da amostra em cada alvo, não só o tamanho (§14.8) |
 | `geometry` | se a diagonal foi assumida, fonte, `distPx`, `pxPorCm`, escala, viewport e tela em px |
 
 **`meta.observacoes` diz se a prontidão foi medida.** Quando há avaliação
@@ -1648,6 +1651,76 @@ ruído do uso maior que o da calibração, a revisão pula menos (a escala
 acompanha o ruído de verdade), ao custo de passos de 90–260 px um pouco mais
 lentos nesse cenário (a escala honesta abre o portão). Com o ruído dobrado, o
 custo é ~0,7 pulo a mais por minuto.
+
+### 14.8 Correções deliberadas e decomposição do erro — 2026-11-05 *(replay offline sobre predições reais, não é medição ao vivo)*
+
+**Dados e método.** Os 15 relatórios do teste de precisão de 05/09 a
+25/10/2026 (uma pessoa, a mesma máquina; os 9 primeiros estão em
+`docs/medicoes/historico/`, os 6 mais novos ficaram fora do repositório). A
+predição média de cada ponto interno (P1–P9) passa pelo módulo de produção
+(`correcaoPorDwell.ts`): o ponto olhado de propósito (P5 no reajuste pelo
+centro; P1, P3, P7 e P9 na recalibração rápida) entra como medida deliberada, e
+mede-se o erro médio dos OUTROS pontos depois da rampa. Graus a 60 cm. Os olhos
+são de verdade; a medida deliberada é um ponto do próprio teste, não um
+reajuste feito no uso.
+
+**O portão das medidas deliberadas era o gargalo.** Um resíduo acima do teto
+(8 % da tela: ~150 px na horizontal, ~86 px na vertical) era recusado inteiro.
+Isso recusava o reajuste pelo centro em 8 das 15 sessões e a recalibração
+rápida em 3 — justamente as de erro maior. M24 aceita até o dobro do teto; o
+deslocamento aprendido continua no teto (`aplicarTeto`). M23 soma ao R o erro
+de padrão do mapa (σ = 1,4°, ~55 px a 60 cm), que um ponto só não separa do
+deslocamento.
+
+| medida (erro dos outros pontos) | sem correção | portão no teto | teto + M23 | 2× teto | 2× teto + M23 (V3) |
+|---|---|---|---|---|---|
+| reajuste pelo centro (8 pontos) | 2,27° | 2,19° | 2,15° | 2,14° | **1,97°** |
+| recalibração pelos 4 cantos internos (5 pontos) | 2,26° | 2,07° | 2,02° | 1,82° | **1,76°** |
+
+- **M24 sessão a sessão** (com M23): no centro, 6 sessões melhoram (de 0,03° a
+  1,04°), 1 piora 0,05° e 8 não mudam (7 já estavam abaixo do teto e 1 passa
+  do dobro); nos 4 cantos, 3 melhoram (0,60°, 1,55° e 1,70°), nenhuma piora e
+  as outras 12 já estavam abaixo do teto.
+- **O limite não é afinado à amostra:** 1,5× dá 2,01° / 1,80°; 2×, 1,97° /
+  1,76°; 3× e sem limite, 2,03° / 1,76°.
+- **M23 sessão a sessão** (portão no teto): melhora o centro em 3 sessões e
+  piora em 4 — é um ganho de robustez, não de média. A pior piora do reajuste
+  (+0,72° numa sessão, o ponto olhado tinha um erro de padrão grande) cai para
+  +0,36°. Com M24 o portão deixa passar as sessões de resíduo grande, e aí M23
+  melhora o centro em 9 das 15.
+
+Reprodutível (a direção, nos 9 relatórios versionados):
+`npx vitest run src/interaction/correcaoPorDwell.relatoriosReais.test.ts`.
+
+**De onde vem o erro.** `result.decomposicaoDoErro` (novo,
+`src/decomposicaoDoErro.ts`) separa, sobre os mesmos interiores: o
+deslocamento da sessão, a distorção linear além dele (o resíduo afim) e o resto
+— erro de padrão de cada ponto, que nenhuma correção global tira. Nas 15
+sessões: deslocamento 26 %, linear 18 %, resto 57 % (média das frações). Um
+recentramento perfeito levaria 2,32° a 1,69°.
+
+O campo também traz o erro **em uso** (só quando a sessão roda o Kalman da
+correção por dwell; em `?pipeline=base` sai `null`): o Kalman de produção
+aprendendo um rótulo por alvo, na ordem do teste, com botões do tamanho do alvo mínimo da
+sessão (mediana 277 px), com teste χ², teto e excitação do ganho como no app.
+Nos pontos 2–9: **2,35° → 1,99°**. O teste de precisão mede o mapa em malha
+aberta (`decomposicaoDoVies.dwell` = 0 nas 5 sessões que trazem o campo), então ele
+superestima o erro que a pessoa sente depois de algumas seleções. O replay
+supõe rótulos certos: é otimista quando o dwell erra o alvo. Se houve reajuste
+entre a calibração e o teste, as predições já trazem a correção (o termo
+`dwell` de `decomposicaoDoVies` deixa de ser zero) e o em uso mede só o que
+os rótulos acrescentariam.
+
+- O ganho afim do dwell (M16) quase não aprende em 8 rótulos: 2,00° → 1,99°.
+  O R de um rótulo é dominado pelo tamanho do botão (W/√12 ≈ 80 px), e o
+  prior do ganho (σ 0,05, limite ±0,1) é estreito para o que se mede.
+- **Ganho vertical abaixo de 1** em 10 das 15 sessões nos 9 pontos internos
+  (mediana 0,86; 8 sessões abaixo de 0,9). Candidatos: o encolhimento do Ridge
+  no eixo fraco (λ por LOTO, dominado pelos cantos) e a diluição por ruído nas
+  features. Não dá para testar uma correção de ganho na calibração com estes
+  relatórios: o LOO por alvo guardava só o tamanho do erro. Desde 05/11/2026,
+  `calibrationFit.looByTarget[].residuoMedioPx` guarda o vetor, e as próximas
+  sessões permitem esse teste offline.
 
 ---
 

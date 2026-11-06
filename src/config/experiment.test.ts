@@ -209,8 +209,10 @@ describe('defaults decididos', () => {
 
 describe('interruptor do V3', () => {
   /**
-   * As 21 flags do V3 (M1–M21 menos M11, que é o relatório e não tem flag,
-   * mais a recoleta dos alvos ruins de 19/10/2026).
+   * As 23 flags do V3 (M1–M21 menos M11, que é o relatório e não tem flag,
+   * mais a recoleta dos alvos ruins de 19/10/2026, o ruído do mapa nas
+   * medidas deliberadas, M23, e o limite delas no dobro do teto, M24, de
+   * 05/11/2026).
    */
   const FLAGS_DO_V3 = [
     'ordemDescorrelacionada', 'referencialIsotropico', 'desrolarComSinalDoL2cs', 'l2csNaCabeca',
@@ -218,7 +220,7 @@ describe('interruptor do V3', () => {
     'estimadorDeFixacao', 'fusaoPorCovariancia', 'saida6DoF', 'nivelarRecorteCorrigido',
     'suavizacaoDoLandmarker', 'correcaoPorDwellKalman', 'correcaoPorDwellAfim', 'dwellEmCascata',
     'alvoMinimoMedido', 'toleranciaIntrusoes', 'recalibracaoRapidaAfim', 'pausaNaPerdaCurta',
-    'recoletaDeAlvosRuins',
+    'recoletaDeAlvosRuins', 'ruidoDoMapaNaCorrecaoDeliberada', 'medidaDeliberadaAteODobroDoTeto',
   ].sort();
   const FORA_DO_INTERRUPTOR = [
     'referencialIsotropico', 'alvoInferiorCentral', 'fusaoPorCovariancia', 'saida6DoF', 'nivelarRecorteCorrigido',

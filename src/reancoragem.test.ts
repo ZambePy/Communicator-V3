@@ -8,6 +8,7 @@ import { EXPERIMENT } from './config/experiment';
 // V3 (M15) trata o reajuste como medida, com R pela dispersão — ver o último
 // bloco deste arquivo.
 const kalmanAntes = EXPERIMENT.correcaoPorDwellKalman;
+const m23Antes = EXPERIMENT.ruidoDoMapaNaCorrecaoDeliberada;
 
 describe('AcumuladorDeReancoragem', () => {
   it('mediana da distância, média de pose e centro; conta só o que entrou', () => {
@@ -181,19 +182,34 @@ describe('reajuste com o Kalman da correção por dwell (M15)', () => {
   });
   afterEach(() => {
     EXPERIMENT.correcaoPorDwellKalman = kalmanAntes;
+    EXPERIMENT.ruidoDoMapaNaCorrecaoDeliberada = m23Antes;
     reiniciarCorrecao();
   });
 
-  it('com a dispersão dos quadros, o reajuste entra quase inteiro', () => {
+  const reajustar = () => {
     const a = new AcumuladorDeReancoragem();
     for (let i = 0; i < 60; i++) {
       a.adicionar({ distanciaCm: 55, pose: null, centro: null });
       a.adicionarPredicao({ x: 0.51 + (i % 2 ? 0.004 : -0.004), y: 0.49 });
     }
     const r = a.resultado();
-    expect(calibration.corrigirDerivaNoCentro(r.predicao, { amostras: r.amostras, dispersao: r.dispersao! }).aplicado).toBe(true);
+    return calibration.corrigirDerivaNoCentro(r.predicao, { amostras: r.amostras, dispersao: r.dispersao! }).aplicado;
+  };
+
+  it('sem o ruído do mapa (pipeline base): com a dispersão dos quadros, o reajuste entra quase inteiro', () => {
+    EXPERIMENT.ruidoDoMapaNaCorrecaoDeliberada = false;
+    expect(reajustar()).toBe(true);
     expect(estadoDaCorrecao().offset.x).toBeLessThan(-0.009);
     expect(estadoDaCorrecao().offset.x).toBeGreaterThan(-0.0101);
+  });
+
+  it('com o ruído do mapa (M23): o reajuste entra pela metade, porque um ponto só mede também o erro de padrão', () => {
+    // Sem a distância no contexto, σ do mapa = 55 px: k = 3600/(3600 + 3025 + r),
+    // com r da dispersão (7,7 px) quase nada → k ≈ 0,54 do resíduo de −0,01.
+    EXPERIMENT.ruidoDoMapaNaCorrecaoDeliberada = true;
+    expect(reajustar()).toBe(true);
+    expect(estadoDaCorrecao().offset.x).toBeLessThan(-0.0052);
+    expect(estadoDaCorrecao().offset.x).toBeGreaterThan(-0.0056);
   });
 
   it('sem a dispersão não há ruído de medida: não aplica', () => {

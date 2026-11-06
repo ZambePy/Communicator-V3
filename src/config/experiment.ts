@@ -394,6 +394,45 @@ export interface ExperimentConfig {
    */
   recoletaDeAlvosRuins: boolean;
   /**
+   * M23 — o erro de PADRÃO do mapa entra no ruído (R) das medidas deliberadas
+   * da correção por dwell: o reajuste pelo centro e a recalibração rápida (M20).
+   *
+   * Um ponto olhado de propósito mede o deslocamento da sessão somado ao erro
+   * de padrão do mapa naquele ponto. Nos 15 relatórios reais de 05/09 a
+   * 25/10/2026, o desvio desse erro de padrão (o que sobra em cada ponto depois
+   * de tirar o deslocamento da sessão) foi de 47 px em x e 60 px em y — do
+   * tamanho do próprio deslocamento (43 e 57 px). Com R só da dispersão
+   * amostral, o Kalman toma o resíduo de UM ponto como o deslocamento inteiro
+   * (ganho ≈ 0,98): quando o ponto olhado carrega um erro de padrão grande, o
+   * reajuste piora os outros pontos — até +0,72° numa das 15 sessões. Com o
+   * ruído do mapa no R (σ = 1,4°), o reajuste pelo centro vai de 2,19° para
+   * 2,15° em média (sem reajuste, 2,27°) e a pior piora cai para +0,36°; a
+   * recalibração pelos quatro cantos internos, de 2,07° para 2,02°. Com M24,
+   * que deixa passar as sessões de erro maior, o efeito cresce: 2,14° → 1,97°
+   * no centro e 1,82° → 1,76° nos cantos (docs/MEDICOES.md §14.8).
+   *
+   * Os rótulos de uso do dwell NÃO mudam: neles o termo do tamanho do botão
+   * já faz esse papel, e somar o ruído do mapa não ajudou nos mesmos dados.
+   */
+  ruidoDoMapaNaCorrecaoDeliberada: boolean;
+  /**
+   * M24 — uma medida DELIBERADA (reajuste pelo centro, recalibração rápida) é
+   * aceita até o DOBRO do teto da correção; o deslocamento aprendido continua
+   * limitado ao teto, como sempre (`aplicarTeto`).
+   *
+   * Antes, um resíduo acima do teto (8 % da tela: ~150 px na horizontal,
+   * ~86 px na vertical) era recusado inteiro, com a ideia de que deriva desse
+   * tamanho pede calibrar de novo. Nos 15 relatórios reais de 05/09 a
+   * 25/10/2026 isso recusava o reajuste pelo centro em 8 sessões —
+   * justamente as de erro maior. Aceitando até o dobro: reajuste pelo centro
+   * 2,15° → 1,97° (6 sessões melhoram, até 1,04°; 1 piora 0,05°) e
+   * recalibração pelos 4 cantos internos 2,02° → 1,76° (3 melhoram de 0,6° a
+   * 1,7°, nenhuma piora). 1,5× e 3× dão quase o mesmo (2,01°–2,03° e
+   * 1,76°–1,80°): o número não é afinado à amostra (docs/MEDICOES.md §14.8).
+   * Acima do dobro continua recusado. Os rótulos de uso do dwell não mudam.
+   */
+  medidaDeliberadaAteODobroDoTeto: boolean;
+  /**
    * O ESTÍMULO de antes de 19/10/2026 na calibração e no teste de precisão
    * (revisão do pipeline de 19/10/2026): a bola azul lisa de 36 px que pulsava
    * na coleta e ficava verde, sobre fundo PRETO, e no teste o círculo azul-claro
@@ -465,6 +504,8 @@ const DEFAULTS_DO_CODIGO: ExperimentConfig = {
   recalibracaoRapidaAfim: true,
   pausaNaPerdaCurta: true,
   recoletaDeAlvosRuins: true,
+  ruidoDoMapaNaCorrecaoDeliberada: true,
+  medidaDeliberadaAteODobroDoTeto: true,
   estimuloAntigo: false,
 };
 
@@ -517,6 +558,8 @@ export const VALORES_DA_BASE = {
   recalibracaoRapidaAfim: false,
   pausaNaPerdaCurta: false,
   recoletaDeAlvosRuins: false,
+  ruidoDoMapaNaCorrecaoDeliberada: false,
+  medidaDeliberadaAteODobroDoTeto: false,
 } as const satisfies Partial<ExperimentConfig>;
 
 /** Aplica o interruptor único: com `base`, todas as flags do V3 voltam ao valor anterior. */

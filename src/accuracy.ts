@@ -37,6 +37,7 @@ import { amostrasEfetivas } from './ruidoDaCalibracao';
 import type { TermosDaPredicao } from './calibration';
 import { REGRESSOR_MODE } from './gazeRegressor';
 import { EXPERIMENT, experimentSnapshot } from './config/experiment';
+import { decomporErro, type DecomposicaoDoErro } from './decomposicaoDoErro';
 import { ACCLIMATION_MS, COLLECTION_MS, MIN_VALID_SAMPLE_RATIO, quadrosEsperados } from './accuracyProtocol';
 import { ACTIVE_FEATURE_SET, l2csSlotsInSet } from './extractor';
 
@@ -174,6 +175,15 @@ export interface AccuracyResult {
    * `mapGaze` somou à predição, em px (positivo = para a direita/para baixo).
    */
   decomposicaoDoVies?: Record<'distancia' | 'pose' | 'translacao' | 'cantos' | 'dwell', { x: number; y: number }> | null;
+  /**
+   * Decomposição do erro sobre os mesmos interiores (auditoria e pesquisa de
+   * 05/11/2026, `decomposicaoDoErro.ts`): quanto é deslocamento da sessão,
+   * quanto é distorção linear e quanto é erro de padrão de cada ponto — e o
+   * erro EM USO, o que a correção por dwell deixaria depois de um rótulo por
+   * alvo, na ordem do teste, com botões do tamanho do alvo mínimo. O teste
+   * mede o mapa em malha aberta; este campo diz quanto disso a pessoa sente.
+   */
+  decomposicaoDoErro?: DecomposicaoDoErro | null;
   /**
    * Em que modo esta rodada correu. Presente em TODO resultado, inclusive nos
    * de medição, para que nenhum consumidor precise inferir pela ausência de
@@ -1562,6 +1572,40 @@ function finishTest(
   const alvoMinimoPx = tamanhoMinimoDeAlvo(meanError, sigmaPior);
   const alvoMinimoDeg = alvoMinimoPx !== null && pxPorGrau > 0 ? alvoMinimoPx / pxPorGrau : null;
 
+  // Mesmos interiores e mesma ordem do teste: o erro em uso replica o Kalman
+  // de produção rótulo a rótulo, e a ordem dos rótulos importa. Só quando a
+  // sessão roda esse Kalman: com o integrador antigo (`?pipeline=base`) ou a
+  // correção desligada, ele mediria uma correção que a sessão não tem.
+  const replayDoDwell = EXPERIMENT.correcaoPorDwell && EXPERIMENT.correcaoPorDwellKalman;
+  const decomposicaoDoErro = decomporErro(
+    interiores.map((d) => ({
+      alvoX: d.groundX,
+      alvoY: d.groundY,
+      predX: d.predX ?? Number.NaN,
+      predY: d.predY ?? Number.NaN,
+      sdX: d.sdX,
+      sdY: d.sdY,
+      nEfetivo: d.nEfetivo,
+    })),
+    {
+      larguraPx: vw,
+      alturaPx: vh,
+      ladoDoRotuloPx: replayDoDwell ? alvoMinimoPx : null,
+      residuoAfimPx: affine?.residualPx ?? null,
+      afim: EXPERIMENT.correcaoPorDwellAfim,
+    },
+  );
+  if (decomposicaoDoErro) {
+    const pct = (v: number | null) => (v === null ? '—' : `${Math.round(v * 100)}%`);
+    const px = (v: number | null) => (v === null ? '—' : `${Math.round(v)}px`);
+    const p = decomposicaoDoErro.parcelas;
+    console.log(
+      `[accuracy] Decomposição do erro (interior): deslocamento ${pct(p.deslocamento)} | ` +
+      `linear ${pct(p.linear)} | resto ${pct(p.resto)} | em uso ${px(decomposicaoDoErro.emUsoPx)} ` +
+      `(sem correção nos mesmos pontos ${px(decomposicaoDoErro.semCorrecaoNosMesmosPontosPx)})`,
+    );
+  }
+
   const distancias = distanciasDoTeste.filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
   const distanciaMedidaCm = distancias.length > 0
     ? {
@@ -1669,6 +1713,7 @@ function finishTest(
           dwell: mediaDoTermo((t) => t.dwell),
         }
       : null,
+    decomposicaoDoErro,
     poseDrift,
     poseDeltaCalibToTestDeg,
     affine,

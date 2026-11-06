@@ -398,6 +398,47 @@ export const RECUSAS_PARA_REAJUSTE = 3;
  * entrar sem salto.
  */
 export const RAMPA_MS = RESFRIAMENTO_MS;
+
+/**
+ * Desvio do erro de PADRÃO do mapa por eixo, em graus (M23).
+ *
+ * É o que sobra em cada ponto depois de tirar o deslocamento da sessão: nos
+ * 15 relatórios reais de 05/09 a 25/10/2026, 47 px em x e 60 px em y a 60 cm
+ * da tela de 24" (2205 px de distância), ~1,4° pelos dois eixos. Um ponto
+ * olhado de propósito carrega esse erro inteiro, além da dispersão amostral.
+ */
+export const SIGMA_DO_MAPA_DEG = 1.4;
+/** O mesmo desvio em px, para quando a distância da tela em px não é conhecida. */
+export const SIGMA_DO_MAPA_PX_PADRAO = 55;
+
+/**
+ * Variância do erro de padrão do mapa, em px², a `distanciaPx` da tela.
+ *
+ * O erro de padrão é um ângulo: em px ele cresce com a distância da tela em px
+ * (distância × px/cm). Sem distância conhecida, o desvio medido na bancada.
+ */
+export function varianciaDoMapaPx2(distanciaPx: number | null | undefined): number {
+  const sigma = distanciaPx !== null && distanciaPx !== undefined && Number.isFinite(distanciaPx) && distanciaPx > 0
+    ? distanciaPx * Math.tan((SIGMA_DO_MAPA_DEG * Math.PI) / 180)
+    : SIGMA_DO_MAPA_PX_PADRAO;
+  return sigma * sigma;
+}
+
+/** Variância do mapa somada ao R das medidas deliberadas, ou 0 com M23 desligada. */
+function ruidoDoMapaNaMedidaDeliberada(): number {
+  return EXPERIMENT.ruidoDoMapaNaCorrecaoDeliberada ? varianciaDoMapaPx2(contexto?.distanciaPx) : 0;
+}
+
+/**
+ * Maior resíduo (normalizado, como o teto) que uma medida deliberada pode ter
+ * para ser aceita: o dobro do teto com M24, o próprio teto sem ela. O
+ * deslocamento aprendido continua limitado ao teto por `aplicarTeto`, que só
+ * existe no Kalman — o integrador SUBSTITUI o deslocamento pelo resíduo, então
+ * nele o limite é sempre o teto.
+ */
+export function limiteDaMedidaDeliberada(): number {
+  return EXPERIMENT.medidaDeliberadaAteODobroDoTeto && usaKalman() ? 2 * TETO_NORMALIZADO : TETO_NORMALIZADO;
+}
 /** NIS guardados para a média de consistência (diagnóstico). */
 const NIS_GUARDADOS = 20;
 
@@ -588,15 +629,18 @@ export function sessaoDoComputador(): boolean {
  * medido de uma vez e com ~60 quadros — muito mais evidência que uma seleção.
  * No integrador, SUBSTITUI o deslocamento em vez de somar uma fração dele: é a
  * "drift correction" dos rastreadores de laboratório. No Kalman é uma medida
- * direta do deslocamento com R = (π/2)·s²/N_eff, que dá ganho perto de 1 e
+ * direta do deslocamento com R = (π/2)·s²/N_eff — mais, com M23, a variância
+ * do erro de padrão do mapa, que leva o ganho de ~1 para ~0,5 a 60 cm — e
  * deixa a variância coerente para os rótulos seguintes. As referências
  * geométricas da calibração NÃO mudam: a compensação de pose e distância
  * continua medindo contra elas, que é o que a física pede (ver
  * `referenciaLenta` em `config/experiment.ts`).
  *
- * Acima do teto não aplica nada e devolve `false`: um viés desse tamanho não é
- * deriva — é calibração quebrada ou posição muito diferente, e a resposta
- * certa é calibrar de novo, não escorregar a tela inteira.
+ * Acima do limite (`limiteDaMedidaDeliberada`: o teto, ou o dobro dele com
+ * M24) não aplica nada e devolve `false`: um viés desse tamanho não é deriva —
+ * é calibração quebrada ou posição muito diferente, e a resposta certa é
+ * calibrar de novo, não escorregar a tela inteira. Entre o teto e o dobro,
+ * aplica e o deslocamento para no teto.
  */
 export function corrigirDerivaPeloCentro(
   residuo: Ponto,
@@ -606,14 +650,16 @@ export function corrigirDerivaPeloCentro(
 ): boolean {
   if (!ligado) return false;
   if (!Number.isFinite(residuo.x) || !Number.isFinite(residuo.y) || !Number.isFinite(agoraMs)) return false;
-  if (norma(residuo) > TETO_NORMALIZADO) return false;
+  if (norma(residuo) > limiteDaMedidaDeliberada()) return false;
   if (usaKalman()) {
     const v = contexto?.viewport;
     if (!v || !medida || !(medida.amostras > 0)) return false;
     const nEff = Math.max(1, amostrasEfetivas(medida.amostras, contexto?.rho1 ?? 0.8));
+    // M23: o resíduo de UM ponto é deslocamento + erro de padrão do mapa ali.
+    const mapa = ruidoDoMapaNaMedidaDeliberada();
     const r = {
-      x: Math.max(1, FATOR_MEDIANA * (medida.dispersao.x * v.largura) ** 2 / nEff),
-      y: Math.max(1, FATOR_MEDIANA * (medida.dispersao.y * v.altura) ** 2 / nEff),
+      x: Math.max(1, FATOR_MEDIANA * (medida.dispersao.x * v.largura) ** 2 / nEff) + mapa,
+      y: Math.max(1, FATOR_MEDIANA * (medida.dispersao.y * v.altura) ** 2 / nEff) + mapa,
     };
     const anterior = preverKalman(kalman, agoraMs);
     kalman = medirDeslocamento(anterior, { x: residuo.x * v.largura, y: residuo.y * v.altura }, r);
@@ -651,7 +697,8 @@ export interface PontoDaRecalibracao {
  * Cada ponto é uma medida do Kalman com H = [1, x − centro] — deslocamento e,
  * com o afim (M16), ganho — e R pela dispersão da própria coleta. Os pontos
  * cobrem a tela, então o ganho pode andar por inteiro. Só existe com o Kalman;
- * acima do teto, calibrar de novo.
+ * acima do limite (`limiteDaMedidaDeliberada`: o teto, ou o dobro com M24),
+ * calibrar de novo.
  */
 export function corrigirPorPontos(
   pontos: readonly PontoDaRecalibracao[],
@@ -668,15 +715,18 @@ export function corrigirPorPontos(
     x: validos.reduce((s, p) => s + (p.alvo.x - p.mediana.x), 0) / validos.length / viewport.largura,
     y: validos.reduce((s, p) => s + (p.alvo.y - p.mediana.y), 0) / validos.length / viewport.altura,
   };
-  if (norma(medio) > TETO_NORMALIZADO) return false;
+  if (norma(medio) > limiteDaMedidaDeliberada()) return false;
   const afim = EXPERIMENT.correcaoPorDwellAfim;
   const anterior = preverKalman(kalman, agoraMs);
+  // M23: cada ponto carrega o erro de padrão do mapa naquele lugar, e os erros
+  // de pontos diferentes são quase independentes — N pontos o dividem por N.
+  const mapa = ruidoDoMapaNaMedidaDeliberada();
   let e = anterior;
   for (const p of validos) {
     const nEff = Math.max(1, amostrasEfetivas(p.amostras, contexto?.rho1 ?? 0.8));
     const r = {
-      x: Math.max(1, FATOR_MEDIANA * p.dispersao.x ** 2 / nEff),
-      y: Math.max(1, FATOR_MEDIANA * p.dispersao.y ** 2 / nEff),
+      x: Math.max(1, FATOR_MEDIANA * p.dispersao.x ** 2 / nEff) + mapa,
+      y: Math.max(1, FATOR_MEDIANA * p.dispersao.y ** 2 / nEff) + mapa,
     };
     e = atualizarKalman(e, { centro: p.alvo, mediana: p.mediana, r }, {
       centroDaTela: centroDaTela(viewport), afim, excitacao: { x: 1, y: 1 }, deliberada: true,

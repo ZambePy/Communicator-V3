@@ -1167,7 +1167,8 @@ function referenciasEmUso(): { pose: Pose | null; centro: CentroFacial | null } 
  * pose, a pálpebra, a luz — é exatamente o que o centro mede.
  *
  * Devolve se a correção foi aplicada e o tamanho do viés medido, em px. Acima
- * do teto da correção (~150 px) não aplica: é caso de calibrar de novo.
+ * do limite da medida deliberada (o teto da correção, ~150 px, ou o dobro com
+ * M24 — `limiteDaMedidaDeliberada`) não aplica: é caso de calibrar de novo.
  */
 export function corrigirDerivaNoCentro(
   predicao: { x: number; y: number } | null,
@@ -1184,7 +1185,7 @@ export function corrigirDerivaNoCentro(
   const aplicado = corrigirDerivaPeloCentro(residuo, performance.now(), medida);
   console.log(
     `[calib] reajuste rápido: viés no centro ${desvioPx === null ? '?' : `${desvioPx.toFixed(0)} px`} — ` +
-    (aplicado ? 'corrigido' : 'NÃO aplicado (acima do teto da correção: calibre de novo)'),
+    (aplicado ? 'corrigido' : 'NÃO aplicado (acima do limite da correção: calibre de novo)'),
   );
   return { aplicado, desvioPx };
 }
@@ -1193,7 +1194,7 @@ export function corrigirDerivaNoCentro(
  * Recalibração rápida afim (M20): os pontos olhados, com a mediana e a
  * dispersão da predição em cada um (fração da tela), viram medidas da correção
  * por dwell. Mesmo contrato do reajuste pelo centro: não retreina nada, não
- * troca referências, e acima do teto não aplica.
+ * troca referências, e acima do limite da medida deliberada não aplica.
  */
 export function corrigirDerivaNosPontos(
   medidas: readonly {
@@ -1216,7 +1217,7 @@ export function corrigirDerivaNosPontos(
   const aplicado = corrigirPorPontos(emPx, performance.now(), { largura: vw, altura: vh });
   console.log(
     `[calib] recalibração rápida (${medidas.length} pontos): erro médio ${desvioPx.toFixed(0)} px — ` +
-    (aplicado ? 'corrigido' : 'NÃO aplicado (acima do teto da correção: calibre de novo)'),
+    (aplicado ? 'corrigido' : 'NÃO aplicado (acima do limite da correção: calibre de novo)'),
   );
   return { aplicado, desvioPx };
 }
@@ -3883,6 +3884,14 @@ export interface CalibrationFitDiagnostics {
     alvo?: { x: number; y: number };
     dispersaoPx?: number;
     /**
+     * Média ASSINADA (predição − alvo) das amostras do alvo deixado de fora,
+     * em px. `errorPx` é a média dos tamanhos; este é o vetor — para que lado
+     * o mapa erra fora da amostra, que é o que separa um mapa encolhido
+     * (ganho < 1) de erro de padrão espalhado (auditoria de 05/11/2026).
+     * Ausente em relatórios anteriores a 05/11/2026.
+     */
+    residuoMedioPx?: { x: number; y: number };
+    /**
      * Amostras COLETADAS no alvo, antes do filtro robusto por quadro (M6).
      * `samples` é o que sobrou dele e treinou; o mínimo de referência
      * (`MIN_ACCEPTED_SAMPLES`) é o da coleta, e é contra este número que a
@@ -5738,13 +5747,16 @@ export function computeFitDiagnostics(
         looByTarget.push({ ...alvo, errorPx: NaN, samples: test.length, ...extras });
         continue;
       }
-      let s = 0;
+      let s = 0, sx = 0, sy = 0;
       for (const i of test) {
         const p = fundir(loo.esquerdo[i]!, loo.direito[i]!);
         s += errPx(p.x - targets[i].screenX, p.y - targets[i].screenY);
+        sx += p.x - targets[i].screenX;
+        sy += p.y - targets[i].screenY;
       }
       const e = s / test.length;
-      looByTarget.push({ ...alvo, errorPx: e, samples: test.length, ...extras });
+      const residuoMedioPx = { x: (sx / test.length) * vw, y: (sy / test.length) * vh };
+      looByTarget.push({ ...alvo, errorPx: e, samples: test.length, ...extras, residuoMedioPx });
       looSum += e; looCount++;
     }
   }

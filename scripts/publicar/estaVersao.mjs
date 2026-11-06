@@ -22,19 +22,17 @@
  *   Nada de linha de coautoria.
  */
 
-export const BASE = '6d7ae288e404f031de92b9d1a670214f6ca73356';
+export const BASE = '5bf841f9158af46f8ea2b637bd5470c8f126fbb9';
 
-export const REMOVIDOS = [
-  // 25/10: no Windows (sem diferença de maiúsculas) o import './MarcaCuidador' caía neste
-  // arquivo e o tsc do app parava (TS1261). Virou caminhosDaMarcaCuidador.ts.
-  'app/src/components/marcaCuidador.ts',
-];
+// Nada saiu nesta versão.
+export const REMOVIDOS = [];
 
 export const MENSAGEM = {
-  titulo: 'App do cuidador: marcaCuidador.ts vira caminhosDaMarcaCuidador.ts (o tsc parava no Windows)',
+  titulo: 'Rastreamento: reajustes deliberados mais robustos (M23, M24) e decomposição do erro no relatório',
   corpo: [
-    'No Windows, MarcaCuidador.tsx e marcaCuidador.ts só diferiam nas maiúsculas: o import de \'./MarcaCuidador\' no index caía no arquivo de dados e o tsc do app parava (TS1261), o que travava o npm run publicar.',
-    'O arquivo de dados (gerado por app/scripts/gerar-marca-cuidador.py) agora se chama caminhosDaMarcaCuidador.ts; o gerador e o README acompanham. Nenhuma mudança visual.',
-    'Teste da tela de voz (desktop): "Preparar frases rápidas" carrega módulos com import() e, com a suíte inteira rodando, passava do prazo de 1 s do waitFor. Prazo de 15 s e o modelo do assistente simulado no teste. Nenhuma mudança no app.',
+    'M23 (ruidoDoMapaNaCorrecaoDeliberada): o erro de padrão do mapa (1,4 graus, 55 px sem a distância) entra no ruído do reajuste pelo centro e da recalibração rápida, porque um ponto só não o separa do deslocamento. Os rótulos do dwell não mudam.',
+    'M24 (medidaDeliberadaAteODobroDoTeto): esses reajustes são aceitos até o dobro do teto da correção; o deslocamento aprendido continua no teto. Antes, o reajuste pelo centro era recusado em 8 das 15 sessões reais, as de erro maior.',
+    'No replay dos 15 relatórios reais (05/09 a 25/10/2026), o reajuste pelo centro vai de 2,19 a 1,97 graus e a recalibração pelos 4 cantos internos, de 2,07 a 1,76 (sem reajuste, 2,27 e 2,26). As duas flags ficam desligadas em ?pipeline=base.',
+    'O relatório do teste ganha result.decomposicaoDoErro (deslocamento, parte linear, resto e o erro em uso com a correção por dwell, nulo sem o Kalman) e calibrationFit.looByTarget[].residuoMedioPx (o vetor do erro fora da amostra). docs/MEDICOES.md 14.8 e a tabela de flags do README.',
   ].join('\n\n'),
 };
