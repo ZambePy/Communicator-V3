@@ -5,6 +5,7 @@ import type { AcaoDoSistema, AmostraDeOlhar, ConfiguracaoDoModo, RespostaDaAcao 
 import { Overlay } from './Overlay';
 import { EXPERIMENT } from '@tracker/config/experiment';
 import { instalarRelogioDeQuadros, type RelogioDeQuadros } from '../test/quadros';
+import { MARGEM_DA_TRAVESSIA_MS } from '@tracker/interaction/cursorNoCompositor';
 
 /**
  * Sobreposição de ponta a ponta com uma ponte falsa: config → barra; dwell
@@ -204,16 +205,27 @@ describe('Overlay — rótulo da correção por dwell e laço de pintura', () =>
     expect(alvo.style.transition).toBe('transform 0ms linear');
     expect(alvo.style.opacity).toBe('1');
 
-    // A seguinte, 2 quadros depois: o compositor atravessa os ~33 ms sozinho.
+    // A seguinte, 2 quadros depois: o compositor atravessa os ~33 ms (mais a
+    // margem de um quadro do M25) sozinho.
     relogio.quadros(2);
     act(() => onOlhar?.({ x: 520, y: 300, t: 34, hasFace: true, eyeState: 'open', degraded: false, uncalibrated: false }));
     expect(alvo.style.transform).toContain('translate3d(506px, 286px, 0)');
-    expect(alvo.style.transition).toBe('transform 33ms linear');
+    expect(alvo.style.transition).toBe(`transform ${33 + MARGEM_DA_TRAVESSIA_MS}ms linear`);
 
     // 400 ms sem amostra nova: congela E fica translúcido.
     relogio.quadros(26);
     expect(alvo.style.opacity).toBe('0.35');
     expect(alvo.style.transform).toContain('translate3d(506px, 286px, 0)');
+  });
+
+  it('a borda do estado degradado não desloca o centro do cursor (border-box)', () => {
+    // A página da sobreposição não carrega o index.css (sem o reset do
+    // Tailwind): com `content-box`, o tracejado de 2 px aumentava a caixa de 48
+    // para 52 px com o mesmo deslocamento de 24, e o centro desenhado andava
+    // (+2, +2) px ao entrar em degradado — lido como erro de calibração.
+    render(<Overlay />);
+    act(() => onConfig?.(CONFIG));
+    expect(cursorDaSobreposicao().style.boxSizing).toBe('border-box');
   });
 
   it('volta segura (cursorPeloCompositor desligada): a posição é escrita pelo laço de pintura', () => {

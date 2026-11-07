@@ -37,6 +37,7 @@ import { geometriaDoAnel } from '@tracker/interaction/dwellRing';
 import { GazeFallback } from '@tracker/interaction/gazeFallback';
 import { SeguidorDeCursor, IDADE_MAXIMA_MS } from '@tracker/interaction/seguidorDeCursor';
 import { PlanejadorDoCursor, transicaoDoPasso } from '@tracker/interaction/cursorNoCompositor';
+import { animarTransform, pararAnimacao, podeAnimar } from '@tracker/interaction/animacaoDoCursor';
 import {
   consultar as consultarVigia, dispensar as dispensarVigia, resolvido as vigiaResolvido,
   estadoInicialDoAviso, INTERVALO_DE_CONSULTA_MS, type EstadoDoAviso,
@@ -446,7 +447,11 @@ function escreverNoCursor(
   // `!important`, e o Windows liga essa preferência quando os "efeitos de
   // animação" estão desligados — comum em PC lento, justamente onde a thread
   // principal mais trava. Sem a prioridade, o cursor voltaria a saltar a cada
-  // amostra, pior que o laço de rAF de antes (que ignora CSS).
+  // amostra, pior que o laço de rAF de antes (que ignora CSS). Com o M25 a
+  // posição anda por animação web, que a regra não atinge, e a transição de
+  // `transform` fica em 0 ms: a prioridade passa a valer sobretudo para o fade
+  // de opacidade e para o caminho sem `el.animate`. A exceção está escrita na
+  // regra do CLAUDE.md; não a "conserte".
   else el.style.setProperty(NOME_CSS[prop], valor, prop === 'transition' ? 'important' : '');
 }
 
@@ -459,7 +464,10 @@ const TRANSICAO_DA_OPACIDADE = 'opacity 600ms ease 300ms';
 /** Esconde o cursor sem tocar em nada que já esteja no valor certo. */
 function esconderCursor(el: HTMLElement, cache: EstiloDeCursorEmCache): void {
   // Travessia zerada ANTES de mandar o cursor para fora da tela: com a
-  // transição do compositor ainda valendo, ele atravessaria a tela até lá.
+  // transição do compositor ainda valendo, ele atravessaria a tela até lá. A
+  // animação web do M25 (`fill: 'both'`) seguraria o cursor no último ponto
+  // dela: sai também.
+  pararAnimacao(el);
   escreverNoCursor(el, cache, 'transition', transicaoDoPasso(0, TRANSICAO_DA_OPACIDADE));
   escreverNoCursor(el, cache, 'transform', 'translate3d(-9999px,-9999px,0)');
   escreverNoCursor(el, cache, 'opacity', '0');
@@ -1382,7 +1390,18 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (!cur) return;
       const cache = ultimoEstiloDoCursorRef.current;
       const passo = planejadorRef.current.passo({ x, y, tMs });
-      if (passo) {
+      // M25: animação web partindo do ponto que o planejador calculou (ver
+      // `animacaoDoCursor.ts`). Sem `el.animate`, segue pela transição CSS.
+      const porAnimacao = passo !== null && passo.deX !== undefined && passo.deY !== undefined && podeAnimar(cur);
+      if (passo && porAnimacao) {
+        const para = `translate3d(${passo.x - p.offsetPx}px, ${passo.y - p.offsetPx}px, 0) scale(${p.escala})`;
+        const de = `translate3d(${passo.deX! - p.offsetPx}px, ${passo.deY! - p.offsetPx}px, 0) scale(${p.escala})`;
+        // O destino vai como valor de base, sem transição CSS de `transform`:
+        // quem anda é a animação.
+        escreverNoCursor(cur, cache, 'transition', transicaoDoPasso(0, TRANSICAO_DA_OPACIDADE));
+        escreverNoCursor(cur, cache, 'transform', para);
+        animarTransform(cur, de, para, passo.duracaoMs, tMs);
+      } else if (passo) {
         // A duração vai ANTES do destino: a transição nova usa a duração em
         // vigor no instante em que o `transform` muda.
         escreverNoCursor(cur, cache, 'transition', transicaoDoPasso(passo.duracaoMs, TRANSICAO_DA_OPACIDADE));
@@ -1410,13 +1429,20 @@ export const GazeProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (svg && passo) {
         // Anel que estava escondido aparece no lugar: atravessar a tela desde
         // onde sumiu seria um risco verde cruzando a tela.
-        const t = transicaoDoPasso(cache.anelVisivel === '1' ? passo.duracaoMs : 0);
+        const visivel = cache.anelVisivel === '1';
+        const paraDoAnel = `translate3d(${passo.x - g.centro}px, ${passo.y - g.centro}px, 0)`;
+        const t = transicaoDoPasso(visivel && !porAnimacao ? passo.duracaoMs : 0);
         if (t !== transicaoDoAnel) {
           // Mesma prioridade do cursor (ver `escreverNoCursor`).
           svg.style.setProperty('transition', t, 'important');
           transicaoDoAnel = t;
         }
-        svg.style.transform = `translate3d(${passo.x - g.centro}px, ${passo.y - g.centro}px, 0)`;
+        svg.style.transform = paraDoAnel;
+        if (porAnimacao) {
+          // A mesma travessia do cursor; escondido, aparece no lugar.
+          const deDoAnel = `translate3d(${passo.deX! - g.centro}px, ${passo.deY! - g.centro}px, 0)`;
+          animarTransform(svg, deDoAnel, paraDoAnel, visivel ? passo.duracaoMs : 0, tMs);
+        }
         // Só aparece com a posição desta amostra escrita: sem ela, a próxima
         // amostra o trataria como visível e o faria deslizar de onde ficou.
         mostrarAnel();

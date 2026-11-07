@@ -100,7 +100,7 @@ Três coisas precisam andar junto com esse número sempre que ele for citado:
 - **Foi medido com o L2CS, em 20/09, antes do V2.** Os pesos do L2CS têm
   licença só para pesquisa; desde a 1.0.0-beta.10 eles vão no instalador, e
   por isso a beta é acadêmica e não comercial ([Pendências e riscos](#pendências-e-riscos),
-  item 1). O pipeline padrão de hoje ([V3](#pipeline-v3-m1m22)) ainda não foi
+  item 1). O pipeline padrão de hoje ([V3](#pipeline-v3-m1m29)) ainda não foi
   medido ao vivo, e desde 19/10/2026 a calibração e o teste usam outro alvo e
   outro fundo (`docs/MEDICOES.md` §2): o 1,40° é de antes da troca. Para uma
   versão comercial, o caminho é o retreino do V2 (ramo ocular com UnityEyes 2,
@@ -375,8 +375,10 @@ Quando a geometria sai do lugar — a pessoa sentou mais perto, escorregou na
 cadeira, apoiou a cabeça de outro jeito — a primeira saída **não** é
 recalibrar. Um **reajuste de 2 s** olhando um alvo único no centro mede onde o
 cursor está caindo enquanto a pessoa olha o centro e desconta esse desvio como
-deslocamento da correção por dwell (até 8 % da tela; acima disso ele recusa e
-pede nova calibração). O Ridge e as referências de pose e de distância ficam
+deslocamento da correção por dwell. Um ponto só mede o deslocamento somado ao
+erro de padrão do mapa ali (~1,4°), e por isso o desvio entra pela metade (M23).
+Desvio de até 16 % da tela é aceito, e o deslocamento aprendido para em 8 % (M24);
+acima de 16 % ele recusa e pede nova calibração. O Ridge e as referências de pose e de distância ficam
 como estão: até 23/09 o reajuste recomeçava as referências, o que faz sentido
 só se o "zero" da cabeça mudou sem o olhar mudar — e apagava de uma vez a
 compensação da postura que a pessoa ainda mantinha. Ele aparece como botão no
@@ -791,6 +793,7 @@ projetos, e um `torchvision` de outra versão faz o modelo falhar ao carregar
 | comando | o que faz |
 |---|---|
 | `npm run dev` | interface em `http://localhost:5173` (desenvolvimento) |
+| `npm run teste-local` | gera o build de produção e abre a mesma interface sem nuvem, sem conta e sem termo, já com o paciente "Teste local": para calibrar e medir direto ([Modo de teste local](#modo-de-teste-local)) |
 | `npm run build` e `npm --prefix frontend run preview` | build de produção em `http://127.0.0.1:4173`; use este para medir |
 | `npm run electron:dev` | app desktop em desenvolvimento |
 | `npm run dev:limpo`, `npm run electron:dev:limpo` | o mesmo, começando com o armazenamento local zerado |
@@ -798,6 +801,38 @@ projetos, e um `torchvision` de outra versão faz o modelo falhar ao carregar
 | `npm run verificar` | tudo o que o CI confere: tipos, testes e builds do desktop, do site e do app ([Verificação](#verificação)) |
 | `npm run publicar` | publica o site com um comando: confere as pastas, testa, commita, envia e espera o site novo no ar ([Publicar com um comando](#publicar-com-um-comando)) |
 | `voice-engine\build-voice-engine.ps1` | gera o executável do motor de voz (PyInstaller, modo pasta) para entrar no instalador |
+
+### Modo de teste local
+
+`npm run teste-local` gera o build de PRODUÇÃO da interface numa pasta própria
+(`frontend/dist-teste-local`, fora do git e do instalador) e abre no navegador
+(`http://127.0.0.1:4180`, o `vite preview` com `--strictPort`) direto no
+rastreador, para calibrar, rodar o teste de precisão e usar as telas sem passar
+pelo produto inteiro. Cada execução refaz o build (cerca de um minuto).
+
+- **Sem nuvem:** o Supabase fica desligado mesmo com o `frontend/.env.local`
+  preenchido; nenhum heartbeat, mensagem ou login real sai do computador.
+- **Sem conta:** a licença fica ativa só na memória, sem login.
+- **Sem termo nem apresentação:** o termo é aceito em nome de
+  `teste-local@irisflow.local` e já existe um paciente "Teste local".
+
+É o build de produção, e não o servidor de desenvolvimento, porque o cursor e a
+medição dependem da thread principal: no `npm run dev` o React roda em modo de
+desenvolvimento e os módulos vêm sem empacotar, a thread perde mais quadros de
+câmera, o cursor anda pior e o erro medido não é o do produto (o relatório de
+06/11/2026 saiu assim). O dia de medição já usava o `vite preview` pelo mesmo
+motivo.
+
+Tudo fica no armazenamento da origem `http://127.0.0.1:4180`, que não é o do
+app instalado nem o do build de medição (`127.0.0.1:4173`): cada porta é uma
+origem com o próprio armazenamento, então o termo, o paciente "Teste local" e as
+flags gravadas pela URL não passam para a medição, e as calibrações e os
+pacientes de verdade não são tocados. Com a 4180 ocupada, o comando para com
+erro em vez de subir noutra porta. O relatório do teste de
+precisão é salvo na raiz do projeto, e as flags de experimento valem pela URL
+(`?exp.<flag>=0`). O modo só existe no build feito com `--mode teste-local`: no
+build do instalador o modo é `production`, e `modoTesteLocal()` compila para
+`return false` (`frontend/src/modoTesteLocal.ts`).
 
 ### Modelos
 
@@ -1003,12 +1038,13 @@ com a M13). `blocoL2csCompleto` continua desligada de
 propósito: leva as sete dimensões do bloco angular em vez de duas, e com treze
 alvos ainda é território de decorar.
 
-#### Pipeline V3 (M1–M22)
+#### Pipeline V3 (M1–M29)
 
 As mudanças de matemática e de comportamento do V2 têm, cada uma, uma flag e o
 número da tabela de decisão de [`docs/PESQUISA.md`](docs/PESQUISA.md) §5 (M11,
 o relatório de precisão, não tem flag; M22, de 19/10/2026, tem a pesquisa em
-§7). Desligada, a flag devolve o
+§7; M23 e M24, de 05/11/2026, têm os números em `docs/MEDICOES.md` §14.8; M25 a
+M29, as do cursor de 06/11/2026, na §14.9). Desligada, a flag devolve o
 comportamento anterior bit a bit — `src/golden.pipelineBase.test.ts` confere o
 extractor, a calibração e o `mapGaze` contra os números de e731357 (a beta de
 27/09, de onde o V2 partiu). Um interruptor só troca todas:
@@ -1050,6 +1086,11 @@ Como os outros parâmetros de URL, esses ficam gravados no `localStorage` até
 | M22 | `recoletaDeAlvosRuins` | `true` ² | refaz na hora os alvos com LOTO ou dispersão ruins e troca as amostras deles; o modelo novo só fica se o LOTO médio não piorar |
 | M23 | `ruidoDoMapaNaCorrecaoDeliberada` | `true` | o erro de padrão do mapa (1,4°) entra no ruído do reajuste pelo centro e da recalibração rápida: um ponto só não separa esse erro do deslocamento |
 | M24 | `medidaDeliberadaAteODobroDoTeto` | `true` | reajuste e recalibração rápida aceitos até o dobro do teto da correção (o deslocamento continua no teto); antes, as sessões de erro maior eram recusadas |
+| M25 | `travessiaContinua` | `true` | o cursor anda por animação web (`el.animate`) que parte do ponto calculado no instante da amostra, e cada travessia dura o intervalo mediano mais 17 ms; antes, a transição CSS escrita no fim de um quadro ocupado começava no começo dele e chegava quase terminada (salta e para). Custo: depois de uma sacada grande, o cursor desenhado assenta ~35 ms depois (75 → 111 ms no simulador); o dwell decide pela amostra, não pelo desenho, e não atrasa. No Modo Computador segue pela transição CSS |
+| M26 | `deslocamentoPorInovacao` | `true` | o estimador de fixação (M9) acha o passo pela inovação branqueada (GLR), e não pela média das 4 últimas amostras: passos de 80–160 px chegam a 70 % do caminho em ~60 % do tempo (266 → 165 ms), sem mais pulos com o olhar parado. Só vale com a rampa do L2CS (M29) e o suavizador ligados |
+| M27 | `palpebraBaixaRapida` | `true` | pálpebra baixa (olhar para o teclado) que não fecha até o fundo em 150 ms e assenta deixa de ser piscada; antes, o cursor congelava 400 ms a cada olhar para baixo. A piscada dentro da pálpebra baixa segura só ela, e o fechamento lento e a reabertura continuam piscada |
+| M28 | `fixacaoNaPerdaCurta` | `true` | um quadro sem rosto não recomeça a fixação do M9; só uma perda de mais de 150 ms |
+| M29 | `rampaDoL2cs` | `true` | o ângulo do L2CS anda em rampa entre uma inferência e a seguinte, em vez de degrau a 6–10 Hz; na sacada e depois de uma lacuna (rosto perdido) sai na hora |
 
 ¹ Fora do interruptor: `?pipeline=v3` não liga. M12 e M13 nasceram assim; M2,
 M7 e M10 foram desligadas depois de implementadas — M2 e M10 porque pioraram o

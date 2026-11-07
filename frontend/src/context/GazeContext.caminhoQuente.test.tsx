@@ -3,6 +3,7 @@ import { render, act } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import React from 'react';
 import type { GazeSample } from '@tracker/tracker/engine';
+import { MARGEM_DA_TRAVESSIA_MS } from '@tracker/interaction/cursorNoCompositor';
 
 /**
  * O CAMINHO QUENTE.
@@ -225,10 +226,11 @@ describe('GazeContext — o caminho quente a 30 Hz', () => {
     // laço de rAF continua rodando, e não escreve posição nenhuma.
     expect(contagem.transform).toBe(AMOSTRAS_POR_SEGUNDO);
     // A travessia acompanha o intervalo entre amostras: com a câmera regular
-    // ela muda uma vez (do "aparece no lugar" da primeira para os 33 ms) e
+    // ela muda uma vez (do "aparece no lugar" da primeira para os 33 ms mais a
+    // margem de um quadro do M25) e
     // não é reescrita a cada amostra.
     expect(contagem.transition).toBeLessThanOrEqual(1);
-    expect(cursor().style.transition).toBe('transform 33ms linear, opacity 600ms ease 300ms');
+    expect(cursor().style.transition).toBe(`transform ${33 + MARGEM_DA_TRAVESSIA_MS}ms linear, opacity 600ms ease 300ms`);
     // Com prioridade: a regra de `prefers-reduced-motion` do index.css zera
     // toda transição com `!important`, e o cursor voltaria aos saltos.
     expect(cursor().style.getPropertyPriority('transition')).toBe('important');
@@ -293,9 +295,9 @@ describe('GazeContext — o caminho quente a 30 Hz', () => {
     );
     emitirEPintar(400, 300);
     emitirEPintar(401, 301);
-    expect(cursor().style.transition).toContain('transform 33ms');
+    expect(cursor().style.transition).toContain(`transform ${33 + MARGEM_DA_TRAVESSIA_MS}ms`);
 
-    // Calibração: o cursor some. Com os 33 ms ainda valendo, ele atravessaria
+    // Calibração: o cursor some. Com a travessia ainda valendo, ele atravessaria
     // a tela até (-9999, -9999) na frente da pessoa.
     const estadoOriginal = engineMock.getState;
     engineMock.getState = () => 'calibrating';
@@ -312,6 +314,58 @@ describe('GazeContext — o caminho quente a 30 Hz', () => {
     expect(cursor().style.transition).toContain('transform 0ms');
     expect(cursor().style.transform).toContain('translate3d(');
     expect(cursor().style.transform).not.toContain('-9999px');
+  });
+
+  // M25: com `el.animate` (todo navegador de verdade; o jsdom não tem), o
+  // cursor anda por animação web que parte do ponto calculado, com início
+  // explícito. A transição CSS ficava para trás: escrita no fim de um quadro
+  // ocupado, ela começava no COMEÇO do quadro e chegava quase terminada ao
+  // compositor (medido no Chromium em 06/11/2026).
+  it('com animação web, o cursor anda por ela (início explícito) e esconder a cancela', () => {
+    const animacoes: { el: Element; quadros: Keyframe[]; opcoes: KeyframeAnimationOptions; startTime: number | null; cancelada: boolean }[] = [];
+    const original = (HTMLElement.prototype as Partial<HTMLElement>).animate;
+    (HTMLElement.prototype as unknown as { animate: unknown }).animate = function (this: Element, quadros: Keyframe[], opcoes: KeyframeAnimationOptions) {
+      const a = { el: this, quadros, opcoes, startTime: null as number | null, cancelada: false, cancel() { this.cancelada = true; } };
+      animacoes.push(a);
+      return a;
+    };
+    try {
+      render(
+        <GazeProvider>
+          <div />
+        </GazeProvider>
+      );
+      emitirEPintar(400, 300);
+      // A segunda travessia parte de onde a primeira está (ela apareceu no
+      // lugar, então do próprio ponto) e começa no instante da amostra — o
+      // `startTime` explícito é o que o M25 corrige.
+      const deEsperado = cursor().style.transform;
+      const instanteDaSegunda = relogio.agoraMs();
+      emitirEPintar(440, 300);
+      const doCursor = animacoes.filter((a) => a.el === cursor());
+      expect(doCursor.length).toBeGreaterThanOrEqual(1);
+      const ultima = doCursor.at(-1)!;
+      expect(ultima.opcoes).toMatchObject({ duration: 33 + MARGEM_DA_TRAVESSIA_MS, easing: 'linear', fill: 'both' });
+      expect(ultima.startTime).toBe(instanteDaSegunda);
+      expect(ultima.quadros[0].transform).toBe(deEsperado);
+      expect(ultima.quadros[1].transform).toBe(cursor().style.transform);
+      expect(ultima.quadros[1].transform).not.toBe(deEsperado);
+      // Sem transição CSS de `transform` por baixo: quem anda é a animação.
+      expect(cursor().style.transition).toContain('transform 0ms');
+
+      const estadoOriginal = engineMock.getState;
+      engineMock.getState = () => 'calibrating';
+      try {
+        emitirEPintar(441, 301);
+        expect(cursor().style.transform).toContain('-9999px');
+        expect(ultima.cancelada).toBe(true);
+      } finally {
+        engineMock.getState = estadoOriginal;
+      }
+    } finally {
+      if (original) (HTMLElement.prototype as unknown as { animate: unknown }).animate = original;
+      else delete (HTMLElement.prototype as unknown as { animate?: unknown }).animate;
+    }
   });
 
   it('o cursor escondido não é reescrito a cada quadro', () => {

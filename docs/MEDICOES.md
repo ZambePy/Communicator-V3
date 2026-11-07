@@ -742,10 +742,12 @@ do default de 69,7°, não o da compensação.
 
 ### 4.7 V3 — o pipeline novo contra o anterior *(a medir)*
 
-O V2 fez 22 mudanças — matemática do rastreamento, calibração e interação;
-M11 é o relatório, e M22, a recoleta dos alvos ruins, entrou em 2026-10-19
-(README → *Pipeline V3*; a evidência de cada uma em `docs/PESQUISA.md` §5 e,
-da M22, §7). Nesta seção M1–M22 numeram essas mudanças, e não as sessões M1–M4
+O V2 fez 29 mudanças — matemática do rastreamento, calibração e interação;
+M11 é o relatório, M22, a recoleta dos alvos ruins, entrou em 2026-10-19,
+M23 e M24, os reajustes deliberados, em 2026-11-05, e M25–M29, as do cursor, em
+2026-11-06 (README → *Pipeline V3*; a evidência de cada uma em
+`docs/PESQUISA.md` §5, da M22 em §7, das M23 e M24 na §14.8 daqui e das M25–M29
+na §14.9). Nesta seção M1–M29 numeram essas mudanças, e não as sessões M1–M4
 da §4.1–4.3. Nenhuma foi medida com uma pessoa. As sessões, a ordem e a régua estão em
 [`ROTEIRO_DE_MEDICAO.md`](ROTEIRO_DE_MEDICAO.md); o resumo:
 
@@ -760,6 +762,7 @@ da §4.1–4.3. Nenhuma foi medida com uma pessoa. As sessões, a ordem e a rég
 | roll do recorte | `?rollCrop=0&exp.nivelarRecorteCorrigido=0` · `?rollCrop=1&exp.nivelarRecorteCorrigido=0` · `?rollCrop=1&exp.nivelarRecorteCorrigido=1`, cabeça a ~15° e nivelada | o padrão de `normalizarRollNoCrop` e a M13 |
 | recoleta | `?exp.recoletaDeAlvosRuins=0` · `=1`, blocos alternados | se a M22 fica ligada |
 | medidas deliberadas | `?exp.ruidoDoMapaNaCorrecaoDeliberada=0` · `=1` e `?exp.medidaDeliberadaAteODobroDoTeto=0` · `=1`, reajuste pelo centro e recalibração rápida no uso, teste de precisão logo depois | se M23 e M24 ficam ligadas (o replay da §14.8 não é medição ao vivo) |
+| cursor | `?exp.travessiaContinua=0` · `=1` (e as outras quatro do cursor), gravação de tela a 60 quadros/s e teste de precisão no build de produção (`npm run teste-local`) | se M25–M29 ficam ligadas (a §14.9 é Chromium sem câmera e simulação, não é medição ao vivo) |
 | estímulo novo | o build de antes de 2026-10-19 contra o atual, na mesma pessoa | quanto a troca de alvo e fundo muda os números (§2) |
 | robustez de 2026-10-19 | contraluz real, WebGPU perdida, pouca luz, desempenho no PC | os avisos e os limiares novos |
 
@@ -1721,6 +1724,164 @@ os rótulos acrescentariam.
   relatórios: o LOO por alvo guardava só o tamanho do erro. Desde 05/11/2026,
   `calibrationFit.looByTarget[].residuoMedioPx` guarda o vetor, e as próximas
   sessões permitem esse teste offline.
+
+### 14.9 Cursor travando, pálpebra baixa e degraus do L2CS — 2026-11-06 *(Chromium sem câmera e simulação, não é medição ao vivo)*
+
+**O que se viu.** O relatório de 06/11/2026 00:03 (`accuracy-report-1793934223695`)
+deu 1,72°, medido no `npm run teste-local` quando ele ainda rodava o servidor de
+desenvolvimento. A gravação de tela da mesma noite (30 quadros/s), analisada
+quadro a quadro, mostrou:
+- 26 % dos quadros com o cursor parado e ~22 mudanças de posição por segundo;
+- passos de 5–15 px com o olhar parado;
+- congelamentos de exatamente 12–13 quadros seguidos de saltos de 115–360 px;
+- sacadas mostradas em 1–2 quadros.
+
+**Causas e evidência.**
+
+1. **A transição CSS nascia velha.** Medido no Chromium: a transição de
+   `transform` escrita no fim de um quadro em que a thread principal trabalhou
+   30 ms ganha como `startTime` o `document.timeline.currentTime` do COMEÇO do
+   quadro — 30–46 ms antes da escrita. Com o MediaPipe ocupando 24–41 ms antes
+   de cada amostra (§14.7), a travessia chegava ao compositor quase terminada: o
+   cursor saltava e parava.
+2. **A travessia durava um intervalo.** As amostras chegam em intervalos de 33,
+   50 e 66 ms. Toda vez que o intervalo passava da mediana, o cursor chegava e
+   esperava.
+3. **Pálpebra baixa tratada como piscada.** Olhar para o teclado baixa a
+   pálpebra. O detector segurava a posição até o teto de 400 ms; somado ao
+   quadro pendente do estimador, são os 12–13 quadros do vídeo, e depois vinha
+   o salto.
+4. **O M9 escorregava nos passos pequenos.** A média das 4 últimas amostras
+   contra a do resto só separa do ruído passos acima de ~3,5σ. O botão vizinho
+   e o ajuste fino levavam ~300 ms para 70 % do caminho.
+5. **O L2CS entrava em degraus.** O ângulo ficava constante entre duas
+   inferências (a cada ~100 ms). Nos relatórios de 20–23/09, o |Δ| quadro a
+   quadro da predição crua tem p97/p50 de 5–12, onde um ruído AR(1) daria 3,1.
+6. **Servidor de desenvolvimento.** React em modo dev e módulos sem empacotar
+   pesam na mesma thread. O `npm run teste-local` passou a usar o build de
+   produção.
+
+**Correções** (cada uma com flag; desligadas em `?pipeline=base`):
+- M25 `travessiaContinua`: animação web (`el.animate`) partindo do ponto
+  calculado, com `startTime` explícito; travessia = intervalo mediano + 17 ms.
+- M26 `deslocamentoPorInovacao`: passo achado pela inovação AR(1) branqueada
+  (GLR, limiar 24, 8 inovações, ≥ 2 amostras depois do passo). Só com a rampa
+  do L2CS (M29) e o suavizador ligados.
+- M27 `palpebraBaixaRapida`: episódio que não chega a 0,45× o EAR de repouso em
+  150 ms e assenta (EAR parado) é pálpebra baixa. A piscada dentro da pálpebra
+  baixa segura só ela; o fechamento lento e a reabertura continuam piscada.
+- M28 `fixacaoNaPerdaCurta`: um quadro sem rosto não recomeça a fixação; só uma
+  perda de mais de 150 ms.
+- M29 `rampaDoL2cs`: o ângulo do L2CS anda em rampa até a inferência seguinte;
+  na sacada e depois de uma lacuna (intervalo acima de 2× a mediana), sai na
+  hora.
+
+**Chromium de verdade, sem câmera.** Chromium com janela, num display virtual,
+gravado a 60 quadros/s. A thread principal fica presa 22–40 ms por quadro, como
+o MediaPipe; o cursor persegue a 300 px/s, fixa com ruído e salta. Conta-se a
+fração de quadros parados durante a perseguição, em três gravações por regra:
+
+| regra | quadros parados | variação da velocidade (CV) |
+|---|---|---|
+| transição CSS, um intervalo (antes) | 40,0–40,9 % | 0,95–0,97 |
+| transição CSS + a idade do quadro na duração | 39,4–40,6 % | 0,84–0,87 |
+| animação web partindo do ponto calculado (M25) | 1,6–18,0 % (média ~10 %) | 0,50–0,68 |
+
+Compensar a duração na transição CSS não adianta; a animação web, sim.
+
+**Simulador do compositor.** `src/testUtils/simuladorDoCursor.ts` modela o
+relógio congelado medido acima. `src/testUtils/cenarioDoCursor.ts` gera o uso:
+- fixações de 0,4–1,5 s e sacadas;
+- ruído AR(1) de 25 px com ρ₁ = 0,8, mais o L2CS em degraus de 15 px a cada
+  100 ms;
+- amostras a ~25/s com buracos de 66 ms;
+- pálpebra baixa ao descer para o terço de baixo.
+
+Antes, o cenário dá 27–33 % de quadros parados a 30 quadros/s, a mesma ordem
+dos 26 % do vídeo. O filtro e o planejador são os módulos de produção; são 5
+sementes de 60 fixações. O simulador ORDENA variantes, não prevê a fração na
+tela: com a thread presa, a animação web deu 1,6–18 % de paradas na gravação do
+Chromium e 4,7 % aqui; a transição CSS, ~40 % contra ~35 %.
+
+| métrica | uso (sacadas pela tela) | botões vizinhos (80–160 px) |
+|---|---|---|
+| quadros parados a 30 quadros/s | 33,3 % → **18,2 %** | 26,6 % → **14,4 %** |
+| paradas no meio do movimento (60 Hz) | 31,5 % → **4,3 %** | 35,0 % → **3,9 %** |
+| congelamento ≥ 10 quadros seguido de salto > 80 px | 0,8 → **0** /min | 0,6 → **0** /min |
+| pulos > 25 px em 100 ms com o olhar parado | 37,0 → **5,2** /min | 31,1 → **6,1** /min |
+| tremor parado (passo RMS por quadro de 60 Hz) | 3,3 → **1,9** px | 3,2 → **1,9** px |
+| erro do cursor exibido contra o olhar, parado | 24,0 → 22,7 px | 23,2 → 22,7 px |
+| até ficar a 50 px de onde assenta, depois da sacada | 75 → 111 ms (pior) | 137 → **115** ms |
+| até cobrir 70 % do caminho | 94 → 106 ms | 266 → **165** ms |
+
+A sacada grande assenta ~35 ms depois porque antes ela não atravessava:
+aparecia quase pronta. A seleção por dwell não espera o cursor exibido; ela usa
+a amostra filtrada.
+
+Duas regras foram testadas e descartadas:
+- **sacada que voa em 48 ms:** +57 ms para assentar, sem ganho que se meça nos
+  quadros parados;
+- **travessia de 1,6× o intervalo:** com o relógio congelado, ainda deixava
+  ~20 % de paradas.
+
+**O M26 nos testes de unidade.** σ = 40 px, ρ₁ = 0,8, 30 Hz; mediana de 60
+sementes do tempo até 70 % do caminho:
+
+| passo | antes | M26 |
+|---|---|---|
+| 2,5σ | 233 ms | 167 ms |
+| 3σ | 200 ms | 133 ms |
+| 3,5σ | 167 ms | 100 ms (90 % do caminho: de ~330 para ≤ 170 ms) |
+
+Com o olhar parado: nenhum pulo em 6 min de ruído para ρ₁ de 0,6, 0,8 e 0,9 —
+o mesmo critério do detector de antes. Com limiar 20, os passos chegam ~35 ms
+antes, mas dá 0,2–0,7 pulo por minuto.
+
+**A rampa do L2CS (M29).** Simulação a ~56 amostras/s, como no relatório de
+06/11: a dispersão da predição crua cai 9–14 %, e a da saída filtrada, 1–3 %.
+O ganho maior é tirar os degraus que o estimador tomava por sacada.
+
+**A acurácia do relatório de 06/11 (1,72°).**
+- O deslocamento da sessão é ~0 % do erro (37 px na horizontal). A parte linear
+  é 42 % (ganho horizontal 1,13) e o resto, 58 %.
+- Durante a calibração a cabeça girou 1,96° em yaw e 2,59° em pitch, com
+  tendência forte (r = −0,94 e −0,75). O LOTO ficou em 83 px contra 51 px de
+  treino, e 6 dos 13 alvos ficaram instáveis.
+- A página estava com zoom de 67 % (viewport 2880 × 1620 numa tela de
+  1920 × 1080): os botões e o cursor apareciam a dois terços do tamanho. O erro
+  em graus não muda com o zoom.
+- Nada das M25–M29 mexe na matemática da calibração, exceto a rampa do L2CS (as
+  features dos alvos) e a pálpebra baixa (mais quadros aceitos na linha de
+  baixo). Isso precisa de medição ao vivo: calibração com a cabeça apoiada, zoom
+  em 100 %, `npm run teste-local` (build de produção) e a caixa "Gravar sessão"
+  marcada, para o replay offline.
+
+**Revisão do mesmo dia** (quatro revisores independentes: bugs, convenções e
+testes, UX e UI). Corrigido antes de entregar:
+- **M27 segurava ~400 ms de novo numa piscada enquanto a pessoa olha o
+  teclado** (o episódio "fechava" uma vez só e só reabria acima do limiar), e a
+  segunda piscada do mesmo episódio deixava passar o olho meio fechado. Agora a
+  janela conta do último fundo, a reabertura termina ao voltar ao nível da
+  pálpebra baixa (ou ao assentar), e a pálpebra só solta quando o EAR assenta:
+  o fechamento lento não sai mais como olhar aos 150 ms. Testes em
+  `src/extractor.palpebraBaixa.test.ts`.
+- **M29 depois de uma lacuna** partia do ângulo de antes dela; agora sai na hora.
+- **M26 sem a rampa do L2CS** dava 0,7–1,5 pulos por minuto com o olhar parado
+  (L2CS em degraus); agora só liga com a rampa. Com a rampa, ~0,1 por minuto.
+- **`teste-local` na mesma origem do build de medição** (`127.0.0.1:4173`): o
+  termo, o paciente "Teste local" e as flags gravadas pela URL passavam de um
+  para o outro. Agora serve em `127.0.0.1:4180`, com `--strictPort`.
+- Testes do engine para a ligação do M28, números dos comentários conferidos
+  e a medição acima versionada.
+
+Ficou anotado, sem mudar: com o clique por piscada ligado (desligado por
+padrão), olhar para baixo vira uma pseudo-piscada de 150–170 ms (eram 400 ms) e
+clica na tecla de onde o olhar saiu, como já acontecia antes; o piso fixo do EAR
+(0,12) prejudica quem tem ptose; e o Modo Computador não tem medição própria.
+
+Reprodutível (sem câmera):
+`npx vitest run src/interaction/cursorNoCompositor.test.ts src/filters/estimadorDeFixacao.test.ts src/extractor.palpebraBaixa.test.ts src/l2cs/suavizacao.test.ts`;
+a tabela do simulador: `IRISFLOW_MEDIR_CURSOR=1 npx vitest run src/testUtils/medicaoDoCursor.test.ts --reporter=verbose`.
 
 ---
 

@@ -33,7 +33,7 @@ import { criarRamoOcularOnnx, ramoOcularNulo, type RamoOcular, type SaidasDoRamo
 import { createCropContext, cropFaceToTensor, type CropContext } from '../l2cs/crop';
 import { descricaoDoModelo, ladoAceito } from '../l2cs/modelos';
 import { L2CSHealthMonitor, isGazePlausible, reiniciarReusoDoBloco, ultimoDiagnosticoDoBloco } from '../l2cs/block';
-import { SuavizadorDeAngulos } from '../l2cs/suavizacao';
+import { SuavizadorDeAngulos, anguloDoL2csNoQuadro } from '../l2cs/suavizacao';
 import { AcumuladorDeReancoragem, DURACAO_PADRAO_MS as REANCORAGEM_PADRAO_MS } from '../reancoragem';
 import {
   VigiaDeRecalibracao,
@@ -1829,7 +1829,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
         ultimoYawDeg = null;
         ultimoPitchDeg = null;
         estabilizadorOneEuro?.reset();
-        estimadorDeFixacao?.reiniciar();
+        // M28: um quadro perdido não recomeça a fixação; só uma perda longa
+        // (`LACUNA_SEM_ROSTO_MS`), decidida na volta do rosto.
+        if (EXPERIMENT.fixacaoNaPerdaCurta) estimadorDeFixacao?.semRosto(startTimeMs);
+        else estimadorDeFixacao?.reiniciar();
         // Sem rosto a referência lenta congela e o contraluz não é do quadro.
         calibration.alimentarReferenciaLenta(startTimeMs, false);
         calibration.setContraluzAtual(null);
@@ -2064,8 +2067,10 @@ export function createGazeEngine(mediapipeBaseUrl?: string): GazeEngine {
             : g;
           // EMA curta na fixação, solta na sacada (item 10a). Só sobre leitura
           // válida; o suavizador ignora releituras da mesma inferência.
+          // M29: com o relógio do quadro, o ângulo anda em rampa até a
+          // inferência seguinte em vez de degrau a 7,5–10 Hz.
           const gVideo = g.valid && suavizadorL2cs
-            ? suavizadorL2cs.processar(gVideo0.yaw, gVideo0.pitch, g.timestamp)
+            ? anguloDoL2csNoQuadro(suavizadorL2cs, gVideo0.yaw, gVideo0.pitch, g.timestamp, startTimeMs)
             : gVideo0;
           // M4: o Ridge recebe o L2CS no referencial da CABEÇA, como a íris. A
           // rotação usa a pose deste quadro — a mesma que a compensação vai

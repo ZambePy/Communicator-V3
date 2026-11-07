@@ -8,6 +8,7 @@ import { aplicarSessaoDaUrl } from './sessionFromUrl';
 import { descarregar as descarregarAssistente } from './services/assistente';
 import { instalarCapturaDeErros } from './services/diagnostico/relatorioDeSuporte';
 import { restaurarPedidoDeSocorro } from './services/emergencia/pedidoDeSocorro';
+import { prepararModoTesteLocal } from './prepararModoTesteLocal';
 
 // ANTES de renderizar: a configuração de sessão vinda da URL. `EXPERIMENT` é
 // resolvido no import do módulo, então aplicar depois não valeria para esta
@@ -16,6 +17,10 @@ if (aplicarSessaoDaUrl()) {
   console.warn('[sessão] configuração da URL aplicada — recarregando.');
   window.location.reload();
 }
+
+// `npm run teste-local`: direto no rastreador, sem conta, termo nem nuvem. No
+// build do instalador (modo `production`) não faz nada (ver `modoTesteLocal.ts`).
+prepararModoTesteLocal();
 
 // O relatório de suporte precisa dos erros desde o INÍCIO da sessão: instalado
 // aqui, antes de renderizar, ele pega inclusive as falhas de boot.

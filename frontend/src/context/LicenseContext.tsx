@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { cofre, CHAVES } from '../cloud/armazenamento';
 import { cloudConfig } from '../cloud/config';
+import { EMAIL_DO_TESTE_LOCAL, modoTesteLocal } from '../modoTesteLocal';
 import {
   licenseService as servicoPadrao,
   getDeviceBinding,
@@ -193,6 +194,15 @@ const paraAtiva = (g: LicenceGravada, device: DeviceBinding): ActiveLicense => (
   thisDevice: { deviceId: g.deviceId, deviceName: device.deviceName, boundAt: g.boundAt },
 });
 
+/** A licença do modo de teste local: existe só na memória, nunca é gravada. */
+const LICENCA_DO_TESTE_LOCAL = (): ActiveLicense => ({
+  account: { email: EMAIL_DO_TESTE_LOCAL },
+  plan: { id: 'teste-local', name: 'Teste local', validUntil: null, deviceLimit: null },
+  token: 'teste-local',
+  devicesUsed: 1,
+  thisDevice: getDeviceBinding(),
+});
+
 export const LicenseProvider: React.FC<{
   children: React.ReactNode;
   /** Injetável para teste; em produção usa o serviço real do módulo. */
@@ -307,6 +317,15 @@ export const LicenseProvider: React.FC<{
   }, [service]);
 
   useEffect(() => {
+    // Modo de teste local (`npm run teste-local`, só no build `--mode
+    // teste-local`): licença ativa sem login e sem falar com serviço nenhum.
+    if (modoTesteLocal()) {
+      geracao.current++;
+      setLicense(LICENCA_DO_TESTE_LOCAL());
+      setBlockedReason(null);
+      setStatus('active');
+      return;
+    }
     // `verificar` não lança; o `catch` é a última rede, para uma promessa
     // rejeitada nunca passar calada.
     verificar().catch((e) => console.error('[licenca] verificação falhou fora do previsto:', e));

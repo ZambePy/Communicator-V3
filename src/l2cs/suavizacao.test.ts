@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { SuavizadorDeAngulos, TAU_MAX_MS, faixaDeSoltura } from './suavizacao';
+import { afterEach, describe, it, expect } from 'vitest';
+import { SuavizadorDeAngulos, TAU_MAX_MS, faixaDeSoltura, RAMPA_MINIMA_DO_L2CS_MS, RAMPA_MAXIMA_DO_L2CS_MS, anguloDoL2csNoQuadro } from './suavizacao';
+import { EXPERIMENT } from '../config/experiment';
 
 const RAD = Math.PI / 180;
 
@@ -158,5 +159,132 @@ describe('SuavizadorDeAngulos', () => {
     const r = s.processar(4 * RAD, 0, 200);
     expect(r.yaw).toBe(4 * RAD);
     expect(r.soltou).toBe(false);
+  });
+});
+
+// M29 — entre duas inferências do L2CS (a cada ~100 ms no WebGPU, ~160 ms no
+// WASM) o ângulo ficava CONSTANTE e mudava de uma vez na seguinte: o termo do
+// L2CS entrava no cursor em degraus a 6–10 Hz. Nos relatórios de
+// 20–23/09/2026, o |Δ| quadro a quadro da predição crua tem p97/p50 de 5–12
+// (um ruído AR(1) daria ~3,3), e um degrau grande passava do portão do
+// estimador como se fosse sacada. Com o
+// relógio do quadro, a saída anda em rampa até o valor novo ao longo do
+// intervalo entre inferências; na sacada (soltura plena), sai na hora.
+describe('rampa entre inferências (M29)', () => {
+  it('a releitura no meio do intervalo devolve o meio do caminho', () => {
+    const s = new SuavizadorDeAngulos();
+    // Inferências a cada 100 ms, vistas pelo engine 40 ms depois da captura.
+    for (let i = 0; i <= 5; i++) s.processar(0, 0, i * 100, i * 100 + 40);
+    const inicio = s.processar(2 * RAD, 0, 600, 640);
+    // Degrau de 2° em 100 ms = 20 °/s: começo da faixa de soltura, EMA pura.
+    expect(inicio.yaw).toBeCloseTo(0, 9);
+    const alvo = new SuavizadorDeAngulos();
+    for (let i = 0; i <= 5; i++) alvo.processar(0, 0, i * 100);
+    const destino = alvo.processar(2 * RAD, 0, 600).yaw;
+    const meio = s.processar(2 * RAD, 0, 600, 690);
+    expect(meio.yaw).toBeCloseTo(destino / 2, 9);
+    const fim = s.processar(2 * RAD, 0, 600, 740);
+    expect(fim.yaw).toBeCloseTo(destino, 9);
+    // Depois do fim da rampa, para no destino.
+    expect(s.processar(2 * RAD, 0, 600, 790).yaw).toBeCloseTo(destino, 9);
+  });
+
+  it('na sacada (soltura plena) a leitura crua sai na hora, sem rampa', () => {
+    const s = new SuavizadorDeAngulos();
+    for (let i = 0; i <= 5; i++) s.processar(0, 0, i * 100, i * 100 + 40);
+    const r = s.processar(15 * RAD, 0, 600, 640);
+    expect(r.soltou).toBe(true);
+    expect(r.yaw).toBe(15 * RAD);
+  });
+
+  it('inferência nova no meio da rampa parte de onde a saída está', () => {
+    const s = new SuavizadorDeAngulos();
+    for (let i = 0; i <= 5; i++) s.processar(0, 0, i * 100, i * 100 + 40);
+    s.processar(2 * RAD, 0, 600, 640);
+    const noMeio = s.processar(2 * RAD, 0, 600, 690).yaw;
+    // A seguinte chega antes do fim: começa exatamente do ponto em que estava.
+    const proxima = s.processar(2 * RAD, 0, 650, 690);
+    expect(proxima.yaw).toBeCloseTo(noMeio, 9);
+  });
+
+  it('sem o relógio do quadro, o comportamento de antes: muda na inferência, para onde a rampa chegaria', () => {
+    const com = new SuavizadorDeAngulos();
+    const sem = new SuavizadorDeAngulos();
+    for (let i = 0; i <= 5; i++) { com.processar(0, 0, i * 100, i * 100 + 40); sem.processar(0, 0, i * 100); }
+    const naHora = sem.processar(2 * RAD, 0, 600).yaw;
+    expect(naHora).toBeGreaterThan(0);
+    // Com o relógio, começa no valor de antes e chega ao mesmo destino no fim da rampa.
+    expect(com.processar(2 * RAD, 0, 600, 640).yaw).toBeCloseTo(0, 9);
+    expect(com.processar(2 * RAD, 0, 600, 740).yaw).toBeCloseTo(naHora, 9);
+  });
+
+  it('depois de uma lacuna (rosto perdido), a primeira inferência sai na hora, sem rampa', () => {
+    // A EMA de antes já tratava a lacuna: com dt grande, a leitura sai quase
+    // crua. A rampa partiria do ângulo de ANTES da lacuna e levaria o intervalo
+    // inteiro para chegar — justo na volta do rosto, quando o estimador recomeça
+    // a fixação na primeira amostra.
+    const s = new SuavizadorDeAngulos();
+    const base = new SuavizadorDeAngulos();
+    for (let i = 0; i <= 10; i++) { s.processar(0, 0, i * 100, i * 100 + 40); base.processar(0, 0, i * 100); }
+    const volta = s.processar(5 * RAD, 0, 3000, 3040);
+    expect(volta.yaw).toBeCloseTo(base.processar(5 * RAD, 0, 3000).yaw, 9);
+    expect(volta.yaw).toBeGreaterThan(4.9 * RAD);
+  });
+
+  it('a rampa dura o intervalo medido entre inferências, preso entre os limites', () => {
+    /** Fração do caminho andada `depoisMs` depois da inferência, com inferências a cada `periodoMs`. */
+    const fracao = (periodoMs: number, depoisMs: number): number => {
+      const r = new SuavizadorDeAngulos();
+      const alvo = new SuavizadorDeAngulos();
+      for (let i = 0; i <= 5; i++) { r.processar(0, 0, i * periodoMs, i * periodoMs + 10); alvo.processar(0, 0, i * periodoMs); }
+      const t = 6 * periodoMs;
+      // Um passo pequeno (0,2° por período): EMA pura, sem soltura.
+      const destino = alvo.processar(0.2 * RAD * (periodoMs / 100), 0, t).yaw;
+      r.processar(0.2 * RAD * (periodoMs / 100), 0, t, t + 10);
+      return r.processar(0.2 * RAD * (periodoMs / 100), 0, t, t + 10 + depoisMs).yaw / destino;
+    };
+    // Inferências a cada 30 ms: a rampa não fica abaixo do mínimo (60 ms).
+    expect(fracao(30, RAMPA_MINIMA_DO_L2CS_MS / 2)).toBeCloseTo(0.5, 6);
+    // A cada 400 ms: a rampa não passa do máximo (200 ms).
+    expect(fracao(400, RAMPA_MAXIMA_DO_L2CS_MS / 2)).toBeCloseTo(0.5, 6);
+    expect(fracao(400, RAMPA_MAXIMA_DO_L2CS_MS)).toBeCloseTo(1, 6);
+    // Inferências a cada 160 ms (WASM): a rampa dura 160 ms.
+    const s = new SuavizadorDeAngulos();
+    for (let i = 0; i <= 5; i++) s.processar(0, 0, i * 160, i * 160 + 40);
+    s.processar(1 * RAD, 0, 960, 1000);
+    const alvo = new SuavizadorDeAngulos();
+    for (let i = 0; i <= 5; i++) alvo.processar(0, 0, i * 160);
+    const destino = alvo.processar(1 * RAD, 0, 960).yaw;
+    expect(s.processar(1 * RAD, 0, 960, 1080).yaw).toBeCloseTo(destino / 2, 9);
+  });
+});
+
+// O engine passa o relógio do quadro por `anguloDoL2csNoQuadro`, que é onde a
+// flag do M29 é lida.
+describe('o ângulo do L2CS no quadro (a flag do M29)', () => {
+  const salvo = EXPERIMENT.rampaDoL2cs;
+  afterEach(() => { EXPERIMENT.rampaDoL2cs = salvo; });
+
+  /** Releitura da mesma inferência 50 ms depois: o meio da rampa, ou o degrau. */
+  function noMeio(): { inicio: number; meio: number } {
+    const s = new SuavizadorDeAngulos();
+    for (let i = 0; i <= 5; i++) anguloDoL2csNoQuadro(s, 0, 0, i * 100, i * 100 + 40);
+    const inicio = anguloDoL2csNoQuadro(s, 2 * RAD, 0, 600, 640).yaw;
+    const meio = anguloDoL2csNoQuadro(s, 2 * RAD, 0, 600, 690).yaw;
+    return { inicio, meio };
+  }
+
+  it('com a flag, o ângulo anda em rampa entre inferências', () => {
+    EXPERIMENT.rampaDoL2cs = true;
+    const { inicio, meio } = noMeio();
+    expect(inicio).toBeCloseTo(0, 9);
+    expect(meio).toBeGreaterThan(0);
+  });
+
+  it('sem a flag (base), muda de uma vez na inferência e fica', () => {
+    EXPERIMENT.rampaDoL2cs = false;
+    const { inicio, meio } = noMeio();
+    expect(inicio).toBeGreaterThan(0);
+    expect(meio).toBe(inicio);
   });
 });

@@ -11,6 +11,7 @@
   },
   "scripts": {
     "dev": "npm --prefix frontend run dev",
+    "teste-local": "npm --prefix frontend run build -- --mode teste-local --outDir dist-teste-local && npm --prefix frontend run preview -- --mode teste-local --outDir dist-teste-local --port 4180 --strictPort --open",
     "dev:limpo": "node scripts/limpo.mjs dev",
     "build": "npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview",

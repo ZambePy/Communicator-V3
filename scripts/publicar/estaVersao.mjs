@@ -22,17 +22,19 @@
  *   Nada de linha de coautoria.
  */
 
-export const BASE = '5bf841f9158af46f8ea2b637bd5470c8f126fbb9';
+export const BASE = 'd62fec80e0081405872905643d00d39cf632d8bd';
 
 // Nada saiu nesta versão.
 export const REMOVIDOS = [];
 
 export const MENSAGEM = {
-  titulo: 'Rastreamento: reajustes deliberados mais robustos (M23, M24) e decomposição do erro no relatório',
+  titulo: 'Cursor: anda sem trancos e não congela ao olhar para baixo (M25–M29); teste-local no build de produção',
   corpo: [
-    'M23 (ruidoDoMapaNaCorrecaoDeliberada): o erro de padrão do mapa (1,4 graus, 55 px sem a distância) entra no ruído do reajuste pelo centro e da recalibração rápida, porque um ponto só não o separa do deslocamento. Os rótulos do dwell não mudam.',
-    'M24 (medidaDeliberadaAteODobroDoTeto): esses reajustes são aceitos até o dobro do teto da correção; o deslocamento aprendido continua no teto. Antes, o reajuste pelo centro era recusado em 8 das 15 sessões reais, as de erro maior.',
-    'No replay dos 15 relatórios reais (05/09 a 25/10/2026), o reajuste pelo centro vai de 2,19 a 1,97 graus e a recalibração pelos 4 cantos internos, de 2,07 a 1,76 (sem reajuste, 2,27 e 2,26). As duas flags ficam desligadas em ?pipeline=base.',
-    'O relatório do teste ganha result.decomposicaoDoErro (deslocamento, parte linear, resto e o erro em uso com a correção por dwell, nulo sem o Kalman) e calibrationFit.looByTarget[].residuoMedioPx (o vetor do erro fora da amostra). docs/MEDICOES.md 14.8 e a tabela de flags do README.',
+    'M25 (travessiaContinua): o cursor anda por animação web (el.animate) que parte do ponto calculado, com início explícito, e cada travessia dura o intervalo mediano mais 17 ms. A transição CSS escrita no fim de um quadro ocupado pelo MediaPipe começava no começo dele e chegava ao compositor quase terminada: o cursor saltava e parava. Numa gravação a 60 quadros/s de um Chromium com a thread presa como no app, os quadros parados no meio de um movimento caíram de 40 % para ~10 %.',
+    'M26 (deslocamentoPorInovacao): o estimador de fixação acha o passo pela inovação AR(1) branqueada (GLR), e não pela média das 4 últimas amostras; o botão vizinho chega bem antes, sem pulos a mais com o olhar parado. Só liga com a rampa do L2CS. M27 (palpebraBaixaRapida): a pálpebra que desce com o olhar, não fecha até o fundo em 150 ms e assenta deixa de ser piscada; antes o cursor congelava 400 ms a cada olhar para o teclado. A piscada dentro da pálpebra baixa segura só ela, e o fechamento lento e a reabertura continuam piscada. M28 (fixacaoNaPerdaCurta): um quadro sem rosto não recomeça a fixação. M29 (rampaDoL2cs): o ângulo do L2CS anda em rampa entre inferências, em vez de degraus a 6-10 Hz; na sacada e depois de uma lacuna sai na hora.',
+    'No simulador do compositor (cenário do vídeo de 06/11/2026): paradas no meio do movimento de 31,5 % para 4,3 %, pulos com o olhar parado de 37 para 5,2 por minuto, tremor de 3,3 para 1,9 px por quadro, botão vizinho de 266 para 165 ms. As cinco flags ficam desligadas em ?pipeline=base; a sessão 16 do roteiro decide se ficam.',
+    'npm run teste-local passa a gerar o build de produção (frontend/dist-teste-local, fora do git e do instalador) e a servir com o vite preview em 127.0.0.1:4180 (--strictPort, fora da 4173 do build de medição, para o armazenamento das duas origens não se misturar): o servidor de desenvolvimento pesava na thread do rastreamento. No build do instalador o modo compila para falso.',
+    'Revisão com quatro revisores (bugs, convenções e testes, UX, UI): corrigidos o M27 que voltava a segurar ~400 ms numa piscada enquanto a pessoa olha o teclado, a rampa do M29 depois de uma lacuna, o M26 sem a rampa, a origem do teste-local e a borda do cursor do Modo Computador (border-box); testes do engine para o M28.',
+    'Ferramentas de medição: src/testUtils/simuladorDoCursor.ts, cenarioDoCursor.ts e medicaoDoCursor.test.ts (IRISFLOW_MEDIR_CURSOR=1). Documentação: README, docs/MEDICOES.md (14.9), docs/PESQUISA.md, docs/ROTEIRO_DE_MEDICAO.md (sessão 16), docs/RELATORIO_DE_ALTERACOES.md e CLAUDE.md.',
   ].join('\n\n'),
 };

@@ -70,7 +70,7 @@ const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 // O perfil do paciente persiste entre sessões (localStorage). O acesso do
 // cuidador NÃO: vive só na aba/sessão atual (sessionStorage), para fechar o
 // app não deixar a área do cuidador destravada para o paciente.
-const PROFILE_KEY = 'irisflow_auth';
+export const PROFILE_KEY = 'irisflow_auth';
 const CAREGIVER_SESSION_KEY = 'irisflow_caregiver_session';
 
 interface PersistedProfile {

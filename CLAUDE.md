@@ -15,7 +15,8 @@ a tela renderizada em vez de confiar no código.
 | `voice-engine/`, `supabase/`, `scripts/` | motor de voz, banco, automação | — | não é UI |
 
 Comandos: `npm run dev` (frontend), `npm --prefix site run dev`, `npm --prefix site run preview`,
-`npm test`, `npm run verificar`.
+`npm test`, `npm run verificar`, `npm run teste-local` (o build de produção da interface sem nuvem,
+conta nem termo, servido em `127.0.0.1:4180`, fora da 4173 do build de medição, para calibrar e medir direto).
 
 O projeto é escrito em português do Brasil — nomes de arquivo, variáveis, commits
 e comentários. Mantenha isso. A UI é para pessoas com deficiência motora severa
@@ -148,7 +149,9 @@ impeccable:
 
 Toda animação: só `transform` e `opacity`, com fallback de
 `prefers-reduced-motion` que mantém o conteúdo e tira o deslocamento. Conteúdo
-nunca fica escondido se o script falhar.
+nunca fica escondido se o script falhar. Exceção: o cursor do olhar e o anel do
+dwell não obedecem ao reduced-motion, porque ali o deslocamento é o conteúdo
+(WCAG 2.3.3) — ver `src/interaction/animacaoDoCursor.ts`.
 
 **4. Figma MCP — consultar e extrair referência de design.**
 Já conectado e autenticado na conta (`claude.ai Figma`, `https://mcp.figma.com/mcp`),

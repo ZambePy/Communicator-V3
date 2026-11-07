@@ -1,6 +1,6 @@
 # Roteiro de medição do V3
 
-As mudanças do pipeline V3 (M1–M22, README → *Pipeline V3*) foram decididas com
+As mudanças do pipeline V3 (M1–M29, README → *Pipeline V3*) foram decididas com
 literatura, simulação e o replay de uma gravação. Nenhuma foi medida com uma
 pessoa. Este roteiro diz, sessão por sessão, o que medir para decidir cada flag
 — e, desde 19/10/2026, também o que conferir nas mudanças de robustez de
@@ -25,6 +25,8 @@ os de [`MEDICOES.md`](MEDICOES.md); aqui entra só o que o V3 acrescenta.
 | 12. Perda da WebGPU | o reinício do modelo e o aviso de calibração perdida | 20 min |
 | 13. Pouca luz | os limiares 0,12 e 0,18 e o destravar da exposição | 30 min |
 | 14. Desempenho no PC real | se o reaproveitamento de buffers tira as coletas de lixo e os engasgos | 20 min |
+| 15. Reajustes deliberados | M23 e M24 (05/11/2026) | 40 min |
+| 16. Cursor | M25–M29 (06/11/2026) | 30 min |
 
 ---
 
@@ -544,3 +546,73 @@ os engasgos do cursor que a pessoa percebeu.
 (`src/reusoDeBuffers.test.ts`). A sessão confirma o ganho se as coletas e os
 quadros longos caírem em B. Se não caírem, registra "sem efeito no PC real", e
 o próximo passo é o `getImageData`.
+
+## 17. Sessão 15 — reajustes deliberados (M23, M24)
+
+A pergunta: com o ruído do mapa no reajuste (M23) e o limite no dobro do teto
+(M24), o reajuste pelo centro e a recalibração rápida deixam o cursor melhor
+do que antes, no uso de verdade? No replay dos 15 relatórios
+(`MEDICOES.md` §14.8) o centro foi de 2,19° para 1,97° e os 4 cantos internos
+de 2,07° para 1,76°, mas lá a medida deliberada era um ponto do próprio teste.
+
+| | A — antes | B — M23 e M24 (padrão) |
+|---|---|---|
+| URL | `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3&exp.ruidoDoMapaNaCorrecaoDeliberada=0&exp.medidaDeliberadaAteODobroDoTeto=0` | `http://127.0.0.1:4173/?preflight=1&debug=1&diagonal=23.6&pipeline=v3&exp.ruidoDoMapaNaCorrecaoDeliberada=1&exp.medidaDeliberadaAteODobroDoTeto=1` |
+| ordem | blocos alternados, A B B A, cinco minutos de pausa entre as rodadas | |
+| cada rodada | calibração completa, 5 minutos de uso livre, levantar e sentar de novo, reajuste pelo centro (rodadas 1 e 2) ou recalibração rápida (rodadas 3 e 4) e, logo depois, o teste de precisão | |
+
+O reajuste continua valendo no teste: o erro do teste mede o efeito dele.
+`npm run teste-local` (desde 06/11/2026 já é o build de produção, servido pelo
+preview em `http://127.0.0.1:4180`) serve para ensaiar e também para medir. É
+outra origem, com outro armazenamento: a calibração e o paciente de lá não são
+os da 4173.
+
+**Registrar**, em cada rodada: no console, a linha `[calib] reajuste rápido`
+ou `recalibração rápida` (o desvio medido e se foi aplicado), e no relatório o
+`meanErrorDeg` (P1–P9), o `decomposicaoDoVies.dwell` (o que o reajuste somou) e
+o `decomposicaoDoErro`.
+
+**Decisão.** M23 e M24 ficam ligadas se o erro do miolo em B não ficar 10 %
+acima do de A em nenhum par de rodadas, e saem se ficar 15 % acima na média.
+Rodadas em que A recusou o reajuste (desvio acima do teto) e B aplicou são as
+que testam a M24: registre quantas foram.
+
+## 18. Sessão 16 — o cursor (M25–M29)
+
+A pergunta: o cursor deixou de travar sem ficar atrasado, e a precisão não
+piorou? A §14.9 de `MEDICOES.md` mediu num Chromium sem câmera (40 % → ~10 % de
+quadros parados) e no simulador; falta a pessoa, a câmera e o computador de
+verdade.
+
+Antes de começar: zoom da página em 100 % (no relatório de 06/11 estava em
+67 %), cabeça apoiada, a mesma luz nas duas rodadas.
+
+| | A — antes | B — M25–M29 (padrão) |
+|---|---|---|
+| URL | `http://127.0.0.1:4180/?debug=1&pipeline=v3&exp.travessiaContinua=0&exp.deslocamentoPorInovacao=0&exp.palpebraBaixaRapida=0&exp.fixacaoNaPerdaCurta=0&exp.rampaDoL2cs=0` | `http://127.0.0.1:4180/?debug=1&pipeline=v3&exp.travessiaContinua=1&exp.deslocamentoPorInovacao=1&exp.palpebraBaixaRapida=1&exp.fixacaoNaPerdaCurta=1&exp.rampaDoL2cs=1` |
+| ordem | A B B A, cada rodada com calibração nova (a rampa do L2CS muda as features) | |
+| cada rodada | calibração com a caixa "Gravar sessão" marcada; 2 min de uso olhando os botões em sequência, incluindo a linha de baixo do teclado, gravando a tela a 60 quadros/s; o teste de precisão | |
+
+Gravar a tela: Win + Alt + R (Xbox Game Bar) grava a 60 quadros/s se o ajuste
+de captura estiver em 60. O vídeo e o `irisflow-recording-….jsonl` da rodada
+vão juntos para a análise.
+
+**Registrar**, em cada rodada:
+- No vídeo, quadro a quadro: a fração de quadros parados com o olhar em
+  movimento, os congelamentos de 10 quadros ou mais seguidos de salto, e o
+  passo por quadro com o olhar parado.
+- Na gravação de sessão: as corridas de quadros com `blink` (na A, as de
+  exatamente 12–13 quadros ao olhar para baixo; na B, até ~5).
+- No relatório: `meanErrorDeg`, `precisionDeg`, `jitterFilteredRMS` e
+  `decomposicaoDoErro`.
+
+**Decisão.** M25–M29 ficam ligadas se, em B:
+- os quadros parados com o olhar em movimento caírem pelo menos à metade;
+- não sobrar nenhum congelamento de 10 quadros seguido de salto;
+- o erro médio não ficar 10 % acima do de A em nenhum par de rodadas.
+
+Se o erro piorar, a primeira suspeita é a rampa do L2CS (`exp.rampaDoL2cs=0`
+isola), porque é a única das cinco que muda as features da calibração. Ela
+desliga junto o M26, que só vale com a rampa (com o L2CS em degraus, a GLR toma
+cada inferência por um passo).
+

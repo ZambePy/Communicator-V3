@@ -433,6 +433,113 @@ export interface ExperimentConfig {
    */
   medidaDeliberadaAteODobroDoTeto: boolean;
   /**
+   * M25 — o cursor anda por animação web (`el.animate`) que parte do ponto
+   * calculado, no instante da amostra, e cada travessia dura o intervalo
+   * mediano mais um quadro de display (`MARGEM_DA_TRAVESSIA_MS`). A sacada
+   * atravessa em ~1 quadro (`DURACAO_DA_SACADA_MS`).
+   *
+   * Dois defeitos. (1) A transição CSS escrita no fim de um quadro ocupado
+   * ganha como início o COMEÇO do quadro (`document.timeline.currentTime`):
+   * medido no Chromium em 06/11/2026 com 30 ms de trabalho na thread, o início
+   * ficava 30–46 ms antes da escrita; no app, o MediaPipe ocupa 24–41 ms antes
+   * de cada amostra (gravação de 23/09/2026). A travessia chegava ao
+   * compositor quase terminada, e o cursor saltava e parava. (2) Uma travessia
+   * de um intervalo só emenda quando a amostra seguinte chega na hora, e elas
+   * chegam em intervalos de 33, 50 e 66 ms. Numa gravação a 60 fps de um
+   * Chromium com a thread presa 22–40 ms por quadro, 40 % dos quadros ficavam
+   * parados no meio de um movimento contínuo; com a animação web, 1,6–18 %
+   * (média ~10 % em 3 gravações). No simulador, cenário completo do vídeo de
+   * 06/11 (33 % de quadros parados antes; o vídeo tinha 26 %): paradas no
+   * meio do movimento de 31,5 % para 4,3 % (docs/MEDICOES.md §14.9).
+   *
+   * O custo: o cursor desenhado chega um pouco depois. Depois de uma sacada
+   * grande, 75 → 111 ms até ficar a 50 px de onde assenta (só o M25: +17 ms na
+   * mediana); nos passos de 80–160 px, só o M25 leva 70 % do caminho de 267 para
+   * 300 ms, e é o M26 que traz o ganho. Nenhuma AÇÃO atrasa: o dwell decide pela
+   * amostra filtrada (`elementoNoPonto(sample.x, sample.y)`), não pelo cursor
+   * desenhado.
+   *
+   * A animação mexe só em `transform` e não obedece ao `prefers-reduced-motion`
+   * de propósito: no cursor do olhar o deslocamento É o conteúdo (WCAG 2.3.3),
+   * e tirar a interpolação o deixaria aos saltos a 22–30 Hz. Onde não há
+   * `el.animate` (jsdom) e no Modo Computador (`Overlay.tsx`, cuja janela não
+   * roda o MediaPipe), o cursor segue pela transição CSS com as durações novas;
+   * o Modo Computador não tem medição própria.
+   */
+  travessiaContinua: boolean;
+  /**
+   * M26 — o estimador de fixação (M9) acha o deslocamento pela INOVAÇÃO
+   * branqueada, e não pela média das 4 últimas amostras.
+   *
+   * Com ρ₁ = 0,8, quatro amostras seguidas valem pouco mais que uma, e o
+   * detector de médias só separava do ruído passos acima de ~3,5σ. O resto (o
+   * botão vizinho, o ajuste fino em cima de um botão, a correção que a pessoa
+   * faz quando o cursor fica um pouco fora) escorregava pela janela de
+   * 600–1000 ms. A amostra menos a previsão AR(1) põe o passo inteiro no
+   * primeiro quadro, com desvio de só √(1−ρ²) ≈ 0,6σ; a razão de
+   * verossimilhança generalizada (GLR) sobre as últimas 8 inovações reinicia a
+   * fixação no começo do passo. No cenário completo do vídeo de 06/11/2026,
+   * passos de 80–160 px chegam a 70 % do caminho em 165 ms (eram 266); só o
+   * M26, 267 → 133 ms no cursor desenhado. Nos testes de unidade (σ = 40 px),
+   * 3σ em 133 ms (eram 200), sem pulo a mais com o olhar parado
+   * (docs/MEDICOES.md §14.9).
+   *
+   * Só vale com a rampa do L2CS (M29) e o suavizador ligados
+   * (`deslocamentoPorInovacaoAtivo`): com o L2CS em degraus, cada inferência
+   * parece um passo para a GLR (0,7–1,5 pulos por minuto com o olhar parado, na
+   * simulação da revisão de 06/11/2026).
+   */
+  deslocamentoPorInovacao: boolean;
+  /**
+   * M27 — a pálpebra baixa (olhar para baixo, para o teclado) solta o cursor
+   * em ~150 ms, e não em 400 ms.
+   *
+   * Piscada de verdade FECHA: o EAR cai abaixo de ~0,45× o de repouso em 2–3
+   * quadros. A pálpebra que desce com o olhar fica na faixa do meio e ASSENTA
+   * (o EAR para). Se o trecho abaixo do limiar não chega lá no fundo em
+   * `DECISAO_DA_PALPEBRA_MS` e o EAR assentou, é pálpebra: o quadro volta a
+   * valer. Antes, o cursor ficava parado os 400 ms inteiros (`PISCADA_MAX_MS`)
+   * a cada vez que a pessoa olhava para baixo, e depois saltava: os
+   * congelamentos de exatamente 12–13 quadros, seguidos de saltos de 115–360
+   * px, do vídeo de 06/11/2026.
+   *
+   * O que continua piscada (`BlinkDetector.decidirPalpebra`): o fechamento
+   * lento e a reabertura, com o EAR andando; depois do fundo, até o EAR voltar
+   * ao nível da pálpebra baixa (piscada enquanto a pessoa olha o teclado), ou
+   * assentar num nível novo, ou passar o limiar; e, com a pálpebra baixa já
+   * solta, um quadro abaixo do nível dela, que é uma piscada fechando. Abaixo
+   * do piso (`EAR_THR_MIN`), sempre. Tetos de `PISCADA_MAX_MS`, como na regra
+   * antiga.
+   */
+  palpebraBaixaRapida: boolean;
+  /**
+   * M28 — um quadro sem rosto não recomeça a fixação do estimador (M9); só uma
+   * perda de mais de `LACUNA_SEM_ROSTO_MS` (150 ms).
+   *
+   * O engine chamava `reiniciar()` a cada quadro sem rosto. Um quadro perdido
+   * no meio da fixação (mão perto do rosto, borrão de movimento) fazia a média
+   * recomeçar de UMA amostra crua, e o cursor saltava ~1σ para um ponto
+   * ruidoso antes de voltar a assentar.
+   */
+  fixacaoNaPerdaCurta: boolean;
+  /**
+   * M29 — o ângulo do L2CS anda em RAMPA entre uma inferência e a seguinte, em
+   * vez de mudar de uma vez a cada inferência.
+   *
+   * O L2CS roda a cada ~100 ms (WebGPU) ou ~160 ms (WASM), e entre duas
+   * inferências o ângulo ficava constante: o termo dele entrava no cursor em
+   * degraus a 6–10 Hz (7,5–10 Hz no WebGPU). Nos relatórios de 20–23/09/2026 o |Δ| quadro a quadro
+   * da predição crua tem p97/p50 de 5–12, onde um ruído AR(1) daria 3,1; um
+   * degrau grande passava do portão do estimador de fixação como se fosse
+   * sacada, e o cursor saltava parado. A rampa dura o intervalo medido entre
+   * inferências e parte de onde a saída está; na sacada (soltura plena da EMA,
+   * `suavizacao.ts`) e depois de uma lacuna (rosto perdido, inferência
+   * atrasada: intervalo acima de 2× a mediana) a leitura sai na hora, como
+   * antes. Simulação a ~56 amostras/s: a dispersão da predição crua cai 9–14 %,
+   * e a da saída filtrada, 1–3 %.
+   */
+  rampaDoL2cs: boolean;
+  /**
    * O ESTÍMULO de antes de 19/10/2026 na calibração e no teste de precisão
    * (revisão do pipeline de 19/10/2026): a bola azul lisa de 36 px que pulsava
    * na coleta e ficava verde, sobre fundo PRETO, e no teste o círculo azul-claro
@@ -506,6 +613,11 @@ const DEFAULTS_DO_CODIGO: ExperimentConfig = {
   recoletaDeAlvosRuins: true,
   ruidoDoMapaNaCorrecaoDeliberada: true,
   medidaDeliberadaAteODobroDoTeto: true,
+  travessiaContinua: true,
+  deslocamentoPorInovacao: true,
+  palpebraBaixaRapida: true,
+  fixacaoNaPerdaCurta: true,
+  rampaDoL2cs: true,
   estimuloAntigo: false,
 };
 
@@ -560,6 +672,11 @@ export const VALORES_DA_BASE = {
   recoletaDeAlvosRuins: false,
   ruidoDoMapaNaCorrecaoDeliberada: false,
   medidaDeliberadaAteODobroDoTeto: false,
+  travessiaContinua: false,
+  deslocamentoPorInovacao: false,
+  palpebraBaixaRapida: false,
+  fixacaoNaPerdaCurta: false,
+  rampaDoL2cs: false,
 } as const satisfies Partial<ExperimentConfig>;
 
 /** Aplica o interruptor único: com `base`, todas as flags do V3 voltam ao valor anterior. */

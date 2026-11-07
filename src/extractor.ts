@@ -157,6 +157,45 @@ const BOOTSTRAP_MAX_FRAMES = 60;
 export const PISCADA_MAX_MS = 400;
 
 /**
+ * M27 (`EXPERIMENT.palpebraBaixaRapida`): um episódio abaixo do limiar que não
+ * chega ao FUNDO (`PROFUNDIDADE_DA_PISCADA` × o repouso) neste tempo é
+ * pálpebra baixa, e o quadro volta a valer. Piscada de verdade fecha em 2–3
+ * quadros (60–100 ms); 150 ms dá folga a uma piscada lenta sem deixar o cursor
+ * parado os 400 ms inteiros a cada olhar para baixo.
+ */
+export const DECISAO_DA_PALPEBRA_MS = 150;
+
+/**
+ * M27: abaixo desta fração do EAR de repouso (nunca abaixo de `EAR_THR_MIN`),
+ * o olho está FECHADO — piscada. Olho fechado fica em 0,15–0,35× o repouso; a
+ * pálpebra baixa de quem olha para o teclado, em 0,55–0,8× (o 0,22 de um
+ * repouso de 0,31 nas gravações de 22/09/2026).
+ */
+export const PROFUNDIDADE_DA_PISCADA = 0.45;
+
+/**
+ * M27: a pálpebra ASSENTOU quando o EAR fica parado — dentro de
+ * `TOLERANCIA_DO_PLATO` × o repouso — por pelo menos `DURACAO_MINIMA_DO_PLATO_MS`
+ * nos últimos `JANELA_DO_PLATO_MS`. Fechando ou abrindo, o EAR anda 0,03–0,1 por
+ * quadro; a pálpebra baixa fica no ruído do landmark (±0,01). Só se solta um
+ * episódio assentado: o fechamento lento e a reabertura, com a íris meio coberta,
+ * continuam piscada.
+ */
+export const JANELA_DO_PLATO_MS = 100;
+export const DURACAO_MINIMA_DO_PLATO_MS = 60;
+export const TOLERANCIA_DO_PLATO = 0.08;
+
+/**
+ * M27: o NÍVEL da pálpebra baixa solta (média dos quadros soltos) vale enquanto
+ * a pessoa olha para baixo. Abaixo dele por mais que esta fração do repouso, a
+ * pálpebra está fechando — é uma piscada dentro da pálpebra baixa, e segura. De
+ * volta a ele, a piscada acabou. Acima dele por duas margens, a pessoa voltou a
+ * olhar para cima e o nível é esquecido.
+ */
+export const MARGEM_DO_NIVEL_DA_PALPEBRA = 0.1;
+const SUAVIZACAO_DO_NIVEL = 0.3;
+
+/**
  * Detector de piscada com limiar adaptativo ao EAR de repouso da pessoa.
  * O histórico só recebe quadros sem piscada, senão o limiar realimenta a si
  * mesmo e olhos semi-fechados viram fixação válida.
@@ -173,6 +212,14 @@ export class BlinkDetector {
   private wasBlinking = false;
   /** Quando o episódio corrente de EAR baixo começou. `null` fora dele. */
   private earBaixoDesdeMs: number | null = null;
+  /** M27: início do trecho segurado como piscada. `null` fora dele. */
+  private segurandoDesdeMs: number | null = null;
+  /** M27: o último quadro no fundo (olho fechado) do trecho segurado. `null` se não fechou. */
+  private fechouEmMs: number | null = null;
+  /** M27: os quadros da faixa do meio desde o último fundo, para ver se a pálpebra assentou. */
+  private recentes: { t: number; ear: number }[] = [];
+  /** M27: o nível da pálpebra baixa já solta. `null` olhando para a frente. */
+  private nivelDaPalpebra: number | null = null;
   private quadrosSemHistorico = 0;
   private avisouBootstrap = false;
   private static readonly TIMESTAMP_RETENTION_MS = 5 * 60 * 1000;
@@ -214,6 +261,8 @@ export class BlinkDetector {
     }
     const duracaoMs = this.earBaixoDesdeMs === null ? 0 : nowMs - this.earBaixoDesdeMs;
 
+    if (EXPERIMENT.palpebraBaixaRapida) blink = this.decidirPalpebra(ear, blink, nowMs);
+
     // PÁLPEBRA BAIXA, não piscada. Ver `PISCADA_MAX_MS`: passado o teto
     // fisiológico, uma leitura ACIMA do piso (`EAR_THR_MIN`) não é olho
     // fechado — é pálpebra que desceu (olhar para baixo) ou, com óculos, a
@@ -230,7 +279,7 @@ export class BlinkDetector {
     // Olho de fato fechado continua piscada, por mais que dure: o EAR fica
     // abaixo do piso e esta condição não se aplica. O piso é o que separa os
     // dois casos — o mesmo critério de antes, só aplicado sem atraso.
-    const palpebraBaixa = blink && duracaoMs > PISCADA_MAX_MS && ear >= this.thrMin;
+    const palpebraBaixa = blink && !EXPERIMENT.palpebraBaixaRapida && duracaoMs > PISCADA_MAX_MS && ear >= this.thrMin;
     if (palpebraBaixa) blink = false;
 
     // Ptose severa: olho aberto abaixo do limiar absoluto. Sem esta guarda o
@@ -268,11 +317,100 @@ export class BlinkDetector {
     return blink;
   }
 
+  /**
+   * M27 (`EXPERIMENT.palpebraBaixaRapida`): piscada ou pálpebra baixa, quadro a
+   * quadro, para um quadro abaixo do limiar (`abaixoDoLimiar`).
+   *
+   * - Abaixo do piso (`EAR_THR_MIN`) é piscada, sempre.
+   * - Um trecho que não chega ao FUNDO (`PROFUNDIDADE_DA_PISCADA` × o repouso)
+   *   solta depois de `DECISAO_DA_PALPEBRA_MS`, quando a pálpebra assentou
+   *   (platô): é a pálpebra que desceu com o olhar.
+   * - Depois do fundo, segura até reabrir: de volta ao nível da pálpebra baixa
+   *   (piscada enquanto a pessoa olha para baixo), ou assentada num nível novo
+   *   (piscada junto com a descida do olhar). Olhando para a frente, a reabertura
+   *   termina sozinha, quando o EAR passa o limiar.
+   * - Com a pálpebra baixa já solta, um quadro abaixo do nível dela é uma piscada
+   *   fechando, e segura de novo.
+   * - Tetos de `PISCADA_MAX_MS` (desde o último fundo, ou desde o começo do
+   *   trecho para quem fica acima do piso), como na regra antiga: nada acima do
+   *   piso fica segurado para sempre.
+   */
+  private decidirPalpebra(ear: number, abaixoDoLimiar: boolean, nowMs: number): boolean {
+    const repouso = this.nonBlinkHistory.length >= this.minHistory
+      ? this.nonBlinkHistory.reduce((a, b) => a + b, 0) / this.nonBlinkHistory.length
+      : null;
+    const base = repouso ?? 0.3;
+    const margem = MARGEM_DO_NIVEL_DA_PALPEBRA * base;
+    if (this.nivelDaPalpebra !== null && ear >= this.nivelDaPalpebra + 2 * margem) this.nivelDaPalpebra = null;
+
+    if (!abaixoDoLimiar) {
+      this.segurandoDesdeMs = null;
+      this.fechouEmMs = null;
+      this.recentes = [];
+      return false;
+    }
+
+    const fundo = repouso === null ? this.thrMin : Math.max(this.thrMin, PROFUNDIDADE_DA_PISCADA * repouso);
+    const noFundo = ear < fundo;
+    const segurar = (): boolean => {
+      if (this.segurandoDesdeMs === null) this.segurandoDesdeMs = nowMs;
+      if (noFundo) {
+        this.fechouEmMs = nowMs;
+        this.recentes = [];
+      } else {
+        this.recentes.push({ t: nowMs, ear });
+        while (this.recentes.length > 0 && this.recentes[0].t < nowMs - JANELA_DO_PLATO_MS) this.recentes.shift();
+      }
+      return true;
+    };
+    const soltar = (): boolean => {
+      this.segurandoDesdeMs = null;
+      this.fechouEmMs = null;
+      this.recentes = [];
+      this.nivelDaPalpebra = this.nivelDaPalpebra === null
+        ? ear
+        : this.nivelDaPalpebra + SUAVIZACAO_DO_NIVEL * (ear - this.nivelDaPalpebra);
+      return false;
+    };
+
+    if (ear < this.thrMin) return segurar();
+
+    if (this.segurandoDesdeMs === null) {
+      // Pálpebra baixa já solta e o quadro no nível dela: continua solta.
+      if (this.nivelDaPalpebra !== null && !noFundo && ear >= this.nivelDaPalpebra - margem) return soltar();
+      return segurar();
+    }
+
+    segurar();
+    const assentou = (): boolean => {
+      if (this.recentes.length < 2) return false;
+      if (nowMs - this.recentes[0].t < DURACAO_MINIMA_DO_PLATO_MS) return false;
+      let min = Infinity;
+      let max = -Infinity;
+      for (const r of this.recentes) { min = Math.min(min, r.ear); max = Math.max(max, r.ear); }
+      return max - min <= TOLERANCIA_DO_PLATO * base;
+    };
+    const desde = nowMs - this.segurandoDesdeMs;
+    if (noFundo) {
+      // Entre o piso e o fundo: o teto da regra antiga, contado do começo do trecho.
+      return desde > PISCADA_MAX_MS ? soltar() : true;
+    }
+    if (this.fechouEmMs !== null) {
+      const reabriu = (this.nivelDaPalpebra !== null && ear >= this.nivelDaPalpebra - margem) || assentou();
+      return reabriu || nowMs - this.fechouEmMs > PISCADA_MAX_MS ? soltar() : true;
+    }
+    return (desde >= DECISAO_DA_PALPEBRA_MS && assentou()) || desde > PISCADA_MAX_MS ? soltar() : true;
+  }
+
   reset(): void {
     this.nonBlinkHistory.length = 0;
     this.blinkStartTimestamps.length = 0;
     this.wasBlinking = false;
     this.earBaixoDesdeMs = null;
+    this.segurandoDesdeMs = null;
+    this.fechouEmMs = null;
+    this.recentes = [];
+    this.nivelDaPalpebra = null;
     this.quadrosSemHistorico = 0;
     this.avisouBootstrap = false;
   }

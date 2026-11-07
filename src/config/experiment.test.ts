@@ -209,10 +209,13 @@ describe('defaults decididos', () => {
 
 describe('interruptor do V3', () => {
   /**
-   * As 23 flags do V3 (M1–M21 menos M11, que é o relatório e não tem flag,
+   * As 28 flags do V3 (M1–M21 menos M11, que é o relatório e não tem flag,
    * mais a recoleta dos alvos ruins de 19/10/2026, o ruído do mapa nas
    * medidas deliberadas, M23, e o limite delas no dobro do teto, M24, de
-   * 05/11/2026).
+   * 05/11/2026, e as cinco do cursor de 06/11/2026: a travessia por animação
+   * web, M25, o deslocamento pela inovação, M26, a pálpebra baixa que solta
+   * cedo, M27, a fixação que sobrevive a um quadro sem rosto, M28, e a rampa
+   * do L2CS entre inferências, M29).
    */
   const FLAGS_DO_V3 = [
     'ordemDescorrelacionada', 'referencialIsotropico', 'desrolarComSinalDoL2cs', 'l2csNaCabeca',
@@ -221,6 +224,8 @@ describe('interruptor do V3', () => {
     'suavizacaoDoLandmarker', 'correcaoPorDwellKalman', 'correcaoPorDwellAfim', 'dwellEmCascata',
     'alvoMinimoMedido', 'toleranciaIntrusoes', 'recalibracaoRapidaAfim', 'pausaNaPerdaCurta',
     'recoletaDeAlvosRuins', 'ruidoDoMapaNaCorrecaoDeliberada', 'medidaDeliberadaAteODobroDoTeto',
+    'travessiaContinua', 'deslocamentoPorInovacao', 'palpebraBaixaRapida', 'fixacaoNaPerdaCurta',
+    'rampaDoL2cs',
   ].sort();
   const FORA_DO_INTERRUPTOR = [
     'referencialIsotropico', 'alvoInferiorCentral', 'fusaoPorCovariancia', 'saida6DoF', 'nivelarRecorteCorrigido',

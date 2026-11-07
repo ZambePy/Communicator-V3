@@ -297,6 +297,9 @@ export const Overlay: React.FC = () => {
     const cursorPeloCompositor = EXPERIMENT.cursorPeloCompositor;
     /** Último valor escrito em cada propriedade: escreve só o que mudou. */
     const escrito = new Map<string, string>();
+    // Sem `!important` (ao contrário da janela do app): a página da
+    // sobreposição não carrega o index.css, e a regra de `prefers-reduced-motion`
+    // que zera as transições não existe aqui.
     const escrever = (el: HTMLElement | SVGElement, prop: 'transform' | 'transition' | 'opacity' | 'background' | 'boxShadow' | 'border', valor: string) => {
       const chave = (el === cursorRef.current ? 'c:' : 'a:') + prop;
       if (escrito.get(chave) === valor) return;
@@ -635,6 +638,8 @@ export const Overlay: React.FC = () => {
           position: 'absolute', left: 0, top: 0, width: config.tamanhoCursorPx, height: config.tamanhoCursorPx,
           borderRadius: '50%', pointerEvents: 'none', transform: 'translate3d(-9999px,-9999px,0)',
           transformOrigin: 'center center', willChange: 'transform', opacity: 0, zIndex: 20,
+          // Sem o reset do index.css aqui: a borda do degradado não pode crescer a caixa.
+          boxSizing: 'border-box',
         }}
       />
       <svg

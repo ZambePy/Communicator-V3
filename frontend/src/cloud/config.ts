@@ -9,8 +9,12 @@
  *
  * Copie `frontend/.env.example` para `frontend/.env.local` e preencha.
  */
-const url = (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
-const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
+import { modoTesteLocal } from '../modoTesteLocal';
+
+// No modo de teste local (`npm run teste-local`) a nuvem fica desligada mesmo com
+// o `.env.local` preenchido: nada sai do computador.
+const url = modoTesteLocal() ? '' : (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
+const anonKey = modoTesteLocal() ? '' : (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
 
 export const cloudConfig = {
   url,

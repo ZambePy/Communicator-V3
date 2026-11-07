@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { EXPERIMENT } from '../config/experiment';
 import {
   EstimadorDeFixacao,
   JANELA_BASE_MS,
@@ -9,7 +10,9 @@ import {
   janelaParaRho,
   varianciaDaInovacao,
   varianciaDoDeslocamento,
+  LACUNA_SEM_ROSTO_MS,
 } from './estimadorDeFixacao';
+import { CENARIO_DO_VIDEO, gerarCenarioDoCursor } from '../testUtils/cenarioDoCursor';
 
 function gerador(semente: number) {
   let s = semente >>> 0 || 1;
@@ -301,5 +304,201 @@ describe('passos médios chegam sem escorregar', () => {
     const media = escalas.reduce((a, b) => a + b, 0) / escalas.length;
     expect(media).toBeGreaterThan(2.1);
     expect(media).toBeLessThan(3.4);
+  });
+});
+
+// M26 — o detector de deslocamento compara a MÉDIA das 4 últimas com a média
+// do resto. Com ρ₁ = 0,8, quatro amostras seguidas valem pouco mais que uma: a
+// média delas varia quase tanto quanto uma amostra só, e passos abaixo de ~3,5σ
+// (o botão vizinho, o ajuste fino em cima de um botão) escorregavam pela
+// janela de 600–1000 ms — 266 ms até 70 % do caminho nos passos de 80–160 px
+// do cenário do vídeo de 06/11/2026. A inovação BRANQUEADA (a amostra menos a
+// previsão AR(1)) põe o passo inteiro no primeiro quadro, com desvio de só
+// √(1−ρ²) ≈ 0,6σ: a razão de verossimilhança generalizada (GLR) sobre as
+// últimas inovações leva um passo de 3σ a 70 % em ~4 quadros e um de 2,5σ em
+// ~5 (t70 de 133 e 167 ms; eram 200 e 233).
+describe('detector de deslocamento pela inovação (M26)', () => {
+  const salvo = EXPERIMENT.deslocamentoPorInovacao;
+  afterEach(() => { EXPERIMENT.deslocamentoPorInovacao = salvo; });
+
+  /**
+   * Tempo (ms) até a saída cobrir `fracao` de um passo de `passoSigmas` σ, em
+   * `n` sementes, com o detector pedido. 70 % é quando o cursor "foi" para lá;
+   * 90 % inclui o assentamento da média nova, que é ruído.
+   */
+  function tempos(passoSigmas: number, n: number, porInovacao: boolean, fracao: number, rho = 0.8): number[] {
+    EXPERIMENT.deslocamentoPorInovacao = porInovacao;
+    const out: number[] = [];
+    for (let semente = 1; semente <= n; semente++) {
+      const e = new EstimadorDeFixacao(janelaParaRho(rho), rho);
+      let t = 3000;
+      serieDeRuido(150, 1, semente * 13, rho).forEach((q, i) => {
+        const alvo = i < 60 ? 0 : passoSigmas * SIGMA;
+        const o = e.processar(700 + alvo + q.x, 500 + q.y, i * DT, RUIDO);
+        if (i >= 60 && t === 3000 && o.x - 700 >= fracao * passoSigmas * SIGMA) t = (i - 60) * DT;
+      });
+      out.push(t);
+    }
+    return out.sort((a, b) => a - b);
+  }
+  const mediana = (v: number[]) => v[Math.floor(v.length / 2)];
+
+  it('passo de 2,5σ (o botão vizinho num computador ruidoso): 70 % do caminho bem mais cedo', () => {
+    const antes = mediana(tempos(2.5, 60, false, 0.7));
+    const depois = mediana(tempos(2.5, 60, true, 0.7));
+    expect(antes).toBeGreaterThanOrEqual(200);
+    expect(depois).toBeLessThanOrEqual(0.75 * antes);
+  });
+
+  it('passo de 3σ: 70 % do caminho em até 140 ms na mediana (eram 200)', () => {
+    expect(mediana(tempos(3, 60, true, 0.7))).toBeLessThanOrEqual(140);
+  });
+
+  it('passo de 3,5σ: 90 % do caminho em até 170 ms na mediana (eram ~330)', () => {
+    expect(mediana(tempos(3.5, 60, false, 0.9))).toBeGreaterThanOrEqual(300);
+    expect(mediana(tempos(3.5, 60, true, 0.9))).toBeLessThanOrEqual(170);
+  });
+
+  it('sacada grande continua chegando em até dois quadros', () => {
+    expect(mediana(tempos(6, 60, true, 0.9))).toBeLessThanOrEqual(67);
+  });
+
+  it('com o olhar parado (ρ₁ de 0,6 a 0,9), não reinicia a fixação à toa', () => {
+    EXPERIMENT.deslocamentoPorInovacao = true;
+    for (const rho of [0.6, 0.8, 0.9]) {
+      let pulos = 0;
+      for (const semente of [3, 8, 12]) {
+        const e = new EstimadorDeFixacao(janelaParaRho(rho), rho);
+        let anterior: { x: number; y: number } | null = null;
+        serieDeRuido(1800, 1, semente, rho).forEach((q, i) => {
+          const o = e.processar(960 + q.x, 540 + q.y, i * DT, RUIDO);
+          if (anterior && i > 60 && Math.hypot(o.x - anterior.x, o.y - anterior.y) > 0.5 * SIGMA) pulos++;
+          anterior = o;
+        });
+      }
+      // 3 min de olhar parado por ρ₁; cada pulo seria o cursor saltando
+      // parado. O mesmo critério do detector de médias: nenhum.
+      expect(pulos).toBe(0);
+    }
+  });
+
+  it('só vale com o L2CS em rampa (M29) e suavizado: sem a rampa, fica o detector de médias', () => {
+    // Com o L2CS em degraus (sem M29), cada degrau parece um passo para a GLR:
+    // na simulação da revisão de 06/11/2026, 0,7–1,5 pulos por minuto com o
+    // olhar parado, contra nenhum no detector de médias.
+    const salvoRampa = EXPERIMENT.rampaDoL2cs;
+    const salvoSuave = EXPERIMENT.suavizarL2csNaFixacao;
+    try {
+      const base = mediana(tempos(3, 30, false, 0.7));
+      EXPERIMENT.rampaDoL2cs = false;
+      expect(mediana(tempos(3, 30, true, 0.7))).toBe(base);
+      EXPERIMENT.rampaDoL2cs = true;
+      EXPERIMENT.suavizarL2csNaFixacao = false;
+      expect(mediana(tempos(3, 30, true, 0.7))).toBe(base);
+      EXPERIMENT.suavizarL2csNaFixacao = true;
+      expect(mediana(tempos(3, 30, true, 0.7))).toBeLessThan(base);
+    } finally {
+      EXPERIMENT.rampaDoL2cs = salvoRampa;
+      EXPERIMENT.suavizarL2csNaFixacao = salvoSuave;
+    }
+  });
+
+  it('com o termo do L2CS em rampa somado ao ruído, o olhar parado quase não pula', () => {
+    // O ruído real não é só AR(1): o L2CS soma um termo próprio que muda a cada
+    // inferência (σ ~30 px nos relatórios de 20–23/09/2026, pelo p97/p50 do |Δ|).
+    // Σ e ρ₁ medidos do ruído TOTAL, como a calibração mede.
+    const pulosPorMinuto = (porInovacao: boolean): number => {
+      EXPERIMENT.deslocamentoPorInovacao = porInovacao;
+      let pulos = 0;
+      let minutos = 0;
+      for (const semente of [2, 5, 9]) {
+        const amostras = gerarCenarioDoCursor({
+          ...CENARIO_DO_VIDEO, semente, fixacoes: 1, duracaoDaFixacaoMs: [120000, 120000],
+          l2cs: { periodoMs: 100, sigmaPx: 30, rampa: true },
+        });
+        const ex = amostras.map((a) => a.x - a.verdadeX);
+        const ey = amostras.map((a) => a.y - a.verdadeY);
+        const media = (v: number[]) => v.reduce((t, x) => t + x, 0) / v.length;
+        const mx = media(ex);
+        const my = media(ey);
+        const sxx = media(ex.map((x) => (x - mx) ** 2));
+        const syy = media(ey.map((y) => (y - my) ** 2));
+        const sxy = media(ex.map((x, i) => (x - mx) * (ey[i] - my)));
+        let num = 0;
+        for (let i = 1; i < ex.length; i++) num += (ex[i] - mx) * (ex[i - 1] - mx);
+        const rho1 = Math.min(0.95, Math.max(0, num / (sxx * ex.length)));
+        const e = new EstimadorDeFixacao(janelaParaRho(rho1), rho1);
+        let anterior: { x: number; y: number } | null = null;
+        amostras.forEach((a, i) => {
+          const o = e.processar(a.x, a.y, a.tMs, { sxx, syy, sxy });
+          if (anterior && i > 60 && Math.hypot(o.x - anterior.x, o.y - anterior.y) > 30) pulos++;
+          anterior = o;
+        });
+        minutos += (amostras[amostras.length - 1].tMs - amostras[0].tMs) / 60000;
+      }
+      return pulos / minutos;
+    };
+    expect(pulosPorMinuto(false)).toBe(0);
+    // Medido: ~0,1 por minuto (um pulo a cada ~10 min).
+    expect(pulosPorMinuto(true)).toBeLessThanOrEqual(0.3);
+  });
+
+  it('pico de um quadro continua descartado: a fixação não recomeça nele', () => {
+    EXPERIMENT.deslocamentoPorInovacao = true;
+    const e = new EstimadorDeFixacao(JANELA_BASE_MS);
+    const z = gerador(31);
+    let t = 0;
+    let antes = { x: 0, y: 0 };
+    for (let i = 0; i < 40; i++, t += DT) antes = e.processar(700 + 3 * z(), 400 + 3 * z(), t, RUIDO);
+    // Um pico de 3σ — dentro do portão, mas a inovação dele é enorme.
+    const noPico = e.processar(700 + 3 * SIGMA, 400, t, RUIDO); t += DT;
+    const saidas: { x: number; y: number }[] = [];
+    for (let i = 0; i < 10; i++, t += DT) saidas.push(e.processar(700 + 3 * z(), 400 + 3 * z(), t, RUIDO));
+    // A média absorve o pico como absorve qualquer amostra (~σ/3 com a
+    // janela de 600 ms); o que não pode é a fixação recomeçar NELE (~3σ).
+    expect(Math.abs(noPico.x - antes.x)).toBeLessThan(0.5 * SIGMA);
+    for (const s of saidas) expect(Math.abs(s.x - 700)).toBeLessThan(0.5 * SIGMA);
+  });
+});
+
+// M28 — o engine chamava `reiniciar()` a cada quadro sem rosto. Um quadro
+// perdido no meio da fixação (mão perto do rosto, borrão) fazia a fixação
+// recomeçar de UMA amostra crua: o cursor saltava ~1σ para um ponto ruidoso e
+// voltava a assentar. Agora o engine avisa `semRosto()` e o estimador só
+// recomeça se a lacuna passar de `LACUNA_SEM_ROSTO_MS`.
+describe('lacuna curta sem rosto não recomeça a fixação (M28)', () => {
+  function fixacao(e: EstimadorDeFixacao, n: number, t0: number): number {
+    let t = t0;
+    const z = gerador(41);
+    for (let i = 0; i < n; i++, t += DT) e.processar(700 + 4 * z(), 400 + 4 * z(), t, RUIDO);
+    return t;
+  }
+
+  it('um quadro sem rosto: a amostra seguinte entra na média, sem salto', () => {
+    const e = new EstimadorDeFixacao(JANELA_BASE_MS);
+    let t = fixacao(e, 40, 0);
+    e.semRosto(t); t += DT;
+    // Volta com um ponto a 1σ: com a fixação reiniciada, a saída iria para ele.
+    const o = e.processar(700 + SIGMA, 400, t, RUIDO);
+    expect(Math.abs(o.x - 700)).toBeLessThan(0.25 * SIGMA);
+  });
+
+  it('perda longa (além da lacuna): recomeça do zero, como antes', () => {
+    const e = new EstimadorDeFixacao(JANELA_BASE_MS);
+    let t = fixacao(e, 40, 0);
+    e.semRosto(t);
+    t += LACUNA_SEM_ROSTO_MS + 2 * DT;
+    expect(e.processar(1234, 567, t, RUIDO)).toEqual({ x: 1234, y: 567 });
+  });
+
+  it('dois quadros seguidos sem rosto (67 ms) também não recomeçam; uma perda de 300 ms, sim', () => {
+    const curta = new EstimadorDeFixacao(JANELA_BASE_MS);
+    let t = fixacao(curta, 40, 0);
+    curta.semRosto(t); t += 2 * DT;
+    expect(Math.abs(curta.processar(700 + SIGMA, 400, t, RUIDO).x - 700)).toBeLessThan(0.25 * SIGMA);
+    const longa = new EstimadorDeFixacao(JANELA_BASE_MS);
+    t = fixacao(longa, 40, 0);
+    longa.semRosto(t); t += 300;
+    expect(longa.processar(700 + SIGMA, 400, t, RUIDO)).toEqual({ x: 700 + SIGMA, y: 400 });
   });
 });

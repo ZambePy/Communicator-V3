@@ -80,10 +80,27 @@
  * 24,7 px, com o erro médio igual. Passos abaixo de ~2σ continuam
  * escorregando (~400 ms): ali o passo e o ruído não se separam sem atrasar a
  * fixação inteira. Sacadas grandes chegam no mesmo tempo (±1 quadro).
+ *
+ * ## M26 (06/11/2026, `EXPERIMENT.deslocamentoPorInovacao`)
+ *
+ * O detector de médias acima ficou como o caminho da base. Com o M26 (e a rampa
+ * do L2CS, ver `deslocamentoPorInovacaoAtivo`), o passo é achado pela INOVAÇÃO
+ * branqueada: a amostra menos a previsão AR(1), que põe o passo inteiro no
+ * primeiro quadro com desvio de só √(1−ρ²). A razão de verossimilhança
+ * generalizada (GLR) sobre as últimas `INOVACOES_DA_GLR` inovações, acima de
+ * `LIMIAR_DA_GLR`, reinicia a fixação no começo do passo (`passoPelaInovacao`).
+ * Passos de 3σ chegam a 70 % em 133 ms (eram 200); no cenário do vídeo de
+ * 06/11/2026, passos de 80–160 px em 165 ms no cursor desenhado (eram 266).
+ *
+ * ## M28 (06/11/2026, `EXPERIMENT.fixacaoNaPerdaCurta`)
+ *
+ * Sem rosto, o engine chama `semRosto()`: a fixação só recomeça se a lacuna
+ * passar de `LACUNA_SEM_ROSTO_MS`.
  */
 
 import { amostrasEfetivas, MEDIANA_CHI2_2GL } from '../ruidoDaCalibracao';
 import { passoSuave } from '../estatistica';
+import { EXPERIMENT } from '../config/experiment';
 
 /** √χ²₂(0,999): até aqui a amostra pesa 1. */
 export const RAIO_INICIO = Math.sqrt(-2 * Math.log(1 - 0.999));
@@ -103,7 +120,10 @@ export const AMOSTRAS_DA_ESCALA = 60;
 export const MINIMO_PARA_ESCALA = 15;
 /** Teto da escala da Σ: o dobro do desvio medido na calibração. */
 export const ESCALA_MAXIMA = 4;
-/** Amostras recentes cuja média o detector de deslocamento compara com a fixação (~133 ms a 30 Hz). */
+/**
+ * Amostras recentes cuja média o detector de deslocamento compara com a
+ * fixação (~133 ms a 30 Hz). Só com o M26 desligado.
+ */
 export const AMOSTRAS_DO_DESLOCAMENTO = 4;
 /**
  * Distância (em desvios da diferença entre as duas médias) acima da qual o
@@ -111,6 +131,7 @@ export const AMOSTRAS_DO_DESLOCAMENTO = 4;
  * do ρ₁ da pessoa: com o olhar parado e ruído gaussiano, ≤ 0,1 reinício à toa
  * por minuto para ρ₁ de 0 a 0,9. Na simulação com ruído real
  * (docs/MEDICOES.md §14.7) é o limiar que ainda encurta os passos de 3–5σ.
+ * Só com o M26 desligado.
  */
 export const LIMIAR_DO_DESLOCAMENTO = 4.5;
 /**
@@ -121,6 +142,48 @@ export const LIMIAR_DO_DESLOCAMENTO = 4.5;
 export const RHO_MAXIMO_DO_MODELO = 0.95;
 /** O detector só age com a fixação já formada: as recentes mais esta quantidade. */
 const MINIMO_ANTIGAS_DO_DESLOCAMENTO = 6;
+
+/**
+ * M26 (`EXPERIMENT.deslocamentoPorInovacao`): quantas inovações recentes entram
+ * na GLR — os começos de passo candidatos vão até ~270 ms para trás.
+ */
+export const INOVACOES_DA_GLR = 8;
+/** Amostras desde o começo do passo antes de a GLR decidir (a segunda separa o passo de um pico). */
+export const MINIMO_DEPOIS_DO_PASSO = 2;
+/**
+ * Limiar da estatística GLR (2 × log da razão de verossimilhança, χ² com 2
+ * graus sob ruído puro): P ≈ 6·10⁻⁶ por candidato. É o menor da varredura que
+ * mantém o critério do detector de médias — nenhum pulo com o olhar parado em
+ * 6 min de ruído AR(1) para ρ₁ de 0,6, 0,8 e 0,9. Com ele, 70 % do caminho de
+ * um passo de 2,5σ em 167 ms (eram 233), de 3σ em 133 (eram 200) e de 3,5σ em
+ * 100 (eram 167). Com 20 chega ~35 ms antes, mas dá 0,2–0,7 pulos por minuto
+ * parado (docs/MEDICOES.md §14.9).
+ */
+export const LIMIAR_DA_GLR = 24;
+/**
+ * Depois do passo, a média das amostras novas precisa estar a mais que isto
+ * (em desvios da calibração, com a escala da sessão) da fixação. Barra o
+ * reinício por um pico que a GLR ainda viu como passo.
+ */
+export const AFASTAMENTO_MINIMO_DO_PASSO = 1;
+
+/**
+ * M28: sem rosto por mais que isto, a fixação recomeça na volta. Um quadro ou
+ * dois perdidos (33–66 ms: mão perto do rosto, borrão) não mudam para onde a
+ * pessoa olha; recomeçar de uma amostra crua fazia o cursor saltar ~1σ.
+ */
+export const LACUNA_SEM_ROSTO_MS = 150;
+
+/** Uma inovação branqueada: a amostra menos a previsão AR(1) a partir da anterior. */
+interface Inovacao {
+  t: number;
+  wx: number;
+  wy: number;
+  /** Variância da inovação em unidades da Σ da calibração: escala·(1 − ρ̂²). */
+  c: number;
+  /** Quanto de um passo anterior sobra nesta inovação: 1 − ρ̂. */
+  resto: number;
+}
 
 export interface Covariancia2 {
   sxx: number;
@@ -247,6 +310,20 @@ export function varianciaDoDeslocamento(
   return Math.max(0.02, varRecentes + varianciaDaMediaPonderada(antigas, w, rho) - 2 * cov);
 }
 
+/**
+ * M26 só com o termo do L2CS em rampa (M29, com o suavizador ligado). Em
+ * degraus, cada inferência do L2CS soma ao ruído um salto que a GLR toma por
+ * passo: na simulação da revisão de 06/11/2026, 0,7–1,5 pulos por minuto com o
+ * olhar parado, contra nenhum no detector de médias; com a rampa, ~0,1. Sem a
+ * rampa (`?exp.rampaDoL2cs=0` ou `suavizarL2csNaFixacao` desligada), o estimador
+ * fica no detector de médias.
+ */
+export function deslocamentoPorInovacaoAtivo(
+  e: Pick<typeof EXPERIMENT, 'deslocamentoPorInovacao' | 'rampaDoL2cs' | 'suavizarL2csNaFixacao'> = EXPERIMENT,
+): boolean {
+  return e.deslocamentoPorInovacao && e.rampaDoL2cs && e.suavizarL2csNaFixacao;
+}
+
 export class EstimadorDeFixacao {
   private readonly janelaMs: number;
   /** ρ₁ do ruído na calibração: a correlação entre quadros vizinhos. */
@@ -256,10 +333,19 @@ export class EstimadorDeFixacao {
   /** d² (sob a Σ da calibração) das últimas amostras aceitas, em anel. */
   private readonly d2Recentes: number[] = [];
   private escalaAtual = 1;
+  /** M26: detector pela inovação (lido na construção, ver `deslocamentoPorInovacaoAtivo`). */
+  private readonly porInovacao: boolean;
+  /** M26: a última amostra ACEITA na fixação (um pico descartado não conta). */
+  private anterior: { t: number; x: number; y: number } | null = null;
+  /** M26: inovações desde o começo da fixação, no máximo `INOVACOES_DA_GLR`. */
+  private inovacoes: Inovacao[] = [];
+  /** M28: desde quando o rosto sumiu (`null` com rosto). */
+  private semRostoDesdeMs: number | null = null;
 
   constructor(janelaMs: number = JANELA_BASE_MS, rho1: number = RHO_DE_REFERENCIA) {
     this.janelaMs = janelaMs;
     this.rho = Number.isFinite(rho1) ? Math.max(0, Math.min(RHO_MAXIMO_DO_MODELO, rho1)) : RHO_DE_REFERENCIA;
+    this.porInovacao = deslocamentoPorInovacaoAtivo();
   }
 
   /** Janela em uso, em ms (vai para o diagnóstico). */
@@ -327,6 +413,65 @@ export class EstimadorDeFixacao {
     return d > LIMIAR_DO_DESLOCAMENTO;
   }
 
+  /** A fixação recomeça com estas amostras: as inovações da anterior não valem mais. */
+  private recomecar(amostras: Amostra[]): void {
+    this.fixacao = amostras;
+    this.inovacoes = [];
+    const ultima = amostras[amostras.length - 1];
+    this.anterior = ultima ? { t: ultima.t, x: ultima.x, y: ultima.y } : null;
+  }
+
+  /**
+   * M26: guarda a inovação branqueada da amostra aceita, `(z − μ) − ρ̂·(z₋₁ − μ)`
+   * com ρ̂ = ρ₁ elevado ao intervalo real em quadros, e devolve o começo do
+   * passo se a GLR o acha — ou `null`.
+   *
+   * Modelo: um passo Δ que começa na amostra j aparece inteiro na inovação j
+   * e, nas seguintes, só o que o AR(1) não prevê dele, (1 − ρ̂)·Δ. Com
+   * inovações de covariância cᵢ·Σ, o Δ mais provável é S/I, com
+   * S = Σ aᵢ wᵢ / cᵢ e I = Σ aᵢ² / cᵢ, e a estatística G = Sᵀ Σ⁻¹ S / I é χ²
+   * com 2 graus sob ruído puro.
+   */
+  private passoPelaInovacao(x: number, y: number, tMs: number, est: { x: number; y: number }, ruido: Covariancia2): number | null {
+    const ant = this.anterior;
+    this.anterior = { t: tMs, x, y };
+    if (!ant || !(tMs > ant.t)) return null;
+    const rhoDt = this.rho ** ((tMs - ant.t) / INTERVALO_PADRAO_MS);
+    this.inovacoes.push({
+      t: tMs,
+      wx: (x - est.x) - rhoDt * (ant.x - est.x),
+      wy: (y - est.y) - rhoDt * (ant.y - est.y),
+      c: this.escalaAtual * Math.max(0.05, 1 - rhoDt * rhoDt),
+      resto: 1 - rhoDt,
+    });
+    if (this.inovacoes.length > INOVACOES_DA_GLR) this.inovacoes.shift();
+    if (this.fixacao.length < MINIMO_DEPOIS_DO_PASSO + MINIMO_ANTIGAS_DO_DESLOCAMENTO) return null;
+
+    const n = this.inovacoes.length;
+    let melhor = LIMIAR_DA_GLR;
+    let inicio: number | null = null;
+    for (let j = n - MINIMO_DEPOIS_DO_PASSO; j >= 0; j--) {
+      let sx = 0;
+      let sy = 0;
+      let info = 0;
+      for (let i = j; i < n; i++) {
+        const v = this.inovacoes[i];
+        const a = i === j ? 1 : v.resto;
+        sx += (a * v.wx) / v.c;
+        sy += (a * v.wy) / v.c;
+        info += (a * a) / v.c;
+      }
+      if (!(info > 0)) continue;
+      const d = distanciaDeMahalanobis(sx, sy, ruido);
+      const g = (d * d) / info;
+      if (g > melhor) {
+        melhor = g;
+        inicio = this.inovacoes[j].t;
+      }
+    }
+    return inicio;
+  }
+
   /** Registra o d² de uma amostra aceita e atualiza a escala pela mediana. */
   private registrarD2(d2: number): void {
     if (!Number.isFinite(d2)) return;
@@ -340,6 +485,11 @@ export class EstimadorDeFixacao {
   }
 
   processar(x: number, y: number, tMs: number, ruido: Covariancia2): { x: number; y: number } {
+    if (this.semRostoDesdeMs !== null && Number.isFinite(tMs)) {
+      // M28: o rosto voltou. Lacuna curta: segue a fixação de onde estava.
+      if (tMs - this.semRostoDesdeMs > LACUNA_SEM_ROSTO_MS) this.reiniciar();
+      this.semRostoDesdeMs = null;
+    }
     if (![x, y, tMs].every(Number.isFinite)) {
       const m = this.media(tMs);
       return m ? { x: m.x, y: m.y } : { x, y };
@@ -348,7 +498,7 @@ export class EstimadorDeFixacao {
     this.fixacao = this.fixacao.filter((a) => tMs - a.t < this.janelaMs);
     const est = this.media(tMs);
     if (!est) {
-      this.fixacao = [{ t: tMs, x, y, w: 1 }];
+      this.recomecar([{ t: tMs, x, y, w: 1 }]);
       this.pendente = null;
       return { x, y };
     }
@@ -371,16 +521,30 @@ export class EstimadorDeFixacao {
       } else {
         const c = 2 * this.escalaAtual;
         const sp: Covariancia2 = { sxx: c * ruido.sxx, syy: c * ruido.syy, sxy: c * ruido.sxy };
-        this.fixacao = distanciaDeMahalanobis(x - p.x, y - p.y, sp) <= RAIO_FIM
+        this.recomecar(distanciaDeMahalanobis(x - p.x, y - p.y, sp) <= RAIO_FIM
           // Sacada confirmada: a fixação nova começa com as duas amostras.
           ? [{ t: p.t, x: p.x, y: p.y, w: 1 }, { t: tMs, x, y, w: 1 }]
           // Em movimento: recomeça só com a atual.
-          : [{ t: tMs, x, y, w: 1 }];
+          : [{ t: tMs, x, y, w: 1 }]);
       }
     } else if (peso > 0) {
       this.fixacao.push({ t: tMs, x, y, w: peso });
       this.registrarD2(dBase * dBase);
-      if (this.deslocou(tMs, ruido)) {
+      if (this.porInovacao) {
+        // M26: o passo começa onde a GLR o acha; a fixação nova começa ali,
+        // desde que as amostras dele continuem longe (um pico volta).
+        const inicio = this.passoPelaInovacao(x, y, tMs, est, ruido);
+        if (inicio !== null) {
+          const depois = this.fixacao.filter((a) => a.t >= inicio);
+          const mx = depois.reduce((t, a) => t + a.x, 0) / depois.length;
+          const my = depois.reduce((t, a) => t + a.y, 0) / depois.length;
+          const c = this.escalaAtual;
+          const sc: Covariancia2 = { sxx: c * ruido.sxx, syy: c * ruido.syy, sxy: c * ruido.sxy };
+          if (distanciaDeMahalanobis(mx - est.x, my - est.y, sc) > AFASTAMENTO_MINIMO_DO_PASSO) {
+            this.recomecar(depois.map((a) => ({ ...a, w: 1 })));
+          }
+        }
+      } else if (this.deslocou(tMs, ruido)) {
         // O olhar foi para perto: a fixação nova começa com as recentes.
         this.fixacao = this.fixacao.slice(-AMOSTRAS_DO_DESLOCAMENTO).map((a) => ({ ...a, w: 1 }));
       }
@@ -400,5 +564,17 @@ export class EstimadorDeFixacao {
   reiniciar(): void {
     this.fixacao = [];
     this.pendente = null;
+    this.inovacoes = [];
+    this.anterior = null;
+    this.semRostoDesdeMs = null;
+  }
+
+  /**
+   * M28: quadro sem rosto. A fixação só recomeça se o rosto voltar depois de
+   * `LACUNA_SEM_ROSTO_MS`; antes disso a amostra seguinte entra na média como
+   * qualquer outra (o portão ainda pega quem voltou olhando para outro lugar).
+   */
+  semRosto(tMs: number): void {
+    if (this.semRostoDesdeMs === null && Number.isFinite(tMs)) this.semRostoDesdeMs = tMs;
   }
 }
